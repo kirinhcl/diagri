@@ -51,8 +51,8 @@ MCP 进程不直接占用蓝牙。常驻服务集中执行命令、校验回读�
 需要 Python 3.11+。Mac 还需要 Xcode 命令行工具；Linux 需要 BlueZ 和系统 D-Bus。
 
 ```sh
-git clone https://github.com/kirinhcl/spiderfarmer-growbridge.git
-cd spiderfarmer-growbridge
+git clone https://github.com/kirinhcl/diagri.git
+cd diagri
 python3 -m venv .venv
 .venv/bin/python -m pip install -c constraints-tested.txt .
 .venv/bin/growbridge scan
@@ -107,7 +107,7 @@ ssh -L 8766:127.0.0.1:8766 YOUR_PI_HOST
 再从另一个终端向树莓派请求临时连接链接：
 
 ```sh
-ssh -T YOUR_PI_HOST /absolute/path/on/pi/spiderfarmer-growbridge/.venv/bin/growbridge dashboard --no-open
+ssh -T YOUR_PI_HOST /absolute/path/on/pi/diagri/.venv/bin/growbridge dashboard --no-open
 ```
 
 在 60 秒内于 Mac 浏览器打开返回的链接，并保持 SSH 转发运行。这不会将控制接口公开到互联网。
@@ -118,7 +118,7 @@ ssh -T YOUR_PI_HOST /absolute/path/on/pi/spiderfarmer-growbridge/.venv/bin/growb
 
 ```toml
 [mcp_servers.growbridge]
-command = "/absolute/path/spiderfarmer-growbridge/.venv/bin/growbridge"
+command = "/absolute/path/diagri/.venv/bin/growbridge"
 args = ["mcp"]
 ```
 
@@ -162,8 +162,8 @@ args = ["mcp"]
 ```sh
 sudo apt update
 sudo apt install -y python3-venv bluez dbus git
-git clone https://github.com/kirinhcl/spiderfarmer-growbridge.git
-cd spiderfarmer-growbridge
+git clone https://github.com/kirinhcl/diagri.git
+cd diagri
 python3 -m venv .venv
 .venv/bin/python -m pip install -c constraints-tested.txt .
 .venv/bin/growbridge scan
@@ -187,7 +187,7 @@ systemctl --user status growbridge
 ```toml
 [mcp_servers.growbridge]
 command = "ssh"
-args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/spiderfarmer-growbridge/.venv/bin/growbridge", "mcp"]
+args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/diagri/.venv/bin/growbridge", "mcp"]
 ```
 
 先配置 SSH 密钥并确认主机身份。MCP 连接结束不会停止树莓派的常驻服务。服务继续只监听树莓派自己的回环地址，不需要公开 HTTP 端口。

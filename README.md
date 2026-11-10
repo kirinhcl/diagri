@@ -51,8 +51,8 @@ This release supports on-demand control, continuous data collection, and a local
 Requires Python 3.11+. macOS also requires Xcode Command Line Tools; Linux requires BlueZ and the system D-Bus.
 
 ```sh
-git clone https://github.com/kirinhcl/spiderfarmer-growbridge.git
-cd spiderfarmer-growbridge
+git clone https://github.com/kirinhcl/diagri.git
+cd diagri
 python3 -m venv .venv
 .venv/bin/python -m pip install -c constraints-tested.txt .
 .venv/bin/growbridge scan
@@ -107,7 +107,7 @@ ssh -L 8766:127.0.0.1:8766 YOUR_PI_HOST
 In another terminal, request a short-lived connection link from the Pi:
 
 ```sh
-ssh -T YOUR_PI_HOST /absolute/path/on/pi/spiderfarmer-growbridge/.venv/bin/growbridge dashboard --no-open
+ssh -T YOUR_PI_HOST /absolute/path/on/pi/diagri/.venv/bin/growbridge dashboard --no-open
 ```
 
 Open the returned link on the Mac within 60 seconds. Keep the SSH forwarding session running. This does not make the control interface public.
@@ -118,7 +118,7 @@ Keep the daemon running. Add a stdio server to your MCP client. For Codex, use:
 
 ```toml
 [mcp_servers.growbridge]
-command = "/absolute/path/spiderfarmer-growbridge/.venv/bin/growbridge"
+command = "/absolute/path/diagri/.venv/bin/growbridge"
 args = ["mcp"]
 ```
 
@@ -162,8 +162,8 @@ Enable SSH and connect to the network on Raspberry Pi OS Lite 64-bit, then run:
 ```sh
 sudo apt update
 sudo apt install -y python3-venv bluez dbus git
-git clone https://github.com/kirinhcl/spiderfarmer-growbridge.git
-cd spiderfarmer-growbridge
+git clone https://github.com/kirinhcl/diagri.git
+cd diagri
 python3 -m venv .venv
 .venv/bin/python -m pip install -c constraints-tested.txt .
 .venv/bin/growbridge scan
@@ -187,7 +187,7 @@ To use the Raspberry Pi's MCP server from a Mac over SSH:
 ```toml
 [mcp_servers.growbridge]
 command = "ssh"
-args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/spiderfarmer-growbridge/.venv/bin/growbridge", "mcp"]
+args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/diagri/.venv/bin/growbridge", "mcp"]
 ```
 
 Configure SSH keys and verify the host's identity first. Closing an MCP connection leaves the Raspberry Pi daemon running. The API continues to listen only on the Pi's loopback address; no public HTTP port is needed.
