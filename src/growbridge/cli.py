@@ -1,13 +1,164 @@
 import argparse
 import asyncio
+import contextlib
 import fcntl
+import getpass
 import json
 import logging
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 from . import __version__
 from .config import default_config, initialize, load
+
+ROLE_TOKEN_PREFIX = "GROWBRIDGE_ROLE_TOKEN_"
+TICK_SECONDS = 1.0
+AGENT_SECONDS = 30.0
+log = logging.getLogger(__name__)
+
+
+def role_tokens_from_env(environ: Mapping[str, str]) -> dict[str, str]:
+    """Model-role tokens come only from ``GROWBRIDGE_ROLE_TOKEN_<ROLE>``; empty ones are ignored."""
+    tokens = {}
+    for key, value in environ.items():
+        role = key.removeprefix(ROLE_TOKEN_PREFIX).lower()
+        if key.startswith(ROLE_TOKEN_PREFIX) and role and value:
+            tokens[role] = value
+    return tokens
+
+
+def _add_operator(parser, settings, name: str) -> None:
+    from .archive.clock import SystemClock
+    from .archive.db import Database
+    from .runtime import private_dir
+    from .workbench.auth import MIN_SECRET_LENGTH, Operators
+
+    secret = getpass.getpass("Operator secret: ")
+    if len(secret) < MIN_SECRET_LENGTH:
+        parser.error(f"the secret needs at least {MIN_SECRET_LENGTH} characters")
+    if getpass.getpass("Repeat secret: ") != secret:
+        parser.error("the two entries differ")
+    db = Database(private_dir(settings.data_dir) / "workflow.sqlite3")
+    try:
+        Operators(db, SystemClock()).add(name, secret)
+    except ValueError as error:
+        parser.error(str(error))
+    finally:
+        db.close()
+    print(f"Operator added: {name}")
+
+
+def _register_host(parser, settings) -> None:
+    from .ports import Denied
+    from .runtime import register_write_host
+
+    try:
+        host_id = register_write_host(settings)
+    except Denied as error:
+        parser.error(str(error))
+    print(f"Write host registered: {host_id}")
+
+
+async def _bump_recovery(settings, reason: str) -> int:
+    from .runtime import build_runtime
+
+    runtime = build_runtime(settings)
+    try:
+        return await runtime.bump_recovery(reason)
+    finally:
+        await runtime.stop()
+
+
+def _recovery_bump(parser, settings, reason: str) -> None:
+    """Offline only: the daemon lock must be free, and it is held while the number changes."""
+    from .runtime import private_dir
+
+    with (private_dir(settings.data_dir) / "daemon.lock").open("w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            parser.error("a daemon is running on this data directory; stop it first")
+        number = asyncio.run(_bump_recovery(settings, reason))
+    print(f"Recovery number is now {number}; confirm the safety config and review live stages")
+
+
+async def _tick_forever(runtime) -> None:
+    while True:
+        await runtime.tick()  # every step guards itself; a failure becomes an alert
+        await asyncio.sleep(TICK_SECONDS)
+
+
+def model_client_or_none(runtime):
+    """The Anthropic client, or ``None`` (with a warning and an alert) when it cannot be built.
+
+    The SDK is an optional extra and credentials come from the environment, so failure is normal.
+    """
+    try:
+        from .agents.llm import AnthropicClient
+
+        return AnthropicClient()
+    except Exception as error:
+        log.warning("model roles are off: %s: %s", type(error).__name__, error)
+        message = f"Model roles are off: {type(error).__name__}: {error}"
+        runtime.alert("model_client", "anthropic", message)
+        return None
+
+
+async def _agents_forever(runtime, client) -> None:
+    while True:
+        await runtime.run_agents(client)  # a failing task becomes an alert, never an exception
+        await asyncio.sleep(AGENT_SECONDS)
+
+
+async def _serve_listeners(app, settings) -> None:
+    """The loopback listener (behind the overlay proxy), plus the on-site listener when both
+    ``lan_bind`` and ``lan_port`` are set. The entry of a request follows the listener that
+    accepted it, so both serve the same app in this one event loop."""
+    import uvicorn
+
+    main = uvicorn.Server(
+        uvicorn.Config(app, host="127.0.0.1", port=settings.port, log_level="info")
+    )
+    if not (settings.lan_bind and settings.lan_port):
+        await main.serve()
+        return
+    lan = uvicorn.Server(
+        uvicorn.Config(
+            app, host=settings.lan_bind, port=settings.lan_port, log_level="info", lifespan="off"
+        )
+    )
+    lan.capture_signals = contextlib.nullcontext  # the main server owns the signals
+    lan_task = asyncio.create_task(lan.serve())
+    try:
+        await main.serve()
+    finally:
+        lan.should_exit = True
+        await asyncio.gather(lan_task, return_exceptions=True)
+
+
+async def _serve_auto_research(settings) -> None:
+    from .api import create_app
+    from .runtime import build_runtime
+
+    runtime = build_runtime(settings)
+    try:  # a too-short role token stops the daemon before anything starts
+        router = runtime.workbench(role_tokens_from_env(os.environ))
+    except ValueError as error:
+        raise SystemExit(f"growbridge: {error}") from error
+    await runtime.start()
+    ticker = asyncio.create_task(_tick_forever(runtime))
+    client = model_client_or_none(runtime) if settings.roles else None
+    agents = None if client is None else asyncio.create_task(_agents_forever(runtime, client))
+    app = create_app(settings, bridge=runtime.bridge, workbench=router)
+    try:
+        await _serve_listeners(app, settings)
+    finally:
+        background = [t for t in (ticker, agents) if t is not None]
+        for background_task in background:
+            background_task.cancel()
+        await asyncio.gather(*background, return_exceptions=True)
+        await runtime.stop()
 
 
 def main():
@@ -34,6 +185,20 @@ def main():
         action="store_true",
         help="Print the short-lived link instead of opening a browser",
     )
+    operator = sub.add_parser("operator", help="Manage workbench operators (auto_research)")
+    operator_sub = operator.add_subparsers(dest="operator_command", required=True)
+    add = operator_sub.add_parser(
+        "add", help="Add an operator; the secret is asked for, not passed"
+    )
+    add.add_argument("name")
+    host = sub.add_parser("host", help="Manage the write host of this device (auto_research)")
+    host_sub = host.add_subparsers(dest="host_command", required=True)
+    host_sub.add_parser("register", help="Make this machine the registered write host")
+    recovery = sub.add_parser("recovery", help="Recovery number after a restore or host change")
+    recovery_sub = recovery.add_subparsers(dest="recovery_command", required=True)
+    bump = recovery_sub.add_parser("bump", help="Raise the recovery number (daemon stopped)")
+    bump.add_argument("--reason", required=True, help="Why: restore, host change, ...")
+    sub.add_parser("simulate", help="Run a short simulated stage (no radio, no network)")
     args = parser.parse_args()
     os.umask(0o077)
     if args.command == "init":
@@ -47,8 +212,19 @@ def main():
         data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         print(json.dumps(asyncio.run(scan_devices(data_dir)), ensure_ascii=False, indent=2))
         return
+    if args.command == "simulate":
+        from .runtime import simulate_stage
+
+        print(json.dumps(asyncio.run(simulate_stage()), ensure_ascii=False, indent=2))
+        return
     settings = load(args.config)
-    if args.command == "dashboard":
+    if args.command == "operator":
+        _add_operator(parser, settings, args.name)
+    elif args.command == "host":
+        _register_host(parser, settings)
+    elif args.command == "recovery":
+        _recovery_bump(parser, settings, args.reason)
+    elif args.command == "dashboard":
         import webbrowser
 
         from .client import Client
@@ -84,6 +260,9 @@ def main():
             except BlockingIOError:
                 parser.error("A daemon already owns this data directory")
             logging.basicConfig(level=logging.INFO)
+            if settings.auto_research:
+                asyncio.run(_serve_auto_research(settings))
+                return
             uvicorn.run(
                 create_app(settings), host="127.0.0.1", port=settings.port, log_level="info"
             )

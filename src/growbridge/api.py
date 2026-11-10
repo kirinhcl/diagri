@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .dashboard import COOKIE, SESSION_SECONDS, BrowserSessions
 from .service import Bridge, BridgeError
+from .workbench.auth import allowed_origins, trusted_hosts
 
 
 class Operation(BaseModel):
@@ -41,12 +42,19 @@ class BrowserCode(BaseModel):
     code: str = Field(min_length=20, max_length=100)
 
 
-def create_app(settings, bridge=None):
+def create_app(settings, bridge=None, workbench: APIRouter | None = None):
+    """With ``settings.auto_research`` the shared token and its browser sessions are read-only
+    (the three write endpoints answer 403), the registered entry addresses join the trusted
+    hosts and allowed origins, and ``workbench`` (see ``workbench.api``) is mounted."""
     bridge = bridge or Bridge(settings)
     sessions = BrowserSessions()
+    allowed = {settings.url, f"http://localhost:{settings.port}"}
+    hosts = ["localhost", "127.0.0.1", "testserver"]
+    if settings.auto_research:
+        allowed |= allowed_origins(settings)
+        hosts += trusted_hosts(settings)
 
     def check_origin(request: Request):
-        allowed = {settings.url, f"http://localhost:{settings.port}"}
         if request.headers.get("origin") not in allowed:
             raise HTTPException(403, "Browser origin is not allowed")
 
@@ -81,9 +89,11 @@ def create_app(settings, bridge=None):
     app.state.bridge = bridge
     app.state.browser_sessions = sessions
     api = APIRouter(dependencies=[Depends(authorize)])
-    app.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "testserver"]
-    )
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
+
+    async def writes_closed():
+        if settings.auto_research:
+            raise HTTPException(403, "Device writes go through the workbench")
 
     @app.middleware("http")
     async def browser_headers(request, call_next):
@@ -220,7 +230,7 @@ def create_app(settings, bridge=None):
             headers={"Content-Disposition": 'attachment; filename="growbridge-history.csv"'},
         )
 
-    @api.post("/control/{device}")
+    @api.post("/control/{device}", dependencies=[Depends(writes_closed)])
     async def level(device: str, operation: Level):
         if device not in {"light", "exhaust", "fan"}:
             raise HTTPException(404, "Unknown device")
@@ -228,7 +238,7 @@ def create_app(settings, bridge=None):
             bridge.operate(operation.request_id, device, {"level": operation.level})
         )
 
-    @api.post("/outlet")
+    @api.post("/outlet", dependencies=[Depends(writes_closed)])
     async def outlet(operation: Outlet):
         return await asyncio.shield(
             bridge.operate(
@@ -236,11 +246,13 @@ def create_app(settings, bridge=None):
             )
         )
 
-    @api.post("/pump")
+    @api.post("/pump", dependencies=[Depends(writes_closed)])
     async def pump(operation: Pump):
         return await asyncio.shield(
             bridge.operate(operation.request_id, "pump", {"seconds": operation.seconds})
         )
 
     app.include_router(api)
+    if settings.auto_research and workbench is not None:
+        app.include_router(workbench)
     return app

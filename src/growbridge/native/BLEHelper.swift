@@ -22,7 +22,9 @@ final class BLEExplorer: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
     private var queuedWrites: [(Data, String)] = []
     private var writing = false
     private var processedCommands = Set<String>()
-    private var followUps: [String: [String: Any]] = [:]
+    private var channelDescriptor: Int32 = -1
+    private var channelSource: DispatchSourceRead?
+    private var channelClosed = false
 
     init(output: String, socketPath: String?, target: String?, scanSeconds: Double, listenSeconds: Double, commandDirectory: String?) throws {
         self.target = target
@@ -48,6 +50,7 @@ final class BLEExplorer: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
                 }
             }
             guard connected == 0 else { Darwin.close(descriptor); throw NSError(domain: "GrowBridge", code: 3) }
+            self.channelDescriptor = descriptor
             self.log = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         } else {
             FileManager.default.createFile(atPath: output, contents: nil, attributes: [.posixPermissions: 0o600])
@@ -62,6 +65,7 @@ final class BLEExplorer: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
             let existing = (try? FileManager.default.contentsOfDirectory(atPath: commandDirectory)) ?? []
             processedCommands.formUnion(existing.filter { $0.hasSuffix(".json") })
         }
+        watchChannel()
         emit("start", ["target": target ?? "scan only", "scan_seconds": scanSeconds, "process_id": ProcessInfo.processInfo.processIdentifier])
         central = CBCentralManager(delegate: self, queue: .main)
         DispatchQueue.main.asyncAfter(deadline: .now() + 90 + scanSeconds) {
@@ -69,7 +73,27 @@ final class BLEExplorer: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
         }
     }
 
+    /// Python never sends data on the event channel, so any readable state means it hung up.
+    /// Drop every queued write and exit so no write can outlive the Python owner.
+    private func watchChannel() {
+        guard channelDescriptor >= 0 else { return }
+        signal(SIGPIPE, SIG_IGN)
+        let source = DispatchSource.makeReadSource(fileDescriptor: channelDescriptor, queue: .main)
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            var scratch = [UInt8](repeating: 0, count: 256)
+            let count = Darwin.read(self.channelDescriptor, &scratch, scratch.count)
+            if count > 0 { return }
+            self.channelClosed = true
+            self.queuedWrites.removeAll()
+            self.finish("event_channel_closed")
+        }
+        source.resume()
+        channelSource = source
+    }
+
     private func emit(_ event: String, _ fields: [String: Any] = [:]) {
+        if channelClosed { return }
         var record = fields
         record["event"] = event
         record["time"] = ISO8601DateFormatter().string(from: Date())
@@ -246,16 +270,12 @@ final class BLEExplorer: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
         emit("command_queued", ["method": method, "msgId": id, "frames": frames.count,
                                "params": command["params"] ?? [:]])
         for (index, frame) in frames.enumerated() { queuedWrites.append((frame, index == frames.count - 1 ? id : "")) }
-        if let seconds = wrapper["auto_off_seconds"] as? Double,
-           (1...10).contains(seconds), let off = wrapper["auto_off_command"] as? [String: Any] {
-            followUps[id] = ["delay": seconds, "command": off]
-        }
         writeNext()
     }
 
     private func pollCommands() {
         guard let directory = commandDirectory, writeCharacteristic != nil else { return }
-        if FileManager.default.fileExists(atPath: directory + "/STOP"), queuedWrites.isEmpty, !writing, followUps.isEmpty {
+        if FileManager.default.fileExists(atPath: directory + "/STOP"), queuedWrites.isEmpty, !writing {
             finish("command_session_stopped")
             return
         }
@@ -289,14 +309,6 @@ final class BLEExplorer: NSObject, CBCentralManagerDelegate, CBPeripheralDelegat
             queuedWrites.removeAll()
         } else if !written.1.isEmpty {
             emit("command_written", ["msgId": written.1])
-            if let followUp = followUps[written.1], let delay = followUp["delay"] as? Double,
-               let off = followUp["command"] as? [String: Any] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    self.followUps.removeValue(forKey: written.1)
-                    do { try self.enqueue(["command": off, "transport": "framed"]) }
-                    catch { self.emit("auto_off_error", ["error": error.localizedDescription]) }
-                }
-            }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.04) { self.writeNext() }
     }

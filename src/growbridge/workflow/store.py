@@ -1,0 +1,570 @@
+"""Persistence of the workflow service: projects, protocols, rounds, stages, approvals, history.
+
+Stage rows carry a revision number. Every update states the revision it was computed from, so
+a slow caller that awaited a control call cannot overwrite a newer state (compare-and-set).
+Raw records only append: approvals are voided, never deleted; history and interventions grow.
+Column names in dynamic SQL come from model field names, never from caller input.
+"""
+
+import json
+import sqlite3
+from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Literal
+
+from growbridge.archive.db import Database
+from growbridge.archive.models import (
+    Approval,
+    Channel,
+    Model,
+    ResearchProtocol,
+    RightKind,
+    RuleAction,
+    RunSheet,
+)
+from growbridge.ports import Denied, Difference, RightScope, StageEvent, StageEventKind
+from growbridge.workflow.states import ROUND_TERMINAL, STAGE_TERMINAL, RoundState, StageState
+
+S = StageState
+
+NAMESPACE = "workflow"
+LIVE_STATES = (
+    StageState.RUNNING,
+    StageState.PAUSED,
+    StageState.MANUAL,
+    StageState.RECOVERY_CHECK,
+)
+
+STEPS = (
+    "CREATE TABLE wf_projects(id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at REAL NOT NULL)",
+    "CREATE TABLE wf_protocols(id TEXT NOT NULL, version INTEGER NOT NULL,"
+    " project_id TEXT NOT NULL, digest TEXT NOT NULL, body TEXT NOT NULL,"
+    " created_at REAL NOT NULL, PRIMARY KEY(id, version))",
+    "CREATE TABLE wf_rounds(id TEXT PRIMARY KEY, project_id TEXT NOT NULL,"
+    " protocol_id TEXT NOT NULL, protocol_version INTEGER NOT NULL, state TEXT NOT NULL,"
+    " stages_done INTEGER NOT NULL, awaiting_choice TEXT, snapshot_id TEXT,"
+    " report_artifact_id TEXT, created_at REAL NOT NULL)",
+    "CREATE TABLE wf_run_sheets(id TEXT NOT NULL, version INTEGER NOT NULL,"
+    " round_id TEXT NOT NULL, stage_id TEXT NOT NULL, digest TEXT NOT NULL,"
+    " body TEXT NOT NULL, submitted_at REAL NOT NULL, PRIMARY KEY(id, version))",
+    "CREATE TABLE wf_stages(stage_id TEXT PRIMARY KEY, round_id TEXT NOT NULL,"
+    " project_id TEXT NOT NULL, experiment_id TEXT NOT NULL, device_id TEXT NOT NULL,"
+    " run_sheet_id TEXT NOT NULL, run_sheet_version INTEGER NOT NULL, state TEXT NOT NULL,"
+    " prior_state TEXT, right_number INTEGER, care_right INTEGER, manual_right INTEGER,"
+    " manual_operator TEXT, started_at REAL, paused_at REAL, state_at REAL NOT NULL,"
+    " end_pending INTEGER NOT NULL DEFAULT 0, onsite_checked INTEGER NOT NULL DEFAULT 0,"
+    " recovery_number INTEGER NOT NULL, rev INTEGER NOT NULL DEFAULT 0)",
+    "CREATE TABLE wf_approvals(id TEXT PRIMARY KEY, stage_id TEXT NOT NULL,"
+    " approved_at REAL NOT NULL, voided_at REAL, body TEXT NOT NULL)",
+    "CREATE TABLE wf_events(event_id TEXT PRIMARY KEY, stage_id TEXT, round_id TEXT,"
+    " kind TEXT NOT NULL, at REAL NOT NULL, outcome TEXT NOT NULL)",
+    "CREATE TABLE wf_history(id INTEGER PRIMARY KEY AUTOINCREMENT, stage_id TEXT NOT NULL,"
+    " at REAL NOT NULL, from_state TEXT NOT NULL, to_state TEXT NOT NULL,"
+    " event TEXT NOT NULL, detail TEXT NOT NULL)",
+    "CREATE TABLE wf_interventions(id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " experiment_id TEXT NOT NULL, stage_id TEXT NOT NULL, at REAL NOT NULL,"
+    " kind TEXT NOT NULL, operator TEXT, detail TEXT NOT NULL)",
+    "CREATE INDEX wf_stages_round ON wf_stages(round_id)",
+    "CREATE INDEX wf_approvals_stage ON wf_approvals(stage_id)",
+)
+
+
+class DuplicateEvent(Exception):
+    """The event id was already recorded; the transaction that tried again rolls back."""
+
+
+class StageRow(Model):
+    stage_id: str
+    round_id: str
+    project_id: str
+    experiment_id: str
+    device_id: str
+    run_sheet_id: str
+    run_sheet_version: int
+    state: StageState
+    prior_state: StageState | None = None
+    right_number: int | None = None
+    care_right: int | None = None
+    manual_right: int | None = None
+    manual_operator: str | None = None
+    started_at: float | None = None
+    paused_at: float | None = None
+    state_at: float
+    end_pending: bool = False
+    onsite_checked: bool = False
+    recovery_number: int
+    rev: int = 0
+
+
+class RoundRow(Model):
+    id: str
+    project_id: str
+    protocol_id: str
+    protocol_version: int
+    state: RoundState
+    stages_done: int = 0
+    awaiting_choice: str | None = None
+    snapshot_id: str | None = None
+    report_artifact_id: str | None = None
+
+
+def _db_value(value: Any) -> Any:
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, bool):
+        return int(value)
+    return value
+
+
+def _marks(count: int) -> str:
+    return ", ".join("?" * count)
+
+
+def _assignments(changes: dict[str, Any], allowed: Iterable[str]) -> tuple[str, list[Any]]:
+    unknown = set(changes) - set(allowed)
+    if unknown:
+        raise ValueError(f"unknown columns {sorted(unknown)}")
+    sets = ", ".join(f"{column} = ?" for column in changes)
+    return sets, [_db_value(value) for value in changes.values()]
+
+
+class WorkflowStore:
+    def __init__(self, db: Database):
+        self.db = db
+        db.migrate(NAMESPACE, STEPS)
+
+    # --- projects and protocols ----------------------------------------------------------------
+
+    def add_project(self, project_id: str, name: str, now: float) -> None:
+        self.db.execute("INSERT INTO wf_projects VALUES (?, ?, ?)", (project_id, name, now))
+
+    def has_project(self, project_id: str) -> bool:
+        return self.db.one("SELECT 1 FROM wf_projects WHERE id = ?", (project_id,)) is not None
+
+    def protocol(self, protocol_id: str, version: int) -> ResearchProtocol | None:
+        row = self.db.one(
+            "SELECT body FROM wf_protocols WHERE id = ? AND version = ?", (protocol_id, version)
+        )
+        return None if row is None else ResearchProtocol.model_validate_json(row["body"])
+
+    def latest_protocol(self, protocol_id: str, project_id: str) -> ResearchProtocol | None:
+        row = self.db.one(
+            "SELECT body FROM wf_protocols WHERE id = ? AND project_id = ?"
+            " ORDER BY version DESC LIMIT 1",
+            (protocol_id, project_id),
+        )
+        return None if row is None else ResearchProtocol.model_validate_json(row["body"])
+
+    def put_protocol(self, protocol: ResearchProtocol, now: float) -> None:
+        self.db.execute(
+            "INSERT INTO wf_protocols VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                protocol.id,
+                protocol.version,
+                protocol.project_id,
+                protocol.digest(),
+                protocol.model_dump_json(),
+                now,
+            ),
+        )
+
+    # --- rounds --------------------------------------------------------------------------------
+
+    def add_round(self, row: RoundRow, now: float) -> None:
+        self.db.execute(
+            "INSERT INTO wf_rounds VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                row.id,
+                row.project_id,
+                row.protocol_id,
+                row.protocol_version,
+                row.state.value,
+                row.stages_done,
+                row.awaiting_choice,
+                row.snapshot_id,
+                row.report_artifact_id,
+                now,
+            ),
+        )
+
+    def round(self, round_id: str) -> RoundRow:
+        row = self.db.one("SELECT * FROM wf_rounds WHERE id = ?", (round_id,))
+        if row is None:
+            raise Denied("state", f"unknown round {round_id}")
+        return RoundRow(**{key: row[key] for key in RoundRow.model_fields})
+
+    def update_round(self, round_id: str, **changes: Any) -> RoundRow:
+        sets, values = _assignments(changes, set(RoundRow.model_fields) - {"id"})
+        self.db.execute(f"UPDATE wf_rounds SET {sets} WHERE id = ?", (*values, round_id))
+        return self.round(round_id)
+
+    # --- run sheets ----------------------------------------------------------------------------
+
+    def run_sheet(self, sheet_id: str, version: int) -> RunSheet:
+        row = self.db.one(
+            "SELECT body FROM wf_run_sheets WHERE id = ? AND version = ?", (sheet_id, version)
+        )
+        if row is None:
+            raise Denied("state", f"unknown run sheet {sheet_id} v{version}")
+        return RunSheet.model_validate_json(row["body"])
+
+    def run_sheet_digest(self, sheet_id: str, version: int) -> str | None:
+        row = self.db.one(
+            "SELECT digest FROM wf_run_sheets WHERE id = ? AND version = ?", (sheet_id, version)
+        )
+        return None if row is None else row["digest"]
+
+    def put_run_sheet(self, sheet: RunSheet, round_id: str, now: float) -> None:
+        self.db.execute(
+            "INSERT OR IGNORE INTO wf_run_sheets VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                sheet.id,
+                sheet.version,
+                round_id,
+                sheet.stage_id,
+                sheet.digest(),
+                sheet.model_dump_json(),
+                now,
+            ),
+        )
+
+    # --- stages --------------------------------------------------------------------------------
+
+    @staticmethod
+    def _stage_row(row: sqlite3.Row) -> StageRow:
+        data = {key: row[key] for key in StageRow.model_fields}
+        data["end_pending"] = bool(data["end_pending"])
+        data["onsite_checked"] = bool(data["onsite_checked"])
+        return StageRow(**data)
+
+    def add_stage(self, row: StageRow) -> None:
+        columns = list(StageRow.model_fields)
+        values = [_db_value(getattr(row, column)) for column in columns]
+        self.db.execute(
+            f"INSERT INTO wf_stages({', '.join(columns)}) VALUES ({_marks(len(columns))})",
+            values,
+        )
+
+    def find_stage(self, stage_id: str) -> StageRow | None:
+        row = self.db.one("SELECT * FROM wf_stages WHERE stage_id = ?", (stage_id,))
+        return None if row is None else self._stage_row(row)
+
+    def stage(self, stage_id: str) -> StageRow:
+        row = self.find_stage(stage_id)
+        if row is None:
+            raise Denied("state", f"unknown stage {stage_id}")
+        return row
+
+    def update_stage(self, row: StageRow, **changes: Any) -> StageRow:
+        """Compare-and-set on ``row.rev``: a stale caller gets ``Denied("state")``."""
+        sets, values = _assignments(changes, set(StageRow.model_fields) - {"stage_id", "rev"})
+        cursor = self.db.execute(
+            f"UPDATE wf_stages SET {sets}, rev = rev + 1 WHERE stage_id = ? AND rev = ?",
+            (*values, row.stage_id, row.rev),
+        )
+        if cursor.rowcount != 1:
+            raise Denied("state", f"stage {row.stage_id} changed while the request was running")
+        return self.stage(row.stage_id)
+
+    def stages_of_round(self, round_id: str) -> tuple[StageRow, ...]:
+        rows = self.db.query(
+            "SELECT * FROM wf_stages WHERE round_id = ? ORDER BY rowid", (round_id,)
+        )
+        return tuple(self._stage_row(row) for row in rows)
+
+    def stages_in(self, states: Iterable[StageState]) -> tuple[StageRow, ...]:
+        wanted = [state.value for state in states]
+        rows = self.db.query(
+            f"SELECT * FROM wf_stages WHERE state IN ({_marks(len(wanted))}) ORDER BY rowid",
+            wanted,
+        )
+        return tuple(self._stage_row(row) for row in rows)
+
+    def other_care_holders(self, device_id: str, stage_id: str) -> tuple[StageRow, ...]:
+        rows = self.db.query(
+            "SELECT * FROM wf_stages WHERE device_id = ? AND stage_id != ?"
+            " AND care_right IS NOT NULL",
+            (device_id, stage_id),
+        )
+        return tuple(self._stage_row(row) for row in rows)
+
+    def device_busy(self, device_id: str, stage_id: str) -> bool:
+        states = [state.value for state in LIVE_STATES]
+        row = self.db.one(
+            "SELECT 1 FROM wf_stages WHERE device_id = ? AND stage_id != ?"
+            f" AND state IN ({_marks(len(states))})",
+            (device_id, stage_id, *states),
+        )
+        return row is not None
+
+    def active(self) -> StageRow | None:
+        """Latest started stage of a round that is not yet delivered or aborted."""
+        row = self.db.one(
+            "SELECT s.* FROM wf_stages s JOIN wf_rounds r ON r.id = s.round_id"
+            " WHERE s.started_at IS NOT NULL AND r.state NOT IN (?, ?)"
+            " ORDER BY s.started_at DESC, s.rowid DESC LIMIT 1",
+            (RoundState.DELIVERED.value, RoundState.ABORTED.value),
+        )
+        return None if row is None else self._stage_row(row)
+
+    # --- approvals -----------------------------------------------------------------------------
+
+    def add_approval(self, approval: Approval) -> None:
+        self.db.execute(
+            "INSERT INTO wf_approvals VALUES (?, ?, ?, NULL, ?)",
+            (approval.id, approval.stage_id, approval.approved_at, approval.model_dump_json()),
+        )
+
+    def approvals(self, stage_id: str) -> tuple[Approval, ...]:
+        rows = self.db.query(
+            "SELECT body, voided_at FROM wf_approvals WHERE stage_id = ? ORDER BY rowid",
+            (stage_id,),
+        )
+        return tuple(
+            Approval.model_validate_json(row["body"]).model_copy(
+                update={"voided_at": row["voided_at"]}
+            )
+            for row in rows
+        )
+
+    def valid_approval(self, stage_id: str) -> Approval | None:
+        live = [approval for approval in self.approvals(stage_id) if approval.voided_at is None]
+        return live[-1] if live else None
+
+    def void_approvals(self, stage_id: str, now: float) -> None:
+        self.db.execute(
+            "UPDATE wf_approvals SET voided_at = ? WHERE stage_id = ? AND voided_at IS NULL",
+            (now, stage_id),
+        )
+
+    # --- events, history, interventions --------------------------------------------------------
+
+    def event_seen(self, event_id: str) -> bool:
+        return self.db.one("SELECT 1 FROM wf_events WHERE event_id = ?", (event_id,)) is not None
+
+    def record_event(
+        self,
+        event_id: str,
+        stage_id: str | None,
+        round_id: str | None,
+        kind: str,
+        at: float,
+        outcome: str,
+    ) -> None:
+        try:
+            self.db.execute(
+                "INSERT INTO wf_events VALUES (?, ?, ?, ?, ?, ?)",
+                (event_id, stage_id, round_id, kind, at, outcome),
+            )
+        except sqlite3.IntegrityError as error:
+            raise DuplicateEvent(event_id) from error
+
+    def add_history(
+        self, stage_id: str, at: float, before: str, after: str, event: str, detail: dict
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO wf_history(stage_id, at, from_state, to_state, event, detail)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (stage_id, at, before, after, event, json.dumps(detail, sort_keys=True)),
+        )
+
+    def history(self, stage_id: str) -> tuple[dict, ...]:
+        rows = self.db.query("SELECT * FROM wf_history WHERE stage_id = ? ORDER BY id", (stage_id,))
+        return tuple(
+            {
+                "at": row["at"],
+                "from": row["from_state"],
+                "to": row["to_state"],
+                "event": row["event"],
+                "detail": json.loads(row["detail"]),
+            }
+            for row in rows
+        )
+
+    def add_intervention(
+        self,
+        experiment_id: str,
+        stage_id: str,
+        at: float,
+        kind: str,
+        operator: str | None,
+        detail: dict,
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO wf_interventions(experiment_id, stage_id, at, kind, operator, detail)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (experiment_id, stage_id, at, kind, operator, json.dumps(detail, sort_keys=True)),
+        )
+
+    def interventions(self, experiment_id: str) -> tuple[dict, ...]:
+        rows = self.db.query(
+            "SELECT * FROM wf_interventions WHERE experiment_id = ? ORDER BY id", (experiment_id,)
+        )
+        return tuple(
+            {
+                "stage_id": row["stage_id"],
+                "at": row["at"],
+                "kind": row["kind"],
+                "operator": row["operator"],
+                **json.loads(row["detail"]),
+            }
+            for row in rows
+        )
+
+    # --- round state ---------------------------------------------------------------------------
+
+    def stage_total(self, rnd: RoundRow) -> int:
+        protocol = self.protocol(rnd.protocol_id, rnd.protocol_version)
+        return len(protocol.stages) if protocol is not None else 0
+
+    def round_effect(self, stage: StageRow, effect: str) -> None:
+        """What a stage change does to its round (App. B, round table)."""
+        rnd = self.round(stage.round_id)
+        if rnd.state in ROUND_TERMINAL:
+            return
+        if effect == "started" and rnd.state is RoundState.STAGE_REVIEW:
+            self.update_round(rnd.id, state=RoundState.STAGE_RUNNING)
+        elif effect == "to_review" and rnd.state is RoundState.STAGE_RUNNING:
+            self.update_round(rnd.id, state=RoundState.STAGE_REVIEW)
+        elif effect == "stopped":
+            self.update_round(rnd.id, awaiting_choice=stage.stage_id)
+        elif effect == "ended" and rnd.state is RoundState.STAGE_RUNNING:
+            done = rnd.stages_done + 1
+            more = done < self.stage_total(rnd)
+            target = RoundState.STAGE_REVIEW if more else RoundState.DATA_VERIFICATION
+            self.update_round(rnd.id, state=target, stages_done=done)
+
+    def abort_stage(self, stage: StageRow, now: float) -> None:
+        cleared = {"right_number": None, "manual_right": None, "care_right": None}
+        if stage.state in STAGE_TERMINAL:
+            self.update_stage(stage, **cleared)
+            return
+        self.void_approvals(stage.stage_id, now)
+        self.update_stage(stage, state=S.STOPPED, prior_state=None, state_at=now, **cleared)
+        args = (stage.stage_id, now, stage.state.value, S.STOPPED.value)
+        self.add_history(*args, "round_aborted", {})
+
+    def mark_round(
+        self,
+        round_id: str,
+        event_id: str,
+        kind: str,
+        move: tuple[RoundState, RoundState],
+        changes: dict[str, Any],
+        now: float,
+    ) -> RoundState:
+        """Advance once per event id; an event that arrives in the wrong state is dropped."""
+        expected, target = move
+        rnd = self.round(round_id)
+        if self.event_seen(event_id):
+            return rnd.state
+        applies = rnd.state is expected
+        try:
+            with self.db.transaction():
+                outcome = "applied" if applies else "dropped"
+                self.record_event(event_id, None, round_id, kind, now, outcome)
+                if applies:
+                    return self.update_round(round_id, state=target, **changes).state
+        except DuplicateEvent:
+            pass
+        return self.round(round_id).state
+
+
+# --- stage plans: what a change of stage state consists of ----------------------------------------
+
+
+@dataclass(frozen=True)
+class Grant:
+    kind: RightKind
+    column: str  # the StageRow column that receives the new right number
+    operator: str | None = None
+
+
+Hook = Callable[[StageRow], None]
+
+
+@dataclass(frozen=True)
+class Plan:
+    """Enter ``state``: hand over ``handover`` rights first, then grant ``grants``, then save."""
+
+    state: StageState
+    event: str
+    updates: dict[str, Any] = field(default_factory=dict)
+    handover: tuple[int, ...] = ()
+    grants: tuple[Grant, ...] = ()
+    reason: str = ""
+    detail: dict[str, Any] = field(default_factory=dict)
+    round_effect: Literal["started", "ended", "stopped", "to_review"] | None = None
+    sheet: RunSheet | None = None  # governs the new rights when the run sheet changes
+    extra: Hook | None = None  # more records, written inside the same transaction
+
+
+def held(*numbers: int | None) -> tuple[int, ...]:
+    return tuple(number for number in numbers if number is not None)
+
+
+def care_if_missing(stage: StageRow) -> tuple[Grant, ...]:
+    return () if stage.care_right is not None else (Grant(RightKind.CARE, "care_right"),)
+
+
+def describe(diffs: Sequence[Difference]) -> str:
+    return ", ".join(f"{d.channel.value}.{d.field} {d.expected} != {d.actual}" for d in diffs)
+
+
+def right_scope(stage: StageRow, sheet: RunSheet, kind: RightKind) -> RightScope | None:
+    hosted: tuple[Channel, ...] = sheet.host_channels()
+    base = {"device_id": sheet.device_id, "experiment_id": stage.experiment_id}
+    base["stage_id"] = stage.stage_id
+    if kind is RightKind.MANUAL:
+        return RightScope(**base, channels=hosted)
+    if kind is RightKind.STAGE:
+        return RightScope(**base, run_sheet_digest=sheet.digest(), channels=hosted)
+    steps = [step for rule in sheet.care_rules for step in rule.schedule if step.channel in hosted]
+    if not steps:
+        return None  # a run sheet without care rules gets no care right
+    levels = tuple(dict.fromkeys(RuleAction(channel=s.channel, level=s.level) for s in steps))
+    channels = tuple(dict.fromkeys(step.channel for step in steps))
+    return RightScope(**base, run_sheet_digest=sheet.digest(), channels=channels, levels=levels)
+
+
+def pause_plan(stage: StageRow, event: str, now: float) -> Plan:
+    updates = {"right_number": None, "paused_at": now}
+    return Plan(S.PAUSED, event, updates, handover=held(stage.right_number), reason=event)
+
+
+def recovery_plan(stage: StageRow, event: str) -> Plan:
+    """Old writes or the pump cannot be confirmed: nothing may write until it is checked."""
+    cleared = {"right_number": None, "manual_right": None, "care_right": None}
+    return Plan(
+        S.RECOVERY_CHECK,
+        event,
+        updates={**cleared, "prior_state": stage.state, "onsite_checked": False},
+        handover=held(stage.right_number, stage.manual_right, stage.care_right),
+        reason=event,
+    )
+
+
+def end_actions_plan(stage: StageRow, event: StageEvent) -> Plan | None:
+    if stage.state is not S.RUNNING or not stage.end_pending:
+        return None
+    if not event.detail.get("confirmed", False):
+        return recovery_plan(stage, event.kind.value)
+    return Plan(
+        S.ENDED,
+        event.kind.value,
+        updates={"right_number": None, "end_pending": False},
+        handover=held(stage.right_number),
+        reason="stage ended",
+        detail={"confirmed": True},
+        round_effect="ended",
+    )
+
+
+def expiry_plan(outcome: StageState) -> Plan:
+    """The longest wait is over: the run sheet says whether the stage stays paused or stops."""
+    event = StageEventKind.MAX_WAIT_EXPIRED.value
+    if outcome is S.STOPPED:
+        updates = {"prior_state": None}
+        return Plan(S.STOPPED, event, updates, detail={"on_expiry": "stop"}, round_effect="stopped")
+    return Plan(S.PAUSED, event, detail={"on_expiry": "stay_paused"})

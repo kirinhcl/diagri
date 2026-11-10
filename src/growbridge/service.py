@@ -6,6 +6,7 @@ import math
 import time
 import uuid
 
+from .archive.clock import SystemClock
 from .protocol import Decoder, ProtocolError, public_data
 from .store import Store
 from .transport import make_transport
@@ -22,8 +23,11 @@ class PumpOffUnconfirmed(BridgeError):
 
 
 class Bridge:
-    def __init__(self, settings, transport_factory=make_transport):
+    def __init__(self, settings, transport_factory=make_transport, clock=None):
         self.settings = settings
+        self.clock = clock or SystemClock()
+        self.request_timeout = 8.0  # seconds to wait for a matched device reply
+        self.readback_interval = 0.5  # seconds between read-back polls
         self.store = Store(settings.data_dir / "growbridge.sqlite3")
         self.transport_factory = transport_factory
         self.transport = None
@@ -61,9 +65,9 @@ class Bridge:
         if message.get("code") == 200 and isinstance(message.get("data"), dict):
             if method == "getDevSta":
                 self.data = public_data(message["data"])
-                self.received_at = time.time()
-                self.received_monotonic = time.monotonic()
-                self.store.sample(self.data)
+                self.received_at = self.clock.now()
+                self.received_monotonic = self.clock.monotonic()
+                self.store.sample(self.data, self.received_at)
                 if time.monotonic() - self.last_prune > 3600:
                     self.store.prune(self.settings.retention_days)
                     self.last_prune = time.monotonic()
@@ -148,7 +152,7 @@ class Bridge:
             self.pending[key] = future
             try:
                 await self.transport.send(command)
-                return await asyncio.wait_for(future, timeout=8)
+                return await asyncio.wait_for(future, timeout=self.request_timeout)
             except TimeoutError as error:
                 raise BridgeError(f"No matched device reply for {method}") from error
             finally:
@@ -157,7 +161,7 @@ class Bridge:
                     future.cancel()
 
     def health(self):
-        age = time.monotonic() - self.received_monotonic if self.received_monotonic else None
+        age = self.clock.monotonic() - self.received_monotonic if self.received_monotonic else None
         return {
             "connected": self.connected,
             "protocol_version": self.decoder.version,
@@ -203,7 +207,7 @@ class Bridge:
             state = data.get(section, {}).get(key) if section == "outlet" else data.get(key)
             if isinstance(state, dict) and predicate(state):
                 return state
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(self.readback_interval)
         raise BridgeError("Device state did not confirm the requested setting")
 
     def outlet_params(self, config, number, on):

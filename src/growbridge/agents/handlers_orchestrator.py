@@ -1,0 +1,221 @@
+"""Orchestrator tool handlers (architecture doc §5.2): read state, create or delegate tasks, file
+drafts for review. Nothing here controls a stage or the device."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from growbridge.agents.handlers_common import (
+    MAX_ITEMS,
+    Deps,
+    DraftInput,
+    ToolInput,
+    clip,
+    submit_draft,
+)
+from growbridge.agents.tools import Tool
+from growbridge.archive.ids import file_digest, new_id
+from growbridge.archive.models import Budget, ResearchTask
+from growbridge.ports import Denied
+
+ROLE = "orchestrator"
+HISTORY_TAIL = 10
+MAX_ARTIFACT_BYTES = 64_000
+DEFAULT_TASK_BUDGET = Budget(max_calls=20, max_cost=5.0)
+ModelRole = Literal["planner", "researcher"]
+
+
+class ProjectStateInput(ToolInput):
+    project_id: str
+    round_id: str | None = None
+
+
+class RunStatusInput(ToolInput):
+    stage_id: str
+
+
+class CreateTaskInput(ToolInput):
+    project_id: str
+    owner_role: ModelRole
+    question: str
+    trigger_event_id: str
+    correlation_id: str
+    constraints: tuple[str, ...] = ()
+    input_refs: tuple[str, ...] = ()
+    expected_artifacts: tuple[str, ...] = ()
+    budget: Budget = DEFAULT_TASK_BUDGET
+
+
+class DelegateInput(ToolInput):
+    """A full handoff (``roles.Handoff``) plus the project and the receiving role."""
+
+    project_id: str
+    to_role: ModelRole
+    goal: str
+    budget: Budget
+    trigger_event_id: str
+    correlation_id: str
+    constraints: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
+    expected_artifacts: tuple[str, ...] = ()
+    parent_task_id: str | None = None
+
+
+class TaskStatusInput(ToolInput):
+    task_id: str
+
+
+class ArtifactInput(ToolInput):
+    artifact_id: str
+
+
+def _task_summary(task: ResearchTask) -> dict:
+    return {
+        "id": task.id,
+        "owner_role": task.owner_role,
+        "state": task.state.value,
+        "question": clip(task.question, 200),
+    }
+
+
+def _stored(deps: Deps, task: ResearchTask) -> dict:
+    stored = deps.tasks.create(task)  # one task per trigger event: a repeat returns the first
+    return {"task_id": stored.id, "state": stored.state.value, "reused": stored.id != task.id}
+
+
+def build_orchestrator_tools(deps: Deps) -> list[Tool]:
+    def project_state(data: ProjectStateInput) -> dict:
+        tasks = deps.tasks.list(data.project_id)
+        out: dict = {"tasks": [_task_summary(t) for t in tasks[-MAX_ITEMS:]]}
+        out["active_stage"] = getattr(deps.workflow.active_stage(), "stage_id", None)
+        if data.round_id is not None:
+            out["round_state"] = deps.workflow.round_state(data.round_id).value
+            out["stages"] = [
+                {"stage_id": s.stage_id, "state": s.state.value}
+                for s in deps.workflow.store.stages_of_round(data.round_id)
+            ]
+        return out
+
+    def run_status(data: RunStatusInput) -> dict:
+        stage = deps.workflow.stage(data.stage_id)
+        return {
+            "stage_id": stage.stage_id,
+            "state": stage.state.value,
+            "experiment_id": stage.experiment_id,
+            "started_at": stage.started_at,
+            "paused_at": stage.paused_at,
+            "end_pending": stage.end_pending,
+            "history": list(deps.workflow.history(data.stage_id))[-HISTORY_TAIL:],
+        }
+
+    def create_task(data: CreateTaskInput) -> dict:
+        task = ResearchTask(
+            id=new_id("task"),
+            project_id=data.project_id,
+            question=data.question,
+            owner_role=data.owner_role,
+            budget=data.budget,
+            trigger_event_id=data.trigger_event_id,
+            correlation_id=data.correlation_id,
+            constraints=data.constraints,
+            input_refs=data.input_refs,
+            expected_artifacts=data.expected_artifacts,
+        )
+        return _stored(deps, task)
+
+    def delegate(data: DelegateInput) -> dict:
+        task = ResearchTask(
+            id=new_id("task"),
+            project_id=data.project_id,
+            question=data.goal,
+            owner_role=data.to_role,
+            budget=data.budget,
+            trigger_event_id=data.trigger_event_id,
+            correlation_id=data.correlation_id,
+            constraints=data.constraints,
+            input_refs=data.evidence_refs,
+            expected_artifacts=data.expected_artifacts,
+            parent_task_id=data.parent_task_id,
+        )
+        return _stored(deps, task)
+
+    def task_status(data: TaskStatusInput) -> dict:
+        task = deps.tasks.get(data.task_id)
+        artifacts = deps.archive.artifacts(task.id)
+        return {
+            **_task_summary(task),
+            "artifacts": [{"id": a.id, "kind": a.kind, "label": a.label} for a in artifacts],
+        }
+
+    def read_artifact(data: ArtifactInput) -> dict:
+        return _read(deps, data.artifact_id)
+
+    def submit_for_review(data: DraftInput) -> dict:
+        return submit_draft(deps, ROLE, data)
+
+    return [
+        Tool(
+            "get_project_state",
+            "Read tasks, round and stage states of a project.",
+            ProjectStateInput,
+            project_state,
+        ),
+        Tool(
+            "get_run_status",
+            "Read the state and recent history of one stage.",
+            RunStatusInput,
+            run_status,
+        ),
+        Tool(
+            "create_research_task",
+            "Create a planner or researcher task.",
+            CreateTaskInput,
+            create_task,
+            writes=True,
+        ),
+        Tool(
+            "delegate_task",
+            "Delegate a task with a full handoff.",
+            DelegateInput,
+            delegate,
+            writes=True,
+        ),
+        Tool(
+            "submit_run_for_review",
+            "File a validated run sheet draft for operator review.",
+            DraftInput,
+            submit_for_review,
+            writes=True,
+        ),
+        Tool(
+            "get_task_status", "Read a task's state and artifact ids.", TaskStatusInput, task_status
+        ),
+        Tool(
+            "read_artifact",
+            "Read a registered text artifact (checked against its digest).",
+            ArtifactInput,
+            read_artifact,
+        ),
+    ]
+
+
+def _read(deps: Deps, artifact_id: str) -> dict:
+    artifact = deps.archive.artifact(artifact_id)
+    if artifact is None:
+        raise Denied("state", f"unknown artifact {artifact_id}")
+    path = deps.archive.root.joinpath(artifact.path).resolve()
+    roots = (deps.work_root.resolve(), deps.archive.root.resolve())
+    if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
+        raise Denied("scope", f"artifact {artifact_id} is outside the project data")
+    if file_digest(path) != artifact.sha256:
+        raise Denied("state", f"artifact {artifact_id} no longer matches its recorded digest")
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_ARTIFACT_BYTES + 1)
+    text = raw[:MAX_ARTIFACT_BYTES].decode(errors="replace")
+    return {
+        "artifact_id": artifact_id,
+        "kind": artifact.kind,
+        "label": artifact.label,
+        "truncated": len(raw) > MAX_ARTIFACT_BYTES,
+        "text": text,
+    }

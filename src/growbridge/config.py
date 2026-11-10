@@ -2,12 +2,29 @@ import os
 import secrets
 import tomllib
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 def default_config() -> Path:
     return Path.home() / ".config" / "spiderfarmer-growbridge" / "config.toml"
+
+
+class RoleModel(BaseModel):
+    """Model configuration of one Auto Research role (architecture doc §11.7).
+
+    Credentials never live here: the model client resolves them from the environment.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    provider: Literal["anthropic"] = "anthropic"
+    model: str = "claude-opus-5-5"
+    effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
+    max_tokens: int = Field(default=16000, ge=256, le=64000)
+    max_calls: int = Field(default=40, ge=1)
+    tools: list[str] = Field(default_factory=list)  # empty: every tool the role allows
+    data: list[str] = Field(default_factory=list)  # data kinds the role may read
 
 
 class Settings(BaseModel):
@@ -25,6 +42,19 @@ class Settings(BaseModel):
     exhaust_outlet: int = Field(default=2, ge=1, le=5)
     fan_outlet: int = Field(default=3, ge=1, le=5)
     retention_days: int = Field(default=30, ge=1, le=365)
+    # Auto Research (off by default: the daemon then behaves exactly as before).
+    auto_research: bool = False
+    lan_hosts: list[str] = Field(default_factory=list)  # addresses of the on-site entry
+    overlay_hosts: list[str] = Field(default_factory=list)  # addresses of the overlay entry
+    # The on-site entry has its own listener: a request is "LAN" only when it was accepted on
+    # this address and port, never because of a Host header. Unset means no on-site entry.
+    lan_bind: str = ""
+    lan_port: int | None = Field(default=None, ge=1024, le=65535)
+    report_time: str = Field(default="08:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    report_timezone: str = "UTC"
+    roles: dict[str, RoleModel] = Field(default_factory=dict)
+    backup_dir: Path | None = None  # independent media for the SQLite online backups
+    backup_interval_seconds: float = Field(default=6 * 3600, ge=60)
 
     @property
     def url(self) -> str:

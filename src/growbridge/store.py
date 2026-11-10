@@ -7,6 +7,8 @@ from pathlib import Path
 class Store:
     def __init__(self, path: Path):
         self.path = path.resolve()
+        # (archived_cursor(), clock) once the project archive protects unarchived history.
+        self.history_guard = None
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -19,8 +21,9 @@ class Store:
         """)
         self.db.commit()
 
-    def sample(self, data: dict) -> None:
-        self.db.execute("INSERT INTO samples VALUES(?,?)", (time.time(), json.dumps(data)))
+    def sample(self, data: dict, at: float | None = None) -> None:
+        stamp = time.time() if at is None else at
+        self.db.execute("INSERT INTO samples VALUES(?,?)", (stamp, json.dumps(data)))
         self.db.commit()
 
     def history(self, hours: float, limit: int = 500) -> list[dict]:
@@ -31,7 +34,21 @@ class Store:
         return [{"timestamp": at, "data": json.loads(data)} for at, data in reversed(rows)]
 
     def prune(self, days: int) -> None:
-        self.db.execute("DELETE FROM samples WHERE at<?", (time.time() - days * 86400,))
+        guard = self.history_guard
+        if guard is None:
+            self.db.execute("DELETE FROM samples WHERE at<?", (time.time() - days * 86400,))
+        else:
+            # Archive-protected: only archived rows go, and nothing while the clock is unsynced.
+            archived_cursor, clock = guard
+            if not clock.synced:
+                return
+            # The newest row stays: samples has no AUTOINCREMENT, so an emptied table would
+            # hand out rowids below the archive cursor again and those rows would be lost.
+            self.db.execute(
+                "DELETE FROM samples WHERE at<? AND rowid<=?"
+                " AND rowid<(SELECT MAX(rowid) FROM samples)",
+                (clock.now() - days * 86400, archived_cursor()),
+            )
         self.db.commit()
 
     def series(self, hours: float, points: int = 600) -> dict:
