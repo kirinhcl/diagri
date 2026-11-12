@@ -90,6 +90,32 @@ class Env:
         }
         return make_run_sheet(**{**defaults, **fields})
 
+    def stage_for(self, experiment_id: str) -> str:
+        """Register a stage of this project for an experiment, so its snapshots have an owner.
+
+        The stage goes into a second round, leaving the main round's state alone.
+        """
+        if not hasattr(self, "_experiment_round"):
+            self._experiment_round = self.workflow.create_round(
+                self.project_id, self.protocol.id, self.operator
+            )
+        stage_id = f"stage-of-{experiment_id}"
+        sheet = self.sheet(stage_id, experiment_id=experiment_id)
+        self.workflow.submit_run_sheet(self._experiment_round, sheet, self.operator)
+        return stage_id
+
+    def other_project(self) -> tuple[str, str]:
+        """A second project with its own protocol, round and one stage of experiment ``exp-b``."""
+        project_id = self.workflow.create_project("other", self.operator)
+        protocol = make_protocol(project_id=project_id, id="protocol-b")
+        self.workflow.save_protocol(protocol, self.operator)
+        round_id = self.workflow.create_round(project_id, protocol.id, self.operator)
+        sheet = self.sheet(
+            "stage-b", project_id=project_id, protocol_id=protocol.id, experiment_id="exp-b"
+        )
+        self.workflow.submit_run_sheet(round_id, sheet, self.operator)
+        return project_id, round_id
+
     def sheet_json(self, **fields) -> dict:
         return self.sheet(**fields).model_dump(mode="json")
 

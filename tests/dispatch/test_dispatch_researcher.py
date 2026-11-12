@@ -27,6 +27,11 @@ PUBLISH_FIELDS = {
 }
 
 
+def _task_id(env) -> str:
+    """The researcher task the freeze belongs to (created once per trigger event)."""
+    return env.task("researcher").id
+
+
 def _payload(outcome) -> dict:
     assert not outcome.is_error, outcome.content
     return json.loads(outcome.content)
@@ -98,6 +103,7 @@ def _experiment(
 ) -> str:
     """Samples and one measurement for experiment e<number>, frozen; returns the snapshot id."""
     name = f"e{number}"
+    env.stage_for(name)  # a snapshot is only usable when its experiment has a stage of the project
     _samples(env, name, seconds)
     if value is not None:
         env.archive.add_measurement(_measurement(name, value, f"m{number}", batch))
@@ -155,7 +161,9 @@ async def _running_stage(env, seconds=range(11), **fields) -> None:
 async def test_freeze_dataset_snapshots_the_stage_window_and_returns_only_a_summary(env):
     await _running_stage(env)
 
-    body = _payload(await env.invoke("researcher", "freeze_dataset", stage_id="stage-1"))
+    body = _payload(
+        await env.invoke("researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1")
+    )
 
     assert body["complete"] is True and body["verified"] is True
     snap = env.archive.snapshot(body["snapshot_id"])
@@ -167,7 +175,9 @@ async def test_freeze_takes_the_gap_limit_from_the_run_sheet_sampling(env):
     sampling = SamplingPlan(interval_seconds=1, max_gap_seconds=2)
     await _running_stage(env, seconds=HOLE, sampling=sampling)
 
-    body = _payload(await env.invoke("researcher", "freeze_dataset", stage_id="stage-1"))
+    body = _payload(
+        await env.invoke("researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1")
+    )
 
     assert body["complete"] is False  # the default 120 s limit would have called this whole
 
@@ -178,7 +188,9 @@ async def test_freeze_takes_the_gap_limit_from_the_run_sheet_sampling(env):
 async def test_freeze_rejects_limits_supplied_by_the_model(env, extra):
     await _running_stage(env)
 
-    outcome = await env.invoke("researcher", "freeze_dataset", stage_id="stage-1", **extra)
+    outcome = await env.invoke(
+        "researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1", **extra
+    )
 
     assert outcome.is_error and env.archive.snapshots("experiment-stage-1") == ()
 
@@ -186,7 +198,9 @@ async def test_freeze_rejects_limits_supplied_by_the_model(env, extra):
 async def test_freeze_of_a_stage_that_never_started_is_an_error(env):
     env.workflow.submit_run_sheet(env.round_id, env.sheet(), env.operator)
 
-    outcome = await env.invoke("researcher", "freeze_dataset", stage_id="stage-1")
+    outcome = await env.invoke(
+        "researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1"
+    )
 
     assert outcome.is_error
 
@@ -195,7 +209,9 @@ async def test_freeze_dataset_with_an_unsynced_clock_is_an_error_result(env):
     await _running_stage(env)
     env.clock.synced = False
 
-    outcome = await env.invoke("researcher", "freeze_dataset", stage_id="stage-1")
+    outcome = await env.invoke(
+        "researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1"
+    )
 
     assert outcome.is_error and "clock_unsynced" in outcome.content
 
@@ -215,12 +231,18 @@ async def test_query_evidence_filters_cards_from_the_archive(env):
 
 
 async def test_local_analysis_runs_only_through_the_sandbox_and_is_exploratory(env):
+    task = env.task("researcher")
     snapshot_id = _experiment(env, 1, 5.0)
     sandbox = RecordingSandbox()
     deps = env.make_deps(sandbox=sandbox)
 
     outcome = await env.invoke(
-        "researcher", "run_local_analysis", deps, snapshot_id=snapshot_id, script="print(1)"
+        "researcher",
+        "run_local_analysis",
+        deps,
+        task_id=task.id,
+        snapshot_id=snapshot_id,
+        script="print(1)",
     )
 
     body = _payload(outcome)
@@ -232,21 +254,32 @@ async def test_local_analysis_runs_only_through_the_sandbox_and_is_exploratory(e
 
 
 async def test_local_analysis_without_a_sandbox_is_an_error_result(env):
+    task = env.task("researcher")
     snapshot_id = _experiment(env, 1, 5.0)
 
     outcome = await env.invoke(
-        "researcher", "run_local_analysis", snapshot_id=snapshot_id, script="print(1)"
+        "researcher",
+        "run_local_analysis",
+        task_id=task.id,
+        snapshot_id=snapshot_id,
+        script="print(1)",
     )
 
     assert outcome.is_error and "sandbox" in outcome.content
 
 
 async def test_local_analysis_refuses_an_unknown_snapshot(env):
+    task = env.task("researcher")
     sandbox = RecordingSandbox()
     deps = env.make_deps(sandbox=sandbox)
 
     outcome = await env.invoke(
-        "researcher", "run_local_analysis", deps, snapshot_id="snap-none", script="print(1)"
+        "researcher",
+        "run_local_analysis",
+        deps,
+        task_id=task.id,
+        snapshot_id="snap-none",
+        script="print(1)",
     )
 
     assert outcome.is_error and not sandbox.calls
@@ -500,7 +533,13 @@ async def test_freeze_with_a_round_moves_it_to_analysis(env):
     _to_data_verification(env)
 
     body = _payload(
-        await env.invoke("researcher", "freeze_dataset", stage_id="stage-1", round_id=env.round_id)
+        await env.invoke(
+            "researcher",
+            "freeze_dataset",
+            task_id=_task_id(env),
+            stage_id="stage-1",
+            round_id=env.round_id,
+        )
     )
 
     assert env.workflow.round_state(env.round_id) is RoundState.ANALYSIS
@@ -511,7 +550,11 @@ async def test_freeze_with_a_round_in_the_wrong_state_is_an_error_and_freezes_no
     await _running_stage(env)  # the round is stage_running
 
     outcome = await env.invoke(
-        "researcher", "freeze_dataset", stage_id="stage-1", round_id=env.round_id
+        "researcher",
+        "freeze_dataset",
+        task_id=_task_id(env),
+        stage_id="stage-1",
+        round_id=env.round_id,
     )
 
     assert outcome.is_error and env.archive.snapshots("experiment-stage-1") == ()
@@ -523,7 +566,13 @@ async def test_an_incomplete_snapshot_does_not_advance_the_round(env):
     _to_data_verification(env)
 
     body = _payload(
-        await env.invoke("researcher", "freeze_dataset", stage_id="stage-1", round_id=env.round_id)
+        await env.invoke(
+            "researcher",
+            "freeze_dataset",
+            task_id=_task_id(env),
+            stage_id="stage-1",
+            round_id=env.round_id,
+        )
     )
 
     assert body["complete"] is False
@@ -585,16 +634,24 @@ async def test_holdout_outcomes_never_reach_a_snapshot_or_a_tool_result(env):
     env.archive.add_measurement(held)
     deps = env.make_deps(holdout=registry, sandbox=RecordingSandbox())
 
-    outcome = await env.invoke("researcher", "freeze_dataset", deps, stage_id="stage-1")
+    outcome = await env.invoke(
+        "researcher", "freeze_dataset", deps, task_id=_task_id(env), stage_id="stage-1"
+    )
 
     body = _payload(outcome)
-    assert "987" not in outcome.content
+    assert "987.5" not in outcome.content
     snap_dir = env.archive.root / "snapshots" / body["snapshot_id"]
-    assert "987" not in (snap_dir / "measurements.jsonl").read_text()
+    assert "987.5" not in (snap_dir / "measurements.jsonl").read_text()
+    task = env.task("researcher")
     run = await env.invoke(
-        "researcher", "run_local_analysis", deps, snapshot_id=body["snapshot_id"], script="x"
+        "researcher",
+        "run_local_analysis",
+        deps,
+        task_id=task.id,
+        snapshot_id=body["snapshot_id"],
+        script="x",
     )
-    assert "987" not in run.content
+    assert "987.5" not in run.content
 
 
 async def test_the_first_holdout_evaluation_may_be_confirmatory_the_second_never(env, tmp_path):

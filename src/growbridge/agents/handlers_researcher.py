@@ -14,9 +14,9 @@ from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
     clip,
-    load_snapshot,
     require_round,
     resolve,
+    scoped_snapshot,
     unavailable,
 )
 from growbridge.agents.handlers_report import PublishInput, own_task, publish
@@ -35,6 +35,7 @@ ATTEMPT_ID = r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*$"  # used as a directory name: no s
 
 
 class FreezeInput(ToolInput):
+    task_id: str  # the researcher task this freeze belongs to; the stage must be its project's
     stage_id: str
     round_id: str | None = None  # advance this round (数据核验 -> 研究分析) when the data is whole
 
@@ -46,6 +47,7 @@ class EvidenceInput(ToolInput):
 
 
 class LocalAnalysisInput(ToolInput):
+    task_id: str  # the researcher task this analysis belongs to; the snapshot must be its project's
     snapshot_id: str
     script: str = Field(max_length=MAX_SCRIPT_CHARS)
     timeout_seconds: float = Field(default=60.0, gt=0, le=MAX_TIMEOUT_SECONDS)
@@ -73,9 +75,10 @@ class AttemptInput(ToolInput):
 
 
 def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
+    task = own_task(deps, data.task_id)
+    scoped_snapshot(deps, task, data.snapshot_id)  # before anything is mounted or read
     if deps.sandbox is None:
         unavailable("sandbox")
-    load_snapshot(deps, data.snapshot_id)
     if not snapshots.verify(deps.archive, data.snapshot_id):
         raise Denied("snapshot_incomplete", f"snapshot {data.snapshot_id} fails verification")
     run_id = new_id("local")
@@ -97,11 +100,14 @@ def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
 
 
 def _freeze(deps: Deps, data: FreezeInput) -> dict:
+    task = own_task(deps, data.task_id)
     stage = deps.workflow.stage(data.stage_id)
+    if stage.project_id != task.project_id:  # before a snapshot is written or a round touched
+        raise Denied("scope", f"stage {data.stage_id} is not available to task {task.id}")
     if stage.started_at is None:
         raise Denied("state", f"stage {data.stage_id} never started; there is nothing to freeze")
     if data.round_id is not None:
-        require_round(deps, data.round_id, RoundState.DATA_VERIFICATION)
+        require_round(deps, data.round_id, RoundState.DATA_VERIFICATION, task.project_id)
     sheet = stage.run_sheet
     keep = None if deps.holdout is None else deps.holdout.development_filter(stage.project_id)
     shot = snapshots.freeze(
@@ -199,7 +205,8 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         Tool(
             "freeze_dataset",
             "Freeze a stage's data into a verified snapshot (window and limits come from its "
-            "run sheet).",
+            "run sheet). Pass the researcher task_id you are working on; a stage or round of "
+            "another project is refused.",
             FreezeInput,
             lambda d: _freeze(deps, d),
             writes=True,
@@ -212,7 +219,9 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "run_local_analysis",
-            "Run an exploratory script in the sandbox on a snapshot.",
+            "Run an exploratory script in the sandbox on a snapshot of your task's project. "
+            "Pass the researcher task_id you are working on; a snapshot of another project, "
+            "an unknown snapshot or one holding held-out outcomes is refused.",
             LocalAnalysisInput,
             lambda d: _local_analysis(deps, d),
             sandbox=True,

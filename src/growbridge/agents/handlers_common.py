@@ -14,10 +14,10 @@ from typing import Any, NoReturn
 
 from pydantic import BaseModel, ConfigDict
 
-from growbridge.archive.models import RunSheet, Snapshot
+from growbridge.archive.models import ManualMeasurement, ResearchTask, RunSheet, Snapshot
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, Finding
-from growbridge.workflow.states import RoundState
+from growbridge.workflow.states import RoundState, StageState
 
 MAX_ITEMS = 20
 MAX_TEXT = 4000
@@ -98,15 +98,49 @@ def clip(text: str, limit: int = MAX_TEXT) -> str:
     return text if len(text) <= limit else text[:limit] + "...[truncated]"
 
 
-def require_round(deps: Deps, round_id: str, expected: RoundState) -> None:
-    """Refuse before anything is created, so a wrong state leaves no orphan snapshot or report."""
+def require_round(deps: Deps, round_id: str, expected: RoundState, project_id: str) -> None:
+    """The round must belong to the project and be in the expected state.
+
+    Checked before anything is created, so a refusal leaves no orphan snapshot or report.
+    """
+    if deps.workflow.store.round(round_id).project_id != project_id:
+        raise Denied("scope", f"round {round_id} does not belong to this project")
     state = deps.workflow.round_state(round_id)
     if state is not expected:
         raise Denied("state", f"round {round_id} is {state.value}; this needs {expected.value}")
 
 
-def load_snapshot(deps: Deps, snapshot_id: str) -> Snapshot:
-    found = deps.archive.snapshot(snapshot_id)
-    if found is None:
-        raise Denied("state", f"unknown snapshot {snapshot_id}")
-    return found
+def experiment_project(deps: Deps, experiment_id: str) -> str | None:
+    """The project that owns an experiment, known from the stage that runs it."""
+    for stage in deps.workflow.store.stages_in(StageState):
+        if stage.experiment_id == experiment_id:
+            return stage.project_id
+    return None
+
+
+def _refuse_holdout_rows(deps: Deps, snap: Snapshot, project_id: str) -> None:
+    """A snapshot frozen without the development filter may hold outcomes of a holdout batch.
+
+    ``Snapshot`` carries no marker for that (the manifest only counts excluded rows), so the rows
+    are checked against the registry's own predicate. The message never quotes a value.
+    """
+    if deps.holdout is None:
+        return
+    keep = deps.holdout.development_filter(project_id)
+    path = deps.archive.root / "snapshots" / snap.id / "measurements.jsonl"
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line and not keep(ManualMeasurement.model_validate_json(line)):
+            raise Denied("scope", f"snapshot {snap.id} holds outcomes of a held-out batch")
+
+
+def scoped_snapshot(deps: Deps, task: ResearchTask, snapshot_id: str) -> Snapshot:
+    """The snapshot a model names, if it belongs to the task's project and is fit for development.
+
+    Unknown ids and other projects' snapshots look the same to the caller. Nothing of the
+    snapshot is mounted or read before this passes.
+    """
+    snap = deps.archive.snapshot(snapshot_id)
+    if snap is None or experiment_project(deps, snap.experiment_id) != task.project_id:
+        raise Denied("scope", f"snapshot {snapshot_id} is not available to task {task.id}")
+    _refuse_holdout_rows(deps, snap, task.project_id)
+    return snap

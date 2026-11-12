@@ -147,7 +147,7 @@ async def test_model_driven_round_from_delegation_to_delivery(world):
     # the researcher freezes the dataset and publishes the report; the round is delivered
     measure(runtime, flow.stage(STAGE).started_at + 10)
     runtime.tasks.create(task(project, "researcher", "ev-res"))
-    freeze = call("freeze_dataset", stage_id=STAGE, round_id=round_id)
+    freeze = call("freeze_dataset", task_id="task-ev-res", stage_id=STAGE, round_id=round_id)
 
     def publish() -> object:
         snapshot = runtime.archive.snapshots(EXPERIMENT)[-1]

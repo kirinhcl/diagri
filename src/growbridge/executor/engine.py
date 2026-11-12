@@ -50,6 +50,10 @@ WriteKind = Literal["experiment_action", "care", "protection"]
 DEFAULT_MAX_GAP_SECONDS = 120.0  # continuity limit for protection when no stage is active
 RETRYABLE = (ActionState.FAILED, ActionState.VOID)
 MAX_FAILED_WRITES = 3  # consecutive failed readbacks per channel before the executor gives up
+# A protection level that cannot be read back is re-sent at most this often per channel. It is
+# the length of the shortest protection window (validity 20 s, duration 30 s): re-asserting once
+# per window keeps the protection effective while a 1 Hz tick adds at most 120 records an hour.
+PROTECTION_RESEND_SECONDS = 30.0
 SKIPPED_FOR_CARE = (StageState.RUNNING, StageState.MANUAL)
 TRANSPORT_STATES = (StageState.RUNNING, StageState.PAUSED, StageState.MANUAL)
 
@@ -103,6 +107,8 @@ class ExecutorEngine:
         self._gaps: tuple[float, ...] = ()
         self._applied: dict[Channel, int] = {}  # what this phase last confirmed on the device
         self._failed: dict[Channel, int] = {}  # consecutive failed readbacks in this phase
+        self._unreadable_since: float | None = None  # monotonic start of a failing state read
+        self._resent: dict[Channel, float] = {}  # last unverifiable protection re-send
         self._feedback: dict[str, RuleState] = {}
         self._protection: dict[str, RuleState] = {}
         self._phase: tuple[str, StageState, int | None] | None = None
@@ -166,6 +172,7 @@ class ExecutorEngine:
             return
         self._phase, self._phase_mono = key, mono
         self._applied, self._feedback, self._failed = {}, {}, {}
+        self._unreadable_since = None
         self._sent = frozenset()
 
     # --- 1. interlock -------------------------------------------------------------------------
@@ -206,8 +213,15 @@ class ExecutorEngine:
     ) -> None:
         action = decision.action
         assert action is not None
-        if await self._verified(action):
+        verified = await self._verified(action)
+        if verified:
+            self._resent = {k: v for k, v in self._resent.items() if k is not action.channel}
             return
+        last = self._resent.get(action.channel)
+        if verified is None:  # unreadable: re-assert, but at most once per interval
+            if last is not None and mono - last < PROTECTION_RESEND_SECONDS:
+                return
+            self._resent = {**self._resent, action.channel: mono}
         since = decision.state.since if decision.state.since is not None else mono
         slot = str(int(since * 1000))
         await self._write(tick, stage, right, "protection", action, f"protect:{rule_id}", slot)
@@ -219,14 +233,15 @@ class ExecutorEngine:
         active = (r.action.channel for r in rules if self._protection.get(r.id, RuleState()).active)
         return frozenset(active)
 
-    async def _verified(self, action: RuleAction) -> bool:
-        """The device already shows the level (read back now); unreadable counts as verified."""
+    async def _verified(self, action: RuleAction) -> bool | None:
+        """Does the device show the level now? ``None`` when the state cannot be read: that is
+        not a confirmation, so the caller re-asserts the level (rate limited)."""
         if self._applied.get(action.channel) != action.level:
             return False
         try:
             return not await self.control.differences({action.channel: action.level})
         except Denied:
-            return True
+            return None
 
     # --- 3. link accounting -------------------------------------------------------------------
 
@@ -239,22 +254,25 @@ class ExecutorEngine:
             self._gaps = (*self._gaps, outage.seconds)
             return False
         unsettled = bool(self.control.unsettled_actions())
-        differs = bool(await self._differences())
+        found = await self._differences()
+        differs = found is None or bool(found)  # an unreadable state is not "no difference"
         reasons = outage_reasons(stage.run_sheet, outage, now, unsettled, differs)
         if not reasons:
             self._gaps = (*self._gaps, outage.seconds)
             return False
         detail = {"reasons": list(reasons), "seconds": outage.seconds}
+        detail["state_unreadable"] = found is None
         await self._report(tick, stage, Kind.DISCONNECT_AFFECTS, f"{outage.start_mono}", detail)
         return True
 
-    async def _differences(self) -> tuple[Difference, ...]:
+    async def _differences(self) -> tuple[Difference, ...] | None:
+        """Differences to what was applied; ``None`` when the device state cannot be read."""
         if not self._applied:
             return ()
         try:
             return await self.control.differences(self._applied)
         except Denied:
-            return ()
+            return None
 
     async def _transport_unconfirmed(self, tick: _Tick, stage: StageRuntime) -> bool:
         if stage.state not in TRANSPORT_STATES or self.control.transport_stopped():
@@ -272,7 +290,7 @@ class ExecutorEngine:
             return
         if await self._readings_stale(tick, stage, mono):
             return
-        if await self._external_change(tick, stage):
+        if await self._external_change(tick, stage, mono):
             return
         if not stage.end_pending:
             await self._experiment(tick, stage, now, mono)
@@ -303,12 +321,28 @@ class ExecutorEngine:
         await self._report(tick, stage, Kind.READINGS_STALE, key)
         return True
 
-    async def _external_change(self, tick: _Tick, stage: StageRuntime) -> bool:
+    async def _external_change(self, tick: _Tick, stage: StageRuntime, mono: float) -> bool:
         found = await self._differences()
+        if found is None:
+            return await self._state_unreadable(tick, stage, mono)
+        self._unreadable_since = None
         if not found:
             return False
         detail = {"differences": [item.model_dump(mode="json") for item in found]}
         await self._report(tick, stage, Kind.EXTERNAL_CHANGE, "panel", detail)
+        return True
+
+    async def _state_unreadable(self, tick: _Tick, stage: StageRuntime, mono: float) -> bool:
+        """Connected with fresh telemetry, but the state read-back fails. A short failure is
+        tolerated; one that outlasts the run sheet's gap limit is reported like stale data."""
+        if self._unreadable_since is None:
+            self._unreadable_since = mono
+        seconds = mono - self._unreadable_since
+        if seconds <= stage.run_sheet.sampling.max_gap_seconds:
+            return False
+        key = f"state-unreadable:{int(self._unreadable_since * 1000)}"
+        detail = {"reason": "state_unreadable", "seconds": seconds}
+        await self._report(tick, stage, Kind.READINGS_STALE, key, detail)
         return True
 
     async def _experiment(self, tick: _Tick, stage: StageRuntime, now: float, mono: float) -> None:

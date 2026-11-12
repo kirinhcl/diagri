@@ -16,8 +16,8 @@ from pydantic import Field, model_validator
 from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
-    load_snapshot,
     require_round,
+    scoped_snapshot,
     unavailable,
 )
 from growbridge.archive import snapshot as snapshots
@@ -85,8 +85,8 @@ def own_task(deps: Deps, task_id: str) -> ResearchTask:
     return task
 
 
-def _verified(deps: Deps, snapshot_id: str) -> Snapshot:
-    snap = load_snapshot(deps, snapshot_id)
+def _verified(deps: Deps, task: ResearchTask, snapshot_id: str) -> Snapshot:
+    snap = scoped_snapshot(deps, task, snapshot_id)  # project and holdout checks come first
     if deps.archive.is_invalid(snap.id):
         raise Denied("state", f"snapshot {snap.id} was invalidated by a later correction")
     if not snapshots.verify(deps.archive, snap.id):
@@ -100,12 +100,12 @@ def _read_rows(deps: Deps, snap: Snapshot) -> list[ManualMeasurement]:
     return [ManualMeasurement.model_validate_json(line) for line in lines if line]
 
 
-def _freeze_inputs(deps: Deps, data: PublishInput) -> Frozen:
+def _freeze_inputs(deps: Deps, task: ResearchTask, data: PublishInput) -> Frozen:
     snaps: list[Snapshot] = []
     round_of: dict[str, int] = {}
     rows: list[ManualMeasurement] = []
     for item in data.snapshots:
-        snap = _verified(deps, item.snapshot_id)
+        snap = _verified(deps, task, item.snapshot_id)
         if round_of.setdefault(snap.experiment_id, item.round) != item.round:
             raise Denied("param", f"experiment {snap.experiment_id} listed in two rounds")
         snaps.append(snap)
@@ -217,7 +217,7 @@ def _precheck(deps: Deps, data: PublishInput) -> tuple[ResearchTask, ResearchPro
     if data.holdout_id is not None and deps.holdout is None:
         unavailable("holdout registry")
     if data.round_id is not None:
-        require_round(deps, data.round_id, RoundState.ANALYSIS)
+        require_round(deps, data.round_id, RoundState.ANALYSIS, task.project_id)
     protocol = deps.workflow.store.latest_protocol(data.protocol_id, task.project_id)
     if protocol is None:
         raise Denied("state", f"no protocol {data.protocol_id} in project {task.project_id}")
@@ -226,7 +226,7 @@ def _precheck(deps: Deps, data: PublishInput) -> tuple[ResearchTask, ResearchPro
 
 def publish(deps: Deps, data: PublishInput) -> dict:
     task, protocol = _precheck(deps, data)
-    frozen = _freeze_inputs(deps, data)
+    frozen = _freeze_inputs(deps, task, data)
     table = _table(protocol, data, frozen)
     facts = _facts(deps, protocol, data, frozen, table)
     decision = _decide(deps, protocol, frozen, facts)
