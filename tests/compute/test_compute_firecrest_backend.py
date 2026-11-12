@@ -11,14 +11,16 @@ from growbridge.compute.backend import (
     BackendError,
     BackendUnavailable,
     JobTemplate,
+    OutputTooLarge,
     ParamSpec,
     SubmitRejected,
 )
-from growbridge.compute.firecrest import FirecrestBackend
+from growbridge.compute.firecrest import MAX_OUTPUT_FILES, FirecrestBackend
 
 WORKDIR = "/scratch/project_2001234/diagri"
 NAME = "gb-att_abc123"
 JOB_DIR = f"{WORKDIR}/{NAME}"
+BIG = 10**9  # a limit no test output comes near
 SECRET = "s3cr3t-client-secret"
 SCRIPT = '#!/bin/bash\n#SBATCH --time=00:10:00\npython run.py "$DIAGRI_PARAM_EPOCHS"\n'
 BASE_ENV = {
@@ -378,7 +380,7 @@ async def test_firecrest_fetch_downloads_and_returns_remote_sha256(
     out = tmp_path / "out"
     out.mkdir()
 
-    sums = await backend.fetch(job_id, out)
+    sums = await backend.fetch(job_id, out, BIG)
 
     assert sums == {
         "model.bin": hashlib.sha256(b"\x00\x01").hexdigest(),
@@ -403,13 +405,13 @@ async def test_firecrest_fetch_refuses_a_checksum_it_cannot_trust(
     for name, value in change.items():
         setattr(client, name, value)
     with pytest.raises(BackendError):
-        await backend.fetch(job_id, tmp_path)
+        await backend.fetch(job_id, tmp_path, BIG)
 
 
 async def test_firecrest_fetch_accepts_sha256_spelled_without_a_hyphen(backend, client, tmp_path):
     job_id = await finished(backend, client)
     client.checksum_algorithm = "sha256"
-    assert len(await backend.fetch(job_id, tmp_path)) == 2
+    assert len(await backend.fetch(job_id, tmp_path, BIG)) == 2
 
 
 @pytest.mark.parametrize(
@@ -430,7 +432,7 @@ async def test_firecrest_fetch_refuses_listings_it_cannot_read_safely(
     job_id = await finished(backend, client)
     client.listing_override = listing
     with pytest.raises(BackendError):
-        await backend.fetch(job_id, tmp_path)
+        await backend.fetch(job_id, tmp_path, BIG)
     assert client.called("download") == []
 
 
@@ -501,3 +503,124 @@ def test_firecrest_a_template_must_bound_its_run_time(script, ok):
     else:
         with pytest.raises(SubmitRejected, match="time"):
             FirecrestBackend.check_template(tmpl)
+
+
+# --- the output limits -----------------------------------------------------------------------
+
+
+async def two_outputs(backend, client, sizes=(10, 10)):
+    job_id = await submitted(backend, client)
+    client.set_state(job_id, "COMPLETED")
+    for number, size in enumerate(sizes):
+        client.put_output(job_id, f"part{number}.bin", b"x" * size)
+    return job_id
+
+
+def local_files(folder):
+    return sorted(p.name for p in folder.iterdir())
+
+
+async def test_firecrest_fetch_refuses_too_many_files_before_any_download(
+    backend, client, tmp_path
+):
+    job_id = await submitted(backend, client)
+    for number in range(MAX_OUTPUT_FILES + 1):
+        client.put_output(job_id, f"f{number}", b"")
+
+    with pytest.raises(OutputTooLarge, match="files"):
+        await backend.fetch(job_id, tmp_path, BIG)
+
+    assert client.called("download") == [] and local_files(tmp_path) == []
+
+
+async def test_firecrest_fetch_accepts_exactly_the_file_limit(backend, client, tmp_path):
+    job_id = await submitted(backend, client)
+    for number in range(MAX_OUTPUT_FILES):
+        client.put_output(job_id, f"f{number}", b"")
+
+    assert len(await backend.fetch(job_id, tmp_path, BIG)) == MAX_OUTPUT_FILES
+
+
+async def test_firecrest_fetch_refuses_a_total_over_the_limit_before_any_download(
+    backend, client, tmp_path
+):
+    job_id = await two_outputs(backend, client, (60, 60))
+
+    with pytest.raises(OutputTooLarge, match="bytes"):
+        await backend.fetch(job_id, tmp_path, 100)
+
+    assert client.called("download") == [] and local_files(tmp_path) == []
+
+
+async def test_firecrest_fetch_accepts_a_total_exactly_at_the_limit(backend, client, tmp_path):
+    job_id = await two_outputs(backend, client, (50, 50))
+    assert len(await backend.fetch(job_id, tmp_path, 100)) == 2
+
+
+@pytest.mark.parametrize("size", [None, "abc", "-1", -1, 1.5, True, [], "", "1e3"])
+async def test_firecrest_fetch_refuses_an_entry_without_a_usable_size(
+    backend, client, tmp_path, size
+):
+    job_id = await two_outputs(backend, client)
+    entry = {"name": "part0.bin", "type": "-"}
+    client.listing_override = [entry if size is None else {**entry, "size": size}]
+
+    with pytest.raises(BackendError, match="size"):
+        await backend.fetch(job_id, tmp_path, BIG)
+
+    assert client.called("download") == [] and local_files(tmp_path) == []
+
+
+async def test_firecrest_fetch_reads_a_size_given_as_digits(backend, client, tmp_path):
+    job_id = await two_outputs(backend, client, (7,))
+    client.listing_override = [{"name": "part0.bin", "type": "-", "size": "7"}]
+    assert list(await backend.fetch(job_id, tmp_path, BIG)) == ["part0.bin"]
+
+
+async def test_firecrest_fetch_aborts_when_files_turn_out_bigger_than_listed(
+    backend, client, tmp_path
+):
+    job_id = await two_outputs(backend, client, (60, 60))  # really 120 bytes
+    client.listing_override = [  # the listing says 10 bytes each, so the pre-check passes
+        {"name": "part0.bin", "type": "-", "size": 10},
+        {"name": "part1.bin", "type": "-", "size": 10},
+    ]
+
+    with pytest.raises(OutputTooLarge, match="limit"):
+        await backend.fetch(job_id, tmp_path, 100)
+
+    assert len(client.called("download")) == 2  # it only knew after the second
+    assert local_files(tmp_path) == []  # nothing that was downloaded is left behind
+
+
+async def test_firecrest_fetch_stops_at_the_file_that_passes_the_limit(backend, client, tmp_path):
+    job_id = await two_outputs(backend, client, (200, 5))
+    client.listing_override = [
+        {"name": "part0.bin", "type": "-", "size": 1},
+        {"name": "part1.bin", "type": "-", "size": 1},
+    ]
+
+    with pytest.raises(OutputTooLarge):
+        await backend.fetch(job_id, tmp_path, 100)
+
+    assert len(client.called("download")) == 1  # the second file was never started
+    assert local_files(tmp_path) == []
+
+
+async def test_firecrest_fetch_removes_only_what_it_downloaded(backend, client, tmp_path):
+    (tmp_path / "keep.txt").write_text("not ours")
+    job_id = await two_outputs(backend, client, (60, 60))
+
+    with pytest.raises(OutputTooLarge):
+        await backend.fetch(job_id, tmp_path, 100)
+
+    assert local_files(tmp_path) == ["keep.txt"]
+
+
+async def test_firecrest_output_limit_errors_say_which_limit_and_no_contents(
+    backend, client, tmp_path
+):
+    job_id = await two_outputs(backend, client, (60, 60))
+    with pytest.raises(OutputTooLarge) as info:
+        await backend.fetch(job_id, tmp_path, 100)
+    assert "120" in str(info.value) and "100" in str(info.value) and "xxx" not in str(info.value)

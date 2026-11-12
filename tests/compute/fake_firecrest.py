@@ -136,7 +136,11 @@ class FakeFirecrest:
             return self.listing_override
         prefix = path.rstrip("/") + "/"
         names = sorted(p[len(prefix) :] for p in self.files if p.startswith(prefix))
-        return [{"name": n, "type": "-"} for n in names if "/" not in n]
+        return [
+            {"name": n, "type": "-", "size": len(self.files[prefix + n])}
+            for n in names
+            if "/" not in n
+        ]
 
     async def download(
         self,

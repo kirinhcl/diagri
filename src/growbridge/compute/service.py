@@ -27,9 +27,11 @@ from growbridge.archive.db import Database
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Model
 from growbridge.compute.backend import (
+    BackendError,
     BackendUnavailable,
     ComputeBackend,
     JobTemplate,
+    OutputTooLarge,
     ParamSpec,
     RemoteJob,
     SubmitRejected,
@@ -53,6 +55,8 @@ REMOTE_PHASE = {
     "queued": "queued", "running": "running", "completed": "fetching",
     "failed": "failed", "cancelled": "cancelled",
 }  # fmt: skip
+BYTES_PER_GB = 10**9  # storage is reserved in decimal gigabytes
+OUTPUT_LIMIT_MARK = "output limit:"  # how an oversized fetch is written on the attempt
 MAX_TEXT_CHARS = 1000  # no text parameter is longer, whatever its template says
 STEPS = [
     "CREATE TABLE compute_attempts(id TEXT PRIMARY KEY, task_id TEXT NOT NULL,"
@@ -72,6 +76,7 @@ STEPS = [
     "ALTER TABLE compute_balances ADD COLUMN note TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE compute_attempts ADD COLUMN settled_by TEXT",
     "ALTER TABLE compute_attempts ADD COLUMN settle_reason TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE compute_attempts ADD COLUMN storage_limit_gb REAL",
 ]
 
 
@@ -101,6 +106,7 @@ class Attempt(Model):
     error: str = ""
     settled_by: str | None = None  # the operator who settled it by hand, if one did
     settle_reason: str = ""
+    storage_limit_gb: float | None = None  # the template's max_storage_gb when it was reserved
     created_at: float
     updated_at: float
 
@@ -441,13 +447,13 @@ class ComputeService:
             self.db.execute(
                 "INSERT INTO compute_attempts(id, task_id, submitter, csc_user, template_id,"
                 " template_version, params, inputs, phase, reserved_cpu, reserved_storage,"
-                " analysis_version, parent_id, root_id, created_at, updated_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?)",
+                " analysis_version, parent_id, root_id, created_at, updated_at, storage_limit_gb)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     attempt_id, task_id, submitter, csc_user, template.id, template.version,
                     json.dumps(params), json.dumps(inputs), template.max_cpu_hours,
                     template.max_storage_gb, analysis_version, parent.id if parent else None,
-                    root_id, now, now,
+                    root_id, now, now, template.max_storage_gb,
                 ),
             )  # fmt: skip
         return self._load(attempt_id)
@@ -622,7 +628,15 @@ class ComputeService:
         attempt = self._owned(attempt_id, submitter)
         if attempt.phase not in FETCHABLE or not attempt.remote_job_id:
             raise Denied("state", f"nothing to fetch in phase {attempt.phase}")
-        reported = await self.backend.fetch(attempt.remote_job_id, out_dir)
+        limit = self._output_limit(attempt)
+        try:
+            reported = await self.backend.fetch(attempt.remote_job_id, out_dir, limit)
+        except OutputTooLarge as error:  # visible (stuck) and final until an operator settles it
+            self._update(attempt_id, FETCHABLE, phase="needs_review", error=str(error))
+            raise
+        except BackendError as error:  # visible too, but a retry may work
+            self._update(attempt_id, FETCHABLE, error=_describe(error))
+            raise
         problems = await asyncio.to_thread(self._verify, out_dir, reported)  # hashes the files
         if problems:
             phase = "failed" if attempt.phase == "failed" else "needs_review"
@@ -632,6 +646,18 @@ class ComputeService:
         phase = "failed" if attempt.phase == "failed" else "done"
         self._update(attempt_id, FETCHABLE, phase=phase, checksums=json.dumps(reported), error="")
         return reported
+
+    def _output_limit(self, attempt: Attempt) -> int:
+        """The most bytes a fetch may bring home: the storage the attempt reserved."""
+        if attempt.error.startswith(OUTPUT_LIMIT_MARK) and attempt.phase == "needs_review":
+            raise Denied("state", "the outputs are over the limit: an operator has to settle it")
+        gigabytes = attempt.storage_limit_gb
+        if gigabytes is None:  # an attempt from before the limit was stored
+            template = self.templates.get(attempt.template_id)
+            if template is None:
+                raise Denied("state", "no storage limit is known for this attempt: settle it")
+            gigabytes = template.max_storage_gb
+        return int(gigabytes * BYTES_PER_GB)
 
     @staticmethod
     def _verify(out_dir: Path, reported: Mapping[str, str]) -> list[str]:

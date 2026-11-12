@@ -7,8 +7,11 @@ the documentation is silent (each one fails closed with a ``BackendError`` when 
 * Slurm state names (the specification does not list them): only the states in ``SLURM_STATES``
   are mapped; any other state is an error that names it, never "completed". An attempt that
   cannot be polled to a result is not left stuck: the operator settles it (``/wb/compute``).
-* ``list_files`` entries are dicts with a ``name`` and a ``type`` ("-" for a regular file);
-  anything else, including a sub-directory, is refused rather than skipped.
+* ``list_files`` entries are dicts with a ``name``, a ``type`` ("-" for a regular file) and a
+  ``size`` in bytes (an integer or digits); anything else, including a sub-directory or an entry
+  without a usable size, is refused rather than skipped or downloaded blind. A fetch is bounded
+  by ``MAX_OUTPUT_FILES`` and by the byte limit the service passes (the attempt's storage
+  reservation); the listed sizes are checked first and the bytes that arrive are counted too.
 * ``checksum`` may return the checksum object itself or wrapped under ``output``; both are read,
   and only SHA-256 is accepted.
 * Slurm takes the job name from ``#SBATCH --job-name`` (``submit`` has no name argument), so the
@@ -37,6 +40,7 @@ from growbridge.compute.backend import (
     BackendError,
     BackendUnavailable,
     JobTemplate,
+    OutputTooLarge,
     RemoteJob,
     SubmitRejected,
 )
@@ -59,6 +63,9 @@ SCRIPT_NAMES_ITSELF = re.compile(r"^[ \t]*#SBATCH\b.*(--job-name|(?:\s|^)-J)", r
 SCRIPT_SETS_TIME = re.compile(
     r"^[ \t]*#SBATCH\b.*(?:--time(?:[= \t]|$)|\s-t(?:[= \t]|\d|$))", re.MULTILINE
 )
+# One output file costs a download and a checksum call; this keeps a runaway job (or a template
+# that writes one file per sample) from turning a fetch into an unbounded number of API calls.
+MAX_OUTPUT_FILES = 1000
 FILE_TYPES = ("-", "f", "file")
 DIRECTORY_TYPES = ("d", "directory")
 # Why each: a terminal state ends the attempt (otherwise ``status`` would raise for ever and the
@@ -166,6 +173,16 @@ def _remote_job(entry: Any) -> RemoteJob:
     )
 
 
+def _size(entry: dict[str, Any], name: str) -> int:
+    """The remote size in bytes, or an error: a fetch never downloads blind."""
+    size = entry.get("size")
+    if isinstance(size, str) and size.isascii() and size.isdigit():
+        return int(size)
+    if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
+        return size
+    raise BackendError(f"output {name!r} has no usable size in the listing")
+
+
 def _file_name(entry: Any) -> str:
     kind = entry.get("type") if isinstance(entry, dict) else None
     name = entry.get("name") if isinstance(entry, dict) else None
@@ -176,6 +193,11 @@ def _file_name(entry: Any) -> str:
     if kind not in FILE_TYPES:
         raise BackendError(f"output {name!r} has an unrecognised type {kind!r}")
     return name
+
+
+def _listed(entry: Any) -> tuple[str, int]:
+    name = _file_name(entry)
+    return name, _size(entry, name)
 
 
 def _digest(reply: Any) -> str:
@@ -338,7 +360,7 @@ class FirecrestBackend:
         return await self._job(job_id)
 
     # -- results --------------------------------------------------------------------------
-    async def fetch(self, job_id: str, out_dir: Path) -> dict[str, str]:
+    async def fetch(self, job_id: str, out_dir: Path, max_bytes: int) -> dict[str, str]:
         job = await self._job(job_id)
         remote = f"{self._job_dir(job.name)}/out"
         listing = await self._call(
@@ -346,16 +368,52 @@ class FirecrestBackend:
         )
         if not isinstance(listing, list):
             raise BackendError("FirecREST returned an output listing that is not a list")
-        names = [_file_name(entry) for entry in listing]  # all of them, before any download
+        listed = [_listed(entry) for entry in listing]  # all of them, before any download
+        self._check_listing(listed, max_bytes)
         out_dir.mkdir(parents=True, exist_ok=True)
+        downloaded: list[Path] = []
+        try:
+            return await self._download_all(
+                remote, [n for n, _ in listed], out_dir, downloaded, max_bytes
+            )
+        except BaseException:  # a refusal, a failure or a cancel leaves none of this fetch behind
+            for path in downloaded:
+                path.unlink(missing_ok=True)
+            raise
+
+    @staticmethod
+    def _check_listing(listed: list[tuple[str, int]], max_bytes: int) -> None:
+        if len(listed) > MAX_OUTPUT_FILES:
+            raise OutputTooLarge(
+                f"output limit: {len(listed)} output files, over the limit of {MAX_OUTPUT_FILES}"
+            )
+        total = sum(size for _, size in listed)
+        if total > max_bytes:
+            raise OutputTooLarge(
+                f"output limit: the outputs total {total} bytes, over the limit of {max_bytes}"
+            )
+
+    async def _download_all(
+        self, remote: str, names: list[str], out_dir: Path, downloaded: list[Path], max_bytes: int
+    ) -> dict[str, str]:
+        """The listed sizes can be wrong and a file can change, so the bytes that actually arrive
+        are counted, and the first file to take the total over the limit stops the fetch."""
         sums: dict[str, str] = {}
+        total = 0
         for name in names:
+            target = out_dir / name
+            downloaded.append(target)  # before the download: a partial file is removed as well
             download = self._client.download(
                 system_name=self.system,
                 source_path=f"{remote}/{name}",
-                target_path=str(out_dir / name),
+                target_path=str(target),
             )
             await self._call("download", download)
+            total += target.stat().st_size
+            if total > max_bytes:
+                raise OutputTooLarge(
+                    f"output limit: {total} bytes downloaded so far, over the limit of {max_bytes}"
+                )
             reply = self._client.checksum(system_name=self.system, path=f"{remote}/{name}")
             sums[name] = _digest(await self._call("checksum", reply))
         return sums

@@ -22,6 +22,10 @@ class SubmitRejected(BackendError):
     """The backend definitely did not accept the job."""
 
 
+class OutputTooLarge(BackendError):
+    """A job's outputs are over a limit; nothing of them was kept locally."""
+
+
 class BackendUnavailable(RuntimeError):
     """The backend cannot be constructed (missing package or credentials)."""
 
@@ -83,8 +87,13 @@ class ComputeBackend(Protocol):
 
     async def status(self, job_id: str) -> RemoteJob: ...
 
-    async def fetch(self, job_id: str, out_dir: Path) -> dict[str, str]:
-        """Copy artifacts into ``out_dir``; return name -> sha256 as computed on the remote."""
+    async def fetch(self, job_id: str, out_dir: Path, max_bytes: int) -> dict[str, str]:
+        """Copy artifacts into ``out_dir``; return name -> sha256 as computed on the remote.
+
+        At most ``max_bytes`` in total (the attempt's storage reservation, which the service
+        passes because the backend does not know it). Over that, or over a file count the backend
+        sets, raise ``OutputTooLarge`` and leave nothing of this fetch in ``out_dir``.
+        """
         ...
 
     async def cleanup(self, job_id: str) -> None: ...

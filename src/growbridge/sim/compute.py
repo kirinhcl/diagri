@@ -10,6 +10,7 @@ from growbridge.compute.backend import (
     BackendError,
     BackendUnavailable,
     JobTemplate,
+    OutputTooLarge,
     RemoteJob,
     SubmitRejected,
 )
@@ -25,6 +26,7 @@ class FakeBackend:
         self.cleaned: list[str] = []
         self.cleaned_names: list[str] = []
         self.fail_cleanup = False
+        self.fetch_limits: list[int] = []  # the max_bytes each fetch was given
         self.cancelled: list[str] = []
         self.artifacts: dict[str, bytes] = {"result.csv": b"a,b\n1,2\n"}
         self.lose_receipt = False  # accept the job, then fail the call (receipt lost)
@@ -109,7 +111,10 @@ class FakeBackend:
             raise BackendError(f"unknown job {job_id}")
         return self.jobs[job_id]
 
-    async def fetch(self, job_id: str, out_dir: Path) -> dict[str, str]:
+    async def fetch(self, job_id: str, out_dir: Path, max_bytes: int) -> dict[str, str]:
+        self.fetch_limits.append(max_bytes)
+        if sum(len(content) for content in self.artifacts.values()) > max_bytes:
+            raise OutputTooLarge("output limit: the outputs are over the limit")
         out_dir.mkdir(parents=True, exist_ok=True)
         sums: dict[str, str] = {}
         for name, content in self.artifacts.items():

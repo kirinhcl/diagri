@@ -159,6 +159,22 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 
 It needs a recent re-authentication. The attempt becomes `failed`; if its usage was not charged yet, the whole reservation is charged (the real use is unknown), your name and the reason are stored, and the service tries to cancel the job and remove its directory (what fails is written into the attempt's `error`). Settling twice is refused with `state`. A failed attempt can then be retried by the researcher. If the job's outputs are still on CSC you can instead leave the attempt alone and fix the cause (credentials, network); the tick resumes by itself.
 
+## Compute outputs too large
+
+**You see.** `GET /wb/compute` lists the attempt under `stuck` in the phase `needs_review` with a reason that starts with `output limit:`. It names which limit was hit: the number of files, the total listed size against the template's `max_storage_gb`, or the bytes that actually arrived. The researcher's `fetch_compute_artifacts` is refused with `state` and is not retried.
+
+**The system has.** Refused before any download when the listing already breaks a limit, or stopped as soon as the bytes that arrived pass it, and deleted what that fetch had downloaded, so the disk of the daemon's machine (which also holds the archive) is not filled. The remote files stay on CSC.
+
+**You do.** Look at the job's output directory on CSC (`FIRECREST_WORKDIR/gb-<attempt id>/out`). If the size is a mistake in the template or a parameter, fix that and let the researcher retry after you settle. If the outputs are really needed, fetch what you need by hand and then settle. To close the attempt:
+
+```http
+POST /wb/compute/attempts/ATTEMPT_ID/settle
+
+{"reason": "outputs 80 GB against a 5 GB reservation; template fixed"}
+```
+
+Settling marks the attempt `failed` and removes its remote directory. A larger limit needs a new template version with a higher `max_storage_gb`.
+
 ## Other alerts
 
 | Alert kind | Meaning | What to do |
