@@ -22,6 +22,11 @@ from growbridge.archive.store import Archive
 from growbridge.ports import Actor, Denied
 from growbridge.research.analysis import MAX_SCRIPT_CHARS, ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, refuse_holdout_rows
+from growbridge.research.preregistration import (
+    RULE,
+    require_measurements_after,
+    require_stages_after,
+)
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import Ident, PathId
 from growbridge.workflow.service import WorkflowService
@@ -75,6 +80,7 @@ class AnalysisRoutes:
         protocol = self.protocol(protocol_id, body.project_id)
         if self.workflow.store.protocol_started(protocol.id, protocol.version):
             raise Denied("state", STARTED)
+        self.require_no_data_yet(protocol)
         self.runner.freeze_analysis(protocol, body.script.encode("utf-8"), actor.id)
         info = self.runner.frozen_info(protocol)
         assert info is not None  # freeze_analysis registered it
@@ -116,26 +122,61 @@ class AnalysisRoutes:
             ],
         }
 
-    def snapshot_of(self, protocol: ResearchProtocol, snapshot_id: str) -> Snapshot:
-        """The snapshot, if its experiment belongs to a round that runs this protocol version."""
+    def require_no_data_yet(self, protocol: ResearchProtocol) -> None:
+        """Early guard: nobody may have seen outcome data before the freeze. A snapshot or a
+        manual measurement of an experiment the protocol's rounds use is already data."""
+        for experiment in self.workflow.store.experiments_under(protocol.id, protocol.version):
+            held = self.archive.snapshots(experiment)
+            held = held or self.archive.measurements(experiment, include_corrected=True)
+            if held:
+                raise Denied(
+                    "state",
+                    f"experiment {experiment} already has a snapshot or a measurement: {RULE}",
+                )
+
+    def snapshot_of(
+        self, line: ResearchProtocol, snapshot_id: str
+    ) -> tuple[Snapshot, ResearchProtocol]:
+        """The snapshot and the protocol version its data was collected under.
+
+        The version comes from the rounds that have a stage for the snapshot's experiment, not
+        from the latest saved version. An experiment shared by rounds of more than one version
+        (or of another protocol) is ambiguous and refused.
+        """
         snap = self.archive.snapshot(snapshot_id)
-        experiments = self.workflow.store.experiments_under(protocol.id, protocol.version)
-        if snap is None or snap.experiment_id not in experiments:
+        versions = (
+            () if snap is None else self.workflow.store.protocol_versions_of(snap.experiment_id)
+        )
+        mine = [version for protocol_id, version in versions if protocol_id == line.id]
+        if snap is None or not mine:
             raise Denied("scope", f"snapshot {snapshot_id} is not a snapshot of this protocol")
+        if len(versions) > 1:
+            raise Denied(
+                "scope",
+                f"the experiment of snapshot {snapshot_id} belongs to rounds of more than one "
+                "protocol version",
+            )
         if self.archive.is_invalid(snap.id):
             raise Denied("state", f"snapshot {snap.id} was invalidated by a later correction")
-        return snap
+        protocol = self.workflow.store.protocol(line.id, mine[0])
+        assert protocol is not None  # a round runs it
+        return snap, protocol
 
     async def start(self, body: RunIn, actor: Actor) -> dict:
-        protocol = self.protocol(body.protocol_id, body.project_id)
-        if self.runner.frozen_script(protocol) is None:
+        line = self.protocol(body.protocol_id, body.project_id)
+        snap, protocol = self.snapshot_of(line, body.snapshot_id)
+        info = self.runner.frozen_info(protocol)
+        if info is None or self.runner.frozen_script(protocol) is None:
             raise Denied("state", "no analysis script is frozen for this protocol version")
-        snap = self.snapshot_of(protocol, body.snapshot_id)
+        starts = self.workflow.store.stage_starts(snap.experiment_id)
+        require_stages_after(info.frozen_at, snap.id, starts)
         directory = self.archive.root / "snapshots" / snap.id
 
-        def admit() -> None:
+        def admit() -> None:  # runs in a worker thread, before anything is claimed
             rows = directory / "measurements.jsonl"
             refuse_holdout_rows(self.holdout, body.project_id, snap.id, rows)
+            recorded = self.archive.measurement_recorded_at
+            require_measurements_after(info.frozen_at, snap.id, rows, recorded)
 
         run = await self.runner.run_frozen(protocol, snap, directory, actor.id, admit)
         return {

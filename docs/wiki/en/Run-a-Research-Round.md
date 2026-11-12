@@ -127,6 +127,7 @@ The answer is `{"protocol_id": "...", "version": 1, "script_sha256": "...", "fro
 
 - The `script` is UTF-8 text of 1 to 20 000 characters. It is compiled when it is frozen, never run: a syntax error or a NUL byte is refused with `param`. **A frozen script cannot be corrected afterwards**, and nothing but a new protocol version lets you freeze another one, so read it before you send it. It is stored with the name of the operator who froze it. The name comes from the session, never from the body.
 - It applies to the latest saved version of the protocol, the version a new round uses. To change the analysis, save the protocol as a new version first.
+- **Data collected before the freeze can never be confirmatory.** Freezing is therefore refused with `state` when any stage of a round that runs this protocol version has started, and also when a snapshot or a manual measurement already exists for an experiment that such a round uses. A run is refused for the same reason (see below).
 - Once any stage of any round that runs this protocol version has started, freezing is refused with `state`: the analysis must be fixed before the outcome data can be seen (architecture document, section 6.5).
 - Freezing the same text again returns the same answer while no stage has started. Another text for the same version is refused with `script_hash`.
 - `GET /wb/protocols/PROTOCOL_ID/analysis?project_id=PROJECT_ID` needs no re-authentication. It shows `started`, `frozen` (`null`, or `script_sha256`, `frozen_at`, `frozen_by` and the `script` itself) and `snapshots`: for each data snapshot of the protocol's rounds its `snapshot_id`, `experiment_id`, `complete` and `run_status` (`none`, `running`, `succeeded` or `failed`).
@@ -260,14 +261,16 @@ The answer has `run_id`, `status` (`succeeded` or `failed`), `exit_code`, `timed
 
 The request is refused before the sandbox starts, in this order:
 
-1. `state`: there is no such protocol in the project, or no script is frozen for its latest version.
-2. `scope`: the snapshot is not a snapshot of a round that runs this protocol version. `state`: a later correction invalidated the snapshot.
-3. `snapshot_incomplete`: the snapshot is incomplete, or a file no longer matches its manifest.
-4. `scope`: the snapshot holds an outcome of a held-out batch. Held-out data goes into no analysis.
-5. `already_run`: this snapshot was run before. A run that failed or timed out also used up the attempt.
-6. `sandbox_unavailable`: this platform has no sandbox (it exists on macOS only). The attempt is not used up.
+1. `state`: there is no such protocol in the project.
+2. `scope`: the snapshot is not a snapshot of a round that runs this protocol, or its experiment belongs to rounds of more than one protocol version. `state`: a later correction invalidated the snapshot. The version that counts is the one the snapshot was collected under, not the latest saved one, so a later version with no script yet does not matter.
+3. `state`: no script is frozen for that version.
+4. `state`: a stage behind the snapshot started before the script was frozen. Data collected before the freeze can never be confirmatory.
+5. `snapshot_incomplete`: the snapshot is incomplete, or a file no longer matches its manifest.
+6. `scope`: the snapshot holds an outcome of a held-out batch. Held-out data goes into no analysis. `state`: a manual measurement in the snapshot was recorded before the script was frozen (the archive's own recording time counts, not the `measured_at` you typed in), or has no recording time because it predates the archive keeping one.
+7. `already_run`: this snapshot was run before. A run that failed or timed out also used up the attempt.
+8. `sandbox_unavailable`: this platform has no sandbox (it exists on macOS only). The attempt is not used up.
 
-While a script is frozen for the protocol version, the researcher's `publish_research_report` is refused with `state` as long as the run of any snapshot it cites is `none` or `running`. If every run has ended, the report is published: it can be confirmatory when all runs succeeded and nothing else lowers the label, and it is exploratory when one run failed. Without a frozen script nothing changes: the report is exploratory.
+A report is analysed under the protocol version its data was collected under, read from the rounds of the snapshots it cites; snapshots of more than one version are refused with `param`. While a script is frozen for that version, the researcher's `publish_research_report` is refused with `state` as long as the run of any snapshot it cites is `none` or `running`. If every run has ended, the report is published: it can be confirmatory when all runs succeeded and nothing else lowers the label, and it is exploratory when one run failed. Without a frozen script nothing changes: the report is exploratory.
 
 There is **no route** to read the report, to read or list research tasks, or to settle a task in `needs_review` or `needs_attention`. An alert of kind `agent_task` in `GET /wb/alerts` tells you that a model task failed or needs attention.
 

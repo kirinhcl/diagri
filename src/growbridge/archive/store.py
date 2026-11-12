@@ -48,6 +48,7 @@ STEPS = (
     "CREATE TABLE invalidations(record_id TEXT NOT NULL, dependent_id TEXT NOT NULL,"
     " at REAL NOT NULL, PRIMARY KEY(record_id, dependent_id))",
     "CREATE TABLE archive_meta(key TEXT PRIMARY KEY, value REAL NOT NULL)",
+    "ALTER TABLE measurements ADD COLUMN recorded_at REAL",  # NULL: recorded before this column
 )
 
 
@@ -201,6 +202,7 @@ class Archive:
                 "experiment_id": record.experiment_id,
                 "corrects": record.corrects,
                 "seq": self._next_seq("measurements"),
+                "recorded_at": self.clock.now(),
             }
             if self._insert_once("measurements", record.id, record, extra):
                 if record.corrects is not None:
@@ -215,6 +217,21 @@ class Archive:
             sql += " AND NOT EXISTS (SELECT 1 FROM measurements c WHERE c.corrects = m.id)"
         rows = self.db.query(sql + " ORDER BY seq", (experiment_id,))
         return tuple(ManualMeasurement.model_validate_json(row["body"]) for row in rows)
+
+    def measurement_recorded_at(self, ids: Iterable[str]) -> dict[str, float | None]:
+        """When each measurement was recorded here (the archive clock, not the ``measured_at``
+        an operator typed in). ``None`` for one recorded before this was kept; unknown ids are
+        left out."""
+        wanted = list(ids)
+        found: dict[str, float | None] = {}
+        for start in range(0, len(wanted), 500):  # stay under SQLite's variable limit
+            chunk = wanted[start : start + 500]
+            marks = ", ".join("?" for _ in chunk)
+            rows = self.db.query(
+                f"SELECT id, recorded_at FROM measurements WHERE id IN ({marks})", chunk
+            )
+            found.update({row["id"]: row["recorded_at"] for row in rows})
+        return found
 
     def add_evidence(self, card: EvidenceCard) -> None:
         with self.db.transaction():

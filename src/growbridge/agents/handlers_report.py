@@ -232,7 +232,7 @@ def _deliver(deps: Deps, round_id: str, artifact_id: str, state: TaskState) -> s
     return deps.workflow.mark_report_published(round_id, artifact_id, event).value
 
 
-def _precheck(deps: Deps, data: PublishInput) -> tuple[ResearchTask, ResearchProtocol]:
+def _precheck(deps: Deps, data: PublishInput) -> ResearchTask:
     task = own_task(deps, data.task_id)
     if task.state is not TaskState.IN_PROGRESS:
         raise Denied("state", f"task {task.id} is {task.state.value}; nothing can be published")
@@ -240,15 +240,39 @@ def _precheck(deps: Deps, data: PublishInput) -> tuple[ResearchTask, ResearchPro
         unavailable("holdout registry")
     if data.round_id is not None:
         require_round(deps, data.round_id, RoundState.ANALYSIS, task.project_id)
-    protocol = deps.workflow.store.latest_protocol(data.protocol_id, task.project_id)
-    if protocol is None:
+    if deps.workflow.store.latest_protocol(data.protocol_id, task.project_id) is None:
         raise Denied("state", f"no protocol {data.protocol_id} in project {task.project_id}")
-    return task, protocol
+    return task
+
+
+def _data_protocol(
+    deps: Deps, task: ResearchTask, data: PublishInput, frozen: Frozen
+) -> ResearchProtocol:
+    """The protocol version the cited snapshots were collected under.
+
+    It is read from the rounds that have a stage for each snapshot's experiment, never from
+    the latest saved version: a later version has its own script and runs, and asking for them
+    would refuse a report of earlier data for good. Snapshots of more than one version, or of
+    another protocol, cannot be analysed together.
+    """
+    store = deps.workflow.store
+    found = {
+        pair for snap in frozen.snaps for pair in store.protocol_versions_of(snap.experiment_id)
+    }
+    if len(found) > 1:
+        raise Denied("param", "the cited snapshots come from more than one protocol version")
+    if not found or next(iter(found))[0] != data.protocol_id:
+        raise Denied("param", f"the cited snapshots were not collected under {data.protocol_id}")
+    protocol = store.protocol(*next(iter(found)))
+    if protocol is None or protocol.project_id != task.project_id:
+        raise Denied("scope", "that protocol is not available to this run")
+    return protocol
 
 
 def publish(deps: Deps, data: PublishInput) -> dict:
-    task, protocol = _precheck(deps, data)
+    task = _precheck(deps, data)
     frozen = _freeze_inputs(deps, task, data)
+    protocol = _data_protocol(deps, task, data, frozen)
     _require_registered_runs(deps, protocol, frozen)
     table = _table(protocol, data, frozen)
     facts = _facts(deps, protocol, data, frozen, table)

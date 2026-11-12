@@ -99,10 +99,10 @@ def nothing_ran(bench, snapshot_id: str) -> bool:
     return bench.sandbox.runs == [] and runner_state(bench, snapshot_id) == "none"
 
 
-def start_the_stage(bench) -> None:
+def start_the_stage(bench, stage_id: str = "stage-1") -> None:
     actor = Actor(kind="operator", id="alice", reauth_at=bench.clock.now())
-    bench.workflow.approve("stage-1", actor)
-    bench.run(bench.workflow.start_stage("stage-1", actor))
+    bench.workflow.approve(stage_id, actor)
+    bench.run(bench.workflow.start_stage(stage_id, actor))
 
 
 # --- freezing ----------------------------------------------------------------------------------
@@ -219,16 +219,17 @@ def test_the_answer_says_plainly_that_a_frozen_script_cannot_be_corrected(seeded
 def test_the_state_shows_the_freeze_and_each_snapshots_run_without_a_reauthentication(
     seeded, operator
 ):
-    snap = snapshot_of(seeded)
     before = status_of(seeded, operator).json()
     freeze(seeded, operator)
+    snap = snapshot_of(seeded)  # data comes after the freeze
+    assert status_of(seeded, operator).json()["snapshots"][0]["run_status"] == "none"
     run(seeded, operator, snap.id)
     seeded.clock.advance(3600)  # the reauthentication is old; reading does not need it
 
     after = status_of(seeded, operator)
 
     assert before["frozen"] is None and before["started"] is False
-    assert [item["run_status"] for item in before["snapshots"]] == ["none"]
+    assert before["snapshots"] == []
     assert after.status_code == 200
     body = after.json()
     assert body["frozen"]["script_sha256"] == hashlib.sha256(SCRIPT.encode()).hexdigest()
@@ -509,3 +510,128 @@ def test_the_routes_are_absent_without_a_runner(seeded):
     assert freeze(seeded, bare).status_code == 404
     assert status_of(seeded, bare).status_code == 404
     assert run(seeded, bare, "snap_x").status_code == 404
+
+
+# --- data collected before the freeze can never be confirmatory --------------------------------
+
+
+def save_v2(bench):
+    protocol = make_protocol(project_id=bench.project_id, version=2, stages=("vegetative",))
+    bench.workflow.save_protocol(protocol, bench.designer)
+    return protocol
+
+
+def round_reusing(bench, experiment_id: str, stage_id: str, version: int):
+    """A round under the latest protocol version whose run sheet names an existing experiment."""
+    round_id = bench.workflow.create_round(bench.project_id, PROTOCOL, bench.designer)
+    change = {"experiment_id": experiment_id, "protocol_version": version}
+    sheet = bench.sheet(stage_id).model_copy(update=change)
+    bench.workflow.submit_run_sheet(round_id, sheet, bench.designer)
+    return round_id
+
+
+def test_the_reuse_of_seen_data_under_a_new_version_is_refused_when_freezing(seeded, operator):
+    """Reproduction: v1 runs and its snapshot is looked at; v2's round reuses the experiment."""
+    start_the_stage(seeded)
+    snapshot_of(seeded, rows=[measurement()])
+    save_v2(seeded)
+    round_reusing(seeded, "experiment-stage-1", "stage-v2", version=2)
+
+    response = freeze(seeded, operator)
+
+    assert response.status_code == 409 and detail(response)["code"] == "state"
+    assert "已有" in detail(response)["message"] or "already" in detail(response)["message"]
+    assert seeded.runner.frozen_info(latest(seeded)) is None
+
+
+def test_an_experiment_shared_by_two_protocol_versions_cannot_be_run(seeded, operator):
+    start_the_stage(seeded)  # v1: the data begins
+    seeded.clock.advance(60)
+    save_v2(seeded)
+    round_reusing(seeded, "experiment-stage-1", "stage-v2", version=2)
+    assert freeze(seeded, operator).status_code == 200  # nothing was recorded yet: allowed
+    snap = snapshot_of(seeded)
+
+    response = run(seeded, operator, snap.id)
+
+    assert response.status_code == 403 and detail(response)["code"] == "scope"
+    assert "more than one" in detail(response)["message"]
+    assert nothing_ran(seeded, snap.id)
+
+
+def test_freezing_is_refused_once_a_snapshot_exists_for_the_protocols_experiments(seeded, operator):
+    snapshot_of(seeded)  # the stage has not started, but a snapshot is already there
+
+    response = freeze(seeded, operator)
+
+    assert response.status_code == 409 and detail(response)["code"] == "state"
+    assert seeded.runner.frozen_info(latest(seeded)) is None
+
+
+def test_freezing_is_refused_once_a_measurement_exists_for_the_protocols_experiments(
+    seeded, operator
+):
+    seeded.archive.add_measurement(measurement())  # recorded before any stage starts
+
+    response = freeze(seeded, operator)
+
+    assert response.status_code == 409 and detail(response)["code"] == "state"
+    assert seeded.runner.frozen_info(latest(seeded)) is None
+
+
+def test_a_measurement_recorded_before_the_freeze_keeps_the_snapshot_from_a_run(seeded, operator):
+    """The experiment joins the protocol after the freeze, so the freeze itself was allowed."""
+    seeded.archive.add_measurement(measurement(experiment="experiment-late"))
+    seeded.clock.advance(60)
+    assert freeze(seeded, operator).status_code == 200
+    seeded.clock.advance(60)
+    round_reusing(seeded, "experiment-late", "stage-late", version=1)
+    start_the_stage(seeded, "stage-late")  # the stage itself starts after the freeze
+    snap = snapshot_of(seeded, experiment="experiment-late")
+
+    response = run(seeded, operator, snap.id)
+
+    assert response.status_code == 409 and detail(response)["code"] == "state"
+    assert "before the analysis script was frozen" in detail(response)["message"]
+    assert "1.0" not in detail(response)["message"]
+    assert nothing_ran(seeded, snap.id)
+
+
+def test_a_stage_that_started_before_the_freeze_keeps_its_snapshot_from_a_run(seeded, operator):
+    assert freeze(seeded, operator).status_code == 200
+    seeded.clock.advance(60)
+    start_the_stage(seeded)
+    seeded.db.execute(  # as if the stage had started before the script was frozen
+        "UPDATE wf_stages SET started_at = ? WHERE stage_id = 'stage-1'",
+        (seeded.clock.now() - 600,),
+    )
+    snap = snapshot_of(seeded)
+
+    response = run(seeded, operator, snap.id)
+
+    assert response.status_code == 409 and detail(response)["code"] == "state"
+    assert nothing_ran(seeded, snap.id)
+
+
+def test_data_collected_after_the_freeze_is_analysed(seeded, operator):
+    assert freeze(seeded, operator).status_code == 200
+    seeded.clock.advance(60)
+    start_the_stage(seeded)
+    seeded.clock.advance(60)
+    snap = snapshot_of(seeded, rows=[measurement()])
+
+    response = run(seeded, operator, snap.id)
+
+    assert response.status_code == 200 and response.json()["status"] == "succeeded"
+
+
+def test_a_run_uses_the_version_the_snapshot_was_collected_under_not_the_latest(seeded, operator):
+    assert freeze(seeded, operator).status_code == 200
+    start_the_stage(seeded)
+    snap = snapshot_of(seeded)
+    save_v2(seeded)  # the next version exists, with no script frozen
+
+    response = run(seeded, operator, snap.id)
+
+    assert response.status_code == 200 and response.json()["status"] == "succeeded"
+    assert seeded.runner.status(snap.id, seeded.workflow.store.protocol(PROTOCOL, 1)) == "succeeded"

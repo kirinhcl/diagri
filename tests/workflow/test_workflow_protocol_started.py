@@ -41,3 +41,20 @@ async def test_experiments_under_a_protocol_version_are_listed_once_each(world):
     assert sorted(found) == ["experiment-stage-1", "experiment-stage-2"]
     assert world.svc.store.experiments_under("protocol-1", 2) == ()
     assert world.svc.store.experiments_under("protocol-other", 1) == ()
+
+
+async def test_the_start_times_of_an_experiments_stages_are_listed(world):
+    await world.approved("stage-1")
+    assert world.svc.store.stage_starts("experiment-stage-1") == (None,)
+
+    await world.svc.start_stage("stage-1", world.op)
+
+    assert world.svc.store.stage_starts("experiment-stage-1") == (world.clock.now(),)
+    assert world.svc.store.stage_starts("experiment-unknown") == ()
+
+
+async def test_the_protocol_versions_an_experiment_ran_under_are_listed(world):
+    await world.approved("stage-1")
+
+    assert world.svc.store.protocol_versions_of("experiment-stage-1") == (("protocol-1", 1),)
+    assert world.svc.store.protocol_versions_of("experiment-unknown") == ()

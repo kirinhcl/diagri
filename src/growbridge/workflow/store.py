@@ -327,6 +327,24 @@ class WorkflowStore:
         )
         return tuple(row["experiment_id"] for row in rows)
 
+    def stage_starts(self, experiment_id: str) -> tuple[float | None, ...]:
+        """The start time of every stage that runs this experiment (None: not started yet)."""
+        rows = self.db.query(
+            "SELECT started_at FROM wf_stages WHERE experiment_id = ? ORDER BY rowid",
+            (experiment_id,),
+        )
+        return tuple(row["started_at"] for row in rows)
+
+    def protocol_versions_of(self, experiment_id: str) -> tuple[tuple[str, int], ...]:
+        """The (protocol id, version) of every round that has a stage for this experiment."""
+        rows = self.db.query(
+            "SELECT DISTINCT r.protocol_id, r.protocol_version FROM wf_stages s"
+            " JOIN wf_rounds r ON r.id = s.round_id WHERE s.experiment_id = ?"
+            " ORDER BY r.protocol_id, r.protocol_version",
+            (experiment_id,),
+        )
+        return tuple((row["protocol_id"], row["protocol_version"]) for row in rows)
+
     # --- approvals -----------------------------------------------------------------------------
 
     def add_approval(self, approval: Approval) -> None:
