@@ -153,7 +153,8 @@ def _advance(deps: Deps, round_id: str, snapshot_id: str, whole: bool) -> str:
     return deps.workflow.mark_snapshot_frozen(round_id, snapshot_id, event).value
 
 
-def _evidence(deps: Deps, data: EvidenceInput) -> dict:
+def query_cards(deps: Deps, data: EvidenceInput) -> dict:
+    """Search the evidence cards (shared by the researcher and the planner)."""
     cards = deps.archive.evidence(data.ids or None)
     needle = data.text.casefold()
     hits = [c for c in cards if not needle or needle in f"{c.claim} {c.citation}".casefold()]
@@ -225,7 +226,7 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
             "query_evidence",
             "Search evidence cards already in the archive.",
             EvidenceInput,
-            lambda d: _evidence(deps, d),
+            lambda d: query_cards(deps, d),
         ),
         Tool(
             "run_local_analysis",

@@ -486,7 +486,9 @@ def test_operator_reads_the_run_sheet_and_its_findings_before_approving(bench, o
     assert body["stage_id"] == "stage-1" and body["state"] == "pending_review"
     assert body["run_sheet"] == sheet.model_dump(mode="json")
     assert (body["run_sheet_version"], body["run_sheet_digest"]) == (1, sheet.digest())
-    assert body["findings"] == [note.model_dump(mode="json")] and body["blocking"] is False
+    # the validator's findings first, then the evidence hints (every set point here cites nothing)
+    assert body["findings"][0] == note.model_dump(mode="json") and body["blocking"] is False
+    assert {item["code"] for item in body["findings"][1:]} == {"no_evidence"}
     approval = bench.post(operator, "/wb/stages/stage-1/approve").json()
     assert approval["run_sheet_digest"] == body["run_sheet_digest"]
 

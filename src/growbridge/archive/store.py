@@ -19,6 +19,7 @@ from growbridge.archive.models import (
     Artifact,
     EvidenceCard,
     ManualMeasurement,
+    Model,
     SampleRecord,
     Snapshot,
 )
@@ -49,7 +50,33 @@ STEPS = (
     " at REAL NOT NULL, PRIMARY KEY(record_id, dependent_id))",
     "CREATE TABLE archive_meta(key TEXT PRIMARY KEY, value REAL NOT NULL)",
     "ALTER TABLE measurements ADD COLUMN recorded_at REAL",  # NULL: recorded before this column
+    # Who entered or proposed an evidence card, and who verified it. Both are appended records:
+    # the card itself is never edited. One verification per card; the first one stays.
+    "CREATE TABLE evidence_sources(card_id TEXT PRIMARY KEY, source TEXT NOT NULL,"
+    " task_id TEXT, at REAL NOT NULL)",
+    "CREATE INDEX evidence_sources_by_task ON evidence_sources(task_id)",
+    "CREATE TABLE evidence_verifications(card_id TEXT PRIMARY KEY, verifier TEXT NOT NULL,"
+    " at REAL NOT NULL, note TEXT NOT NULL)",
 )
+
+
+class EvidenceVerification(Model):
+    card_id: str
+    verifier: str
+    at: float
+    note: str = ""
+
+
+class EvidenceEntry(Model):
+    """A card with its trail: who added it, and who verified it (if anyone)."""
+
+    card: EvidenceCard
+    source: str | None = None  # ``operator:<id>`` or ``model:<role>``; None for older cards
+    task_id: str | None = None
+    added_at: float | None = None
+    verified_by: str | None = None
+    verified_at: float | None = None
+    note: str = ""
 
 
 def _body(model: BaseModel) -> str:
@@ -253,19 +280,93 @@ class Archive:
             found.update({row["id"]: row["recorded_at"] for row in rows})
         return found
 
-    def add_evidence(self, card: EvidenceCard) -> None:
+    def add_evidence(
+        self,
+        card: EvidenceCard,
+        source: str | None = None,
+        task_id: str | None = None,
+        verified_by: str | None = None,
+    ) -> None:
+        """Store a card with its source. The card is always stored unverified: a verification
+        is its own record, written here only when an operator (``verified_by``) entered it."""
+        stored = card.model_copy(update={"verified": False})
         with self.db.transaction():
-            if self._insert_once("evidence", card.id, card, {"seq": self._next_seq("evidence")}):
+            extra = {"seq": self._next_seq("evidence")}
+            if not self._insert_once("evidence", stored.id, stored, extra):
+                return
+            if source is not None:
+                self.db.execute(
+                    "INSERT INTO evidence_sources(card_id, source, task_id, at)"
+                    " VALUES (?, ?, ?, ?)",
+                    (stored.id, source, task_id, self.clock.now()),
+                )
+            if verified_by is not None:
+                self.verify_evidence(stored.id, verified_by)
+            self._touch()
+
+    def verify_evidence(self, card_id: str, verifier: str, note: str = "") -> EvidenceVerification:
+        """Append the verification of a card. Repeating it keeps the first record."""
+        with self.db.transaction():
+            if self.db.one("SELECT 1 FROM evidence WHERE id = ?", (card_id,)) is None:
+                raise ValueError(f"unknown evidence card {card_id}")
+            added = self.db.execute(
+                "INSERT OR IGNORE INTO evidence_verifications(card_id, verifier, at, note)"
+                " VALUES (?, ?, ?, ?)",
+                (card_id, verifier, self.clock.now(), note),
+            )
+            if added.rowcount:
                 self._touch()
+            found = self.evidence_verification(card_id)
+        assert found is not None  # inserted above or already there
+        return found
+
+    def evidence_verification(self, card_id: str) -> EvidenceVerification | None:
+        row = self.db.one("SELECT * FROM evidence_verifications WHERE card_id = ?", (card_id,))
+        return None if row is None else EvidenceVerification(**dict(row))
 
     def evidence(self, ids: Iterable[str] | None = None) -> tuple[EvidenceCard, ...]:
-        rows = self.db.query("SELECT id, body FROM evidence ORDER BY seq")
+        """The cards; ``verified`` is true exactly when a verification record exists."""
+        rows = self.db.query(
+            "SELECT e.id, e.body, v.card_id AS verified FROM evidence e"
+            " LEFT JOIN evidence_verifications v ON v.card_id = e.id ORDER BY e.seq"
+        )
         wanted = None if ids is None else set(ids)
         return tuple(
-            EvidenceCard.model_validate_json(row["body"])
+            EvidenceCard.model_validate_json(row["body"]).model_copy(
+                update={"verified": row["verified"] is not None}
+            )
             for row in rows
             if wanted is None or row["id"] in wanted
         )
+
+    def evidence_entries(self) -> tuple[EvidenceEntry, ...]:
+        """Every card with its source and verification, oldest first."""
+        rows = self.db.query(
+            "SELECT e.body, s.source, s.task_id, s.at AS added_at, v.verifier,"
+            " v.at AS verified_at, v.note FROM evidence e"
+            " LEFT JOIN evidence_sources s ON s.card_id = e.id"
+            " LEFT JOIN evidence_verifications v ON v.card_id = e.id ORDER BY e.seq"
+        )
+        return tuple(
+            EvidenceEntry(
+                card=EvidenceCard.model_validate_json(row["body"]).model_copy(
+                    update={"verified": row["verifier"] is not None}
+                ),
+                source=row["source"],
+                task_id=row["task_id"],
+                added_at=row["added_at"],
+                verified_by=row["verifier"],
+                verified_at=row["verified_at"],
+                note=row["note"] or "",
+            )
+            for row in rows
+        )
+
+    def evidence_count_from(self, task_id: str) -> int:
+        row = self.db.one(
+            "SELECT COUNT(*) AS n FROM evidence_sources WHERE task_id = ?", (task_id,)
+        )
+        return int(row["n"])
 
     def add_artifact(self, artifact: Artifact) -> None:
         with self.db.transaction():

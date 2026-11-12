@@ -15,6 +15,8 @@ from pydantic import Field, StrictInt, StringConstraints
 
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
+from growbridge.archive.store import Archive
+from growbridge.planning.validate import check_evidence
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workflow.service import Choice, WorkflowService
@@ -97,12 +99,19 @@ def round_json(workflow: WorkflowService, round_id: str) -> dict:
     }
 
 
-def review_json(workflow: WorkflowService, stage_id: str) -> dict:
+def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | None = None) -> dict:
     """The run sheet as it would be approved now, checked by the validator ``approve`` uses.
-    The digest is the one an approval records. Reading changes nothing."""
+    The digest is the one an approval records. Reading changes nothing.
+
+    With an archive the findings also carry the evidence hints of ``check_evidence`` (no card, an
+    unverified source, an uncalibrated card). A card counts as verified when an operator recorded
+    a verification. The hints never block."""
     stage = workflow.stage(stage_id)
     sheet = stage.run_sheet
     findings = tuple(workflow.validate(sheet)) if workflow.validate else ()
+    if archive is not None:
+        cards = {card.id: card for card in archive.evidence()}
+        findings = (*findings, *check_evidence(sheet, cards))
     return {
         "stage_id": stage.stage_id,
         "state": stage.state.value,
@@ -178,7 +187,12 @@ def _design_routes(router: APIRouter, operator: Dependency, workflow: WorkflowSe
         return {"round_id": round_id, "state": workflow.round_state(round_id).value}
 
 
-def _steering_routes(router: APIRouter, operator: Dependency, workflow: WorkflowService) -> None:
+def _steering_routes(
+    router: APIRouter,
+    operator: Dependency,
+    workflow: WorkflowService,
+    archive: Archive | None = None,
+) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/rounds/{round_id}")
@@ -187,7 +201,7 @@ def _steering_routes(router: APIRouter, operator: Dependency, workflow: Workflow
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):
-        return review_json(workflow, stage_id)
+        return review_json(workflow, stage_id, archive)
 
     @router.post("/rounds/{round_id}/choice")
     async def choose_after_stop(round_id: PathId, body: ChoiceIn, actor: Operator):
@@ -254,12 +268,13 @@ def add_round_routes(
     workflow: WorkflowService,
     tasks: TaskBoard | None = None,
     budget: ProjectBudget | None = None,
+    archive: Archive | None = None,
 ) -> None:
     """Mount the routes on ``router``. ``operator`` and ``fresh`` are the workbench's operator
     dependencies (session, entry and origin checks; ``fresh`` also asks for a recent
     re-authentication). The budget and goal routes exist only when ``tasks`` and ``budget`` are
     given."""
     _design_routes(router, operator, workflow)
-    _steering_routes(router, operator, workflow)
+    _steering_routes(router, operator, workflow, archive)
     if tasks is not None and budget is not None:
         _model_routes(router, operator, fresh, workflow, tasks, budget)

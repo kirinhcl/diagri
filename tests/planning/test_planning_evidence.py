@@ -52,9 +52,26 @@ def test_unverified_online_source_needs_confirmation():
     assert "card-1" in findings[0].message
 
 
-def test_local_measurement_does_not_need_verification():
-    local = card(source_class="local", verified=False)
+def test_a_verified_local_measurement_gives_no_hint():
+    local = card(source_class="local", verified=True)
     assert check_evidence(sheet_with_evidence("card-1"), {"card-1": local}) == ()
+
+
+def test_an_unverified_local_card_is_flagged_like_any_other_class():
+    """A card is not trusted because of the class it names: only a verification clears the hint."""
+    local = card(source_class="local", verified=False)
+
+    findings = check_evidence(sheet_with_evidence("card-1"), {"card-1": local})
+
+    assert set(codes(findings)) == {"unverified_source"}
+    assert all(not f.blocking for f in findings)
+
+
+def test_every_class_of_unverified_card_is_flagged():
+    for source_class in ("handbook", "paper", "local"):
+        unverified = card(source_class=source_class, verified=False)
+        findings = check_evidence(sheet_with_evidence("card-1"), {"card-1": unverified})
+        assert "unverified_source" in codes(findings), source_class
 
 
 def test_uncalibrated_card_is_flagged():

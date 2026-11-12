@@ -243,7 +243,12 @@ def _evidence_refs(sheet: RunSheet) -> Iterator[tuple[str, str | None]]:
 
 
 def check_evidence(run_sheet: RunSheet, cards: Mapping[str, EvidenceCard]) -> tuple[Finding, ...]:
-    """Every set point must cite a card or user input; weak cards are flagged, never blocking."""
+    """Every set point must cite a card or user input; weak cards are flagged, never blocking.
+
+    A card of any class, ``local`` included, is flagged until it is verified. ``verified`` comes
+    from the cards the caller passes (the archive derives it from an operator's verification
+    record), so the class a card names earns no exemption.
+    """
     findings: list[Finding] = []
     for label, ref in _evidence_refs(run_sheet):
         if ref is not None and ref.startswith(USER_INPUT_PREFIX):
@@ -252,7 +257,7 @@ def check_evidence(run_sheet: RunSheet, cards: Mapping[str, EvidenceCard]) -> tu
         if card is None:
             findings.append(_hint("no_evidence", f"{label}: no evidence card or user input"))
             continue
-        if card.source_class != "local" and not card.verified:
+        if not card.verified:
             findings.append(
                 _hint("unverified_source", f"{label}: card {card.id} is not verified; confirm it")
             )

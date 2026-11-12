@@ -12,6 +12,7 @@ from growbridge.agents.handlers_common import (
     Deps,
     DraftInput,
     ToolInput,
+    bound_task,
     check_sheet,
     clip,
     findings_json,
@@ -21,6 +22,7 @@ from growbridge.agents.handlers_common import (
     submit_draft,
     unavailable,
 )
+from growbridge.agents.handlers_evidence import build_evidence_tools
 from growbridge.agents.tools import Tool
 from growbridge.archive.models import RunSheet
 from growbridge.planning.design import check_experimental_design, estimate_sample_size
@@ -86,13 +88,17 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
     def prior_runs(data: PriorRunsInput) -> dict:
         require_experiment_project(deps, data.experiment_id)
         snapshots = deps.archive.snapshots(data.experiment_id)
+        rows = deps.archive.measurements(data.experiment_id)
+        if deps.holdout is not None:  # a held-out outcome must not even be counted
+            keep = deps.holdout.development_filter(bound_task(deps).project_id)
+            rows = tuple(row for row in rows if keep(row))
         return {
             "experiment_id": data.experiment_id,
             "snapshots": [
                 {"id": s.id, "version": s.version, "complete": s.complete, "coverage": s.coverage}
                 for s in snapshots[-MAX_ITEMS:]
             ],
-            "measurements": len(deps.archive.measurements(data.experiment_id)),
+            "measurements": len(rows),
         }
 
     async def crop_conditions(data: CropInput) -> dict:
@@ -164,4 +170,5 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
             save_draft,
             writes=True,
         ),
+        *build_evidence_tools(deps),
     ]
