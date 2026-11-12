@@ -288,6 +288,20 @@ def test_safety_config_with_a_wrong_shape_is_422(bench, operator):
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "Infinity"])
+def test_safety_config_with_a_number_that_is_not_finite_is_422_and_nothing_changes(
+    bench, operator, value
+):
+    body = safety_body()
+    body["config"]["rules"][0]["trigger"]["value"] = value
+    headers = {**bench.ui(operator), "Content-Type": "application/json"}
+
+    response = operator.post("/wb/safety/approve", content=json.dumps(body), headers=headers)
+
+    assert response.status_code == 422
+    assert bench.control.safety_config.version == 1  # the approved configuration is unchanged
+
+
 # --- alerts ------------------------------------------------------------------------------------
 
 

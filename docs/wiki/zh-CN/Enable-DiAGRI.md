@@ -160,7 +160,7 @@ POST /wb/safety/approve
   "action": {"channel": "light", "level": 0}}]}}
 ```
 
-应该得到 `{"protection_right": <编号>}`。上面这条规则取自模拟器的测试数据（[`sim/fixtures.py`](../../../src/growbridge/sim/fixtures.py)），只用来说明格式，不是推荐的设定值。保护规则能做什么，见[控制与安全模型](Control-and-Safety-Model.md)。
+应该得到 `{"protection_right": <编号>}`。配置里有 NaN 或无穷大的数时，请求以 `422` 被拒绝，之前批准的配置继续有效。上面这条规则取自模拟器的测试数据（[`sim/fixtures.py`](../../../src/growbridge/sim/fixtures.py)），只用来说明格式，不是推荐的设定值。保护规则能做什么，见[控制与安全模型](Control-and-Safety-Model.md)。
 
 ## 某一步被拒绝时
 

@@ -15,13 +15,14 @@ from growbridge.archive.models import (
     Ownership,
     RuleAction,
     RunSheet,
+    SafetyConfig,
     SamplingPlan,
     TimedAction,
     check_level,
     scheduled_level,
 )
 from growbridge.sim.clock import FakeClock
-from growbridge.sim.fixtures import humidity_rule, make_run_sheet
+from growbridge.sim.fixtures import humidity_rule, make_run_sheet, make_safety
 from growbridge.workflow import states
 
 # Every kind of number a run sheet holds. NaN would be stored as null and could not be read back,
@@ -39,6 +40,13 @@ FLOAT_PATHS = (
     "feedback_rules.0.min_switch_seconds",
 )
 NOT_FINITE = (float("nan"), float("inf"), float("-inf"), "nan", "Infinity", "-inf")
+# The same holds for a protection rule: with a NaN threshold it would never act.
+SAFETY_FLOAT_PATHS = (
+    "rules.0.trigger.value",
+    "rules.0.validity_seconds",
+    "rules.0.duration_seconds",
+    "approved_at",
+)
 
 
 def at(hour, minute=0, zone="Europe/Helsinki"):
@@ -178,6 +186,28 @@ def test_a_run_sheet_reads_back_from_storage_unchanged():
     sheet = RunSheet.model_validate(sheet_data())
 
     assert RunSheet.model_validate_json(sheet.model_dump_json()) == sheet
+
+
+def safety_data() -> dict:
+    return make_safety(approved_by="op-1", approved_at=1.0).model_dump(mode="json")
+
+
+@pytest.mark.parametrize("path", SAFETY_FLOAT_PATHS)
+def test_safety_config_rejects_a_number_that_is_not_finite_and_says_where(path):
+    with pytest.raises(ValidationError, match=re.escape(path)):
+        SafetyConfig.model_validate(put(safety_data(), path, float("nan")))
+
+
+@pytest.mark.parametrize("value", NOT_FINITE)
+def test_safety_config_rejects_every_spelling_of_nan_and_infinity(value):
+    with pytest.raises(ValidationError):
+        SafetyConfig.model_validate(put(safety_data(), "rules.0.trigger.value", value))
+
+
+def test_a_safety_config_reads_back_from_storage_unchanged():
+    config = SafetyConfig.model_validate(safety_data())
+
+    assert SafetyConfig.model_validate_json(config.model_dump_json()) == config
 
 
 def test_digest_is_stable_and_changes_with_content():

@@ -48,6 +48,14 @@ def non_finite_paths(value: Any, path: str = "") -> list[str]:
     ]
 
 
+def require_finite(model: BaseModel, what: str) -> None:
+    """For a model that drives the device. NaN would be stored as null and could not be read
+    back, and a NaN threshold never compares true, so a rule holding it would never act."""
+    spoiled = non_finite_paths(model.model_dump())
+    if spoiled:
+        raise ValueError(f"{what} numbers must be finite; not at {', '.join(spoiled)}")
+
+
 class Channel(StrEnum):
     LIGHT = "light"
     EXHAUST = "exhaust"
@@ -191,6 +199,11 @@ class SafetyConfig(Model):
     approved_by: str | None = None
     approved_at: float | None = None
 
+    @model_validator(mode="after")
+    def _finite(self) -> "SafetyConfig":
+        require_finite(self, "Safety configuration")
+        return self
+
 
 class ChannelPlan(Model):
     channel: Channel
@@ -246,11 +259,7 @@ class RunSheet(Model):
 
     @model_validator(mode="after")
     def _finite(self) -> "RunSheet":
-        """NaN would be stored as null and could not be read back, and a NaN threshold never
-        compares true; an infinite duration or interval is no plan either."""
-        spoiled = non_finite_paths(self.model_dump())
-        if spoiled:
-            raise ValueError(f"Run sheet numbers must be finite; not at {', '.join(spoiled)}")
+        require_finite(self, "Run sheet")  # an infinite duration or interval is no plan either
         return self
 
     def plan(self, channel: Channel) -> ChannelPlan | None:

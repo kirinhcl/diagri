@@ -160,7 +160,7 @@ POST /wb/safety/approve
   "action": {"channel": "light", "level": 0}}]}}
 ```
 
-You should get `{"protection_right": <number>}`. The rule above is the one in the simulator fixture ([`sim/fixtures.py`](../../../src/growbridge/sim/fixtures.py)); it is an example of the shape, not a recommended setting. What protection rules may do is explained in the [Control and safety model](Control-and-Safety-Model.md).
+You should get `{"protection_right": <number>}`. A configuration with a NaN or an infinite number is rejected with `422`, and the configuration approved before stays in force. The rule above is the one in the simulator fixture ([`sim/fixtures.py`](../../../src/growbridge/sim/fixtures.py)); it is an example of the shape, not a recommended setting. What protection rules may do is explained in the [Control and safety model](Control-and-Safety-Model.md).
 
 ## When a step is refused
 

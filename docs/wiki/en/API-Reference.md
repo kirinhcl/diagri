@@ -104,7 +104,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 
 The last nine routes, the two reads among them, are for operators only: a role token is refused with `model_role`.
 
-A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `experiment_id`, `project_id`, `state`, `prior_state`, `right_number`, `care_right`, `manual_right`, `started_at`, `paused_at`, `end_pending`. `RunSheet`, `ResearchProtocol`, `SafetyConfig`, `Approval` and `ActionRecord` are in [`archive/models.py`](../../../src/growbridge/archive/models.py). A `RunSheet` refuses NaN and infinity, also spelled as text, in every number it holds, wherever it comes from: a route answers `422`, a model tool returns an error result, and nothing is saved.
+A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `experiment_id`, `project_id`, `state`, `prior_state`, `right_number`, `care_right`, `manual_right`, `started_at`, `paused_at`, `end_pending`. `RunSheet`, `ResearchProtocol`, `SafetyConfig`, `Approval` and `ActionRecord` are in [`archive/models.py`](../../../src/growbridge/archive/models.py). A `RunSheet` and a `SafetyConfig` refuse NaN and infinity, also spelled as text, in every number they hold, wherever they come from: a route answers `422`, a model tool returns an error result, and nothing is saved or approved.
 
 | Method | Path | Body | Returns |
 | --- | --- | --- | --- |

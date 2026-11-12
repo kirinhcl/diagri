@@ -104,7 +104,7 @@
 
 最后九个路由只给操作员用，其中的两个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
-下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存。
+下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。
 
 | 方法 | 路径 | 请求体 | 返回 |
 | --- | --- | --- | --- |
