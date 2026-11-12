@@ -204,3 +204,26 @@ async def test_compute_retry_validates_adjusted_params(env):
     with pytest.raises(Denied) as info:
         await env.service.retry(failed.id, {"batch_size": 9999})
     assert info.value.code == "param"
+
+
+async def test_compute_unreported_usage_is_charged_at_the_full_reservation(env):
+    attempt = await submit(env)
+    env.backend.set_usage(cpu=None, storage=None)  # the backend cannot report usage
+    env.backend.finish(attempt.remote_job_id)
+
+    done = await env.service.get_compute_job(attempt.id, "alice")
+
+    assert (done.used_cpu, done.used_storage) == (10.0, 5.0)  # the template's reservation
+    assert reserved(env) == (0.0, 0.0)
+
+
+async def test_compute_unreported_usage_still_counts_against_the_caps(env):
+    service = await env.build(task_cpu=15.0)
+    first = await service.submit_compute_job("t1", "alice", "segment", GOOD_PARAMS, INPUTS)
+    env.backend.set_usage(cpu=None, storage=None)
+    env.backend.finish(first.remote_job_id)
+    await service.get_compute_job(first.id, "alice")
+
+    with pytest.raises(Denied) as info:  # 10 h are spent, not 0: a second job does not fit
+        await service.submit_compute_job("t1", "alice", "segment", GOOD_PARAMS, INPUTS)
+    assert info.value.code == "quota"

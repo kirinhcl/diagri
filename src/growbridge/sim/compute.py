@@ -6,7 +6,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from growbridge.compute.backend import BackendError, JobTemplate, RemoteJob, SubmitRejected
+from growbridge.compute.backend import (
+    BackendError,
+    BackendUnavailable,
+    JobTemplate,
+    RemoteJob,
+    SubmitRejected,
+)
 
 WRONG_CHECKSUM = "0" * 64
 
@@ -15,15 +21,19 @@ class FakeBackend:
     def __init__(self) -> None:
         self.jobs: dict[str, RemoteJob] = {}
         self.submit_calls: list[str] = []
+        self.submit_inputs: list[dict[str, str]] = []
         self.cleaned: list[str] = []
+        self.cleaned_names: list[str] = []
+        self.fail_cleanup = False
         self.cancelled: list[str] = []
         self.artifacts: dict[str, bytes] = {"result.csv": b"a,b\n1,2\n"}
         self.lose_receipt = False  # accept the job, then fail the call (receipt lost)
         self.fail_submit = False  # refuse the job outright
         self.wrong_checksums = False  # report checksums that do not match the files
         self.balance_value = 0.0
-        self.cpu_used = 0.0
-        self.storage_used = 0.0
+        self.balance_unavailable = False  # like FirecREST: there is no balance to read
+        self.cpu_used: float | None = 0.0  # None: usage is not reported
+        self.storage_used: float | None = 0.0
         self.gates: dict[str, asyncio.Event] = {}  # operation -> event the call waits on
         self.released: dict[str, asyncio.Event] = {}
         self.entered: dict[str, asyncio.Event] = {}  # operation -> set when a call arrives
@@ -42,7 +52,7 @@ class FakeBackend:
             self.entered[operation].set()
             await gate.wait()
 
-    def set_usage(self, cpu: float, storage: float) -> None:
+    def set_usage(self, cpu: float | None, storage: float | None) -> None:
         self.cpu_used, self.storage_used = cpu, storage
 
     def set_balance(self, value: float) -> None:
@@ -70,12 +80,19 @@ class FakeBackend:
         inputs: Mapping[str, str],
     ) -> str:
         self.submit_calls.append(job_name)
+        self.submit_inputs.append(dict(inputs))
         await self._pause("submit")
         await asyncio.sleep(0)  # let concurrent callers interleave
         if self.fail_submit:
             raise SubmitRejected("scheduler refused the job")
         job_id = f"job-{len(self.jobs) + 1}"
-        self.jobs[job_id] = RemoteJob(job_id=job_id, name=job_name, state="queued")
+        self.jobs[job_id] = RemoteJob(
+            job_id=job_id,
+            name=job_name,
+            state="queued",
+            cpu_hours_used=0.0,
+            storage_gb_used=0.0,
+        )
         if self.lose_receipt:
             raise TimeoutError("receipt lost")
         return job_id
@@ -104,9 +121,17 @@ class FakeBackend:
     async def cleanup(self, job_id: str) -> None:
         self.cleaned.append(job_id)
 
+    async def cleanup_by_name(self, job_name: str) -> None:
+        if self.fail_cleanup:
+            raise BackendError("cleanup failed")
+        self.cleaned_names.append(job_name)
+
     async def cancel(self, job_id: str) -> None:
         self.cancelled.append(job_id)
-        self.jobs[job_id] = self.jobs[job_id].model_copy(update={"state": "cancelled"})
+        if job_id in self.jobs:  # a job that is no longer listed is accepted and ignored
+            self.jobs[job_id] = self.jobs[job_id].model_copy(update={"state": "cancelled"})
 
     async def balance(self) -> float:
+        if self.balance_unavailable:
+            raise BackendUnavailable("this backend reports no balance")
         return self.balance_value

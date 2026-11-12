@@ -141,13 +141,19 @@ async def _serve_listeners(app, settings) -> None:
 async def _serve_auto_research(settings) -> None:
     from .api import create_app
     from .runtime import build_runtime
+    from .runtime_compute import ComputeConfigError, compute_options, install_input_guard
     from .runtime_heartbeat import heartbeats_from_env
 
     try:  # one heartbeat URL without the other would watch only half of the failures
         heartbeats = heartbeats_from_env()
     except ValueError as error:
         raise SystemExit(f"growbridge: {error}") from error
-    runtime = build_runtime(settings, heartbeats=heartbeats)
+    try:  # compute starts only when completely configured; a bad template stops the daemon
+        compute = compute_options(settings, os.environ)
+    except ComputeConfigError as error:
+        raise SystemExit(f"growbridge: {error}") from error
+    runtime = build_runtime(settings, heartbeats=heartbeats, **compute)
+    install_input_guard(runtime)  # a model names inputs: only own-project snapshots may leave
     try:  # a too-short role token stops the daemon before anything starts
         router = runtime.workbench(role_tokens_from_env(os.environ))
     except ValueError as error:

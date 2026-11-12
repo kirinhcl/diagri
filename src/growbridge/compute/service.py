@@ -6,49 +6,54 @@ before submission and becomes the remote job name ``gb-<attempt_id>``, so a lost
 reconciled by name instead of resubmitting.
 
 Accounting: compute (cpu hours) and storage (GB) are separate quotas. The project balance is a
-compute balance only; the backend exposes no storage balance.
+compute balance only; the backend exposes no storage balance. A backend that cannot report a
+balance (FirecREST) leaves it to an operator (``record_balance``); a missing balance is never read
+as zero or as unlimited. Usage a backend does not report is charged as the whole reservation.
+
+Inputs are references under ``input_root`` (``<snapshot id>/<path>``). The service resolves them to
+local paths and hands those to the backend, but only after ``input_guard(task_id, ref)`` has
+accepted each one; with a root and no guard, inputs are refused (fail closed).
 """
 
+import asyncio
 import json
-from collections.abc import Mapping, Sequence
+import math
+import re
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from growbridge.archive.db import Database
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Model
 from growbridge.compute.backend import (
+    BackendUnavailable,
     ComputeBackend,
     JobTemplate,
     ParamSpec,
     RemoteJob,
     SubmitRejected,
 )
+from growbridge.compute.overview import build_overview
+from growbridge.compute.phases import (
+    FETCHABLE,
+    LIVE,
+    PHASE_STATE,
+    POLL_AFTER_SECONDS,
+    POLLED,
+    RECONCILE_AFTER_SECONDS,
+    TICK_BATCH,
+    TICK_EVERY_SECONDS,
+    Phase,
+)
 from growbridge.ports import Denied
 from growbridge.workflow.states import TaskState
 
-Phase = Literal[
-    "prepared", "queued", "running", "reconcile", "fetching", "needs_review", "failed",
-    "done", "cancelled",
-]  # fmt: skip
-PHASE_STATE: dict[str, TaskState] = {
-    "prepared": TaskState.IN_PROGRESS,
-    "queued": TaskState.REMOTE_QUEUED,
-    "running": TaskState.COMPUTING,
-    "reconcile": TaskState.RECONCILE,
-    "fetching": TaskState.FETCHING,
-    "needs_review": TaskState.NEEDS_REVIEW,
-    "failed": TaskState.NEEDS_ATTENTION,
-    "done": TaskState.DONE,
-    "cancelled": TaskState.ENDED,
-}
 REMOTE_PHASE = {
     "queued": "queued", "running": "running", "completed": "fetching",
     "failed": "failed", "cancelled": "cancelled",
 }  # fmt: skip
-POLLED = ("queued", "running")
-LIVE = ("prepared", "reconcile", "queued", "running")  # not yet settled
-FETCHABLE = ("fetching", "needs_review", "failed")
+MAX_TEXT_CHARS = 1000  # no text parameter is longer, whatever its template says
 STEPS = [
     "CREATE TABLE compute_attempts(id TEXT PRIMARY KEY, task_id TEXT NOT NULL,"
     " submitter TEXT NOT NULL, csc_user TEXT NOT NULL, template_id TEXT NOT NULL,"
@@ -63,6 +68,10 @@ STEPS = [
     " storage_gb REAL NOT NULL)",
     "CREATE TABLE compute_balances(id INTEGER PRIMARY KEY AUTOINCREMENT, balance REAL NOT NULL,"
     " recorded_at REAL NOT NULL)",
+    "ALTER TABLE compute_balances ADD COLUMN entered_by TEXT NOT NULL DEFAULT 'backend'",
+    "ALTER TABLE compute_balances ADD COLUMN note TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE compute_attempts ADD COLUMN settled_by TEXT",
+    "ALTER TABLE compute_attempts ADD COLUMN settle_reason TEXT NOT NULL DEFAULT ''",
 ]
 
 
@@ -90,6 +99,8 @@ class Attempt(Model):
     root_id: str
     checksums: dict[str, str] = {}
     error: str = ""
+    settled_by: str | None = None  # the operator who settled it by hand, if one did
+    settle_reason: str = ""
     created_at: float
     updated_at: float
 
@@ -102,6 +113,18 @@ class Attempt(Model):
         return f"gb-{self.id}"
 
 
+def _check_text(name: str, spec: ParamSpec, value: str) -> None:
+    limit = min(spec.max_length or MAX_TEXT_CHARS, MAX_TEXT_CHARS)
+    if len(value) > limit:
+        raise Denied("param", f"{name} is longer than {limit} characters")
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise Denied("param", f"{name} must not contain control characters")
+    if spec.pattern is not None and re.fullmatch(spec.pattern, value) is None:
+        raise Denied("param", f"{name} does not match its pattern")
+    if spec.choices is not None and value not in spec.choices:
+        raise Denied("param", f"{name} must be one of {list(spec.choices)}")
+
+
 def _check_value(name: str, spec: ParamSpec, value: Any) -> Any:
     ok = {
         "int": isinstance(value, int) and not isinstance(value, bool),
@@ -111,14 +134,29 @@ def _check_value(name: str, spec: ParamSpec, value: Any) -> Any:
     }[spec.kind]
     if not ok:
         raise Denied("param", f"{name} must be {spec.kind}")
+    if spec.kind == "float" and not math.isfinite(value):
+        raise Denied("param", f"{name} must be a finite number")
     if spec.kind in ("int", "float") and (
         (spec.minimum is not None and value < spec.minimum)
         or (spec.maximum is not None and value > spec.maximum)
     ):
         raise Denied("param", f"{name} outside {spec.minimum}..{spec.maximum}")
-    if spec.choices is not None and value not in spec.choices:
-        raise Denied("param", f"{name} must be one of {list(spec.choices)}")
+    if spec.kind == "str":
+        _check_text(name, spec, value)
     return value
+
+
+def template_problem(template: JobTemplate) -> str | None:
+    """Rules every template must meet, whatever the backend; ``None`` when it meets them."""
+    for name, spec in template.parameters.items():
+        if spec.kind == "str" and spec.choices is None and spec.pattern is None:
+            return f"parameter {name} is free text and must declare a pattern"
+        if spec.default is not None:
+            try:
+                _check_value(name, spec, spec.default)
+            except Denied as error:
+                return f"the default of parameter {name} is not valid: {error}"
+    return None
 
 
 def validate_params(template: JobTemplate, params: Mapping[str, Any]) -> dict[str, Any]:
@@ -135,6 +173,17 @@ def validate_params(template: JobTemplate, params: Mapping[str, Any]) -> dict[st
         else:
             result[name] = spec.default
     return result
+
+
+def _require_amount(value: Any, what: str) -> None:
+    ok = isinstance(value, int | float) and not isinstance(value, bool)
+    if not ok or not math.isfinite(value) or value < 0:
+        raise Denied("param", f"{what} must be a finite, non-negative number")
+
+
+def _describe(error: BaseException) -> str:
+    """For a record kept on an attempt. A backend's own errors never carry a credential."""
+    return f"{type(error).__name__}: {error}"[:300]
 
 
 def validate_inputs(inputs: Mapping[str, str]) -> dict[str, str]:
@@ -155,30 +204,47 @@ class ComputeService:
         members: Mapping[str, str],
         service_cpu_cap: float,
         service_storage_cap: float,
+        input_root: Path | None = None,
     ) -> None:
         self.db, self.clock, self.backend = db, clock, backend
+        self.input_root = input_root
+        self.input_guard: Callable[[str, str], None] | None = None  # (task_id, input reference)
         self.members = dict(members)
         self.service_cpu_cap, self.service_storage_cap = service_cpu_cap, service_storage_cap
         self.templates: dict[str, JobTemplate] = {}
         for template in sorted(templates, key=lambda t: t.version):
             self.templates[template.id] = template  # newest version wins
         self._inflight: set[str] = set()
+        self._last_tick: float | None = None
         db.migrate("compute", STEPS)
 
     # -- budgets --------------------------------------------------------------------------
     def set_task_budget(self, task_id: str, cpu_hours: float, storage_gb: float) -> None:
+        for value in (cpu_hours, storage_gb):
+            _require_amount(value, "a task budget")
         self.db.execute(
             "INSERT INTO compute_task_budgets VALUES (?, ?, ?) ON CONFLICT(task_id)"
             " DO UPDATE SET cpu_hours = excluded.cpu_hours, storage_gb = excluded.storage_gb",
             (task_id, cpu_hours, storage_gb),
         )
 
-    async def refresh_balance(self) -> float:
-        value = await self.backend.balance()
+    def record_balance(self, cpu_hours: float, entered_by: str, note: str = "") -> None:
+        """An operator's reading of the project's remaining cpu hours (appended, never edited)."""
+        _require_amount(cpu_hours, "a balance")
         self.db.execute(
-            "INSERT INTO compute_balances(balance, recorded_at) VALUES (?, ?)",
-            (value, self.clock.now()),
+            "INSERT INTO compute_balances(balance, recorded_at, entered_by, note)"
+            " VALUES (?, ?, ?, ?)",
+            (cpu_hours, self.clock.now(), entered_by, note),
         )
+
+    async def refresh_balance(self) -> float | None:
+        """Ask the backend; if it has no balance, keep the latest recorded one (or ``None``)."""
+        try:
+            value = await self.backend.balance()
+        except BackendUnavailable:
+            row = self.db.one("SELECT balance FROM compute_balances ORDER BY id DESC LIMIT 1")
+            return None if row is None else row["balance"]
+        self.record_balance(value, "backend")
         return value
 
     def _check_caps(self, task_id: str, template: JobTemplate) -> None:
@@ -259,27 +325,56 @@ class ComputeService:
         job: RemoteJob | None,
         error: str = "",
         allowed: Sequence[str] = LIVE,
+        unknown: bool = False,
+        **more: Any,
     ) -> bool:
-        """Record actual usage (none when ``job`` is None) and release the reservation once."""
-        return self._update(
-            attempt_id,
-            allowed=allowed,
-            unsettled=True,
-            phase=phase,
-            reserved_cpu=0.0,
-            reserved_storage=0.0,
-            used_cpu=job.cpu_hours_used if job else 0.0,
-            used_storage=job.storage_gb_used if job else 0.0,
-            settled_at=self.clock.now(),
-            error=error,
-            remote_job_id=job.job_id if job else None,
+        """Charge the attempt and release its reservation, once.
+
+        The charge is the reported usage of ``job``, or the whole reservation where the backend
+        reports none, or where the outcome is ``unknown`` (never zero then). Only an attempt that
+        certainly never reached the scheduler (``job`` None, not ``unknown``) is charged nothing.
+        """
+        used_cpu, used_storage = self._usage(attempt_id, job, unknown)
+        columns: dict[str, Any] = {
+            "phase": phase,
+            "reserved_cpu": 0.0,
+            "reserved_storage": 0.0,
+            "used_cpu": used_cpu,
+            "used_storage": used_storage,
+            "settled_at": self.clock.now(),
+            "error": error,
+            **more,
+        }
+        if job is not None:
+            columns["remote_job_id"] = job.job_id
+        return self._update(attempt_id, allowed=allowed, unsettled=True, **columns)
+
+    def _usage(
+        self, attempt_id: str, job: RemoteJob | None, unknown: bool = False
+    ) -> tuple[float, float]:
+        """What to charge: the reported usage, or the whole reservation where none is reported.
+
+        The reservation only changes when the attempt is settled (a guarded write), so reading it
+        here and writing the charge afterwards is safe.
+        """
+        if job is None and not unknown:
+            return 0.0, 0.0
+        row = self.db.one(
+            "SELECT reserved_cpu, reserved_storage FROM compute_attempts WHERE id = ?",
+            (attempt_id,),
+        )
+        cpu = None if job is None else job.cpu_hours_used
+        storage = None if job is None else job.storage_gb_used
+        return (
+            row["reserved_cpu"] if cpu is None else cpu,
+            row["reserved_storage"] if storage is None else storage,
         )
 
     def _apply_remote(self, attempt_id: str, job: RemoteJob) -> bool:
         phase = REMOTE_PHASE[job.state]
         if phase in POLLED:
-            return self._update(
-                attempt_id, LIVE, unsettled=True, phase=phase, remote_job_id=job.job_id
+            return self._update(  # a poll that works clears an error an earlier one left
+                attempt_id, LIVE, unsettled=True, phase=phase, remote_job_id=job.job_id, error=""
             )
         return self._settle(attempt_id, phase, job)
 
@@ -297,10 +392,33 @@ class ComputeService:
         if template is None:
             raise Denied("param", f"unknown template {template_id}")
         clean = validate_params(template, params)
-        attempt = self._reserve(
-            task_id, submitter, csc_user, template, clean, validate_inputs(inputs)
-        )
-        return await self._launch(attempt, template)
+        refs = validate_inputs(inputs)
+        local = await self._check_inputs(task_id, refs)  # before anything is reserved
+        attempt = self._reserve(task_id, submitter, csc_user, template, clean, refs)
+        return await self._launch(attempt, template, local)
+
+    async def _check_inputs(self, task_id: str, refs: Mapping[str, str]) -> dict[str, str]:
+        """The local paths of ``refs``; the guard must have accepted each reference first.
+
+        Once per submit or retry, not again at launch: a snapshot is immutable once frozen, so
+        the check right before the reservation is as good as one right before the upload, and a
+        second check would hash the whole snapshot again. The guard hashes, so it runs in a
+        thread; the event loop (and the executor tick) keeps going meanwhile.
+        """
+        if not refs:
+            return {}
+        guard = self.input_guard
+        if self.input_root is None or guard is None:
+            raise Denied("param", "inputs are unavailable: no input root or scope guard installed")
+        root, found = self.input_root.resolve(), {}
+        for name, ref in refs.items():
+            await asyncio.to_thread(guard, task_id, ref)
+            path = (root / ref).resolve()  # follows links: one that leaves the snapshot is refused
+            scope = (root / ref.partition("/")[0]).resolve()  # the snapshot the guard accepted
+            if not path.is_relative_to(scope) or not path.exists():
+                raise Denied("param", f"input {name} is not available")
+            found[name] = str(path)
+        return found
 
     def _reserve(
         self,
@@ -342,12 +460,12 @@ class ComputeService:
         if row["n"] >= template.max_retries:
             raise Denied("quota", f"retry limit of {template.max_retries} reached")
 
-    async def _launch(self, attempt: Attempt, template: JobTemplate) -> Attempt:
+    async def _launch(
+        self, attempt: Attempt, template: JobTemplate, local: Mapping[str, str]
+    ) -> Attempt:
         self._inflight.add(attempt.id)
         try:
-            job_id = await self.backend.submit(
-                attempt.job_name, template, attempt.params, attempt.inputs
-            )
+            job_id = await self.backend.submit(attempt.job_name, template, attempt.params, local)
         except SubmitRejected as error:
             self._settle(attempt.id, "failed", None, error=str(error), allowed=("prepared",))
         except Exception as error:  # noqa: BLE001  receipt lost: the job may exist remotely
@@ -392,7 +510,7 @@ class ComputeService:
         if attempt.phase in ("prepared", "reconcile"):
             job = await self.backend.find_by_name(attempt.job_name)
             if job is None:
-                self._settle(attempt_id, "failed", None, error="no remote job found by name")
+                await self._settle_unknown(attempt, "no remote job found by name")
             else:
                 self._apply_remote(attempt_id, job)
         elif attempt.phase in POLLED and attempt.remote_job_id:
@@ -407,11 +525,95 @@ class ComputeService:
         if job_id is None:
             found = await self.backend.find_by_name(attempt.job_name)
             job_id = found.job_id if found else None
-        job = None
-        if job_id is not None:
-            await self.backend.cancel(job_id)
+        if job_id is None:  # nothing to cancel was found: it may yet have run, so it is charged
+            self._settle(attempt_id, "cancelled", None, "cancelled; no remote job was found",
+                         unknown=True)  # fmt: skip
+            return
+        await self.backend.cancel(job_id)
+        try:
             job = await self.backend.status(job_id)
+        except Exception as error:  # noqa: BLE001  gone from the listing: the state is unknown
+            note = f"cancel requested; the remote state is unknown ({_describe(error)})"
+            self._settle(attempt_id, "failed", None, note, unknown=True, remote_job_id=job_id)
+            return
         self._settle(attempt_id, "cancelled", job)
+
+    # -- recovery: the tick and the operator ----------------------------------------------
+    async def tick(self) -> None:
+        """Look again at attempts nobody has answered for, so none stays stuck with a held
+        reservation: an unanswered submit is reconciled by name, a live job is polled.
+
+        Rate-limited, a few attempts at a time, and an attempt that fails is recorded and skipped.
+        The backend is asynchronous, so waiting for it does not block the event loop.
+        """
+        mono = self.clock.monotonic()
+        if self._last_tick is not None and mono - self._last_tick < TICK_EVERY_SECONDS:
+            return
+        self._last_tick = mono
+        for attempt_id in self._due():
+            try:
+                await self.reconcile(attempt_id)
+            except Exception as error:  # noqa: BLE001  one bad attempt must not stop the rest
+                self._update(attempt_id, error=_describe(error))
+
+    def _due(self) -> list[str]:
+        now = self.clock.now()
+        rows = self.db.query(
+            "SELECT id FROM compute_attempts WHERE (phase IN ('prepared', 'reconcile')"
+            " AND updated_at <= ?) OR (phase IN ('queued', 'running') AND updated_at <= ?)"
+            " ORDER BY updated_at, id LIMIT ?",
+            (now - RECONCILE_AFTER_SECONDS, now - POLL_AFTER_SECONDS, TICK_BATCH),
+        )
+        return [row["id"] for row in rows]
+
+    async def _settle_unknown(self, attempt: Attempt, why: str) -> None:
+        """No job was found for an attempt that was submitted (or may have been): it may have
+        run, so it is charged its whole reservation; its files are cleaned up if possible."""
+        note = f"outcome unknown: {why}; charged the full reservation"
+        if self._settle(attempt.id, "failed", None, note, unknown=True):
+            await self._remote_cleanup(attempt, cancel=False)
+
+    async def _remote_cleanup(self, attempt: Attempt, cancel: bool) -> None:
+        """Best effort: stop the job and remove its directory; what fails is written down."""
+        notes: list[str] = []
+        if cancel and attempt.remote_job_id:
+            try:
+                await self.backend.cancel(attempt.remote_job_id)
+            except Exception as error:  # noqa: BLE001
+                notes.append(f"remote cancel failed ({_describe(error)})")
+        try:
+            await self.backend.cleanup_by_name(attempt.job_name)
+        except Exception as error:  # noqa: BLE001
+            notes.append(f"cleanup failed ({_describe(error)})")
+        if notes:
+            self.db.execute(
+                "UPDATE compute_attempts SET error = CASE WHEN error = '' THEN ?"
+                " ELSE error || '; ' || ? END WHERE id = ?",
+                ("; ".join(notes), "; ".join(notes), attempt.id),
+            )
+
+    async def settle_attempt(self, attempt_id: str, actor: str, reason: str) -> Attempt:
+        """An operator ends an attempt nobody can recover (a job that is gone, a fetch that can
+        never finish). A live attempt is charged its whole reservation, as its outcome is not
+        known; one whose usage is already charged keeps that charge. Who and why are recorded."""
+        reason = reason.strip()
+        if not reason:
+            raise Denied("param", "a reason is required")
+        attempt = self._load(attempt_id)
+        who = {"settled_by": actor, "settle_reason": reason}
+        note = f"settled by an operator: {reason}"
+        if attempt.phase in LIVE:
+            done = self._settle(attempt_id, "failed", None, note, unknown=True, **who)
+        elif attempt.phase in ("fetching", "needs_review"):
+            done = self._update(
+                attempt_id, ("fetching", "needs_review"), phase="failed", error=note, **who
+            )
+        else:
+            raise Denied("state", f"an attempt in phase {attempt.phase} is already final")
+        if not done:
+            raise Denied("state", "the attempt was settled by someone else meanwhile")
+        await self._remote_cleanup(attempt, cancel=attempt.phase in LIVE)
+        return self._load(attempt_id)
 
     # -- artifacts and retry --------------------------------------------------------------
     async def fetch_compute_artifacts(
@@ -421,7 +623,7 @@ class ComputeService:
         if attempt.phase not in FETCHABLE or not attempt.remote_job_id:
             raise Denied("state", f"nothing to fetch in phase {attempt.phase}")
         reported = await self.backend.fetch(attempt.remote_job_id, out_dir)
-        problems = self._verify(out_dir, reported)
+        problems = await asyncio.to_thread(self._verify, out_dir, reported)  # hashes the files
         if problems:
             phase = "failed" if attempt.phase == "failed" else "needs_review"
             self._update(attempt_id, FETCHABLE, phase=phase, error="; ".join(problems))
@@ -454,6 +656,7 @@ class ComputeService:
         if template is None or template.version != attempt.template_version:
             raise Denied("param", "the template version of the attempt is no longer registered")
         params = validate_params(template, {**attempt.params, **adjustments})
+        local = await self._check_inputs(attempt.task_id, attempt.inputs)  # still in scope?
         changed = any(
             name in template.result_changing and params[name] != attempt.params.get(name)
             for name in adjustments
@@ -463,4 +666,10 @@ class ComputeService:
             attempt.task_id, attempt.submitter, csc_user, template, params, attempt.inputs,
             parent=attempt, analysis_version=version,
         )  # fmt: skip
-        return await self._launch(new, template), changed
+        return await self._launch(new, template, local), changed
+
+    # -- what the workbench shows ---------------------------------------------------------
+    def overview(self) -> dict[str, Any]:
+        """Balance, per-task budgets and usage, the service totals, open and stuck jobs."""
+        caps = (self.service_cpu_cap, self.service_storage_cap)
+        return build_overview(self.db, self.clock, *caps)

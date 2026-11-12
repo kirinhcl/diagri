@@ -99,7 +99,7 @@ class ScriptedSandbox:
 class Bench:
     """One database, one clock, the services and an app with the workbench mounted."""
 
-    def __init__(self, tmp_path, lan_port: int | None = LAN_PORT):
+    def __init__(self, tmp_path, lan_port: int | None = LAN_PORT, compute_factory=None):
         self.clock = FakeClock()
         self.db = Database(tmp_path / "workbench.db")
         self.control = RecordingControl(self.clock)
@@ -115,6 +115,8 @@ class Bench:
             self.archive.outcome_experiments, self.workflow.store.projects_of_experiment
         )
         self.holdout = HoldoutRegistry(self.db, self.clock, outcomes)
+        # a callable taking this bench: the compute service shares its database and clock
+        self.compute = None if compute_factory is None else compute_factory(self)
         self.settings = Settings(
             device="SIMULATED",
             token="s" * 32,
@@ -137,6 +139,7 @@ class Bench:
             budget=self.budget,
             runner=self.runner,
             holdout=self.holdout,
+            compute=self.compute,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)
         self.lan = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")

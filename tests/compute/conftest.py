@@ -17,6 +17,9 @@ async def env(tmp_path):
     backend = FakeBackend()
     backend.balance_value = 1000.0
 
+    root = tmp_path / "snapshots"
+    (root / "s1" / "images").mkdir(parents=True)  # what compute_support.INPUTS refers to
+
     async def build(cpu_cap=100.0, storage_cap=100.0, task_cpu=100.0, task_storage=100.0):
         service = ComputeService(
             db,
@@ -26,7 +29,9 @@ async def env(tmp_path):
             MEMBERS,
             service_cpu_cap=cpu_cap,
             service_storage_cap=storage_cap,
+            input_root=root,
         )
+        service.input_guard = lambda task_id, ref: None
         service.set_task_budget("t1", task_cpu, task_storage)
         await service.refresh_balance()
         return service

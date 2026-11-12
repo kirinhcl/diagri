@@ -16,5 +16,5 @@ TEMPLATE = JobTemplate(
     result_changing=("batch_size",),
 )
 GOOD_PARAMS = {"epochs": 3}
-INPUTS = {"images": "snapshots/s1/images"}
+INPUTS = {"images": "s1/images"}
 MEMBERS = {"alice": "csc_alice", "bob": "csc_bob"}

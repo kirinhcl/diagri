@@ -306,7 +306,7 @@ class Runtime:
 
     def workbench(self, role_tokens: Mapping[str, str] | None = None) -> APIRouter:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
-        more = (self.book, self.tasks, self.budget, self.runner, self.holdout)
+        more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
         return create_workbench(*args, role_tokens or {}, *more)
 
     @property
@@ -364,6 +364,7 @@ class Runtime:
             ("observer", self.observer.tick),
             ("outbox", self._deliver),
             ("tasks", self._expire),
+            ("compute", self._recover_compute),
             ("report", self._daily_report),
             ("backup", self.backups.step),
             ("health", self._check_health),
@@ -468,6 +469,10 @@ class Runtime:
         for task in self.tasks.expire(self.clock.now()):
             message = f"Research task {task.id} is past its deadline and needs attention"
             self._alert("task_deadline", task.id, message, "warning")
+
+    async def _recover_compute(self) -> None:
+        if self.compute is not None:  # rate-limited inside: reconciles what nobody answered
+            await self.compute.tick()
 
     async def _daily_report(self) -> None:
         stage = self.workflow.active_stage()
@@ -593,11 +598,15 @@ def _probes(
     }
 
 
-def _compute(backend: Any, db: Database, clock: Clock) -> ComputeService | None:
+def _compute(
+    backend: Any, db: Database, clock: Clock, snapshots: Path, templates: Any, members: Any
+) -> ComputeService | None:
+    """Inputs are references under ``snapshots``; they stay refused until the input guard is
+    installed (``runtime_compute.install_input_guard``)."""
     if backend is None:
         return None
-    args = (db, clock, backend, (), {}, COMPUTE_CPU_CAP_HOURS, COMPUTE_STORAGE_CAP_GB)
-    return ComputeService(*args)
+    caps = (COMPUTE_CPU_CAP_HOURS, COMPUTE_STORAGE_CAP_GB)
+    return ComputeService(db, clock, backend, templates, members, *caps, input_root=snapshots)
 
 
 def build_runtime(
@@ -607,6 +616,8 @@ def build_runtime(
     compute_backend: Any = None,
     channels: Mapping[str, NotifyChannel] | None = None,
     heartbeats: tuple[Heartbeat, Heartbeat] | None = None,
+    compute_templates: Collection[Any] = (),
+    compute_members: Mapping[str, str] | None = None,
 ) -> Runtime:
     """``heartbeats`` is the (host, run) pair of external dead-man's-switch endpoints."""
     clock = clock or SystemClock()
@@ -670,7 +681,14 @@ def build_runtime(
         holdout=HoldoutRegistry(dbs["agents"], clock, outcomes),
         sandbox=sandbox,
         operators=Operators(dbs["workflow"], clock),
-        compute=_compute(compute_backend, dbs["compute"], clock),
+        compute=_compute(
+            compute_backend,
+            dbs["compute"],
+            clock,
+            archive.root / "snapshots",
+            compute_templates,
+            compute_members or {},
+        ),
         channels=selected,
         health=RunHealthCheck(
             _probes(clock, bridge, executor, archive, outbox, backups, notify), limits, clock

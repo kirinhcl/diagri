@@ -1,8 +1,11 @@
 """Compute backend contract: job templates, remote job records and the backend protocol."""
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal, Protocol
+
+from pydantic import Field, field_validator
 
 from growbridge.archive.models import Model
 
@@ -28,7 +31,22 @@ class ParamSpec(Model):
     minimum: float | None = None
     maximum: float | None = None
     choices: tuple[str, ...] | None = None
+    # A text value must match ``pattern`` in full (re.fullmatch) and be at most ``max_length``
+    # characters. A free text parameter (no ``choices``) has to declare a pattern: a template
+    # without one is refused at start (see ``runtime_compute``).
+    pattern: str | None = None
+    max_length: int | None = Field(default=None, ge=1)
     default: Any = None  # None means the parameter is required
+
+    @field_validator("pattern")
+    @classmethod
+    def _compiles(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                re.compile(value)
+            except re.error as error:
+                raise ValueError(f"not a valid regular expression: {error}") from None
+        return value
 
 
 class JobTemplate(Model):
@@ -36,8 +54,8 @@ class JobTemplate(Model):
     version: int
     script: str
     parameters: dict[str, ParamSpec]
-    max_cpu_hours: float
-    max_storage_gb: float
+    max_cpu_hours: float = Field(ge=0, allow_inf_nan=False)
+    max_storage_gb: float = Field(ge=0, allow_inf_nan=False)
     result_changing: tuple[str, ...] = ()  # parameters whose change can alter scientific results
     max_retries: int = 2
 
@@ -46,8 +64,10 @@ class RemoteJob(Model):
     job_id: str
     name: str
     state: RemoteState
-    cpu_hours_used: float = 0.0
-    storage_gb_used: float = 0.0
+    # None: the backend cannot report usage, so the service charges the attempt's whole
+    # reservation (never less than was possible). A reported 0.0 is a real zero.
+    cpu_hours_used: float | None = None
+    storage_gb_used: float | None = None
 
 
 class ComputeBackend(Protocol):
@@ -68,6 +88,10 @@ class ComputeBackend(Protocol):
         ...
 
     async def cleanup(self, job_id: str) -> None: ...
+
+    async def cleanup_by_name(self, job_name: str) -> None:
+        """Remove what the job of this name left behind, when its id is not known."""
+        ...
 
     async def cancel(self, job_id: str) -> None: ...
 

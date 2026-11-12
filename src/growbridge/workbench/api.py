@@ -25,6 +25,7 @@ from growbridge.archive.models import (
     check_level,
 )
 from growbridge.archive.store import Archive
+from growbridge.compute.service import ComputeService
 from growbridge.config import Settings
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
@@ -39,6 +40,7 @@ from growbridge.workbench.auth import (
     host_only,
 )
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
+from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
 from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
@@ -170,6 +172,7 @@ class Workbench:
         budget: ProjectBudget | None = None,
         runner: ConfirmatoryRunner | None = None,
         holdout: HoldoutRegistry | None = None,
+        compute: ComputeService | None = None,
     ):
         self.workflow = workflow
         self.control = control
@@ -200,6 +203,8 @@ class Workbench:
             add_analysis_routes(*args)
         if holdout is not None:
             add_holdout_routes(self.router, self.operator, self.fresh, workflow, holdout)
+        if compute is not None and tasks is not None:
+            add_compute_routes(self.router, self.operator, self.fresh, compute, tasks)
 
     # --- who is calling ------------------------------------------------------------------------
 
@@ -495,9 +500,11 @@ def create_workbench(
     budget: ProjectBudget | None = None,
     runner: ConfirmatoryRunner | None = None,
     holdout: HoldoutRegistry | None = None,
+    compute: ComputeService | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
     ``tasks`` and ``budget`` together add the call budget and research goal routes; ``runner``
-    adds the analysis freeze and run routes (``holdout`` guards what they may analyse)."""
+    adds the analysis freeze and run routes (``holdout`` guards what they may analyse);
+    ``compute`` (with ``tasks``) adds the balance and task budget routes."""
     args = (workflow, control, archive, operators, settings, role_tokens)
-    return Workbench(*args, alerts, tasks, budget, runner, holdout).router
+    return Workbench(*args, alerts, tasks, budget, runner, holdout, compute).router

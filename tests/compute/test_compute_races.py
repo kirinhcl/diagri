@@ -37,7 +37,8 @@ async def test_compute_cancel_during_submit_is_not_resurrected(env):
 
     final = await env.service.get_compute_job(attempt_id, "alice")
     assert final.task_state is TaskState.ENDED
-    assert totals(env) == (0.0, 0.0, 0.0, 1)
+    # no remote job was known when it was cancelled: the outcome is unknown, so it is charged
+    assert totals(env) == (0.0, 0.0, 10.0, 1)
     # the job accepted after the cancel is cancelled remotely, not adopted
     assert [job.state for job in env.backend.jobs.values()] == ["cancelled"]
 

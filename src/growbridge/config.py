@@ -73,6 +73,10 @@ class Settings(BaseModel):
     roles: dict[str, RoleModel] = Field(default_factory=dict)
     backup_dir: Path | None = None  # independent media for the SQLite online backups
     backup_interval_seconds: float = Field(default=6 * 3600, ge=60)
+    # Compute service (CSC Roihu via FirecREST). Both unset: no templates, no compute service.
+    # The FirecREST credentials and project settings are environment variables, never config.
+    compute_templates_dir: Path | None = None  # one JSON file per reviewed job template
+    compute_member: str | None = Field(default=None, min_length=1)  # CSC account jobs run as
 
     @field_validator("report_timezone")
     @classmethod
@@ -94,6 +98,8 @@ def load(path: Path | None = None) -> Settings:
     values["data_dir"] = Path(values["data_dir"]).expanduser()
     if values.get("backup_dir") is not None:
         values["backup_dir"] = Path(values["backup_dir"]).expanduser()
+    if values.get("compute_templates_dir") is not None:
+        values["compute_templates_dir"] = Path(values["compute_templates_dir"]).expanduser()
     settings = Settings(**values)
     mapping = [
         settings.pump_outlet,
