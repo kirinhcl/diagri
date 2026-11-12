@@ -306,12 +306,14 @@ class ComputeService:
         attempt_id: str,
         allowed: Sequence[str] | None = None,
         unsettled: bool = False,
+        unsettled_by_hand: bool = False,
         **columns: Any,
     ) -> bool:
         """Write columns; with ``allowed``/``unsettled`` the write is a guarded transition.
 
         A late writer (a poll or submit that raced a cancel or reconcile) matches no row and
-        returns False, so it cannot resurrect a settled attempt or settle it twice.
+        returns False, so it cannot resurrect a settled attempt or settle it twice. With
+        ``unsettled_by_hand`` an attempt an operator has settled is left as they left it.
         """
         columns["updated_at"] = self.clock.now()
         assignments = ", ".join(f"{name} = ?" for name in columns)
@@ -322,6 +324,8 @@ class ComputeService:
             params.extend(allowed)
         if unsettled:
             sql += " AND settled_at IS NULL"
+        if unsettled_by_hand:
+            sql += " AND settled_by IS NULL"
         return self.db.execute(sql, params).rowcount == 1
 
     def _settle(
@@ -628,24 +632,34 @@ class ComputeService:
         attempt = self._owned(attempt_id, submitter)
         if attempt.phase not in FETCHABLE or not attempt.remote_job_id:
             raise Denied("state", f"nothing to fetch in phase {attempt.phase}")
+        if attempt.settled_by:  # the operator's decision is final; a submitter cannot reopen it
+            raise Denied("state", "an operator settled this attempt: it is final")
         limit = self._output_limit(attempt)
         try:
             reported = await self.backend.fetch(attempt.remote_job_id, out_dir, limit)
         except OutputTooLarge as error:  # visible (stuck) and final until an operator settles it
-            self._update(attempt_id, FETCHABLE, phase="needs_review", error=str(error))
+            self._record_fetch(attempt_id, phase="needs_review", error=str(error))
             raise
         except BackendError as error:  # visible too, but a retry may work
-            self._update(attempt_id, FETCHABLE, error=_describe(error))
+            self._record_fetch(attempt_id, error=_describe(error))
             raise
         problems = await asyncio.to_thread(self._verify, out_dir, reported)  # hashes the files
         if problems:
             phase = "failed" if attempt.phase == "failed" else "needs_review"
-            self._update(attempt_id, FETCHABLE, phase=phase, error="; ".join(problems))
+            self._record_fetch(attempt_id, phase=phase, error="; ".join(problems))
             raise ArtifactMismatch("; ".join(problems))
         await self.backend.cleanup(attempt.remote_job_id)
         phase = "failed" if attempt.phase == "failed" else "done"
-        self._update(attempt_id, FETCHABLE, phase=phase, checksums=json.dumps(reported), error="")
+        recorded = self._record_fetch(
+            attempt_id, phase=phase, checksums=json.dumps(reported), error=""
+        )
+        if not recorded and self._load(attempt_id).settled_by:  # not a parallel fetch's win
+            raise Denied("state", "an operator settled this attempt during the fetch")
         return reported
+
+    def _record_fetch(self, attempt_id: str, **columns: Any) -> bool:
+        """Write a fetch's outcome, unless an operator settled the attempt meanwhile."""
+        return self._update(attempt_id, FETCHABLE, unsettled_by_hand=True, **columns)
 
     def _output_limit(self, attempt: Attempt) -> int:
         """The most bytes a fetch may bring home: the storage the attempt reserved."""

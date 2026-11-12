@@ -130,3 +130,71 @@ async def test_compute_an_old_record_without_a_stored_limit_uses_its_template(en
     await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
 
     assert env.backend.fetch_limits == [500]
+
+
+def assert_left_as_the_operator_settled_it(env, attempt_id, reason):
+    stored = row(env, attempt_id)
+    assert stored["phase"] == "failed" and stored["settled_by"] == "carol"
+    assert stored["error"].startswith(f"settled by an operator: {reason}")
+    assert stored["checksums"] == "{}"
+
+
+async def test_compute_a_fetch_cannot_reopen_an_attempt_the_operator_settled(env, tmp_path):
+    attempt = await finished(env)
+    env.backend.artifacts = {"big.bin": b"x" * 2000}
+    with pytest.raises(OutputTooLarge):
+        await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
+    await env.service.settle_attempt(attempt.id, "carol", "outputs far too large")
+    env.backend.fetch_limits.clear()
+
+    with pytest.raises(Denied) as info:
+        await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
+
+    assert info.value.code == "state" and "operator" in str(info.value)
+    assert env.backend.fetch_limits == []  # nothing is downloaded again
+    assert_left_as_the_operator_settled_it(env, attempt.id, "outputs far too large")
+
+
+async def broken_download(job_id, out_dir, max_bytes):
+    raise BackendError("FirecREST download failed (TimeoutError)")
+
+
+@pytest.mark.parametrize(
+    ("artifacts", "broken", "expected"),
+    [
+        ({"big.bin": b"x" * 2000}, False, OutputTooLarge),
+        ({"result.csv": b"a,b\n1,2\n"}, True, BackendError),
+        ({"result.csv": b"a,b\n1,2\n"}, False, Denied),
+    ],
+    ids=["too-large", "backend-error", "complete"],
+)
+async def test_compute_an_operator_who_settles_during_a_fetch_keeps_the_last_word(
+    env, tmp_path, artifacts, broken, expected
+):
+    attempt = await finished(env)
+    env.backend.artifacts = artifacts
+    download = broken_download if broken else env.backend.fetch
+
+    async def settled_meanwhile(job_id, out_dir, max_bytes):
+        await env.service.settle_attempt(attempt.id, "carol", "giving up on it")
+        return await download(job_id, out_dir, max_bytes)
+
+    env.backend.fetch = settled_meanwhile
+    with pytest.raises(expected):
+        await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
+
+    assert_left_as_the_operator_settled_it(env, attempt.id, "giving up on it")
+
+
+async def test_compute_a_fetch_that_a_parallel_fetch_beat_still_returns_its_files(env, tmp_path):
+    attempt = await finished(env)
+    original = env.backend.fetch
+
+    async def beaten(job_id, out_dir, max_bytes):
+        env.db.execute("UPDATE compute_attempts SET phase = 'done' WHERE id = ?", (attempt.id,))
+        return await original(job_id, out_dir, max_bytes)
+
+    env.backend.fetch = beaten
+    files = await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
+
+    assert set(files) == {"result.csv"} and row(env, attempt.id)["phase"] == "done"
