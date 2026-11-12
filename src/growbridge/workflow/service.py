@@ -30,6 +30,7 @@ from growbridge.ports import (
     StageRuntime,
 )
 from growbridge.workflow.permissions import require_kind, require_operator
+from growbridge.workflow.recovery import StageRecovery
 from growbridge.workflow.states import ROUND_TERMINAL, STAGE_TERMINAL, RoundState, StageState
 from growbridge.workflow.store import (
     DuplicateEvent,
@@ -69,8 +70,8 @@ log = logging.getLogger(__name__)
 Choice = Literal["redo", "next", "verify", "abort"]
 
 
-class WorkflowService:
-    """Implements ``ports.StagePort``."""
+class WorkflowService(StageRecovery):
+    """Implements ``ports.StagePort``. The recovery check is in ``workflow/recovery.py``."""
 
     def __init__(
         self,
@@ -542,107 +543,6 @@ class WorkflowService:
             return expiry_plan(S.STOPPED if self._sheet(stage).on_expiry == "stop" else S.PAUSED)
         return None
 
-    # --- recovery ------------------------------------------------------------------------------
-
-    async def on_restart(self) -> None:
-        """Process start: every live stage needs checking and every old write right is void."""
-        await self._enter_recovery("restart", void_approvals=False)
-
-    async def on_recovery_bump(self) -> None:
-        """Restore or host change: the approvals that were given for the old number are void."""
-        await self._enter_recovery("recovery_bump", void_approvals=True)
-
-    async def _enter_recovery(self, event: str, void_approvals: bool) -> None:
-        waiting = (S.PENDING_REVIEW, S.RUNNING, S.PAUSED, S.MANUAL, S.RECOVERY_CHECK)
-        for stage in self.store.stages_in(waiting):
-            prior = stage.prior_state if stage.state is S.RECOVERY_CHECK else stage.state
-            updates = {"prior_state": prior, "right_number": None, "manual_right": None}
-            updates |= {"care_right": None, "onsite_checked": False}
-            void = self._voider(stage.stage_id) if void_approvals else None
-            await self._apply(stage, Plan(S.RECOVERY_CHECK, event, updates, extra=void))
-        for stage in self.store.stages_in((S.ENDED, S.STOPPED)):
-            if stage.care_right is not None:
-                self.store.update_stage(stage, care_right=None)
-        await self.restore_care()
-
-    async def restore_care(self) -> None:
-        """Re-issue the care right of the last finished stage once old writes are confirmed gone."""
-        stage = self.store.active()
-        if stage is None or stage.care_right is not None:
-            return
-        finished = stage.state in STAGE_TERMINAL
-        recovering = stage.state is S.RECOVERY_CHECK and stage.prior_state is not S.MANUAL
-        if not (finished or recovering) or stage.recovery_number != self.control.recovery_number():
-            return
-        if not self.control.transport_stopped() or self.control.interlocked():
-            return
-        numbers: dict[str, int] = {}
-        self._grant(stage, self._sheet(stage), Grant(RightKind.CARE, "care_right"), numbers)
-        if numbers:
-            self.store.update_stage(stage, **numbers)
-
-    async def try_exit_recovery(self, stage_id: str) -> StageRuntime:
-        stage = self.store.stage(stage_id)
-        if stage.state is not S.RECOVERY_CHECK:
-            return self._runtime(stage)
-        await self.restore_care()
-        stage = self.store.stage(stage_id)
-        if not await self._may_exit(stage, self._sheet(stage)):
-            return self._runtime(stage)
-        plan = self._exit_plan(stage)
-        if plan is None:
-            return self._runtime(stage)
-        return self._runtime(await self._apply(stage, plan))
-
-    async def _may_exit(self, stage: StageRow, sheet: RunSheet) -> bool:
-        if stage.onsite_checked:
-            return True
-        control = self.control
-        if not control.transport_stopped() or control.interlocked():
-            return False
-        if await control.reconcile_unsettled():
-            return False
-        if stage.prior_state in (S.RUNNING, S.PAUSED):
-            return not await control.differences(sheet.expected_levels(self.clock.now()))
-        return True
-
-    def _exit_plan(self, stage: StageRow) -> Plan | None:
-        updates: dict[str, Any] = {"prior_state": None, "onsite_checked": False}
-        if stage.recovery_number != self.control.recovery_number():
-            safety = self.control.safety()
-            if safety is None or safety.approved_by is None:
-                return None  # the safety config has to be confirmed again first
-            return Plan(
-                S.PENDING_REVIEW,
-                "recovery_exit",
-                updates,
-                round_effect="to_review",
-                extra=self._voider(stage.stage_id),
-            )
-        if stage.prior_state is S.MANUAL:
-            grant = Grant(RightKind.MANUAL, "manual_right", stage.manual_operator or "unknown")
-            return Plan(S.MANUAL, "recovery_exit", updates, grants=(grant,))
-        if stage.prior_state is S.PENDING_REVIEW:
-            return Plan(S.PENDING_REVIEW, "recovery_exit", updates)
-        updates["paused_at"] = self.clock.now()
-        return Plan(S.PAUSED, "recovery_exit", updates, grants=care_if_missing(stage))
-
-    async def record_onsite_check(self, stage_id: str, actor: Actor, note: str) -> StageRuntime:
-        require_operator(actor, self.clock.now())
-        stage = self.store.stage(stage_id)
-        if stage.state not in (S.RECOVERY_CHECK, S.PAUSED, S.MANUAL):
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; no check is open")
-        await self.control.onsite_check(actor.id, note)
-        recovering = stage.state is S.RECOVERY_CHECK
-        plan = Plan(
-            stage.state,
-            "onsite_check",
-            updates={"onsite_checked": True} if recovering else {},
-            detail={"note": note, "by": actor.id},
-        )
-        row = await self._apply(stage, plan)
-        return await self.try_exit_recovery(stage_id) if recovering else self._runtime(row)
-
     # --- rounds --------------------------------------------------------------------------------
 
     async def choose_after_stop(self, round_id: str, choice: Choice, actor: Actor) -> RoundState:
@@ -708,6 +608,17 @@ class WorkflowService:
 
     def history(self, stage_id: str) -> tuple[dict, ...]:
         return self.store.history(stage_id)
+
+    def waiting_stages(self) -> tuple[dict, ...]:
+        """Every stage that is paused or in recovery check, with the history entry that put it
+        there: ``stage_id``, ``state``, and the entry's ``entry`` id, ``at``, ``event`` and
+        ``detail``."""
+        found = []
+        for stage in self.store.stages_in((S.PAUSED, S.RECOVERY_CHECK)):
+            entry = self.store.entered(stage.stage_id, stage.state)
+            if entry is not None:
+                found.append({"stage_id": stage.stage_id, "state": stage.state.value, **entry})
+        return tuple(found)
 
     def _sheet(self, stage: StageRow) -> RunSheet:
         return self.store.run_sheet(stage.run_sheet_id, stage.run_sheet_version)
@@ -775,7 +686,14 @@ class WorkflowService:
                 args = (event.event_id, fresh.stage_id, fresh.round_id, event.kind.value, event.at)
                 self.store.record_event(*args, "applied")
             updated = self.store.update_stage(fresh, **changes)
-            detail = {**plan.detail, "reason": plan.reason} if plan.reason else plan.detail
+            # What the reporter saw (differences, reasons, request ids) is the only record of
+            # why the stage changed. It never replaces what this service decided, except that
+            # the reporter's own ``reason`` is more specific than the name of the event.
+            seen = event.detail if event is not None else {}
+            detail = {**seen, **plan.detail}
+            reason = seen.get("reason") or plan.reason
+            if reason:
+                detail["reason"] = reason
             args = (fresh.stage_id, now, fresh.state.value, plan.state.value)
             self.store.add_history(*args, plan.event, detail)
             if plan.round_effect is not None:

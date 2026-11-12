@@ -14,7 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
-from growbridge.agents.llm import ModelClient
+from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, TokenPrice
 from growbridge.agents.loop import AgentRun, run_agent
 from growbridge.agents.roles import ROLES, Handoff
 from growbridge.agents.tools import ROLE_TOOLS, Tool, Toolset, build_toolset
@@ -34,6 +34,13 @@ STEPS = (
     "trigger_event_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, claimed_at REAL NOT NULL)",
 )
 INTRO = "Your task record (JSON). Do the work it describes with your tools:\n"
+
+
+def role_price(config: RoleModel) -> TokenPrice:
+    """What the cost budget is charged per token: the role's own price when it states one."""
+    if config.input_per_mtok is None or config.output_per_mtok is None:
+        return DEFAULT_PRICE  # only the default model may leave the price out (config.py)
+    return TokenPrice(input_per_mtok=config.input_per_mtok, output_per_mtok=config.output_per_mtok)
 
 
 def _watching(handler: Any, reviews: list[bool]) -> Any:
@@ -138,6 +145,8 @@ class Dispatcher:
             toolset,
             self.budget,
             task.project_id,
+            max_turns=config.max_calls,
+            price=role_price(config),
         )
 
     def _toolset(self, role: str, config: RoleModel, reviews: list[bool]) -> Toolset:

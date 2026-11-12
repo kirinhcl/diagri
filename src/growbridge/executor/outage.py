@@ -38,6 +38,14 @@ class ClockTrust:
             self._anchor = (wall, mono)
         return self.trusted
 
+    def accept(self) -> None:
+        """An operator has checked the host clock: forget the step seen earlier.
+
+        The last observation is kept, so a step since the previous tick is still noticed, and
+        the host's own ``synced`` flag is not overridden.
+        """
+        self._suspect = False
+
     def now(self) -> float | None:
         """Best known UTC time, or ``None`` when no trusted time has ever been seen."""
         if self.trusted:

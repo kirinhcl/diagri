@@ -61,6 +61,58 @@ async def test_unconfirmed_transport_keeps_the_stage_in_recovery_check(world):
     assert second.workflow.stage(STAGE).state is StageState.RECOVERY_CHECK
 
 
+async def test_stage_waiting_for_review_at_a_restart_leaves_recovery_check_without_a_visit(world):
+    first = await world.boot()
+    world.designed_stage(first)
+    assert first.workflow.stage(STAGE).state is StageState.PENDING_REVIEW
+    await first.stop()
+
+    world.clock.advance(5)
+    second = await world.boot()
+    stage = second.workflow.stage(STAGE)
+    assert stage.state is StageState.RECOVERY_CHECK
+    assert stage.prior_state is StageState.PENDING_REVIEW
+
+    await world.beat(second, 1)  # transport stop confirmed, nothing unsettled
+
+    assert second.workflow.stage(STAGE).state is StageState.PENDING_REVIEW
+    second.workflow.approve(STAGE, world.operator)
+    started = await second.workflow.start_stage(STAGE, world.operator)
+    assert started.state is StageState.RUNNING
+
+
+async def test_stage_that_cannot_be_checked_does_not_keep_the_others_in_recovery_check(
+    world, monkeypatch
+):
+    first = await world.boot()
+    world.designed_stage(first)
+    await first.stop()
+    second = await world.boot()
+    flow, calls = second.workflow, []
+    try_exit, restore_care = flow.try_exit_recovery, flow.restore_care
+
+    async def failing_for_one(stage_id):
+        if stage_id == "stage-unreadable":
+            raise RuntimeError("synthetic failure")
+        return await try_exit(stage_id)
+
+    async def counted_restore():
+        calls.append("restore_care")
+        await restore_care()
+
+    monkeypatch.setattr(flow, "recovering_stages", lambda: ("stage-unreadable", STAGE))
+    monkeypatch.setattr(flow, "try_exit_recovery", failing_for_one)
+    monkeypatch.setattr(flow, "restore_care", counted_restore)
+
+    await world.beat(second, 1)
+
+    assert flow.stage(STAGE).state is StageState.PENDING_REVIEW
+    assert calls  # the care right is still looked after
+    alerts = [a for a in second.book.open() if a.kind == "tick_step"]
+    assert [a.key for a in alerts] == ["recovery"]  # the failure is still reported
+    assert "synthetic failure" in alerts[0].message
+
+
 async def test_unregistered_host_opens_no_ble_connection_and_writes_are_denied(world):
     runtime = await world.boot(register=False)
 

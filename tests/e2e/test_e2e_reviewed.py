@@ -124,6 +124,34 @@ async def test_failed_external_heartbeats_raise_alerts(world):
     assert host.signals
 
 
+async def test_external_heartbeats_are_sent_once_per_interval_not_on_every_tick(world):
+    host, run = Beat(), Beat()
+    runtime = await world.boot(heartbeats=(host, run), channels={})
+
+    for _ in range(30):
+        await world.beat(runtime, 1)  # thirty 1 Hz ticks: half of one heartbeat interval
+
+    assert host.signals == ["ping"]
+    assert run.signals == ["ping"]
+
+    for _ in range(60):
+        await world.beat(runtime, 1)
+
+    assert host.signals == ["ping", "ping"]
+
+
+async def test_run_failure_is_signalled_at_once_between_two_heartbeats(world):
+    host, run = Beat(), Beat()
+    runtime = await world.boot(heartbeats=(host, run), channels={})
+    await world.beat(runtime, 1)
+    assert run.signals == ["ping"]
+
+    runtime.health.probes["capture"] = lambda: None  # the capture probe has no answer any more
+    await world.beat(runtime, 1)
+
+    assert run.signals == ["ping", "fail"]
+
+
 # --- ingestion and reports ------------------------------------------------------------------------
 
 

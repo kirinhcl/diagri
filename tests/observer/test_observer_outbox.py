@@ -144,6 +144,16 @@ def test_oldest_undelivered_is_the_creation_time_of_the_oldest(outbox, clock):
     assert outbox.oldest_undelivered() == first
 
 
+def test_oldest_undelivered_can_be_limited_to_channels_that_have_a_sender(outbox, clock):
+    outbox.queue_notification("e1", "sms", "a")
+    clock.advance(100)
+    second = clock.now()
+    outbox.queue_notification("e2", "telegram", "b")
+
+    assert outbox.oldest_undelivered(["telegram", "email"]) == second
+    assert outbox.oldest_undelivered([]) is None
+
+
 async def test_channel_exception_is_logged_by_type_without_its_message(outbox, caplog):
     outbox.queue_notification("e1", "telegram", "hot")
 

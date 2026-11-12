@@ -18,7 +18,7 @@ import shutil
 import sys
 import tempfile
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -48,7 +48,7 @@ from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, R
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
 from growbridge.observer.report import ReportContext, ReportStore, render_daily_report, reports_due
-from growbridge.observer.service import DEFAULT_CHANNELS, Observer
+from growbridge.observer.service import Observer
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -75,6 +75,7 @@ LINK_WAIT_SECONDS = 20.0  # real seconds start() waits for the device to identif
 LINK_POLL_SECONDS = 0.05
 INGEST_BATCH = 500
 INGEST_BATCHES_PER_TICK = 10
+HEARTBEAT_SECONDS = 60.0  # external heartbeats go out this often, not on every 1 Hz tick
 OUTBOX_BASE_SECONDS = 30.0
 OUTBOX_CAP_SECONDS = 1800.0
 GIB = 1024**3
@@ -159,6 +160,21 @@ def default_channels() -> dict[str, NotifyChannel]:
     if mails and os.environ.get(SMTP_HOST_ENV):
         found["email"] = EmailChannel(mails)
     return found
+
+
+STAGE_ALERT = "stage_waiting"
+OPERATOR_PAUSE = "pause"  # the history event of a pause that an operator asked for
+
+
+def waiting_message(item: Mapping[str, Any]) -> str:
+    """Why a stage waits: its state, the event that put it there and what the event carried."""
+    detail = {
+        name: value
+        for name, value in item["detail"].items()
+        if name != "right_number" and value != item["event"]
+    }
+    text = f"Stage {item['stage_id']} is {item['state']} after {item['event']}"
+    return f"{text}: {json.dumps(detail, sort_keys=True)}" if detail else text
 
 
 MIRROR_NAMESPACE = "runtime_mirror"
@@ -251,6 +267,7 @@ class Runtime:
     databases: tuple[Database, ...] = ()
     failing: set[str] = field(default_factory=set)
     stopped: bool = False
+    last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
 
     # --- life cycle ----------------------------------------------------------------------------
 
@@ -259,6 +276,11 @@ class Runtime:
         if self.backups.directory is None:
             message = "No backup_dir is configured: the databases are not being backed up"
             self._alert("backup_unconfigured", "backups", message, "warning")
+        if self.channels:
+            self._safely(lambda: self.book.resolve("notify_unconfigured", "channels"))
+        else:
+            message = "No notification channel is configured: alerts are not sent anywhere"
+            self._alert("notify_unconfigured", "channels", message, "warning")
         if not self.control.host_registered():
             self._alert("runtime", "write_host", "This host is not the registered write host")
             return
@@ -396,10 +418,41 @@ class Runtime:
             self._alert("source_rewound", "legacy_samples", str(error))
 
     async def _follow_up(self) -> None:
-        stage = self.workflow.active_stage()
-        if stage is not None and stage.state is StageState.RECOVERY_CHECK:
-            await self.workflow.try_exit_recovery(stage.stage_id)
-        await self.workflow.restore_care()
+        # every stage in recovery check, not only the active one: a stage that was waiting for
+        # review at the restart has never started, so it is never the active stage
+        failures: list[Exception] = []
+        try:
+            for stage_id in self.workflow.recovering_stages():
+                try:
+                    await self.workflow.try_exit_recovery(stage_id)
+                except Exception as error:  # one stage must not keep the others waiting
+                    log.exception("stage %s could not be checked for leaving recovery", stage_id)
+                    failures.append(error)
+            await self.workflow.restore_care()
+        finally:
+            self._stage_alerts()
+        if failures:
+            raise failures[0]  # the tick reports it as a failing step
+
+    def _stage_alerts(self) -> None:
+        """One open alert per stage that stopped by itself, for as long as it waits.
+
+        The key names the history entry, so a new cause is a new alert and a new notification.
+        A pause that an operator asked for raises none.
+        """
+        waiting = {
+            f"{item['stage_id']}:{item['entry']}": item
+            for item in self.workflow.waiting_stages()
+            if item["event"] != OPERATOR_PAUSE
+        }
+        known = {alert.key for alert in self.book.open() if alert.kind == STAGE_ALERT}
+        for key in known - set(waiting):
+            self.book.resolve(STAGE_ALERT, key)
+        for key, item in waiting.items():
+            if key not in known:
+                checking = item["state"] == StageState.RECOVERY_CHECK.value
+                severity = "critical" if checking else "warning"
+                self._alert(STAGE_ALERT, key, waiting_message(item), severity)
 
     async def _deliver(self) -> None:
         await self.outbox.deliver(self.channels)
@@ -468,8 +521,17 @@ class Runtime:
             self.book.resolve("run_health", "run")
         else:
             self._alert("run_health", "run", "Run health failing: " + ", ".join(health.failures))
-        if self.monitor is not None:
+        if self.monitor is not None and self._beat_due(health.ok):
             self._monitor_alerts(await self.monitor.beat(health))
+
+    def _beat_due(self, ok: bool) -> bool:
+        """External signals go out once per interval, and at once when the run health turns."""
+        mono = self.clock.monotonic()
+        last = self.last_beat
+        if last is not None and last[1] == ok and mono - last[0] < HEARTBEAT_SECONDS:
+            return False
+        self.last_beat = (mono, ok)
+        return True
 
     def _monitor_alerts(self, status: BeatStatus) -> None:
         signals = {"host": status.host_ok, "run": status.run_ok}
@@ -491,6 +553,7 @@ def _probes(
     archive: Archive,
     outbox: Outbox,
     backups: Backups,
+    channels: Collection[str],
 ) -> dict[str, Callable[[], float | None]]:
     def response() -> float | None:
         seen = bridge.received_monotonic
@@ -505,7 +568,8 @@ def _probes(
         return None if written is None else clock.now() - written
 
     def undelivered() -> float | None:
-        oldest = outbox.oldest_undelivered()
+        # a notification left on a channel that has no sender cannot be delivered by anything
+        oldest = outbox.oldest_undelivered(channels)
         return 0.0 if oldest is None else clock.now() - oldest
 
     def capture() -> float | None:
@@ -559,7 +623,8 @@ def build_runtime(
     book = AlertBook(dbs["observer"], clock)
     outbox = Outbox(dbs["observer"], clock, OUTBOX_BASE_SECONDS, OUTBOX_CAP_SECONDS)
     selected = default_channels() if channels is None else dict(channels)
-    notify = tuple(selected) or DEFAULT_CHANNELS
+    # only channels that have a sender: a notification queued for any other name is never sent
+    notify = tuple(selected)
     observer = Observer(flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify)
     sandbox = make_runtime_sandbox([Path.home(), data_dir])
     backups = Backups(
@@ -595,7 +660,7 @@ def build_runtime(
         compute=_compute(compute_backend, dbs["compute"], clock),
         channels=selected,
         health=RunHealthCheck(
-            _probes(clock, bridge, executor, archive, outbox, backups), limits, clock
+            _probes(clock, bridge, executor, archive, outbox, backups, notify), limits, clock
         ),
         monitor=None if heartbeats is None else ExternalMonitor(*heartbeats, clock),
         source=LegacySampleSource(bridge.store, clock),

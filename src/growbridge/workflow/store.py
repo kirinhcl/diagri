@@ -382,6 +382,18 @@ class WorkflowStore:
             for row in rows
         )
 
+    def entered(self, stage_id: str, state: StageState) -> dict | None:
+        """The latest history entry that moved the stage into ``state`` from another state."""
+        row = self.db.one(
+            "SELECT * FROM wf_history WHERE stage_id = ? AND to_state = ?"
+            " AND from_state != to_state ORDER BY id DESC LIMIT 1",
+            (stage_id, state.value),
+        )
+        if row is None:
+            return None
+        detail = json.loads(row["detail"])
+        return {"entry": row["id"], "at": row["at"], "event": row["event"], "detail": detail}
+
     def add_intervention(
         self,
         experiment_id: str,

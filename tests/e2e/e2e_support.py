@@ -24,6 +24,17 @@ def local(hhmm: str, day: str = DAY) -> float:
     return moment.timestamp()
 
 
+class RecordingChannel:
+    """A notification channel that accepts everything and keeps the texts it was given."""
+
+    def __init__(self):
+        self.sent: list[str] = []
+
+    async def send(self, text: str) -> str:
+        self.sent.append(text)
+        return "accepted"
+
+
 class World:
     """A device, a clock and the runtimes built on them; ``boot`` may be called again to restart."""
 
@@ -70,8 +81,8 @@ class World:
         }
         return make_run_sheet(**{**defaults, **fields})
 
-    async def approved_stage(self, runtime: Runtime) -> tuple[str, str]:
-        """Design, approve and start the stage; returns (project_id, round_id)."""
+    def designed_stage(self, runtime: Runtime) -> tuple[str, str]:
+        """Design the stage and leave it waiting for review; returns (project_id, round_id)."""
         flow, operator = runtime.workflow, self.operator
         runtime.control.approve_safety(make_safety(), OPERATOR)
         project = flow.create_project("lettuce light series", operator)
@@ -81,8 +92,13 @@ class World:
         sheet = self.sheet(project, protocol_id=protocol.id, protocol_version=protocol.version)
         findings = flow.submit_run_sheet(round_id, sheet, Actor(kind="model", id="planner"))
         assert not [f for f in findings if f.blocking], findings
-        flow.approve(STAGE, operator)
-        await flow.start_stage(STAGE, operator)
+        return project, round_id
+
+    async def approved_stage(self, runtime: Runtime) -> tuple[str, str]:
+        """Design, approve and start the stage; returns (project_id, round_id)."""
+        project, round_id = self.designed_stage(runtime)
+        runtime.workflow.approve(STAGE, self.operator)
+        await runtime.workflow.start_stage(STAGE, self.operator)
         return project, round_id
 
     async def run_until_ended(self, runtime: Runtime, step: float = 60.0, limit: int = 40) -> int:

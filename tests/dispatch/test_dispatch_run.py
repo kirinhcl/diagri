@@ -4,8 +4,9 @@ import json
 import pytest
 from dispatch_helpers import call, script_calls
 
-from growbridge.agents.llm import ModelReply
+from growbridge.agents.llm import DEFAULT_PRICE, ModelReply
 from growbridge.archive.models import Budget
+from growbridge.config import RoleModel
 from growbridge.sim.llm import ScriptedClient, text_reply, tool_reply
 from growbridge.workflow.states import StageState, TaskState
 
@@ -227,3 +228,42 @@ async def test_a_crash_after_the_claim_leaves_the_task_open_and_does_not_rerun(e
 
     assert await env.dispatcher(restarted).run_task("task-ev-1") is None
     assert restarted.requests == []
+
+
+MILLION = 1_000_000
+
+
+async def test_a_role_on_another_model_is_charged_at_its_own_price(env):
+    env.roles["planner"] = RoleModel(
+        model="some-other-model", input_per_mtok=1.0, output_per_mtok=5.0
+    )
+    env.task("planner")
+    client = ScriptedClient([text_reply("ok", input_tokens=MILLION, output_tokens=MILLION)])
+
+    run = await env.dispatcher(client).run_task("task-ev-1")
+
+    assert run is not None and run.cost == pytest.approx(6.0)
+    assert client.requests[0]["model"] == "some-other-model"
+
+
+async def test_a_role_on_the_default_model_is_charged_at_the_default_price(env):
+    env.task("planner")
+    client = ScriptedClient([text_reply("ok", input_tokens=MILLION, output_tokens=MILLION)])
+
+    run = await env.dispatcher(client).run_task("task-ev-1")
+
+    assert run is not None
+    assert run.cost == pytest.approx(DEFAULT_PRICE.cost(MILLION, MILLION))
+
+
+async def test_a_role_stops_after_its_configured_number_of_model_calls(env):
+    env.roles["planner"] = RoleModel(max_calls=2)
+    env.task("planner")
+    turns = [tool_reply(call("get_device_capabilities", f"c{n}")) for n in range(5)]
+    client = ScriptedClient(turns)
+
+    run = await env.dispatcher(client).run_task("task-ev-1")
+
+    assert len(client.requests) == 2
+    assert run is not None and run.stop_reason == "max_turns"
+    assert env.tasks.get("task-ev-1").state is TaskState.NEEDS_ATTENTION

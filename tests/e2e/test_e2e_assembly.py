@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from e2e_support import RecordingChannel
 
 from growbridge.research.sandbox import SeatbeltSandbox
 from growbridge.runtime import make_runtime_sandbox
@@ -84,7 +85,8 @@ async def test_tick_runs_its_steps_in_the_documented_order(world, monkeypatch):
 
 
 async def test_daily_report_is_made_once_per_day_and_queued_for_delivery(world):
-    runtime = await world.boot()  # 08:00 UTC: the report time has passed
+    channel = RecordingChannel()
+    runtime = await world.boot(channels={"telegram": channel})  # 08:00 UTC: past the report time
     project, _round = await world.approved_stage(runtime)
 
     await world.beat(runtime, 30)
@@ -94,7 +96,18 @@ async def test_daily_report_is_made_once_per_day_and_queued_for_delivery(world):
     assert text is not None and "Daily report 2027-01-14" in text
     assert runtime.reports.get(project, "2027-01-15") is None
     event = f"report:{project}:2027-01-14"
-    assert runtime.outbox.status(event, "telegram") == "pending"
+    assert runtime.outbox.status(event, "telegram") == "accepted"
+    assert channel.sent.count(text) == 1
+
+
+async def test_daily_report_without_a_channel_is_saved_and_nothing_is_queued(world):
+    runtime = await world.boot(channels={})
+    project, _round = await world.approved_stage(runtime)
+
+    await world.beat(runtime, 30)
+
+    assert runtime.reports.get(project, "2027-01-14") is not None
+    assert runtime.outbox.oldest_undelivered() is None
 
 
 async def test_legacy_samples_are_stamped_with_the_injected_clock(world):

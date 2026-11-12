@@ -165,3 +165,68 @@ async def test_stage_events_after_the_stage_ended_are_dropped(world):
     await world.report(Kind.END_ACTIONS, detail={"confirmed": True})
     await world.report(Kind.RULE_PAUSE)
     assert world.state() == "ended"
+
+
+def last_entry(world, event: str) -> dict:
+    return [row for row in world.svc.history("stage-1") if row["event"] == event][-1]
+
+
+LIGHT_DIFFERS = {"channel": "light", "field": "level", "expected": 60, "actual": 20}
+
+
+@pytest.mark.parametrize(
+    ("kind", "detail"),
+    [
+        (Kind.EXTERNAL_CHANGE, {"differences": [LIGHT_DIFFERS]}),
+        (Kind.DISCONNECT_AFFECTS, {"reasons": ["gap_too_long"], "seconds": 300.0}),
+        (Kind.READINGS_STALE, {"reason": "state_unreadable", "seconds": 90.0}),
+        (Kind.RESULT_UNKNOWN, {"request_ids": ["r-1"]}),
+    ],
+)
+async def test_stage_history_keeps_the_detail_of_the_event_that_paused_it(world, kind, detail):
+    await world.running()
+
+    await world.report(kind, detail=detail)
+
+    stored = last_entry(world, kind.value)["detail"]
+    assert {name: stored[name] for name in detail} == detail
+
+
+async def test_stage_history_reason_is_the_event_name_when_the_event_gives_none(world):
+    await world.running()
+
+    await world.report(Kind.CLOCK_ANOMALY)
+
+    assert last_entry(world, "clock_anomaly")["detail"] == {"reason": "clock_anomaly"}
+
+
+async def test_stage_history_keeps_what_the_workflow_decided_over_what_the_event_says(world):
+    await world.running(on_expiry="stop")
+    await world.svc.pause_stage("stage-1", world.op, "x")
+
+    await world.report(Kind.MAX_WAIT_EXPIRED, detail={"on_expiry": "stay_paused", "waited": 7.0})
+
+    assert world.state() == "stopped"
+    assert last_entry(world, "max_wait_expired")["detail"] == {"on_expiry": "stop", "waited": 7.0}
+
+
+async def test_waiting_stages_name_the_event_that_put_each_stage_there(world):
+    await world.running()
+    assert world.svc.waiting_stages() == ()
+
+    await world.report(Kind.EXTERNAL_CHANGE, detail={"differences": [LIGHT_DIFFERS]})
+    await world.svc.record_onsite_check("stage-1", world.op, "looked at the tent")
+
+    (waiting,) = world.svc.waiting_stages()
+    assert (waiting["stage_id"], waiting["state"]) == ("stage-1", "paused")
+    assert waiting["event"] == "external_change"  # not the later on-site check
+    assert waiting["detail"]["differences"] == [LIGHT_DIFFERS]
+
+
+async def test_waiting_stages_include_a_stage_in_recovery_check(world):
+    await world.running()
+
+    await world.svc.on_restart()
+
+    (waiting,) = world.svc.waiting_stages()
+    assert (waiting["state"], waiting["event"]) == ("recovery_check", "restart")

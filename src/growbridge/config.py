@@ -3,8 +3,11 @@ import secrets
 import tomllib
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+DEFAULT_MODEL = "claude-opus-5-5"  # the model whose price is built in (agents/llm.py)
 
 
 def default_config() -> Path:
@@ -19,12 +22,27 @@ class RoleModel(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     provider: Literal["anthropic"] = "anthropic"
-    model: str = "claude-opus-5-5"
+    model: str = DEFAULT_MODEL
     effort: Literal["low", "medium", "high", "xhigh", "max"] = "medium"
     max_tokens: int = Field(default=16000, ge=256, le=64000)
-    max_calls: int = Field(default=40, ge=1)
+    max_calls: int = Field(default=20, ge=1)  # model calls in one run of the role
     tools: list[str] = Field(default_factory=list)  # empty: every tool the role allows
     data: list[str] = Field(default_factory=list)  # data kinds the role may read
+    # USD per million tokens of ``model``, for the cost budget. Only the default model has a
+    # built-in price, so any other model has to state its own.
+    input_per_mtok: float | None = Field(default=None, ge=0)
+    output_per_mtok: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _priced(self) -> "RoleModel":
+        if (self.input_per_mtok is None) != (self.output_per_mtok is None):
+            raise ValueError("input_per_mtok and output_per_mtok must be set together")
+        if self.model != DEFAULT_MODEL and self.input_per_mtok is None:
+            raise ValueError(
+                f"model {self.model!r} has no built-in price: set input_per_mtok and "
+                "output_per_mtok (USD per million tokens)"
+            )
+        return self
 
 
 class Settings(BaseModel):
@@ -56,6 +74,15 @@ class Settings(BaseModel):
     backup_dir: Path | None = None  # independent media for the SQLite online backups
     backup_interval_seconds: float = Field(default=6 * 3600, ge=60)
 
+    @field_validator("report_timezone")
+    @classmethod
+    def _known_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (KeyError, ValueError, OSError) as error:
+            raise ValueError(f"{value!r} is not a known time zone name") from error
+        return value
+
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
@@ -65,6 +92,8 @@ def load(path: Path | None = None) -> Settings:
     selected = (path or default_config()).expanduser().resolve()
     values = tomllib.loads(selected.read_text())
     values["data_dir"] = Path(values["data_dir"]).expanduser()
+    if values.get("backup_dir") is not None:
+        values["backup_dir"] = Path(values["backup_dir"]).expanduser()
     settings = Settings(**values)
     mapping = [
         settings.pump_outlet,

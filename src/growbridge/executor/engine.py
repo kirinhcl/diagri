@@ -101,6 +101,7 @@ class ExecutorEngine:
         self.clock = clock
         self._allow = allow  # storage guard: "experiment_action", "care" or "protection"
         self._trust = ClockTrust(clock)
+        self._clock_reported = False  # a clock anomaly paused a stage; none has run since
         self._link = LinkWatch()
         self._lock = asyncio.Lock()
         self._beat: float | None = None
@@ -138,9 +139,10 @@ class ExecutorEngine:
             )
 
     async def _tick(self, tick: _Tick) -> None:
+        stage = self.stages.active_stage()
+        self._clock_checked(stage)
         self._trust.observe()
         now, mono = self._trust.now(), self.clock.monotonic()
-        stage = self.stages.active_stage()
         self._enter_phase(stage, mono)
         online = self.control.connected()
         await self._interlock(tick, stage)  # 1
@@ -159,6 +161,16 @@ class ExecutorEngine:
             await self._care(tick, stage, now)  # 5
         if stage.state is StageState.PAUSED:
             await self._max_wait(tick, stage, now, mono)  # 6
+
+    def _clock_checked(self, stage: StageRuntime | None) -> None:
+        """A stage that runs again after a clock anomaly paused one: the operator who started
+        or resumed it has checked the host clock, so the step seen earlier is forgotten (§7.7).
+        Called before the clock is observed, so a step since the last tick still counts."""
+        if not self._clock_reported or stage is None or stage.state is not StageState.RUNNING:
+            return
+        if (stage.stage_id, stage.state, stage.right_number) != self._phase:
+            self._trust.accept()
+            self._clock_reported = False
 
     def _enter_phase(self, stage: StageRuntime | None, mono: float) -> None:
         """A new stage, state or stage write right restarts rule timing and the baseline.
@@ -287,6 +299,7 @@ class ExecutorEngine:
             return
         if now is None or not self._trust.trusted:
             await self._report(tick, stage, Kind.CLOCK_ANOMALY, "clock")
+            self._clock_reported = True
             return
         if await self._readings_stale(tick, stage, mono):
             return

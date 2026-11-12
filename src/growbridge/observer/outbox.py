@@ -7,7 +7,7 @@ produce a duplicate message; that is the accepted cost of never losing an alert.
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
@@ -112,9 +112,15 @@ class Outbox:
         )
         return tuple(row["outcome"] for row in rows)
 
-    def oldest_undelivered(self) -> float | None:
-        """Creation time of the oldest notification that no channel has accepted yet."""
-        row = self.db.one(
-            "SELECT MIN(created_at) AS oldest FROM observer_outbox WHERE status != 'accepted'"
-        )
+    def oldest_undelivered(self, channels: Collection[str] | None = None) -> float | None:
+        """Creation time of the oldest notification that its channel has not accepted yet.
+
+        With ``channels``, only notifications on those channels count: one queued for a channel
+        that has no sender stays pending, but nothing can deliver it, so it is not overdue.
+        """
+        query = "SELECT MIN(created_at) AS oldest FROM observer_outbox WHERE status != 'accepted'"
+        names = () if channels is None else tuple(channels)
+        if channels is not None:
+            query += f" AND channel IN ({', '.join('?' * len(names))})"
+        row = self.db.one(query, names)
         return row["oldest"] if row else None
