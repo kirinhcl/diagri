@@ -169,13 +169,15 @@ GET /wb/stages/STAGE_ID/run-sheet
 
 响应里有完整的 `run_sheet`、它的 `run_sheet_version` 和 `run_sheet_digest`、此刻的校验结果 `findings`，以及 `blocking`：有阻断性问题、批准会被拒绝时为 `true`。读取不改变任何东西。模型角色调不了这个路由。读取已保存的研究协议**无路由**。
 
-`findings` 里还有每个设定值（定时动作、反馈规则和养护步骤）的证据提示：`no_evidence` 表示它没有引用任何证据卡（引用了不存在的卡 ID 同样算没有，`user:...` 表示是你自己告诉计划 Agent 的）；`unverified_source` 表示这张卡还没有任何操作员核实（每个类别的卡都一样，包括 `local`：模型不能提议 `local` 卡，所以计划 Agent 提议的卡不会是 `local`；未核实的卡一律带这个提示）；`uncalibrated` 表示卡片自己标明数值没有用本地测量校准过。它们只是提示，不阻塞审批。操作员记录了核实之后，这张卡才算已核实。批准之前先读卡、核实卡：
+`findings` 里还有每个设定值（定时动作、反馈规则和养护步骤）的证据提示：`no_evidence` 表示它没有引用任何证据卡（引用了不存在的卡 ID 同样算没有，`user:...` 表示是你自己告诉计划 Agent 的）；`unverified_source` 表示这张卡还没有任何操作员核实（每个类别的卡都一样，包括 `local`：模型不能提议 `local` 卡，所以计划 Agent 提议的卡不会是 `local`；未核实的卡一律带这个提示）；`uncalibrated` 表示这张卡的数值没有用本地测量校准过。模型不能声称已校准：计划 Agent 提议的卡以“未校准”保存，你核实之后这个提示仍然保留，直到你自己证明它校准过。它们只是提示，不阻塞审批。操作员记录了核实之后，这张卡才算已核实。批准之前先读卡、核实卡：
 
 ```http
 GET /wb/evidence
 POST /wb/evidence/CARD_ID/verify
-{"note": "对照手册第 41 页核实过"}
+{"note": "对照手册第 41 页核实过", "calibrated": true}
 ```
+
+只有确认这个数值已用本地测量校准过，才传 `"calibrated": true`；否则不要传，`uncalibrated` 提示就会保留。这个证明随核实记录一起保存。第一次核实为准：对已经核实过的卡再传 `"calibrated": true` 不会改变任何东西。你自己录入的卡，保留你录入的 `calibrated` 值。
 
 列表里每张卡都有来源（`operator:<姓名>`；计划 Agent 提议的则是 `model:planner` 加任务 ID）、是否已核实、谁核实的、什么时候核实的。核实是幂等的：再核实一次，保留第一条记录；它不会修改卡片。你自己录入一张卡：
 

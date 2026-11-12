@@ -43,7 +43,8 @@ class ProposeCardInput(ToolInput):
     claim: Claim
     value: float | None = Field(default=None, allow_inf_nan=False)
     unit: Unit | None = None
-    calibrated: bool = True
+    # No ``calibrated`` here: a model cannot vouch for calibration. A proposed card is stored
+    # uncalibrated, and an operator attests it when verifying.
 
 
 def propose_card(deps: Deps, data: ProposeCardInput) -> dict:
@@ -67,13 +68,17 @@ def propose_card(deps: Deps, data: ProposeCardInput) -> dict:
         value=data.value,
         unit=data.unit or None,
         verified=False,
-        calibrated=data.calibrated,
+        calibrated=False,
     )
     deps.archive.add_evidence(card, source=SOURCE, task_id=task.id)
     return {
         "card_id": card.id,
         "verified": False,
-        "note": "stored unverified; an operator must verify it before it counts as verified",
+        "calibrated": False,
+        "note": (
+            "stored unverified and uncalibrated; an operator must verify it, and attest its "
+            "calibration, before it counts as verified or calibrated"
+        ),
     }
 
 
@@ -88,9 +93,9 @@ def build_evidence_tools(deps: Deps) -> list[Tool]:
         Tool(
             "propose_evidence_card",
             "Store a source you read as an UNVERIFIED evidence card and get its id to cite in a "
-            "run sheet. You cannot verify a card; an operator does. A local measurement cannot be "
-            "proposed (only an operator records one): use source_class handbook or paper. Pass "
-            "the planner task_id you are working on.",
+            "run sheet. You cannot verify a card or claim it is calibrated; an operator does "
+            "both. A local measurement cannot be proposed (only an operator records one): use "
+            "source_class handbook or paper. Pass the planner task_id you are working on.",
             ProposeCardInput,
             lambda d: propose_card(deps, d),
             writes=True,

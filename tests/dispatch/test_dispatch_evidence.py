@@ -241,3 +241,54 @@ async def test_a_local_card_without_a_verification_is_flagged_in_the_plan_check(
     body = _payload(await env.invoke("planner", "validate_run_sheet", run_sheet=sheet))
 
     assert "unverified_source" in {f["code"] for f in body["findings"]}
+
+
+# --- calibration: a model cannot claim it -----------------------------------------------------
+
+
+@pytest.mark.parametrize("claimed", [True, False])
+async def test_a_proposal_cannot_claim_calibration(env, claimed):
+    task = env.task("planner")
+
+    outcome = await _propose(env, task.id, calibrated=claimed)
+
+    assert outcome.is_error and "invalid input" in outcome.content
+    assert env.archive.evidence_entries() == ()
+
+
+async def test_a_proposed_card_is_stored_uncalibrated(env):
+    task = env.task("planner")
+    card_id = _payload(await _propose(env, task.id))["card_id"]
+
+    (found,) = env.archive.evidence([card_id])
+
+    assert found.calibrated is False and found.verified is False
+
+
+async def test_the_planner_sees_a_proposed_card_as_uncalibrated_even_after_verification(env):
+    task = env.task("planner")
+    card_id = _payload(await _propose(env, task.id))["card_id"]
+    env.archive.verify_evidence(card_id, "alice")
+
+    body = _payload(await env.invoke("planner", "query_evidence", text="leaf area"))
+
+    assert [(c["verified"], c["calibrated"]) for c in body["cards"]] == [(True, False)]
+
+
+async def test_the_plan_check_keeps_the_uncalibrated_hint_until_an_operator_attests(env):
+    task = env.task("planner")
+    plain = _payload(await _propose(env, task.id, claim="claim one"))["card_id"]
+    attested = _payload(await _propose(env, task.id, claim="claim two"))["card_id"]
+    env.archive.verify_evidence(plain, "alice")
+    env.archive.verify_evidence(attested, "alice", "measured here", True)
+    cites = [
+        {"id": "light-on", "channel": "light", "at": "06:00", "level": 60, "evidence": plain},
+        {"id": "light-off", "channel": "light", "at": "22:00", "level": 0, "evidence": attested},
+    ]
+    sheet = env.sheet_json(timed_actions=cites)
+
+    body = _payload(await env.invoke("planner", "validate_run_sheet", run_sheet=sheet))
+
+    hints = [f["message"] for f in body["findings"] if f["code"] == "uncalibrated"]
+    assert any(plain in message for message in hints)
+    assert not any(attested in message for message in hints)

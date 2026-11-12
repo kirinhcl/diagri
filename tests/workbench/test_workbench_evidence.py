@@ -286,11 +286,68 @@ def test_the_review_shows_a_missing_card_as_no_evidence(bench, operator):
 def test_the_review_shows_an_unverified_source_until_an_operator_verifies_it(bench, operator):
     proposed(bench)
     cite(bench, "card-m", "user:x", "user:x")
-    assert codes(operator) == ["unverified_source"]
+    # nobody but the model vouched for the card: unverified and uncalibrated
+    assert codes(operator) == ["unverified_source", "uncalibrated"]
 
-    verify(bench, operator, "card-m")
+    verify(bench, operator, "card-m", calibrated=True)
 
     assert codes(operator) == []
+
+
+def test_verifying_without_the_attestation_leaves_the_uncalibrated_hint(bench, operator):
+    proposed(bench)
+    cite(bench, "card-m", "user:x", "user:x")
+
+    response = verify(bench, operator, "card-m")
+
+    assert response.json()["calibrated"] is False
+    assert codes(operator) == ["uncalibrated"]
+
+
+def test_a_model_proposed_card_is_listed_as_uncalibrated_until_attested(bench, operator):
+    proposed(bench)
+    before = operator.get(CARDS).json()["cards"][0]
+    verify(bench, operator, "card-m", calibrated=True)
+    after = operator.get(CARDS).json()["cards"][0]
+
+    assert before["calibrated"] is False and after["calibrated"] is True
+
+
+def test_the_attestation_is_stored_with_the_verification_record(bench, operator):
+    proposed(bench)
+
+    response = verify(bench, operator, "card-m", note="measured here", calibrated=True)
+
+    record = bench.archive.evidence_verification("card-m")
+    assert response.json()["calibrated"] is True
+    assert record.calibrated is True and record.verifier == "alice"
+
+
+def test_a_later_attestation_does_not_change_the_first_verification(bench, operator):
+    proposed(bench)
+    first = verify(bench, operator, "card-m")
+
+    second = verify(bench, operator, "card-m", calibrated=True)
+
+    assert second.json() == first.json() and second.json()["calibrated"] is False
+    assert bench.archive.evidence(["card-m"])[0].calibrated is False
+
+
+def test_who_attested_comes_from_the_session_never_from_the_body(bench, operator):
+    proposed(bench)
+
+    verify(bench, operator, "card-m", calibrated=True, calibrated_by="mallory", verifier="mallory")
+
+    assert bench.archive.evidence_verification("card-m").verifier == "alice"
+
+
+def test_an_operator_entered_card_keeps_the_calibration_the_operator_entered(bench, operator):
+    calibrated = enter(bench, operator, calibrated=True).json()["id"]
+    uncalibrated = enter(bench, operator, calibrated=False).json()["id"]
+
+    flags = {c.id: c.calibrated for c in bench.archive.evidence([calibrated, uncalibrated])}
+
+    assert flags == {calibrated: True, uncalibrated: False}
 
 
 def local_card(ident: str = "card-l", **fields) -> EvidenceCard:
@@ -317,7 +374,8 @@ def test_a_local_card_without_a_verification_record_gets_the_hint(bench, operato
     bench.archive.add_evidence(local_card(), source="model:planner", task_id="task-1")
     cite(bench, "card-l", "user:x", "user:x")
 
-    assert codes(operator) == ["unverified_source"]
+    # a model-sourced card is unverified and, with no operator attestation, uncalibrated
+    assert codes(operator) == ["unverified_source", "uncalibrated"]
 
 
 def test_a_local_card_with_no_source_at_all_gets_the_hint(bench, operator):
@@ -353,7 +411,7 @@ def test_set_points_without_any_reference_are_listed_one_by_one(bench, operator)
 def test_the_hints_do_not_block_approval(bench, operator):
     proposed(bench)
     cite(bench, "card-m", None, "card-none")
-    assert set(codes(operator)) == {"unverified_source", "no_evidence"}
+    assert set(codes(operator)) == {"unverified_source", "uncalibrated", "no_evidence"}
 
     approval = bench.workflow.approve(
         "stage-1", Actor(kind="operator", id="alice", reauth_at=bench.clock.now())

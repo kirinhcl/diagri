@@ -120,3 +120,69 @@ def test_evidence_records_survive_a_restart(db, tmp_path, clock):
 
     (found,) = restarted.evidence()
     assert found.verified is True
+
+
+# --- calibration: only an operator vouches for it ---------------------------------------------
+
+
+def test_a_model_proposed_card_is_uncalibrated_whatever_the_card_says(archive):
+    archive.add_evidence(card(calibrated=True), source="model:planner", task_id="task-1")
+
+    (found,) = archive.evidence()
+
+    assert found.calibrated is False
+    assert '"calibrated":false' in stored_body(archive, "card-1").replace(" ", "")
+
+
+def test_verifying_without_an_attestation_leaves_a_proposed_card_uncalibrated(archive):
+    archive.add_evidence(card(), source="model:planner", task_id="task-1")
+
+    record = archive.verify_evidence("card-1", "alice")
+
+    (found,) = archive.evidence()
+    assert record.calibrated is False
+    assert found.verified is True and found.calibrated is False
+
+
+def test_an_operator_attestation_makes_a_proposed_card_calibrated(archive):
+    archive.add_evidence(card(), source="model:planner", task_id="task-1")
+
+    record = archive.verify_evidence("card-1", "alice", "measured against our sensor", True)
+
+    (found,) = archive.evidence()
+    (entry,) = archive.evidence_entries()
+    assert record.calibrated is True
+    assert found.calibrated is True and entry.card.calibrated is True
+
+
+def test_an_unverified_proposed_card_is_never_calibrated(archive):
+    archive.add_evidence(card(), source="model:planner", task_id="task-1")
+
+    assert archive.evidence()[0].calibrated is False
+
+
+def test_the_first_verification_decides_a_later_attestation_changes_nothing(archive):
+    archive.add_evidence(card(), source="model:planner", task_id="task-1")
+    first = archive.verify_evidence("card-1", "alice")
+
+    again = archive.verify_evidence("card-1", "bob", "later", True)
+
+    assert again == first and archive.evidence()[0].calibrated is False
+
+
+@pytest.mark.parametrize("entered", [True, False])
+def test_an_operator_entered_card_keeps_the_calibration_the_operator_entered(archive, entered):
+    archive.add_evidence(card(calibrated=entered), source="operator:alice", verified_by="alice")
+
+    (found,) = archive.evidence()
+
+    assert found.calibrated is entered and found.verified is True
+
+
+def test_a_card_with_no_source_keeps_the_calibration_it_was_stored_with(archive):
+    archive.add_evidence(card("card-1", calibrated=False))
+    archive.add_evidence(card("card-2", calibrated=True))
+
+    flags = {c.id: c.calibrated for c in archive.evidence()}
+
+    assert flags == {"card-1": False, "card-2": True}

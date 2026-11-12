@@ -49,6 +49,9 @@ class CardIn(Body):
 
 class VerifyIn(Body):
     note: Note = ""
+    # The operator's attestation that the value was calibrated against a local measurement. A
+    # model cannot claim it; it is stored with the verification record, and the first one stays.
+    calibrated: bool = False
 
 
 def entry_json(entry: EvidenceEntry) -> dict:
@@ -83,7 +86,7 @@ class EvidenceRoutes:
 
     def verify(self, card_id: str, body: VerifyIn, actor: Actor) -> dict:
         try:
-            record = self.archive.verify_evidence(card_id, actor.id, body.note)
+            record = self.archive.verify_evidence(card_id, actor.id, body.note, body.calibrated)
         except ValueError:
             raise Denied("state", f"unknown evidence card {card_id}") from None
         return {
@@ -92,6 +95,7 @@ class EvidenceRoutes:
             "verified_by": record.verifier,
             "verified_at": record.at,
             "note": record.note,
+            "calibrated": record.calibrated,
         }
 
     def listing(self) -> dict:

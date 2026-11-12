@@ -169,13 +169,15 @@ GET /wb/stages/STAGE_ID/run-sheet
 
 The answer has the full `run_sheet`, its `run_sheet_version` and `run_sheet_digest`, the validation `findings` as they are now, and `blocking`, which is `true` when a finding stops the approval. Reading changes nothing. A model role cannot call this route. There is **no route** to read a saved research protocol.
 
-The `findings` also carry the evidence hints of every set point (the timed actions, feedback rules and care steps): `no_evidence` when it cites no card (a card id that does not exist counts as no card, and `user:...` means you told the planner yourself), `unverified_source` when no operator has verified the card (this holds for every class of card, `local` included: a card the planner proposed is never `local`, because a model cannot propose a local card, and an unverified card always gets the hint), and `uncalibrated` when the card says its value was not calibrated against a local measurement. They are hints and never block the approval. A card counts as verified once an operator has recorded a verification. Read and verify the cards before you approve:
+The `findings` also carry the evidence hints of every set point (the timed actions, feedback rules and care steps): `no_evidence` when it cites no card (a card id that does not exist counts as no card, and `user:...` means you told the planner yourself), `unverified_source` when no operator has verified the card (this holds for every class of card, `local` included: a card the planner proposed is never `local`, because a model cannot propose a local card, and an unverified card always gets the hint), and `uncalibrated` when the card's value was not calibrated against a local measurement. A model cannot claim calibration: a card the planner proposed is stored uncalibrated, and the hint stays after you verify it until you attest the calibration yourself. They are hints and never block the approval. A card counts as verified once an operator has recorded a verification. Read and verify the cards before you approve:
 
 ```http
 GET /wb/evidence
 POST /wb/evidence/CARD_ID/verify
-{"note": "checked against the handbook, p. 41"}
+{"note": "checked against the handbook, p. 41", "calibrated": true}
 ```
+
+Send `"calibrated": true` only when you know the value was calibrated against a local measurement; leave it out otherwise, and the `uncalibrated` hint stays. The attestation is stored with the verification record. The first verification stays: a later call with `"calibrated": true` on a card you already verified changes nothing. A card you enter yourself keeps the `calibrated` value you entered.
 
 The list shows every card with its source (`operator:<name>`, or `model:planner` with the task id when the planner proposed it), whether it is verified, who verified it and when. Verifying is idempotent: a second call keeps the first record. It does not edit the card. To add a card yourself:
 

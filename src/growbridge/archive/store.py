@@ -57,7 +57,12 @@ STEPS = (
     "CREATE INDEX evidence_sources_by_task ON evidence_sources(task_id)",
     "CREATE TABLE evidence_verifications(card_id TEXT PRIMARY KEY, verifier TEXT NOT NULL,"
     " at REAL NOT NULL, note TEXT NOT NULL)",
+    # The operator's attestation that the card's value was calibrated against a local
+    # measurement, stored with the verification record. Cards from before it count as not attested.
+    "ALTER TABLE evidence_verifications ADD COLUMN calibrated INTEGER NOT NULL DEFAULT 0",
 )
+
+MODEL_SOURCE = "model:"  # cards from a model role: it may not vouch for calibration
 
 
 class EvidenceVerification(Model):
@@ -65,6 +70,7 @@ class EvidenceVerification(Model):
     verifier: str
     at: float
     note: str = ""
+    calibrated: bool = False  # the operator attests the value was calibrated locally
 
 
 class EvidenceEntry(Model):
@@ -77,6 +83,15 @@ class EvidenceEntry(Model):
     verified_by: str | None = None
     verified_at: float | None = None
     note: str = ""
+
+
+def _as_reported(body: str, verified: bool, attested: Any, source: str | None) -> EvidenceCard:
+    """A stored card with the two flags that come from records, not from the card text."""
+    card = EvidenceCard.model_validate_json(body)
+    calibrated = card.calibrated
+    if source is not None and source.startswith(MODEL_SOURCE):
+        calibrated = bool(attested)  # no verification, or none that attests it: not calibrated
+    return card.model_copy(update={"verified": verified, "calibrated": calibrated})
 
 
 def _body(model: BaseModel) -> str:
@@ -288,8 +303,13 @@ class Archive:
         verified_by: str | None = None,
     ) -> None:
         """Store a card with its source. The card is always stored unverified: a verification
-        is its own record, written here only when an operator (``verified_by``) entered it."""
+        is its own record, written here only when an operator (``verified_by``) entered it.
+
+        A card from a model role is also stored uncalibrated: a model cannot vouch for it. An
+        operator's own value is kept, and is that operator's attestation."""
         stored = card.model_copy(update={"verified": False})
+        if source is not None and source.startswith(MODEL_SOURCE):
+            stored = stored.model_copy(update={"calibrated": False})
         with self.db.transaction():
             extra = {"seq": self._next_seq("evidence")}
             if not self._insert_once("evidence", stored.id, stored, extra):
@@ -301,18 +321,22 @@ class Archive:
                     (stored.id, source, task_id, self.clock.now()),
                 )
             if verified_by is not None:
-                self.verify_evidence(stored.id, verified_by)
+                self.verify_evidence(stored.id, verified_by, calibrated=stored.calibrated)
             self._touch()
 
-    def verify_evidence(self, card_id: str, verifier: str, note: str = "") -> EvidenceVerification:
-        """Append the verification of a card. Repeating it keeps the first record."""
+    def verify_evidence(
+        self, card_id: str, verifier: str, note: str = "", calibrated: bool = False
+    ) -> EvidenceVerification:
+        """Append the verification of a card, with the operator's attestation that its value was
+        calibrated locally (``calibrated``). Repeating it keeps the first record, attestation
+        included: a later call changes nothing."""
         with self.db.transaction():
             if self.db.one("SELECT 1 FROM evidence WHERE id = ?", (card_id,)) is None:
                 raise ValueError(f"unknown evidence card {card_id}")
             added = self.db.execute(
-                "INSERT OR IGNORE INTO evidence_verifications(card_id, verifier, at, note)"
-                " VALUES (?, ?, ?, ?)",
-                (card_id, verifier, self.clock.now(), note),
+                "INSERT OR IGNORE INTO evidence_verifications(card_id, verifier, at, note,"
+                " calibrated) VALUES (?, ?, ?, ?, ?)",
+                (card_id, verifier, self.clock.now(), note, int(calibrated)),
             )
             if added.rowcount:
                 self._touch()
@@ -325,16 +349,19 @@ class Archive:
         return None if row is None else EvidenceVerification(**dict(row))
 
     def evidence(self, ids: Iterable[str] | None = None) -> tuple[EvidenceCard, ...]:
-        """The cards; ``verified`` is true exactly when a verification record exists."""
+        """The cards as reported to the rest of the system.
+
+        ``verified`` is true exactly when a verification record exists. ``calibrated`` is the
+        operator's: for a card from a model role it is true only when the verification record
+        attests it; for any other card it is the value the operator entered."""
         rows = self.db.query(
-            "SELECT e.id, e.body, v.card_id AS verified FROM evidence e"
-            " LEFT JOIN evidence_verifications v ON v.card_id = e.id ORDER BY e.seq"
+            "SELECT e.id, e.body, v.card_id AS verified, v.calibrated AS attested, s.source"
+            " FROM evidence e LEFT JOIN evidence_verifications v ON v.card_id = e.id"
+            " LEFT JOIN evidence_sources s ON s.card_id = e.id ORDER BY e.seq"
         )
         wanted = None if ids is None else set(ids)
         return tuple(
-            EvidenceCard.model_validate_json(row["body"]).model_copy(
-                update={"verified": row["verified"] is not None}
-            )
+            _as_reported(row["body"], row["verified"] is not None, row["attested"], row["source"])
             for row in rows
             if wanted is None or row["id"] in wanted
         )
@@ -343,14 +370,14 @@ class Archive:
         """Every card with its source and verification, oldest first."""
         rows = self.db.query(
             "SELECT e.body, s.source, s.task_id, s.at AS added_at, v.verifier,"
-            " v.at AS verified_at, v.note FROM evidence e"
+            " v.at AS verified_at, v.note, v.calibrated AS attested FROM evidence e"
             " LEFT JOIN evidence_sources s ON s.card_id = e.id"
             " LEFT JOIN evidence_verifications v ON v.card_id = e.id ORDER BY e.seq"
         )
         return tuple(
             EvidenceEntry(
-                card=EvidenceCard.model_validate_json(row["body"]).model_copy(
-                    update={"verified": row["verifier"] is not None}
+                card=_as_reported(
+                    row["body"], row["verifier"] is not None, row["attested"], row["source"]
                 ),
                 source=row["source"],
                 task_id=row["task_id"],

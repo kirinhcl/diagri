@@ -151,7 +151,7 @@
 | `POST` | `/wb/analysis/runs` | `project_id`、`protocol_id`、`snapshot_id`（各 1 到 100） | `run_id`、`status`、`exit_code`、`timed_out`、`stdout`、`stderr`（后两个截到 4000 个字符） |
 | `POST` | `/wb/holdouts` | `project_id`、`batch_ids`、`development_batch_ids`、`outcome_fields`（各 1 到 50 个名字，每个 1 到 100 个字符，不重复；两个批次列表不重叠，开发批次至少 2 个） | `holdout_id`（由服务端生成）、`project_id`、`batch_ids`、`outcome_fields`、`development_batch_ids`、`registered_at`、`registered_by`（会话中的操作员） |
 | `POST` | `/wb/evidence` | `source_class`（`handbook`、`paper` 或 `local`）、`citation`（去掉首尾空白后 1 到 500 个字符）、`claim`（1 到 1000）；可选 `value`（有限数）、`unit`（最多 40）、`calibrated`（默认为真） | `id`（由服务器生成）、`verified`（恒为真：录入的操作员当场核实）、`source`（`operator:<姓名>`） |
-| `POST` | `/wb/evidence/{card_id}/verify` | 可选 `note`（最多 500 个字符） | `card_id`、`verified`、`verified_by`、`verified_at`、`note`。重复核实返回第一条记录且不再写入；卡不存在以 `state` 拒绝 |
+| `POST` | `/wb/evidence/{card_id}/verify` | 可选 `note`（最多 500 个字符），可选 `calibrated`（默认为假：操作员证明这个数值已用本地测量校准过） | `card_id`、`verified`、`verified_by`、`verified_at`、`note`、`calibrated`。重复核实返回第一条记录（含证明），不再写入；对已核实的卡再传 `calibrated: true` 不会改变任何东西。卡不存在以 `state` 拒绝 |
 | `GET` | `/wb/evidence` | 无 | `cards`：每张卡，另有 `source`（`operator:<姓名>` 或 `model:planner`）、`task_id`、`added_at`、`verified`、`verified_by`、`verified_at`、`note` |
 | `GET` | `/wb/holdouts` | 查询参数 `project_id` | `holdouts`：每个登记如上，另有 `reads`，一组 `reader`、`at`、`label`、`model_sha` |
 
@@ -217,7 +217,7 @@
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | 取回并校验计算作业的输出。 |
 | researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。 |
 
-证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
+证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
 
 研究 Agent 的工具只要涉及快照、阶段、轮次或计算提交，就必须带 `task_id`。这个编号要和调度器正在运行的任务比对，而不是照单全收：任何其他编号、别的角色的任务、以及在调度运行之外发起的调用，都会以 `scope` 被拒绝；其他项目的阶段、轮次或快照同样以 `scope` 被拒绝。
 
