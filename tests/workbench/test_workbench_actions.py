@@ -1,6 +1,8 @@
 """Manual writes, irrigation (LAN only), manual measurements, safety approval, receipts and
 alerts through the workbench."""
 
+import json
+
 import pytest
 
 from growbridge.archive.models import Channel
@@ -230,6 +232,20 @@ def test_malformed_measurement_is_422(bench, operator):
     response = bench.post(operator, "/wb/measurements", {"value": "tall"})
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+def test_a_measurement_that_is_not_finite_is_422_and_its_input_is_echoed_as_text(
+    bench, operator, value
+):
+    headers = {**bench.ui(operator), "Content-Type": "application/json"}
+    body = json.dumps(measurement(value=value))  # writes the NaN and Infinity tokens
+
+    response = operator.post("/wb/measurements", content=body, headers=headers)
+
+    assert response.status_code == 422 and stored(bench) == ()
+    (error,) = response.json()["detail"]
+    assert error["loc"] == ["body", "value"] and error["input"] == str(value)
 
 
 # --- safety configuration ----------------------------------------------------------------------

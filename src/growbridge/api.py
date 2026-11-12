@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -18,6 +20,19 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .dashboard import COOKIE, SESSION_SECONDS, BrowserSessions
 from .service import Bridge, BridgeError
 from .workbench.auth import allowed_origins, trusted_hosts
+
+UNPROCESSABLE = 422
+
+
+def json_safe(value):
+    """``value`` with every NaN or infinity written as text, the only way JSON can carry it."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [json_safe(item) for item in value]
+    return value
 
 
 class Operation(BaseModel):
@@ -147,9 +162,14 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
 
     @app.exception_handler(BridgeError)
     async def bridge_error(request, error):
-        from fastapi.responses import JSONResponse
-
         return JSONResponse(status_code=409, content={"detail": str(error)})
+
+    @app.exception_handler(RequestValidationError)
+    async def unprocessable(request, error: RequestValidationError):
+        """FastAPI's own 422 body, except that a NaN or an infinity the request carried is
+        echoed as text: JSON cannot hold it, and the answer would otherwise fail with 500."""
+        detail = json_safe(jsonable_encoder(error.errors()))
+        return JSONResponse(status_code=UNPROCESSABLE, content={"detail": detail})
 
     @api.get("/health")
     async def health():

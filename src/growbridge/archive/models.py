@@ -5,6 +5,7 @@ version. Only structural rules live here; whether a run sheet is safe to run is 
 ``growbridge.planning.validate``.
 """
 
+import math
 from collections.abc import Iterable
 from datetime import datetime
 from enum import StrEnum
@@ -27,6 +28,24 @@ class Model(BaseModel):
 
     def digest(self) -> str:
         return content_digest(self.model_dump(mode="json"))
+
+
+def non_finite_paths(value: Any, path: str = "") -> list[str]:
+    """Dotted paths, such as ``sampling.interval_seconds``, where a dumped model holds NaN or an
+    infinity. Pydantic accepts both (also spelled as text) unless a model forbids them."""
+    if isinstance(value, float):
+        return [] if math.isfinite(value) else [path]
+    if isinstance(value, dict):
+        items: Iterable[tuple[Any, Any]] = value.items()
+    elif isinstance(value, list | tuple):
+        items = enumerate(value)
+    else:
+        return []
+    return [
+        found
+        for key, item in items
+        for found in non_finite_paths(item, f"{path}.{key}" if path else str(key))
+    ]
 
 
 class Channel(StrEnum):
@@ -223,6 +242,15 @@ class RunSheet(Model):
             ZoneInfo(self.timezone)
         except (KeyError, ValueError) as error:
             raise ValueError(f"Unknown timezone {self.timezone!r}") from error
+        return self
+
+    @model_validator(mode="after")
+    def _finite(self) -> "RunSheet":
+        """NaN would be stored as null and could not be read back, and a NaN threshold never
+        compares true; an infinite duration or interval is no plan either."""
+        spoiled = non_finite_paths(self.model_dump())
+        if spoiled:
+            raise ValueError(f"Run sheet numbers must be finite; not at {', '.join(spoiled)}")
         return self
 
     def plan(self, channel: Channel) -> ChannelPlan | None:

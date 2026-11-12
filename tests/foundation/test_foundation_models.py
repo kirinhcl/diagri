@@ -1,3 +1,4 @@
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -20,8 +21,24 @@ from growbridge.archive.models import (
     scheduled_level,
 )
 from growbridge.sim.clock import FakeClock
-from growbridge.sim.fixtures import make_run_sheet
+from growbridge.sim.fixtures import humidity_rule, make_run_sheet
 from growbridge.workflow import states
+
+# Every kind of number a run sheet holds. NaN would be stored as null and could not be read back,
+# and a NaN threshold never compares true, so a rule holding it would never act.
+FLOAT_PATHS = (
+    "duration_seconds",
+    "max_wait_seconds",
+    "sampling.interval_seconds",
+    "sampling.max_gap_seconds",
+    "channels.0.max_tolerance_seconds",
+    "feedback_rules.0.trigger.value",
+    "feedback_rules.0.recover.value",
+    "feedback_rules.0.validity_seconds",
+    "feedback_rules.0.duration_seconds",
+    "feedback_rules.0.min_switch_seconds",
+)
+NOT_FINITE = (float("nan"), float("inf"), float("-inf"), "nan", "Infinity", "-inf")
 
 
 def at(hour, minute=0, zone="Europe/Helsinki"):
@@ -129,6 +146,38 @@ def test_run_sheet_rejects_duplicate_channels_and_unknown_timezone():
         RunSheet(**{**fields, "channels": (plan, plan)})
     with pytest.raises(ValidationError):
         RunSheet(**{**fields, "timezone": "Mars/Olympus"})
+
+
+def put(data: dict, path: str, value) -> dict:
+    """Set the field at a dotted path such as ``feedback_rules.0.trigger.value``."""
+    *parents, last = path.split(".")
+    node = data
+    for key in parents:
+        node = node[int(key)] if key.isdigit() else node[key]
+    node[int(last) if last.isdigit() else last] = value
+    return data
+
+
+def sheet_data() -> dict:
+    return make_run_sheet(feedback_rules=(humidity_rule(),)).model_dump(mode="json")
+
+
+@pytest.mark.parametrize("path", FLOAT_PATHS)
+def test_run_sheet_rejects_a_number_that_is_not_finite_and_says_where(path):
+    with pytest.raises(ValidationError, match=re.escape(path)):
+        RunSheet.model_validate(put(sheet_data(), path, float("nan")))
+
+
+@pytest.mark.parametrize("value", NOT_FINITE)
+def test_run_sheet_rejects_every_spelling_of_nan_and_infinity(value):
+    with pytest.raises(ValidationError):
+        RunSheet.model_validate(put(sheet_data(), "feedback_rules.0.trigger.value", value))
+
+
+def test_a_run_sheet_reads_back_from_storage_unchanged():
+    sheet = RunSheet.model_validate(sheet_data())
+
+    assert RunSheet.model_validate_json(sheet.model_dump_json()) == sheet
 
 
 def test_digest_is_stable_and_changes_with_content():

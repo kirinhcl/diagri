@@ -1,5 +1,6 @@
 import json
 
+import pytest
 from dispatch_helpers import call, result_blocks, script_calls
 
 from growbridge.sim.llm import ScriptedClient
@@ -77,6 +78,18 @@ async def test_validate_run_sheet_reports_without_saving(env):
     body = _payload(await env.invoke("planner", "validate_run_sheet", run_sheet=bad))
 
     assert any(finding["blocking"] for finding in body["findings"])
+    assert env.workflow.store.find_stage("stage-1") is None
+
+
+@pytest.mark.parametrize("tool", ["save_plan_draft", "validate_run_sheet"])
+async def test_a_run_sheet_number_that_is_not_finite_is_an_error_and_nothing_is_saved(env, tool):
+    sheet = env.sheet_json()
+    sheet["duration_seconds"] = "Infinity"  # tool input is JSON: no NaN token, but a string works
+    fields = {"round_id": env.round_id} if tool == "save_plan_draft" else {}
+
+    outcome = await env.invoke("planner", tool, run_sheet=sheet, **fields)
+
+    assert outcome.is_error
     assert env.workflow.store.find_stage("stage-1") is None
 
 

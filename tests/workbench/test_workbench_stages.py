@@ -1,6 +1,8 @@
 """Stage control through the workbench: operator-only, recent re-authentication where the
 architecture asks for it, and model roles limited to drafts."""
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from workbench_support import SECRET, Bench
@@ -174,6 +176,23 @@ def test_draft_is_rejected_when_the_run_sheet_is_malformed(bench):
         {"round_id": round_id, "run_sheet": sheet},
         headers=bench.model(),
     )
+
+    assert response.status_code == 422
+    assert bench.workflow.store.find_stage("stage-1") is None
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "Infinity"])
+@pytest.mark.parametrize("caller", ["model", "operator"])
+def test_draft_with_a_number_that_is_not_finite_is_rejected(bench, operator, caller, value):
+    round_id = bench.seed_round()
+    sheet = bench.sheet().model_dump(mode="json")
+    sheet["sampling"]["interval_seconds"] = value
+    headers = {**bench.ui(operator), "Content-Type": "application/json"}
+    if caller == "model":
+        headers.update(bench.model())
+    body = json.dumps({"round_id": round_id, "run_sheet": sheet})  # writes NaN and Infinity
+
+    response = operator.post("/wb/drafts/run-sheet", content=body, headers=headers)
 
     assert response.status_code == 422
     assert bench.workflow.store.find_stage("stage-1") is None
