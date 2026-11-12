@@ -24,7 +24,7 @@ from growbridge.config import Settings
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor
 from growbridge.research.analysis import ConfirmatoryRunner
-from growbridge.research.holdout import HoldoutRegistry
+from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SandboxResult
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.control import FakeControl
@@ -111,7 +111,10 @@ class Bench:
         self.operators = Operators(self.db, self.clock, scrypt_n=FAST_SCRYPT)
         self.sandbox = ScriptedSandbox()
         self.runner = ConfirmatoryRunner(self.db, self.clock, self.sandbox, tmp_path / "analysis")
-        self.holdout = HoldoutRegistry(self.db, self.clock)
+        outcomes = project_outcomes(
+            self.archive.outcome_experiments, self.workflow.store.projects_of_experiment
+        )
+        self.holdout = HoldoutRegistry(self.db, self.clock, outcomes)
         self.settings = Settings(
             device="SIMULATED",
             token="s" * 32,

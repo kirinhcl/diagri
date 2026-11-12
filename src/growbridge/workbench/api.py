@@ -39,6 +39,7 @@ from growbridge.workbench.auth import (
     host_only,
 )
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
+from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
 from growbridge.workflow.service import WorkflowService
@@ -195,6 +196,8 @@ class Workbench:
         if runner is not None:
             args = (self.router, self.operator, self.fresh, workflow, archive, runner, holdout)
             add_analysis_routes(*args)
+        if holdout is not None:
+            add_holdout_routes(self.router, self.operator, self.fresh, workflow, holdout)
 
     # --- who is calling ------------------------------------------------------------------------
 
@@ -424,6 +427,10 @@ class Workbench:
 
         @router.post("/measurements")
         async def measurement(body: MeasurementIn, actor: Operator):
+            if not self.workflow.store.projects_of_experiment(body.experiment_id):
+                raise Denied(  # every measurement must be traceable to a project
+                    "scope", "a measurement belongs to an experiment of an existing stage"
+                )
             fields = body.model_dump(exclude={"id"})
             try:
                 record = ManualMeasurement(

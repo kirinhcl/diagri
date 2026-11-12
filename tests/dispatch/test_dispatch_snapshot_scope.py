@@ -198,7 +198,9 @@ async def test_a_scripted_run_cannot_reach_a_foreign_snapshot(env):
 
 def _holdout(env) -> HoldoutRegistry:
     registry = HoldoutRegistry(env.db, env.clock)
-    registry.register(env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], 3)
+    registry.register(
+        env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], ["d-1", "d-2", "d-3"]
+    )
     return registry
 
 

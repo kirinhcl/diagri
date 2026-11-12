@@ -335,6 +335,14 @@ class WorkflowStore:
         )
         return tuple(row["started_at"] for row in rows)
 
+    def projects_of_experiment(self, experiment_id: str) -> tuple[str, ...]:
+        """The projects whose stages run this experiment (none: no stage owns it)."""
+        rows = self.db.query(
+            "SELECT DISTINCT project_id FROM wf_stages WHERE experiment_id = ? ORDER BY project_id",
+            (experiment_id,),
+        )
+        return tuple(row["project_id"] for row in rows)
+
     def protocol_versions_of(self, experiment_id: str) -> tuple[tuple[str, int], ...]:
         """The (protocol id, version) of every round that has a stage for this experiment."""
         rows = self.db.query(

@@ -5,7 +5,7 @@ a record that other results depend on is flagged ("依赖失效") rather than ch
 """
 
 import json
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -217,6 +217,26 @@ class Archive:
             sql += " AND NOT EXISTS (SELECT 1 FROM measurements c WHERE c.corrects = m.id)"
         rows = self.db.query(sql + " ORDER BY seq", (experiment_id,))
         return tuple(ManualMeasurement.model_validate_json(row["body"]) for row in rows)
+
+    def outcome_experiments(
+        self, batch_ids: Sequence[str], outcome_fields: Sequence[str]
+    ) -> tuple[str, ...]:
+        """The experiments that hold a measurement of one of these metrics for one of these
+        batches (a measurement with no batch matches any), corrected ones and corrections
+        included. Done in SQL over the stored body, where ``batch`` and ``metric`` live, so the
+        measurements are neither loaded nor validated; the names go in as JSON arrays, so there
+        is no limit on their number and nothing is spliced into the statement."""
+        if not batch_ids or not outcome_fields:
+            return ()
+        rows = self.db.query(
+            "SELECT DISTINCT experiment_id FROM measurements"
+            " WHERE json_extract(body, '$.metric') IN (SELECT value FROM json_each(?))"
+            " AND (json_extract(body, '$.batch') IN (SELECT value FROM json_each(?))"
+            "      OR json_extract(body, '$.batch') = '')"
+            " ORDER BY experiment_id",
+            (json.dumps(list(outcome_fields)), json.dumps(list(batch_ids))),
+        )
+        return tuple(row["experiment_id"] for row in rows)
 
     def measurement_recorded_at(self, ids: Iterable[str]) -> dict[str, float | None]:
         """When each measurement was recorded here (the archive clock, not the ``measured_at``

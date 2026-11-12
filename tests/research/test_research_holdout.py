@@ -7,6 +7,8 @@ from growbridge.research.holdout import HoldoutRegistry, refuse_holdout_rows
 from growbridge.sim.clock import FakeClock
 
 OUTCOMES = ("yield_g", "canopy_score")
+DEV = ("dev-1", "dev-2")
+DEV3 = ("dev-1", "dev-2", "dev-3")
 
 
 @pytest.fixture
@@ -28,27 +30,29 @@ def registry(db, clock):
 
 @pytest.fixture
 def registered(registry):
-    registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batches=2)
+    registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batch_ids=DEV)
     return registry
 
 
 def test_fewer_than_two_development_batches_is_denied(registry):
     with pytest.raises(Denied) as caught:
-        registry.register("project-1", "hold-1", ("b2",), OUTCOMES, development_batches=1)
+        registry.register(
+            "project-1", "hold-1", ("b2",), OUTCOMES, development_batch_ids=("dev-1",)
+        )
 
     assert caught.value.code == "batches"
 
 
 def test_an_empty_holdout_is_denied(registry):
     with pytest.raises(Denied) as caught:
-        registry.register("project-1", "hold-1", (), OUTCOMES, development_batches=3)
+        registry.register("project-1", "hold-1", (), OUTCOMES, development_batch_ids=DEV3)
 
     assert caught.value.code == "batches"
 
 
 def test_registering_the_same_holdout_twice_is_denied(registered):
     with pytest.raises(Denied) as caught:
-        registered.register("project-1", "hold-1", ("b4",), OUTCOMES, development_batches=3)
+        registered.register("project-1", "hold-1", ("b4",), OUTCOMES, development_batch_ids=DEV3)
 
     assert caught.value.code == "state"
 
@@ -117,7 +121,7 @@ def test_every_read_is_logged_with_time_and_reader(registered, clock):
 
 
 def test_holdouts_count_reads_independently(registered):
-    registered.register("project-1", "hold-2", ("b4",), OUTCOMES, development_batches=2)
+    registered.register("project-1", "hold-2", ("b4",), OUTCOMES, development_batch_ids=DEV)
     for holdout in ("hold-1", "hold-2"):
         registered.register_model(holdout, "m" * 64, "f" * 64, "p" * 64)
 
@@ -136,7 +140,7 @@ def test_registrations_survive_reopening_the_database(tmp_path, clock):
     path = tmp_path / "again.db"
     first = Database(path)
     registry = HoldoutRegistry(first, clock)
-    registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batches=2)
+    registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batch_ids=DEV)
     registry.register_model("hold-1", "m" * 64, "f" * 64, "p" * 64)
     registry.evaluate("hold-1", "a", "m" * 64)
     first.close()
@@ -191,8 +195,8 @@ def test_development_filter_ignores_other_projects_and_sees_later_registrations(
     keep = registry.development_filter("project-1")
     assert keep(measurement("yield_g", "b3")) is True
 
-    registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batches=2)
-    registry.register("project-2", "hold-9", ("b1",), OUTCOMES, development_batches=2)
+    registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batch_ids=DEV)
+    registry.register("project-2", "hold-9", ("b1",), OUTCOMES, development_batch_ids=DEV)
 
     assert keep(measurement("yield_g", "b3")) is False
     assert keep(measurement("yield_g", "b1")) is True

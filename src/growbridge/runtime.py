@@ -52,7 +52,7 @@ from growbridge.observer.service import Observer
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
-from growbridge.research.holdout import HoldoutRegistry
+from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_backup import Backups
@@ -632,6 +632,9 @@ def build_runtime(
     if settings.backup_dir is not None:  # even where an allowed path would cover them
         unreadable.append(settings.backup_dir)
     sandbox = make_runtime_sandbox(unreadable)
+    outcomes = project_outcomes(  # a holdout may only be registered before its outcomes exist
+        archive.outcome_experiments, flow.store.projects_of_experiment
+    )
     backups = Backups(
         dict(zip(DATABASES, dbs.values(), strict=True)),
         settings.backup_dir,
@@ -659,7 +662,7 @@ def build_runtime(
         observer=observer,
         reports=ReportStore(dbs["observer"]),
         runner=ConfirmatoryRunner(dbs["agents"], clock, sandbox, data_dir / "analysis"),
-        holdout=HoldoutRegistry(dbs["agents"], clock),
+        holdout=HoldoutRegistry(dbs["agents"], clock, outcomes),
         sandbox=sandbox,
         operators=Operators(dbs["workflow"], clock),
         compute=_compute(compute_backend, dbs["compute"], clock),

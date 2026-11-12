@@ -7,9 +7,9 @@ evaluation is exploratory, and every read is logged.
 
 import json
 import sqlite3
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
@@ -30,6 +30,8 @@ STEPS = (
     "id INTEGER PRIMARY KEY AUTOINCREMENT, holdout_id TEXT NOT NULL REFERENCES holdouts, "
     "reader TEXT NOT NULL, at REAL NOT NULL, label TEXT NOT NULL)",
     "ALTER TABLE holdout_reads ADD COLUMN model_sha TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE holdouts ADD COLUMN development_batches TEXT",  # NULL: registered before this
+    "ALTER TABLE holdouts ADD COLUMN registered_by TEXT",
 )
 
 
@@ -41,10 +43,87 @@ class HoldoutRead(Model):
     model_sha: str = ""
 
 
+class Holdout(Model):
+    holdout_id: str
+    project_id: str
+    batch_ids: tuple[str, ...]
+    outcome_fields: tuple[str, ...]
+    development_batch_ids: tuple[str, ...] | None  # None: registered before these were kept
+    registered_at: float
+    registered_by: str | None
+
+
+class OutcomeSource(Protocol):
+    """Whether outcome data of the given batches already exists in a project."""
+
+    def has_outcomes(
+        self, project_id: str, batch_ids: Collection[str], outcome_fields: Collection[str]
+    ) -> bool: ...
+
+
+class _ProjectOutcomes:
+    def __init__(
+        self,
+        matching: Callable[[Collection[str], Collection[str]], Iterable[str]],
+        owners_of: Callable[[str], Iterable[str]],
+    ):
+        self.matching = matching
+        self.owners_of = owners_of
+
+    def has_outcomes(
+        self, project_id: str, batch_ids: Collection[str], outcome_fields: Collection[str]
+    ) -> bool:
+        """Whether an outcome of a held-out batch is already recorded that may belong to this
+        project: in an experiment one of its stages runs, or in an experiment no stage runs.
+
+        Data with no owner counts because it cannot be shown to belong to another project, and
+        a stage of this project may take that experiment over later; a measurement for an
+        experiment is accepted only when a stage owns it, so this is a second line of defence
+        for records that predate that rule or arrived another way. A measurement with no batch
+        matches (it cannot be placed, and the development filter hides it too).
+        """
+        for experiment in self.matching(batch_ids, outcome_fields):
+            owners = tuple(self.owners_of(experiment))
+            if not owners or project_id in owners:
+                return True
+        return False
+
+
+def project_outcomes(
+    matching: Callable[[Collection[str], Collection[str]], Iterable[str]],
+    owners_of: Callable[[str], Iterable[str]],
+) -> OutcomeSource:
+    """An ``OutcomeSource``. ``matching(batch_ids, outcome_fields)`` lists the experiments that
+    hold such a measurement (the archive answers it in SQL); ``owners_of(experiment)`` lists the
+    projects whose stages run it (the workflow store)."""
+    return _ProjectOutcomes(matching, owners_of)
+
+
+def _named_once(names: Sequence[str]) -> bool:
+    return all(name for name in names) and len(set(names)) == len(names)
+
+
+def _check_lists(
+    batch_ids: Sequence[str], outcome_fields: Sequence[str], development: Sequence[str]
+) -> None:
+    if not batch_ids or not _named_once(batch_ids):
+        raise Denied("batches", "name at least one held-out batch; names are not empty or repeated")
+    if len(development) < MIN_DEVELOPMENT_BATCHES or not _named_once(development):
+        raise Denied(
+            "batches",
+            f"name at least {MIN_DEVELOPMENT_BATCHES} development batches, not empty or repeated",
+        )
+    if set(batch_ids) & set(development):
+        raise Denied("batches", "a batch cannot be both held out and a development batch")
+    if not outcome_fields or not _named_once(outcome_fields):
+        raise Denied("param", "name the outcome fields; names are not empty or repeated")
+
+
 class HoldoutRegistry:
-    def __init__(self, db: Database, clock: Clock):
+    def __init__(self, db: Database, clock: Clock, outcomes: OutcomeSource | None = None):
         self.db = db
         self.clock = clock
+        self.outcomes = outcomes
         db.migrate("research_holdout", STEPS)
 
     def register(
@@ -53,26 +132,43 @@ class HoldoutRegistry:
         holdout_id: str,
         batch_ids: Sequence[str],
         outcome_fields: Sequence[str],
-        development_batches: int,
+        development_batch_ids: Sequence[str],
+        registered_by: str = "",
     ) -> None:
-        if development_batches < MIN_DEVELOPMENT_BATCHES or not batch_ids:
+        """Register a holdout. It must come before any of its outcome data: if an outcome metric
+        of a held-out batch already exists in the project, that data may already have been seen
+        and the registration is refused (``state``). Nothing in the message quotes a value."""
+        _check_lists(batch_ids, outcome_fields, development_batch_ids)
+        if self.outcomes is not None and self.outcomes.has_outcomes(
+            project_id, tuple(batch_ids), tuple(outcome_fields)
+        ):
             raise Denied(
-                "batches",
-                f"need >= {MIN_DEVELOPMENT_BATCHES} development batches and a non-empty holdout",
+                "state",
+                "outcome data of these batches already exists in the project and may already "
+                "have been seen: a holdout is registered before its outcome data exists",
             )
         try:
             self.db.execute(
-                "INSERT INTO holdouts VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO holdouts(holdout_id, project_id, batch_ids, outcome_fields, "
+                "registered_at, development_batches, registered_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     holdout_id,
                     project_id,
                     json.dumps(list(batch_ids)),
                     json.dumps(list(outcome_fields)),
                     self.clock.now(),
+                    json.dumps(list(development_batch_ids)),
+                    registered_by or None,
                 ),
             )
         except sqlite3.IntegrityError:
             raise Denied("state", f"holdout {holdout_id} is already registered") from None
+
+    def holdouts(self, project_id: str) -> tuple[Holdout, ...]:
+        rows = self.db.query(
+            "SELECT * FROM holdouts WHERE project_id = ? ORDER BY rowid", (project_id,)
+        )
+        return tuple(_holdout(row) for row in rows)
 
     def _holdout(self, holdout_id: str) -> sqlite3.Row:
         row = self.db.one("SELECT * FROM holdouts WHERE holdout_id = ?", (holdout_id,))
@@ -177,3 +273,16 @@ def refuse_holdout_rows(
     for line in measurements.read_text(encoding="utf-8").splitlines():
         if line and not keep(ManualMeasurement.model_validate_json(line)):
             raise Denied("scope", f"snapshot {snapshot_id} holds outcomes of a held-out batch")
+
+
+def _holdout(row: sqlite3.Row) -> Holdout:
+    development = row["development_batches"]
+    return Holdout(
+        holdout_id=row["holdout_id"],
+        project_id=row["project_id"],
+        batch_ids=tuple(json.loads(row["batch_ids"])),
+        outcome_fields=tuple(json.loads(row["outcome_fields"])),
+        development_batch_ids=None if development is None else tuple(json.loads(development)),
+        registered_at=row["registered_at"],
+        registered_by=row["registered_by"],
+    )

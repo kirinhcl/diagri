@@ -414,7 +414,7 @@ def test_a_snapshot_invalidated_by_a_correction_is_refused(seeded, operator):
 
 
 def test_a_snapshot_holding_outcomes_of_a_held_out_batch_is_refused(seeded, operator):
-    seeded.holdout.register(seeded.project_id, "hold-1", ("b3",), ("yield_g",), 2)
+    seeded.holdout.register(seeded.project_id, "hold-1", ("b3",), ("yield_g",), ("d-1", "d-2"))
     freeze(seeded, operator)
     leaky = snapshot_of(seeded, rows=[measurement("yield_g", "b3")])
 
@@ -426,7 +426,7 @@ def test_a_snapshot_holding_outcomes_of_a_held_out_batch_is_refused(seeded, oper
 
 
 def test_a_snapshot_frozen_with_the_development_filter_is_analysed(seeded, operator):
-    seeded.holdout.register(seeded.project_id, "hold-1", ("b3",), ("yield_g",), 2)
+    seeded.holdout.register(seeded.project_id, "hold-1", ("b3",), ("yield_g",), ("d-1", "d-2"))
     freeze(seeded, operator)
     keep = seeded.holdout.development_filter(seeded.project_id)
     clean = snapshot_of(seeded, rows=[measurement("yield_g", "b3")], keep=keep)

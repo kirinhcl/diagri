@@ -210,7 +210,7 @@ async def test_without_a_frozen_script_the_behaviour_is_unchanged(env, tmp_path)
 
 async def test_a_refusal_does_not_use_up_the_holdout_read(env, tmp_path):
     registry = HoldoutRegistry(env.db, env.clock)
-    registry.register(env.project_id, "hold-1", ("batch-9",), ("yield_g",), 2)
+    registry.register(env.project_id, "hold-1", ("batch-9",), ("yield_g",), ("d-1", "d-2"))
     registry.register_model("hold-1", "model-sha", "features", "prep")
     task = env.task("researcher")
     rounds = _rounds(env, registry)

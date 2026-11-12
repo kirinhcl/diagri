@@ -188,6 +188,7 @@ def stored(bench, include_corrected=False):
 
 
 def test_measurement_is_archived_under_the_session_operator(bench, operator):
+    bench.pending()  # a measurement belongs to an experiment of an existing stage
     response = bench.post(operator, "/wb/measurements", measurement(operator="mallory"))
 
     assert response.status_code == 200
@@ -197,6 +198,7 @@ def test_measurement_is_archived_under_the_session_operator(bench, operator):
 
 
 def test_measurement_retry_with_the_same_id_is_stored_once(bench, operator):
+    bench.pending()  # a measurement belongs to an experiment of an existing stage
     body = measurement(id="measure-0001")
 
     assert bench.post(operator, "/wb/measurements", body).status_code == 200
@@ -206,6 +208,7 @@ def test_measurement_retry_with_the_same_id_is_stored_once(bench, operator):
 
 
 def test_measurement_correction_keeps_the_raw_record(bench, operator):
+    bench.pending()  # a measurement belongs to an experiment of an existing stage
     first = bench.post(operator, "/wb/measurements", measurement(id="measure-0001")).json()
     fix = measurement(id="measure-0002", value=13.0, corrects=first["id"])
 
@@ -216,6 +219,7 @@ def test_measurement_correction_keeps_the_raw_record(bench, operator):
 
 
 def test_correcting_an_unknown_measurement_is_rejected_without_detail(bench, operator):
+    bench.pending()  # a measurement belongs to an experiment of an existing stage
     response = bench.post(operator, "/wb/measurements", measurement(corrects="measure-nope"))
 
     assert response.status_code == 422

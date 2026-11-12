@@ -622,7 +622,9 @@ async def test_publish_with_a_round_in_the_wrong_state_is_an_error_and_publishes
 
 def _registry(env) -> HoldoutRegistry:
     registry = HoldoutRegistry(env.db, env.clock)
-    registry.register(env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], 3)
+    registry.register(
+        env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], ["d-1", "d-2", "d-3"]
+    )
     registry.register_model("hold-1", "model-sha", "features-sha", "prep-sha")
     return registry
 

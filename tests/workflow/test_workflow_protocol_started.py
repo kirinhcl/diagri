@@ -58,3 +58,10 @@ async def test_the_protocol_versions_an_experiment_ran_under_are_listed(world):
 
     assert world.svc.store.protocol_versions_of("experiment-stage-1") == (("protocol-1", 1),)
     assert world.svc.store.protocol_versions_of("experiment-unknown") == ()
+
+
+async def test_the_projects_that_own_an_experiment_are_listed(world):
+    await world.approved("stage-1")
+
+    assert world.svc.store.projects_of_experiment("experiment-stage-1") == (world.project_id,)
+    assert world.svc.store.projects_of_experiment("experiment-nobody-runs") == ()
