@@ -1,8 +1,12 @@
-# Spider Farmer GrowBridge
+# DiAGRI
 
 English | [简体中文](README.zh-CN.md)
 
-Connect to Spider Farmer GGS controllers over local Bluetooth and give LLMs tools for environmental monitoring, historical data, outlet switching, light and fan control, and timed pump operation.
+DiAGRI is an AI agent platform for plant-growth research. It takes a research question through a complete experiment: it designs the experiment, runs the approved plan on growing hardware, records every reading and every write, analyzes the result and delivers a report. The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) describes the whole platform. DiAGRI mode has been tested on a simulated AC5 only.
+
+This README covers **GrowBridge**, DiAGRI's device bridge, which can also be used on its own.
+
+GrowBridge connects to Spider Farmer GGS controllers over local Bluetooth and gives LLMs tools for environmental monitoring, historical data, outlet switching, light and fan control, and timed pump operation.
 
 This is an independent, early-stage project with no affiliation with Spider Farmer. Protocol reads, outlet switching, dimming, and speed control have been verified on **macOS with an AC5 advertising as SF-GGS-PS5, firmware 3.2, using plaintext protocol v1**. A Linux/Raspberry Pi backend and installation scripts are included; Bluetooth operation on a physical Raspberry Pi has not yet been verified. Encrypted v2 firmware is detected and control is rejected.
 
@@ -44,7 +48,7 @@ Spider Farmer AC5 / GGS
 
 The daemon owns the Bluetooth connection, executes commands, verifies device readback, and records history. MCP clients access it through the local API, which listens only on `127.0.0.1:8766` by default. Each installation generates a separate access token. Clients read the token from private configuration, so it stays out of MCP configuration files.
 
-This release supports on-demand control, continuous data collection, and a local web dashboard. Unattended environmental optimization, irrigation schedules, MQTT, and cloud models are outside its current scope.
+On its own (bridge-only mode), GrowBridge supports on-demand control, continuous data collection, and a local web dashboard. Unattended environmental optimization, irrigation schedules, MQTT, and cloud models are outside its scope. Running an approved experiment plan automatically is what DiAGRI mode adds; see the [wiki](docs/wiki/en/Overview.md).
 
 ## Installation
 
@@ -201,6 +205,10 @@ Configure SSH keys and verify the host's identity first. Closing an MCP connecti
 - The daemon owns pump timing. A client disconnect does not cancel the OFF action. Operations are persisted before execution; after an interrupted pump operation, reconnection prioritizes turning the pump off rather than replaying ON.
 - If pump shutdown cannot be confirmed, the service reports the fault, blocks further ordinary controls, and attempts to turn it off after restoring the connection. Software timing cannot guarantee shutdown during host power loss, forced process termination, or complete Bluetooth failure. Unattended irrigation needs device-side timing or independent hardware protection.
 - Validation covers the specified device and protocol. Compatibility with other hardware and firmware remains unverified.
+
+## Documentation
+
+The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) covers the whole platform: its architecture, the control and safety model, reference pages, and what has and has not been verified.
 
 ## Development and validation
 

@@ -1,0 +1,1 @@
+Pages were last checked against the code on 2026-11-11. DiAGRI mode has been tested on a simulated AC5 only: see [Status and known limitations](Status-and-Known-Limitations.md). To change a page, read [how this wiki is edited](../README.md) first.

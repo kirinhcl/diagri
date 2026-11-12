@@ -1,4 +1,4 @@
-# Spider Farmer GrowBridge
+# DiAGRI
 
 English documentation: [README.md](README.md).
 

@@ -1,8 +1,12 @@
-# Spider Farmer GrowBridge
+# DiAGRI
 
 [English](README.md) | 简体中文
 
-通过本地蓝牙连接 Spider Farmer GGS 控制器，为 LLM 提供环境监测、历史查询、插座、灯和风机控制，以及定时水泵工具。
+DiAGRI 是一个面向植物生长研究的 AI Agent 平台。它把一个研究问题推进成一轮完整的实验：设计实验，在种植设备上执行已批准的方案，记录每一次读数和写入，分析结果并交付报告。整个平台的说明见 [DiAGRI Wiki](docs/wiki/README.md)（[简体中文](docs/wiki/zh-CN/Home.md)、[English](docs/wiki/en/Home.md)）。DiAGRI 模式目前只在模拟的 AC5 上测试过。
+
+本 README 介绍 **GrowBridge**：DiAGRI 的设备桥接部分，它也可以单独使用。
+
+GrowBridge 通过本地蓝牙连接 Spider Farmer GGS 控制器，为 LLM 提供环境监测、历史查询、插座、灯和风机控制，以及定时水泵工具。
 
 这是独立开发的早期版本，与 Spider Farmer 官方无关联。当前已经在 **macOS + AC5（广播名称 SF-GGS-PS5、固件 3.2、明文协议 v1）** 上验证协议读取、插座开关、调光和调速。Linux/树莓派后端和部署入口已提供；树莓派蓝牙实机验证尚未完成。加密 v2 固件会被识别并拒绝控制。
 
@@ -44,7 +48,7 @@ Spider Farmer AC5 / GGS
 
 MCP 进程不直接占用蓝牙。常驻服务集中执行命令、校验回读，并维护历史。默认 API 仅监听 `127.0.0.1:8766`；每次安装生成独立访问令牌，客户端从私有配置读取，不把令牌写进 MCP 配置。
 
-当前版本支持按需控制、持续采集和本地网页控制台，不包含无人值守环境优化、自动灌溉计划、MQTT 或云端模型。
+单独使用时（仅桥接模式），GrowBridge 支持按需控制、持续采集和本地网页控制台，不包含无人值守环境优化、自动灌溉计划、MQTT 或云端模型。按已批准的方案自动执行实验是 DiAGRI 模式提供的能力，见 [Wiki](docs/wiki/zh-CN/Overview.md)。
 
 ## 安装
 
@@ -201,6 +205,10 @@ args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/diagri/.venv/bin/growbridge"
 - 水泵计时由服务负责，客户端断开不会取消关闭动作。进行中的操作先写入数据库；中断后的水泵操作在重连时优先关闭，不重放开启动作。
 - 如果关闭水泵无法确认，服务标记异常、阻止进一步普通控制，并尝试恢复连接后关闭。主机断电、进程被强制终止、蓝牙完全失效时，软件计时无法保证设备按时关闭；无人值守灌溉需要设备端计时或独立硬件保护。
 - 本版本只验证了指定设备及协议；不要把某一台设备的成功当作所有固件和硬件的兼容保证。
+
+## 文档
+
+完整文档见 [DiAGRI Wiki](docs/wiki/README.md)（[简体中文](docs/wiki/zh-CN/Home.md)、[English](docs/wiki/en/Home.md)）：架构、控制与安全模型、参考页，以及哪些已经验证、哪些还没有。
 
 ## 开发验证
 
