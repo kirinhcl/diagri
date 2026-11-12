@@ -114,7 +114,7 @@ POST /wb/stages/STAGE_ID/onsite-check
 
 **系统已经做了。** 发现两次评估之间，系统时间相对单调时钟跳变了 5 秒以上（[`executor/outage.py`](../../../src/growbridge/executor/outage.py)），于是暂停了阶段。养护规则按“最后一次可信时间加上单调时钟走过的时间”继续执行。
 
-**你要做的。** 检查主机的时间，修好主机的时间同步。然后续跑阶段。阶段在一次 `clock_anomaly` 暂停之后被启动或续跑，执行 Agent 就认为操作员已经核对过时钟，之前看到的那次跳变不再计较（[`executor/engine.py`](../../../src/growbridge/executor/engine.py) 的 `_clock_checked`）。不需要重启。如果时钟再次跳变，阶段会再次暂停。
+**你要做的。** 检查主机的时间，修好主机的时间同步。然后续跑被 `clock_anomaly` 暂停的那个阶段。只有操作员能续跑暂停的阶段或交还人工接管的阶段，所以被时钟异常暂停的阶段在新的阶段写入权下重新运行，执行 Agent 就认为操作员已经核对过时钟，之前看到的那次跳变不再计较（[`executor/engine.py`](../../../src/growbridge/executor/engine.py) 的 `_clock_checked`）。时钟存疑期间另一个阶段启动，并不会解除存疑：它同样会被 `clock_anomaly` 暂停，续跑任何一个被暂停的阶段都会解除。不需要重启。如果时钟再次跳变，阶段会再次暂停。
 
 ## 进程重启与待核对
 

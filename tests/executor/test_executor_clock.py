@@ -78,3 +78,43 @@ async def test_executor_resume_does_not_clear_an_unsynchronised_clock(rig):
 
     assert ANOMALY in report.reported
     assert rig.state() == "paused"
+
+
+TWO_STAGES = ("vegetative", "flowering")
+
+
+async def test_executor_another_stage_starting_does_not_clear_the_clock_suspicion(rig):
+    await rig.start(stages=TWO_STAGES)
+    await rig.tick()
+    rig.clock.jump(STEP_SECONDS)
+    await rig.refresh()
+    assert ANOMALY in (await rig.tick()).reported  # stage-1 is paused by the step
+    await rig.start_next_stage("stage-2", experiment_id="experiment-stage-1")
+
+    await rig.pass_time(1)
+    report = await rig.tick()
+
+    assert ANOMALY in report.reported  # nobody has acknowledged the clock for this stage
+    assert rig.state("stage-2") == "paused"
+
+
+async def test_executor_resuming_the_stage_that_the_step_paused_clears_the_suspicion(rig):
+    await rig.start(stages=TWO_STAGES)
+    await rig.tick()
+    rig.clock.jump(STEP_SECONDS)
+    await rig.refresh()
+    await rig.tick()
+    await rig.start_next_stage("stage-2", experiment_id="experiment-stage-1")
+    await rig.pass_time(1)
+    await rig.tick()  # stage-2 is paused too, and is itself told about the clock
+
+    await rig.svc.resume_stage("stage-2", rig.op)
+    await rig.pass_time(1)
+    report = await rig.tick()
+
+    assert ANOMALY not in report.reported
+    assert rig.state("stage-2") == "running"
+    rig.clock.jump(STEP_SECONDS)  # a new step after the acknowledgement is caught again
+    await rig.refresh()
+    assert ANOMALY in (await rig.tick()).reported
+    assert rig.state("stage-2") == "paused"

@@ -114,7 +114,7 @@ The request is accepted in `paused`, `manual` and `recovery_check`. It stores yo
 
 **The system has.** Seen the wall clock step by more than 5 seconds against the monotonic clock between two ticks ([`executor/outage.py`](../../../src/growbridge/executor/outage.py)). It paused the stage. Care rules continue from the last trusted time plus elapsed monotonic time.
 
-**You do.** Check the time of the host and fix its time synchronization. Then resume the stage. A stage that is started or resumed after a `clock_anomaly` pause tells the executor that an operator has checked the clock, and the step seen earlier is forgotten (`_clock_checked` in [`executor/engine.py`](../../../src/growbridge/executor/engine.py)). No restart is needed. If the clock steps again, the stage is paused again.
+**You do.** Check the time of the host and fix its time synchronization. Then resume the stage that the `clock_anomaly` paused. Only an operator can resume a paused stage or hand a manual one back, so a stage that the anomaly paused and that runs again under a new write right tells the executor that an operator has checked the clock, and the step seen earlier is forgotten (`_clock_checked` in [`executor/engine.py`](../../../src/growbridge/executor/engine.py)). A different stage that starts while the suspicion stands does not clear it: it is paused with `clock_anomaly` too, and resuming either of the paused stages clears it. No restart is needed. If the clock steps again, the stage is paused again.
 
 ## Process restart and the recovery check
 

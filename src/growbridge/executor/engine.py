@@ -101,7 +101,8 @@ class ExecutorEngine:
         self.clock = clock
         self._allow = allow  # storage guard: "experiment_action", "care" or "protection"
         self._trust = ClockTrust(clock)
-        self._clock_reported = False  # a clock anomaly paused a stage; none has run since
+        # stages the clock anomaly paused -> the stage right they were paused under
+        self._clock_paused: dict[str, int | None] = {}
         self._link = LinkWatch()
         self._lock = asyncio.Lock()
         self._beat: float | None = None
@@ -163,14 +164,21 @@ class ExecutorEngine:
             await self._max_wait(tick, stage, now, mono)  # 6
 
     def _clock_checked(self, stage: StageRuntime | None) -> None:
-        """A stage that runs again after a clock anomaly paused one: the operator who started
-        or resumed it has checked the host clock, so the step seen earlier is forgotten (§7.7).
-        Called before the clock is observed, so a step since the last tick still counts."""
-        if not self._clock_reported or stage is None or stage.state is not StageState.RUNNING:
+        """Forget a clock step only when an operator has acknowledged it for the stage it paused.
+
+        The workflow lets only an operator move a paused or manual stage back to RUNNING (resume,
+        hand back); so a stage that the anomaly paused and that runs again under a different
+        stage right has been looked at by an operator, who was told about the clock. A different
+        stage that starts, or any stage the anomaly did not pause, proves nothing about the
+        clock and leaves the suspicion in place. Called before the clock is observed, so a step
+        since the last tick still counts (§7.7).
+        """
+        if not self._clock_paused or stage is None or stage.state is not StageState.RUNNING:
             return
-        if (stage.stage_id, stage.state, stage.right_number) != self._phase:
-            self._trust.accept()
-            self._clock_reported = False
+        if stage.stage_id in self._clock_paused:
+            if stage.right_number != self._clock_paused[stage.stage_id]:
+                self._trust.accept()
+                self._clock_paused = {}
 
     def _enter_phase(self, stage: StageRuntime | None, mono: float) -> None:
         """A new stage, state or stage write right restarts rule timing and the baseline.
@@ -299,7 +307,7 @@ class ExecutorEngine:
             return
         if now is None or not self._trust.trusted:
             await self._report(tick, stage, Kind.CLOCK_ANOMALY, "clock")
-            self._clock_reported = True
+            self._clock_paused = {**self._clock_paused, stage.stage_id: stage.right_number}
             return
         if await self._readings_stale(tick, stage, mono):
             return

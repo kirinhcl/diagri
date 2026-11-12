@@ -106,11 +106,12 @@ class Rig:
         }
         return make_run_sheet(**{**defaults, **fields})
 
-    async def start(self, safety=None, **fields) -> str:
+    async def start(self, safety=None, stages=None, **fields) -> str:
         """Design, approve and start the stage; the safety config is approved first."""
         self.control.approve_safety(safety or make_safety(), "op-1")
         self.project_id = self.svc.create_project("lettuce light series", self.op)
-        protocol = make_protocol(project_id=self.project_id)
+        extra = {} if stages is None else {"stages": stages}
+        protocol = make_protocol(project_id=self.project_id, **extra)
         self.svc.save_protocol(protocol, self.op)
         self.round_id = self.svc.create_round(self.project_id, protocol.id, self.op)
         self.svc.submit_run_sheet(self.round_id, self.sheet(**fields), self.op)
@@ -148,8 +149,18 @@ class Rig:
         )
         await self.control.submit(request)
 
-    def state(self) -> str:
-        return self.svc.stage(STAGE).state.value
+    def state(self, stage_id: str = STAGE) -> str:
+        return self.svc.stage(stage_id).state.value
+
+    async def start_next_stage(self, stage_id: str = "stage-2", **fields) -> str:
+        """Stop the current stage, move the round on and start another stage."""
+        await self.svc.stop_stage(STAGE, self.op)
+        await self.svc.choose_after_stop(self.round_id, "next", self.op)
+        sheet = self.sheet(id=f"sheet-{stage_id}", stage_id=stage_id, **fields)
+        self.svc.submit_run_sheet(self.round_id, sheet, self.op)
+        self.svc.approve(stage_id, self.op)
+        await self.svc.start_stage(stage_id, self.op)
+        return stage_id
 
     # --- observing the device ------------------------------------------------------------------
 
