@@ -7,6 +7,8 @@ from the stage's run sheet, never from tool input, and leaves holdout outcomes o
 
 from __future__ import annotations
 
+import asyncio
+
 from pydantic import Field
 
 from growbridge.agents.handlers_common import (
@@ -74,7 +76,13 @@ class AttemptInput(ToolInput):
     attempt_id: str = Field(pattern=ATTEMPT_ID)
 
 
-def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
+async def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
+    """Binding, scope and snapshot checks run on the event loop; only the sandbox is threaded.
+
+    ``sandbox.run`` blocks for up to ``MAX_TIMEOUT_SECONDS``. ``serve`` runs the executor tick
+    and the model roles in one event loop, so running it inline would stop the protection rules
+    and the pump interlock: safety must never wait for a model.
+    """
     task = own_task(deps, data.task_id)
     scoped_snapshot(deps, task, data.snapshot_id)  # before anything is mounted or read
     if deps.sandbox is None:
@@ -87,7 +95,9 @@ def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
     script = deps.work_root / "local" / run_id / "analysis.py"
     script.write_text(data.script, encoding="utf-8")
     snapshot_dir = deps.archive.root / "snapshots" / data.snapshot_id
-    result = deps.sandbox.run(script, snapshot_dir, out_dir, data.timeout_seconds)
+    result = await asyncio.to_thread(
+        deps.sandbox.run, script, snapshot_dir, out_dir, data.timeout_seconds
+    )
     return {
         "run_id": run_id,
         "label": "exploratory",
