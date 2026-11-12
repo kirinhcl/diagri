@@ -141,8 +141,13 @@ async def _serve_listeners(app, settings) -> None:
 async def _serve_auto_research(settings) -> None:
     from .api import create_app
     from .runtime import build_runtime
+    from .runtime_heartbeat import heartbeats_from_env
 
-    runtime = build_runtime(settings)
+    try:  # one heartbeat URL without the other would watch only half of the failures
+        heartbeats = heartbeats_from_env()
+    except ValueError as error:
+        raise SystemExit(f"growbridge: {error}") from error
+    runtime = build_runtime(settings, heartbeats=heartbeats)
     try:  # a too-short role token stops the daemon before anything starts
         router = runtime.workbench(role_tokens_from_env(os.environ))
     except ValueError as error:

@@ -56,6 +56,7 @@ from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_backup import Backups
+from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
 from growbridge.service import Bridge
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
@@ -282,6 +283,10 @@ class Runtime:
         else:
             message = "No notification channel is configured: alerts are not sent anywhere"
             self._alert("notify_unconfigured", "channels", message, "warning")
+        if self.monitor is None:
+            self._alert("monitor_unconfigured", "heartbeats", UNCONFIGURED_MESSAGE, "warning")
+        else:
+            self._safely(lambda: self.book.resolve("monitor_unconfigured", "heartbeats"))
         if not self.control.host_registered():
             self._alert("runtime", "write_host", "This host is not the registered write host")
             return
