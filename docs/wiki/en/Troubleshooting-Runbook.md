@@ -163,7 +163,7 @@ It needs a recent re-authentication. The attempt becomes `failed`; if its usage 
 
 **You see.** `GET /wb/compute` lists the attempt under `stuck` in the phase `needs_review` with a reason that starts with `output limit:`. It names which limit was hit: the number of files, the total listed size against the template's `max_storage_gb`, or the bytes that actually arrived. The researcher's `fetch_compute_artifacts` is refused with `state` and is not retried.
 
-**The system has.** Refused before any download when the listing already breaks a limit, or stopped as soon as the bytes that arrived pass it, and deleted what that fetch had downloaded, so the disk of the daemon's machine (which also holds the archive) is not filled. The remote files stay on CSC.
+**The system has.** Refused before any download when the listing already breaks a limit, or when one file alone does not fit in what is left. Each download is watched: a quarter of a second at a time the size of the file on disk is checked, and the transfer is cancelled as soon as it passes the limit; then everything that fetch had downloaded is deleted, so the disk of the daemon's machine (which also holds the archive) is not filled. The remote files stay on CSC. Expect the disk to briefly hold somewhat more than the limit before the watchdog reacts: at most what the link carries in 0.25 seconds (about 31 MB at 1 Gbit/s) plus a chunk, and it is deleted again at once.
 
 **You do.** Look at the job's output directory on CSC (`FIRECREST_WORKDIR/gb-<attempt id>/out`). If the size is a mistake in the template or a parameter, fix that and let the researcher retry after you settle. If the outputs are really needed, fetch what you need by hand and then settle. To close the attempt:
 

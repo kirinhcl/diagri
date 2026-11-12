@@ -1,5 +1,6 @@
 """FirecrestBackend against a fake client: no pyfirecrest, no network."""
 
+import asyncio
 import hashlib
 import sys
 from types import ModuleType, SimpleNamespace
@@ -7,6 +8,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 from fake_firecrest import FakeFirecrest
 
+from growbridge.compute import firecrest as firecrest_module
 from growbridge.compute.backend import (
     BackendError,
     BackendUnavailable,
@@ -624,3 +626,86 @@ async def test_firecrest_output_limit_errors_say_which_limit_and_no_contents(
     with pytest.raises(OutputTooLarge) as info:
         await backend.fetch(job_id, tmp_path, 100)
     assert "120" in str(info.value) and "100" in str(info.value) and "xxx" not in str(info.value)
+
+
+# --- bounding the transfer itself --------------------------------------------------------------
+
+
+@pytest.fixture
+def quick_watchdog(monkeypatch):
+    monkeypatch.setattr(firecrest_module, "WATCH_INTERVAL_SECONDS", 0.01)
+
+
+async def test_firecrest_watchdog_stops_a_file_that_keeps_growing_past_the_limit(
+    backend, client, tmp_path, quick_watchdog
+):
+    job_id = await two_outputs(backend, client, (60, 20_000))
+    client.listing_override = [  # the listing understates the second file badly
+        {"name": "part0.bin", "type": "-", "size": 60},
+        {"name": "part1.bin", "type": "-", "size": 10},
+    ]
+    client.chunk_size, client.chunk_delay = 100, 0.002
+
+    with pytest.raises(OutputTooLarge, match="limit"):
+        await backend.fetch(job_id, tmp_path, 500)
+
+    assert client.download_cancelled
+    assert client.written < 5_000  # cut off long before the 20 060 bytes were written
+    assert local_files(tmp_path) == []  # the partial file and the earlier download are gone
+
+
+async def test_firecrest_a_file_whose_listed_size_exceeds_what_is_left_is_refused_up_front(
+    backend, client, tmp_path
+):
+    job_id = await two_outputs(backend, client, (50, 60))
+    client.listing_override = [  # together 70 bytes: the pre-check passes (limit 100)
+        {"name": "part0.bin", "type": "-", "size": 10},
+        {"name": "part1.bin", "type": "-", "size": 60},
+    ]
+
+    with pytest.raises(OutputTooLarge, match="remaining|left"):
+        await backend.fetch(job_id, tmp_path, 100)  # part0 really takes 50: 50 left for 60
+
+    assert [c["source_path"].rsplit("/", 1)[1] for c in client.called("download")] == [
+        "part0.bin"
+    ]  # the second download never started
+    assert local_files(tmp_path) == []
+
+
+async def test_firecrest_a_target_missing_after_a_download_is_a_backend_error(
+    backend, client, tmp_path
+):
+    job_id = await two_outputs(backend, client, (10,))
+    client.download_writes_nothing = True
+
+    with pytest.raises(BackendError, match="missing") as info:
+        await backend.fetch(job_id, tmp_path, BIG)
+
+    assert type(info.value) is BackendError  # not a bare OSError, and not a size refusal
+
+
+async def test_firecrest_a_chunked_download_within_the_limit_is_unchanged(
+    backend, client, tmp_path, quick_watchdog
+):
+    job_id = await two_outputs(backend, client, (30, 30))
+    client.chunk_size, client.chunk_delay = 7, 0.001
+
+    sums = await backend.fetch(job_id, tmp_path, 60)
+
+    assert set(sums) == {"part0.bin", "part1.bin"} and not client.download_cancelled
+    assert (tmp_path / "part0.bin").read_bytes() == b"x" * 30
+
+
+async def test_firecrest_cancelling_the_fetch_cancels_the_download_and_cleans_up(
+    backend, client, tmp_path, quick_watchdog
+):
+    job_id = await two_outputs(backend, client, (5_000,))
+    client.chunk_size, client.chunk_delay = 100, 0.01
+
+    task = asyncio.create_task(backend.fetch(job_id, tmp_path, BIG))
+    await asyncio.sleep(0.05)  # the download is under way
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert client.download_cancelled and local_files(tmp_path) == []

@@ -11,7 +11,8 @@ the documentation is silent (each one fails closed with a ``BackendError`` when 
   ``size`` in bytes (an integer or digits); anything else, including a sub-directory or an entry
   without a usable size, is refused rather than skipped or downloaded blind. A fetch is bounded
   by ``MAX_OUTPUT_FILES`` and by the byte limit the service passes (the attempt's storage
-  reservation); the listed sizes are checked first and the bytes that arrive are counted too.
+  reservation). The listed sizes are checked first; each download is then watched and
+  cancelled as soon as its file on disk passes what is left of the limit.
 * ``checksum`` may return the checksum object itself or wrapped under ``output``; both are read,
   and only SHA-256 is accepted.
 * Slurm takes the job name from ``#SBATCH --job-name`` (``submit`` has no name argument), so the
@@ -30,6 +31,7 @@ script text. Credentials come from environment variables only and are never kept
 logged, or put in an error: a failing client call is reported by its exception class alone.
 """
 
+import asyncio
 import os
 import re
 from collections.abc import Awaitable, Mapping
@@ -66,6 +68,10 @@ SCRIPT_SETS_TIME = re.compile(
 # One output file costs a download and a checksum call; this keeps a runaway job (or a template
 # that writes one file per sample) from turning a fetch into an unbounded number of API calls.
 MAX_OUTPUT_FILES = 1000
+# While a file downloads, its size on disk is looked at this often. The most that can be written
+# past the byte limit before the watchdog reacts is what the link carries in one interval (about
+# 31 MB at 1 Gbit/s) plus what the client writes between two of its own awaits.
+WATCH_INTERVAL_SECONDS = 0.25
 FILE_TYPES = ("-", "f", "file")
 DIRECTORY_TYPES = ("d", "directory")
 # Why each: a terminal state ends the attempt (otherwise ``status`` would raise for ever and the
@@ -193,6 +199,19 @@ def _file_name(entry: Any) -> str:
     if kind not in FILE_TYPES:
         raise BackendError(f"output {name!r} has an unrecognised type {kind!r}")
     return name
+
+
+def _on_disk(path: Path, missing_ok: bool = False) -> int:
+    """The size of a downloaded file; a file that is not there after a download that said it
+    worked is an error of the backend, not an ``OSError``."""
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        if missing_ok:  # the client has not created it yet
+            return 0
+        raise BackendError("a downloaded output is missing locally") from None
+    except OSError as error:
+        raise BackendError(f"a downloaded output cannot be read ({type(error).__name__})") from None
 
 
 def _listed(entry: Any) -> tuple[str, int]:
@@ -373,9 +392,7 @@ class FirecrestBackend:
         out_dir.mkdir(parents=True, exist_ok=True)
         downloaded: list[Path] = []
         try:
-            return await self._download_all(
-                remote, [n for n, _ in listed], out_dir, downloaded, max_bytes
-            )
+            return await self._download_all(remote, listed, out_dir, downloaded, max_bytes)
         except BaseException:  # a refusal, a failure or a cancel leaves none of this fetch behind
             for path in downloaded:
                 path.unlink(missing_ok=True)
@@ -394,29 +411,57 @@ class FirecrestBackend:
             )
 
     async def _download_all(
-        self, remote: str, names: list[str], out_dir: Path, downloaded: list[Path], max_bytes: int
+        self,
+        remote: str,
+        listed: list[tuple[str, int]],
+        out_dir: Path,
+        downloaded: list[Path],
+        max_bytes: int,
     ) -> dict[str, str]:
-        """The listed sizes can be wrong and a file can change, so the bytes that actually arrive
-        are counted, and the first file to take the total over the limit stops the fetch."""
+        """The listed sizes can be wrong and a file can change, so each transfer is bounded by
+        what is left of the limit, and the bytes that actually arrive are what counts."""
         sums: dict[str, str] = {}
         total = 0
-        for name in names:
+        for name, size in listed:
+            remaining = max_bytes - total
+            if size > remaining:
+                raise OutputTooLarge(
+                    f"output limit: a file listed at {size} bytes does not fit in the {remaining}"
+                    f" bytes left of the limit of {max_bytes}"
+                )
             target = out_dir / name
             downloaded.append(target)  # before the download: a partial file is removed as well
-            download = self._client.download(
-                system_name=self.system,
-                source_path=f"{remote}/{name}",
-                target_path=str(target),
-            )
-            await self._call("download", download)
-            total += target.stat().st_size
-            if total > max_bytes:
-                raise OutputTooLarge(
-                    f"output limit: {total} bytes downloaded so far, over the limit of {max_bytes}"
-                )
+            total += await self._transfer(remote, name, target, remaining)
             reply = self._client.checksum(system_name=self.system, path=f"{remote}/{name}")
             sums[name] = _digest(await self._call("checksum", reply))
         return sums
+
+    async def _transfer(self, remote: str, name: str, target: Path, remaining: int) -> int:
+        """Download one file and return its size; cancel the transfer the moment the file on disk
+        passes ``remaining`` (the client cannot be asked to stop at a size)."""
+        download = self._client.download(
+            system_name=self.system, source_path=f"{remote}/{name}", target_path=str(target)
+        )
+        task = asyncio.ensure_future(self._call("download", download))
+        try:
+            while not task.done():
+                await asyncio.wait({task}, timeout=WATCH_INTERVAL_SECONDS)
+                if not task.done() and _on_disk(target, missing_ok=True) > remaining:
+                    raise OutputTooLarge(
+                        f"output limit: a download passed the {remaining} bytes left of the limit"
+                    )
+            task.result()  # a failed download raises here
+        finally:
+            if not task.done():  # the limit was hit, or the fetch itself was cancelled
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+        size = _on_disk(target)  # a fast transfer can finish between two looks
+        if size > remaining:
+            raise OutputTooLarge(
+                f"output limit: a download of {size} bytes passed the {remaining} bytes left"
+                " of the limit"
+            )
+        return size
 
     async def cleanup(self, job_id: str) -> None:
         job = await self._job(job_id)

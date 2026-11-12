@@ -5,6 +5,7 @@ https://pyfirecrest.readthedocs.io/en/stable/reference_async_v2.html, so a call 
 keyword fails here. It keeps a small remote file system and a job table.
 """
 
+import asyncio
 import hashlib
 import re
 from typing import Any
@@ -26,6 +27,11 @@ class FakeFirecrest:
         self.reply_override: Any = None  # replaces the submit reply
         self.fail: dict[str, Exception] = {}  # method name -> error to raise
         self.next_id = 1001
+        self.chunk_size: int | None = None  # write downloads in chunks of this many bytes
+        self.chunk_delay = 0.0  # seconds between chunks
+        self.written = 0  # bytes downloads have written so far
+        self.download_cancelled = False
+        self.download_writes_nothing = False
 
     # -- test controls --------------------------------------------------------------------
     def set_state(self, jobid: str, state: Any) -> None:
@@ -154,8 +160,21 @@ class FakeFirecrest:
         self._record(
             "download", system_name=system_name, source_path=source_path, target_path=target_path
         )
-        with open(target_path, "wb") as stream:
-            stream.write(self.files[source_path])
+        if self.download_writes_nothing:  # "succeeds" without leaving a file
+            return
+        data = self.files[source_path]
+        step = self.chunk_size or max(len(data), 1)
+        try:
+            with open(target_path, "wb") as stream:
+                for start in range(0, len(data), step):
+                    stream.write(data[start : start + step])
+                    stream.flush()
+                    self.written += len(data[start : start + step])
+                    if self.chunk_size:
+                        await asyncio.sleep(self.chunk_delay)  # a slow transfer, cancellable here
+        except asyncio.CancelledError:
+            self.download_cancelled = True
+            raise
 
     async def checksum(self, system_name: str, path: str) -> dict:
         self._record("checksum", system_name=system_name, path=path)
