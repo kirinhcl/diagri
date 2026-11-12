@@ -16,6 +16,7 @@ from pydantic import Field, model_validator
 from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
+    require_bound,
     require_round,
     scoped_snapshot,
     unavailable,
@@ -79,9 +80,10 @@ class Frozen:
 
 
 def own_task(deps: Deps, task_id: str) -> ResearchTask:
-    task = deps.tasks.get(task_id)
+    """The running researcher task; ``task_id`` from the model must equal the server's binding."""
+    task = require_bound(deps, task_id)
     if task.owner_role != ROLE:
-        raise Denied("scope", f"task {task_id} does not belong to the researcher")
+        raise Denied("scope", "this run does not belong to the researcher")
     return task
 
 

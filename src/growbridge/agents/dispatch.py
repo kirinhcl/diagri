@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
+from growbridge.agents.handlers_common import bind_task
 from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, TokenPrice
 from growbridge.agents.loop import AgentRun, run_agent
 from growbridge.agents.roles import ROLES, Handoff
@@ -137,17 +138,18 @@ class Dispatcher:
         if config is None:
             raise Denied("model_role", f"no model configured for role {role!r}")
         toolset = self._toolset(role, config, reviews)
-        return await run_agent(
-            self.client,
-            config,
-            ROLES[role].system,
-            task_message(task),
-            toolset,
-            self.budget,
-            task.project_id,
-            max_turns=config.max_calls,
-            price=role_price(config),
-        )
+        with bind_task(task.id):  # the tools learn their task here, never from model output
+            return await run_agent(
+                self.client,
+                config,
+                ROLES[role].system,
+                task_message(task),
+                toolset,
+                self.budget,
+                task.project_id,
+                max_turns=config.max_calls,
+                price=role_price(config),
+            )
 
     def _toolset(self, role: str, config: RoleModel, reviews: list[bool]) -> Toolset:
         tools = [

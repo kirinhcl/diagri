@@ -139,6 +139,7 @@ class WorkflowService(StageRecovery):
         owner = (run_sheet.project_id, run_sheet.protocol_id, run_sheet.protocol_version)
         if owner != (rnd.project_id, rnd.protocol_id, rnd.protocol_version):
             raise Denied("state", "run sheet does not belong to this round's project and protocol")
+        self._check_experiment_owner(run_sheet)
         findings = self._findings(run_sheet)
         if any(finding.blocking for finding in findings):
             return findings
@@ -151,6 +152,14 @@ class WorkflowService(StageRecovery):
             if rnd.state is RoundState.DESIGNING:
                 self.store.update_round(round_id, state=RoundState.STAGE_REVIEW)
         return findings
+
+    def _check_experiment_owner(self, sheet: RunSheet) -> None:
+        """An experiment id belongs to one project; its data is scoped by that ownership."""
+        for stage in self.store.stages_in(S):
+            if stage.experiment_id == sheet.experiment_id and stage.project_id != sheet.project_id:
+                raise Denied(
+                    "scope", f"experiment {sheet.experiment_id} belongs to another project"
+                )
 
     def _findings(self, run_sheet: RunSheet) -> tuple[Finding, ...]:
         return tuple(self.validate(run_sheet)) if self.validate else ()

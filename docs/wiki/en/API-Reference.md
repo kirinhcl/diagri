@@ -181,7 +181,7 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | orchestrator | `create_research_task` | write | `project_id`, `owner_role`, `question`, `trigger_event_id`, `correlation_id` | Creates a research task for the planner or the researcher. |
 | orchestrator | `delegate_task` | write | `project_id`, `to_role`, `goal`, `budget`, `trigger_event_id`, `correlation_id` | Creates a research task for the planner or the researcher with a full handoff. |
 | orchestrator | `submit_run_for_review` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. |
-| orchestrator | `get_task_status` | read | `task_id` | Reads the state of a task and the ids of its artifacts. |
+| orchestrator | `get_task_status` | read | `task_id` | Reads the state of the running task, or of a task delegated below it, and the ids of its artifacts. |
 | orchestrator | `read_artifact` | read | `artifact_id` | Reads a registered text artifact after checking its digest. |
 | planner | `get_device_capabilities` | read | none | Reads the sensors, channels and level ranges of the device. |
 | planner | `find_prior_runs` | read | `experiment_id` | Lists the data snapshots and the measurement count of an experiment. |
@@ -199,7 +199,9 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | Fetches and verifies the outputs of a compute job. |
 | researcher | `publish_research_report` | write | `task_id`, `protocol_id`, `treatment_id`, `snapshots` | Publishes the report of the round; with `round_id` it also delivers the round when the report is final. |
 
-The researcher tools that take a snapshot, a stage or a round require `task_id`, and the task must belong to the researcher. A stage, round or snapshot of another project is refused with `scope`.
+The researcher tools that take a snapshot, a stage, a round or a compute submission require `task_id`. The id is checked against the task the dispatcher is running, not trusted: any other id, a task of another role, and a call made outside a dispatched run are refused with `scope`. A stage, round or snapshot of another project is refused with `scope` too.
+
+The other two roles are bound the same way. Every `project_id`, `round_id`, `stage_id` and `experiment_id` in an orchestrator or planner call must belong to the project of the running task, and the experiment must have exactly one owning project. `get_task_status` answers for the running task and the tasks delegated below it only. `read_artifact` answers for artifacts of tasks of the project only. `delegate_task` accepts only the running task as `parent_task_id`. All of these are refused with `scope`.
 
 In the daemon that `growbridge serve` builds, no search backend and no compute service are passed. `lookup_crop_conditions`, `search_and_verify_sources`, `submit_compute_job`, `get_compute_job` and `fetch_compute_artifacts` therefore return `denied (unavailable)`. The sandbox exists on macOS only; elsewhere `run_local_analysis` returns `denied (sandbox_unavailable)`.
 

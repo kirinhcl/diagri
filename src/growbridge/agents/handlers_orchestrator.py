@@ -10,7 +10,12 @@ from growbridge.agents.handlers_common import (
     Deps,
     DraftInput,
     ToolInput,
+    bound_task,
     clip,
+    require_bound,
+    require_project,
+    require_round_project,
+    require_stage_project,
     submit_draft,
 )
 from growbridge.agents.tools import Tool
@@ -85,6 +90,9 @@ def _stored(deps: Deps, task: ResearchTask) -> dict:
 
 def build_orchestrator_tools(deps: Deps) -> list[Tool]:
     def project_state(data: ProjectStateInput) -> dict:
+        require_project(deps, data.project_id)
+        if data.round_id is not None:
+            require_round_project(deps, data.round_id)
         tasks = deps.tasks.list(data.project_id)
         out: dict = {"tasks": [_task_summary(t) for t in tasks[-MAX_ITEMS:]]}
         out["active_stage"] = getattr(deps.workflow.active_stage(), "stage_id", None)
@@ -97,6 +105,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         return out
 
     def run_status(data: RunStatusInput) -> dict:
+        require_stage_project(deps, data.stage_id)
         stage = deps.workflow.stage(data.stage_id)
         return {
             "stage_id": stage.stage_id,
@@ -109,6 +118,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         }
 
     def create_task(data: CreateTaskInput) -> dict:
+        require_project(deps, data.project_id)
         task = ResearchTask(
             id=new_id("task"),
             project_id=data.project_id,
@@ -124,6 +134,9 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         return _stored(deps, task)
 
     def delegate(data: DelegateInput) -> dict:
+        require_project(deps, data.project_id)
+        if data.parent_task_id is not None:
+            require_bound(deps, data.parent_task_id)  # a handoff hangs under the running task
         task = ResearchTask(
             id=new_id("task"),
             project_id=data.project_id,
@@ -140,7 +153,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         return _stored(deps, task)
 
     def task_status(data: TaskStatusInput) -> dict:
-        task = deps.tasks.get(data.task_id)
+        task = _visible_task(deps, data.task_id)
         artifacts = deps.archive.artifacts(task.id)
         return {
             **_task_summary(task),
@@ -199,10 +212,38 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
     ]
 
 
-def _read(deps: Deps, artifact_id: str) -> dict:
+def _visible_task(deps: Deps, task_id: str) -> ResearchTask:
+    """The running task and the tasks delegated below it; nothing else, in any project."""
+    bound = bound_task(deps)
+    try:
+        cursor = deps.tasks.get(task_id)
+    except Denied:
+        raise Denied("scope", "that task is not available to this run") from None
+    while cursor.project_id == bound.project_id:
+        if cursor.id == bound.id:
+            return deps.tasks.get(task_id)
+        if cursor.parent_task_id is None:
+            break
+        cursor = deps.tasks.get(cursor.parent_task_id)
+    raise Denied("scope", "that task is not available to this run")
+
+
+def _own_artifact(deps: Deps, artifact_id: str):
+    """An artifact of a task of the run's project; unknown ids look the same."""
     artifact = deps.archive.artifact(artifact_id)
-    if artifact is None:
-        raise Denied("state", f"unknown artifact {artifact_id}")
+    owner = None
+    if artifact is not None:
+        try:
+            owner = deps.tasks.get(artifact.task_id)
+        except Denied:
+            owner = None
+    if artifact is None or owner is None or owner.project_id != bound_task(deps).project_id:
+        raise Denied("scope", f"artifact {artifact_id} is not available to this run")
+    return artifact
+
+
+def _read(deps: Deps, artifact_id: str) -> dict:
+    artifact = _own_artifact(deps, artifact_id)
     path = deps.archive.root.joinpath(artifact.path).resolve()
     roots = (deps.work_root.resolve(), deps.archive.root.resolve())
     if not any(path.is_relative_to(root) for root in roots) or not path.is_file():

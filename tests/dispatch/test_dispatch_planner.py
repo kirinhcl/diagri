@@ -134,6 +134,7 @@ async def test_estimate_sample_size_rejects_nonsense_as_an_error(env):
 
 
 async def test_find_prior_runs_lists_snapshots_of_an_experiment(env):
+    env.stage_for("experiment-1")  # the experiment must belong to the project of the run
     body = _payload(await env.invoke("planner", "find_prior_runs", experiment_id="experiment-1"))
 
     assert body == {"experiment_id": "experiment-1", "snapshots": [], "measurements": 0}

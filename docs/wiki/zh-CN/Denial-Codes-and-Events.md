@@ -16,7 +16,7 @@
 | `controls_disabled` | 配置文件里 `controls_enabled` 是 `false`。 | 控制服务 | 设置 `controls_enabled = true` 并重启守护进程。 |
 | `right_invalid` | 写入权不存在、已撤销，或属于更早的恢复编号；人工写入权没有绑定操作员；灌溉请求用的不是人工写入权；或者排队中的动作在发送前被作废。 | 控制服务、[`control/rights.py`](../../../src/growbridge/control/rights.py) | 不要重复同一个请求。通过工作流重新取得写入权（启动、恢复或接管阶段），再发新的请求。 |
 | `right_held` | 这台设备的阶段写入权已被持有，此时又申请阶段写入权或人工写入权。 | 控制服务 | 先把持有写入权的阶段暂停、停止或接管。 |
-| `scope` | 请求超出了写入权或调用方的范围：不是这台设备，通道或档位不在写入权列出的范围里，阶段、实验或操作员对不上，灌溉时间过长或不是"开泵"。对模型工具来说：任务、阶段、轮次、数据快照、产物或计算作业属于其他项目或其他角色，或者快照里含有留出数据的结果。 | 控制服务、`control/rights.py`、计算服务、模型工具的处理函数（[`agents/`](../../../src/growbridge/agents)） | 修改请求。原样重发还会被拒绝。 |
+| `scope` | 请求超出了写入权或调用方的范围：不是这台设备，通道或档位不在写入权列出的范围里，阶段、实验或操作员对不上，灌溉时间过长或不是"开泵"。对模型工具来说：任务编号不是这次运行所对应的任务，在调度运行之外发起调用，任务、阶段、轮次、实验、数据快照、产物或计算作业属于其他项目或其他角色，实验被两个项目同时占用，或者快照里含有留出数据的结果。对工作流来说：运行单的 `experiment_id` 属于另一个项目。 | 控制服务、`control/rights.py`、计算服务、工作流服务（`WorkflowService.submit_run_sheet`）、模型工具的处理函数（[`agents/`](../../../src/growbridge/agents)） | 修改请求。原样重发还会被拒绝。 |
 | `pump_on_forbidden` | 一次普通写入试图开泵。 | `control/rights.py`；[`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `POST /wb/manual/{channel}` | 在局域网入口上使用 `POST /wb/irrigation`。 |
 | `interlock` | 关泵联锁生效：关泵没有得到确认。普通写入被拒绝，阶段也不能启动或恢复。 | 控制服务；工作流服务（[`workflow/service.py`](../../../src/growbridge/workflow/service.py)） | 到现场检查水泵，然后用 `POST /wb/stages/{stage_id}/onsite-check` 记录现场核对。执行 Agent 会持续尝试关泵。 |
 | `not_connected` | 没有有效的 BLE 连接，或者读不到设备状态。 | 控制服务 | 等连接恢复后重新发送请求。 |

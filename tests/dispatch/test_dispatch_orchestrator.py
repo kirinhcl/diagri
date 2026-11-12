@@ -24,11 +24,12 @@ def _payload(outcome) -> dict:
     return json.loads(outcome.content)
 
 
-def _register(env, artifact_id: str, path, task_id: str = "t") -> None:
+def _register(env, artifact_id: str, path, task_id: str | None = None) -> None:
+    owner = task_id or env.task("researcher", "ev-art").id  # an artifact belongs to a real task
     env.archive.add_artifact(
         Artifact(
             id=artifact_id,
-            task_id=task_id,
+            task_id=owner,
             kind="note",
             path=str(path),
             sha256=file_digest(path),
@@ -68,7 +69,7 @@ async def test_delegating_the_same_trigger_twice_creates_one_task(env):
     second = _payload(await env.invoke("orchestrator", "delegate_task", **fields))
 
     assert first["task_id"] == second["task_id"]
-    assert len(env.tasks.list(env.project_id)) == 1
+    assert len(env.delegated()) == 1
 
 
 async def test_delegation_to_a_non_model_role_is_rejected_by_the_schema(env):
@@ -79,7 +80,7 @@ async def test_delegation_to_a_non_model_role_is_rejected_by_the_schema(env):
         **{**HANDOFF, "to_role": "executor"},
     )
 
-    assert outcome.is_error and not env.tasks.list(env.project_id)
+    assert outcome.is_error and not env.delegated()
 
 
 async def test_handoff_without_trigger_or_correlation_ids_is_rejected(env):
@@ -89,7 +90,7 @@ async def test_handoff_without_trigger_or_correlation_ids_is_rejected(env):
         "orchestrator", "delegate_task", project_id=env.project_id, **partial
     )
 
-    assert outcome.is_error and not env.tasks.list(env.project_id)
+    assert outcome.is_error and not env.delegated()
 
 
 async def test_create_research_task_makes_a_top_level_task(env):
@@ -138,7 +139,7 @@ async def test_get_run_status_and_project_state_are_read_only(env):
     )
 
     assert status["state"] == StageState.PENDING_REVIEW.value
-    assert state["tasks"][0]["owner_role"] == "planner"
+    assert "planner" in {t["owner_role"] for t in state["tasks"]}
     assert state["round_state"] == env.workflow.round_state(env.round_id).value
 
 

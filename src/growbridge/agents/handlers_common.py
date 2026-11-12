@@ -7,7 +7,9 @@ handler in this package approves, starts, pauses, resumes or stops a stage, or w
 from __future__ import annotations
 
 import inspect
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn
@@ -82,6 +84,7 @@ def check_sheet(deps: Deps, sheet: RunSheet) -> tuple[Finding, ...]:
 
 def submit_draft(deps: Deps, role: str, data: DraftInput) -> dict:
     """File a run-sheet draft for operator review; approval is never part of this."""
+    require_round_project(deps, data.round_id)  # a draft goes only into the run's own project
     sheet = data.run_sheet
     own = check_sheet(deps, sheet)
     if any(finding.blocking for finding in own):
@@ -111,11 +114,83 @@ def require_round(deps: Deps, round_id: str, expected: RoundState, project_id: s
 
 
 def experiment_project(deps: Deps, experiment_id: str) -> str | None:
-    """The project that owns an experiment, known from the stage that runs it."""
-    for stage in deps.workflow.store.stages_in(StageState):
-        if stage.experiment_id == experiment_id:
-            return stage.project_id
-    return None
+    """The project that owns an experiment, known from the stage that runs it.
+
+    Fails closed: an unknown experiment, or one claimed by stages of more than one project,
+    has no owner and every scope check on it refuses.
+    """
+    owners = {
+        stage.project_id
+        for stage in deps.workflow.store.stages_in(StageState)
+        if stage.experiment_id == experiment_id
+    }
+    return next(iter(owners)) if len(owners) == 1 else None
+
+
+# --- the running task is bound by the server ------------------------------------------------
+#
+# The dispatcher binds the task it runs for the duration of the run. A task id (or a project,
+# round, stage or experiment id) in tool input is only ever compared with that binding, so the
+# model can never name a task of its own. A context variable keeps concurrent runs apart: each
+# asyncio task has its own copy, and the tools themselves stay shared (built once per runtime).
+
+_BOUND: ContextVar[str | None] = ContextVar("growbridge_bound_task", default=None)
+
+
+@contextmanager
+def bind_task(task_id: str) -> Iterator[None]:
+    token = _BOUND.set(task_id)
+    try:
+        yield
+    finally:
+        _BOUND.reset(token)
+
+
+def bound_task_id() -> str | None:
+    return _BOUND.get()
+
+
+def bound_task(deps: Deps) -> ResearchTask:
+    """The task of the running dispatch; a call outside one is refused."""
+    task_id = _BOUND.get()
+    if task_id is None:
+        raise Denied("scope", "no task is running: tools only work inside a dispatched run")
+    return deps.tasks.get(task_id)
+
+
+def require_bound(deps: Deps, task_id: str) -> ResearchTask:
+    """``task_id`` from the model must be the running task, and nothing else."""
+    task = bound_task(deps)
+    if task_id != task.id:
+        raise Denied("scope", "task_id is not the task this run was started for")
+    return task
+
+
+def require_project(deps: Deps, project_id: str) -> ResearchTask:
+    """A project named by the model must be the running task's project."""
+    task = bound_task(deps)
+    if project_id != task.project_id:
+        raise Denied("scope", "that project is not the project of this run")
+    return task
+
+
+def require_round_project(deps: Deps, round_id: str) -> None:
+    """A round named by the model must belong to the running task's project."""
+    bound_task(deps)  # an unbound call is refused before any lookup
+    require_project(deps, deps.workflow.store.round(round_id).project_id)
+
+
+def require_stage_project(deps: Deps, stage_id: str) -> None:
+    """A stage named by the model must belong to the running task's project."""
+    bound_task(deps)
+    require_project(deps, deps.workflow.stage(stage_id).project_id)
+
+
+def require_experiment_project(deps: Deps, experiment_id: str) -> None:
+    """An experiment named by the model must have exactly one owner: the run's project."""
+    owner = experiment_project(deps, experiment_id)
+    if owner is None or owner != bound_task(deps).project_id:
+        raise Denied("scope", "that experiment is not available to this run")
 
 
 def _refuse_holdout_rows(deps: Deps, snap: Snapshot, project_id: str) -> None:

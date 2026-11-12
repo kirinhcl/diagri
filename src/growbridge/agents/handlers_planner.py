@@ -15,6 +15,8 @@ from growbridge.agents.handlers_common import (
     check_sheet,
     clip,
     findings_json,
+    require_experiment_project,
+    require_project,
     resolve,
     submit_draft,
     unavailable,
@@ -82,6 +84,7 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
         return deps.control.capabilities().model_dump(mode="json")
 
     def prior_runs(data: PriorRunsInput) -> dict:
+        require_experiment_project(deps, data.experiment_id)
         snapshots = deps.archive.snapshots(data.experiment_id)
         return {
             "experiment_id": data.experiment_id,
@@ -99,6 +102,7 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
         return await _search(deps, data.query, data.limit)
 
     def design(data: DesignInput) -> dict:
+        require_project(deps, data.project_id)
         protocol = deps.workflow.store.latest_protocol(data.protocol_id, data.project_id)
         if protocol is None:
             raise Denied("state", f"no protocol {data.protocol_id} in project {data.project_id}")

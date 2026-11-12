@@ -4,6 +4,7 @@ from dispatch_helpers import make_task
 from growbridge.agents.budget import CallBudget
 from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.handlers import Deps, build_role_tools
+from growbridge.agents.handlers_common import bind_task
 from growbridge.agents.tools import ROLE_TOOLS, build_toolset
 from growbridge.archive.db import Database
 from growbridge.archive.models import Budget, Channel, RuleAction, RunSheet
@@ -71,9 +72,36 @@ class Env:
         )
 
     async def invoke(self, role: str, name: str, deps: Deps | None = None, /, **fields):
-        """Call one tool of a role directly, as the loop would; returns the ToolOutcome."""
+        """Call one tool of a role as a dispatched run of ``task_id`` would (own task by default).
+
+        The run is bound to the task named in the input, which models an honest model; tests of
+        a dishonest one use ``invoke_as``. Without a ``task_id`` the role's own task is bound.
+        """
+        given = fields.get("task_id")
+        bound = given if isinstance(given, str) else self.task(role, f"ev-auto-{role}").id
+        return await self.invoke_as(bound, role, name, deps, **fields)
+
+    async def invoke_as(
+        self, bound: str, role: str, name: str, deps: Deps | None = None, /, **fields
+    ):
+        """Call a tool while the dispatcher has bound the run to ``bound``."""
+        toolset = build_toolset(role, self.tools(deps)[role])
+        with bind_task(bound):
+            return await toolset.call(name, fields)
+
+    async def invoke_unbound(self, role: str, name: str, deps: Deps | None = None, /, **fields):
+        """Call a tool outside any dispatched run."""
         toolset = build_toolset(role, self.tools(deps)[role])
         return await toolset.call(name, fields)
+
+    def delegated(self, project_id: str | None = None):
+        """The tasks of a project except the ones ``invoke`` created to bind a run."""
+        tasks = self.tasks.list(project_id or self.project_id)
+        return tuple(t for t in tasks if not t.id.startswith("task-ev-auto-"))
+
+    def task_in(self, project_id: str, owner: str, event: str, **fields):
+        """A task of another project (the main project's tasks come from ``task``)."""
+        return self.tasks.create(make_task(owner, event, project_id=project_id, **fields))
 
     def task(self, owner: str, event: str = "ev-1", **fields):
         return self.tasks.create(make_task(owner, event, project_id=self.project_id, **fields))

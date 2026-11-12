@@ -169,7 +169,8 @@ n = ((z(1 - alpha/2) + z(power)) × sd / effect)²
 
 研究 Agent 是语言模型，所以它的工具有明确的边界（[`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py)、[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)）：
 
-- **限定在任务所属的项目内。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要指明一个研究任务，而且这个任务必须属于研究 Agent。阶段、轮次和快照，只有和任务属于同一个项目才能使用。其他情况一律以 `scope` 拒绝；别的项目的快照，看上去和不存在的快照没有区别。
+- **限定在任务所属的项目内。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要指明一个研究任务，而且所指明的必须就是调度器正在运行的任务：服务器在运行期间绑定任务，模型给出的编号只和这个绑定比对，从不直接采信。别的角色或别的项目的任务、同一项目的另一个任务、以及在调度运行之外发起的调用，一律拒绝。阶段、轮次和快照，只有和这个任务属于同一个项目才能使用。其他情况一律以 `scope` 拒绝；别的项目的快照，看上去和不存在的快照没有区别。
+- **每个实验只有一个所属项目。** 快照所属的项目，就是运行其实验的阶段所属的项目。工作流会拒绝复用别的项目 `experiment_id` 的运行单；一个实验若被两个项目的阶段同时占用，就没有所有者，所有范围检查都会拒绝它。
 - **不碰留出数据。** 测量文件里含有留出批次结局的快照，在读取或挂载任何内容之前就被拒绝。这能拦住那些在登记留出数据之前冻结的快照。
 - **限值取自运行单。** 冻结数据时，时间窗和采样限值来自运行单，不由模型提供。
 - **自己跑的分析都是探索性的。** 研究 Agent 用 `run_local_analysis` 跑出的任何结果，都标为探索性。

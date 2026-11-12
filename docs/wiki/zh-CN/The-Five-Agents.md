@@ -34,7 +34,7 @@
 
 **做什么用。** 用户目标的统一入口。判断用户想做什么，创建研究任务，交给计划 Agent 或研究 Agent，并把校验通过的运行单提交审阅。
 
-**能读。** 一个项目的任务、轮次状态和各阶段状态（`get_project_state`）；某个阶段的状态和最近的历史（`get_run_status`）；任务的状态和产物编号（`get_task_status`）；已登记的文本产物，读取时核对登记的摘要（`read_artifact`）。
+**能读。** 只限正在运行的任务所在的项目：任务、轮次状态和各阶段状态（`get_project_state`）；某个阶段的状态和最近的历史（`get_run_status`）；正在运行的任务和它下面委派出去的任务的状态和产物编号（`get_task_status`）；已登记的文本产物，读取时核对登记的摘要（`read_artifact`）。
 
 **能做。** 给计划 Agent 或研究 Agent 创建任务（`create_research_task`、`delegate_task`）；把运行单草稿提交给操作员审阅（`submit_run_for_review`）。
 
@@ -48,7 +48,7 @@
 
 **做什么用。** 把研究目标变成一份设备做得到、操作员审得了的运行单。
 
-**能读。** 传感器、通道和档位范围（`get_device_capabilities`）；以往实验的快照和测量条数（`find_prior_runs`）；联网搜索结果（`lookup_crop_conditions`、`search_and_verify_sources`）。运行时没有接入搜索后端，所以这两个工具目前都返回 `unavailable`。
+**能读。** 传感器、通道和档位范围（`get_device_capabilities`）；本项目以往实验的快照和测量条数（`find_prior_runs`）；联网搜索结果（`lookup_crop_conditions`、`search_and_verify_sources`）。运行时没有接入搜索后端，所以这两个工具目前都返回 `unavailable`。
 
 **能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。这个工具能保存的只有运行单。
 
@@ -71,7 +71,11 @@
 | `submit_compute_job`、`fetch_compute_artifacts` | 按登记的模板提交作业、取回产物。`growbridge serve` 不启动计算服务，所以目前返回 `unavailable`。 |
 | `publish_research_report` | 写出报告。结论等级和数值都由冻结的数据算出。报告为终稿时，把轮次从 `analysis` 推进到 `delivered`。 |
 
-**只能在自己任务的范围内操作。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要带上 `task_id`，而且这个任务必须归研究 Agent 所有。同一次调用里出现的阶段、轮次、快照编号，都必须属于这个任务所在的项目，否则在写入、挂载或读取任何东西之前，就以 `Denied("scope")` 拒绝。不存在的快照和别的项目的快照，得到的答复一模一样，所以从答复里探不出任何信息。含有留出批次结局的快照同样被拒绝。原因是：编号是模型随手写的，没有这道检查，一个项目里的任务就能读到另一个项目的数据，或者推进另一个项目的轮次。检查代码是 [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 的 `own_task`，以及 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `require_round` 和 `scoped_snapshot`。
+**只能在自己任务的范围内操作。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要带上 `task_id`，而且这个编号必须就是调度器正在运行的任务（见下面的“绑定到正在运行的任务”），该任务必须归研究 Agent 所有。同一次调用里出现的阶段、轮次、快照编号，都必须属于这个任务所在的项目，否则在写入、挂载或读取任何东西之前，就以 `Denied("scope")` 拒绝。不存在的快照和别的项目的快照，得到的答复一模一样，所以从答复里探不出任何信息。含有留出批次结局的快照同样被拒绝。原因是：编号是模型随手写的，没有这道检查，一个项目里的任务就能读到另一个项目的数据，或者推进另一个项目的轮次。检查代码是 [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 的 `own_task`，以及 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `require_round` 和 `scoped_snapshot`。
+
+**绑定到正在运行的任务。** 工具调用里的每一个编号都是模型写的，所以一个都不能信。调度器在整次运行期间绑定它正在运行的任务，每个工具都拿输入里的编号和这个绑定比对。模型传入的 `task_id` 必须等于被绑定的任务：为一个任务工作的研究 Agent，不能指名另一个任务，不管在本项目还是别的项目；在调度运行之外发起的工具调用也一律拒绝。另外两个模型角色同样如此：它们只能指名被绑定任务所在项目的项目、轮次、阶段和实验。`get_task_status` 只回答被绑定的任务和它下面委派出去的任务，`read_artifact` 只回答本项目任务的产物，`delegate_task` 只接受被绑定的任务作为父任务。所有拒绝都是 `Denied("scope")`。绑定是 [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py) 里 `Dispatcher` 设置的一个上下文变量，由 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `bound_task`、`require_bound` 和 `require_project` 读取。用上下文变量是因为工具只建一次、被所有运行共用，而运行可能重叠：每个 asyncio 任务只看得到自己的绑定。
+
+**每个实验只有一个所属项目。** 快照属于其实验所在的项目，这由运行该实验的阶段确定。实验编号只属于一个项目：工作流会拒绝 `experiment_id` 已被另一个项目的阶段使用的运行单（`WorkflowService.submit_run_sheet` 里的 `Denied("scope")`）；一个实验若被两个项目的阶段同时占用，对它的数据查找同样被拒绝，所以这样的编号永远不会让一个项目的数据看起来像另一个项目的。
 
 **绝对做不了。** 修改运行单。在沙箱之外运行代码：macOS 上的沙箱不能联网，也读不到用户主目录和数据目录；其他平台还没有沙箱，工具直接以 `sandbox_unavailable` 拒绝。自行认定结果是确认性的：它能传入的标记只会让结论等级更严，不会更松。
 

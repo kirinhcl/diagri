@@ -181,7 +181,7 @@
 | orchestrator | `create_research_task` | write | `project_id`、`owner_role`、`question`、`trigger_event_id`、`correlation_id` | 给计划 Agent 或研究 Agent 创建一个研究任务。 |
 | orchestrator | `delegate_task` | write | `project_id`、`to_role`、`goal`、`budget`、`trigger_event_id`、`correlation_id` | 带完整交接信息，给计划 Agent 或研究 Agent 创建一个研究任务。 |
 | orchestrator | `submit_run_for_review` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。 |
-| orchestrator | `get_task_status` | read | `task_id` | 读取任务状态和它的产物 ID。 |
+| orchestrator | `get_task_status` | read | `task_id` | 读取正在运行的任务或它下面委派出去的任务的状态，以及它的产物 ID。 |
 | orchestrator | `read_artifact` | read | `artifact_id` | 核对摘要后读取一个已登记的文本产物。 |
 | planner | `get_device_capabilities` | read | 无 | 读取设备的传感器、通道和档位范围。 |
 | planner | `find_prior_runs` | read | `experiment_id` | 列出一个实验的数据快照和测量条数。 |
@@ -199,7 +199,9 @@
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | 取回并校验计算作业的输出。 |
 | researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。 |
 
-研究 Agent 的工具只要涉及快照、阶段或轮次，就必须带 `task_id`，而且这个任务必须属于研究 Agent。其他项目的阶段、轮次或快照会以 `scope` 被拒绝。
+研究 Agent 的工具只要涉及快照、阶段、轮次或计算提交，就必须带 `task_id`。这个编号要和调度器正在运行的任务比对，而不是照单全收：任何其他编号、别的角色的任务、以及在调度运行之外发起的调用，都会以 `scope` 被拒绝；其他项目的阶段、轮次或快照同样以 `scope` 被拒绝。
+
+另外两个角色以同样的方式绑定。编排和计划 Agent 调用里的每个 `project_id`、`round_id`、`stage_id` 和 `experiment_id`，都必须属于正在运行的任务所在的项目，而且该实验必须只有一个所属项目。`get_task_status` 只回答正在运行的任务和它下面委派出去的任务；`read_artifact` 只回答本项目任务的产物；`delegate_task` 只接受正在运行的任务作为 `parent_task_id`。以上情况都以 `scope` 拒绝。
 
 `growbridge serve` 构建的守护进程没有传入搜索后端和计算服务。因此 `lookup_crop_conditions`、`search_and_verify_sources`、`submit_compute_job`、`get_compute_job` 和 `fetch_compute_artifacts` 都返回 `denied (unavailable)`。沙箱只在 macOS 上存在；在其他系统上，`run_local_analysis` 返回 `denied (sandbox_unavailable)`。
 
