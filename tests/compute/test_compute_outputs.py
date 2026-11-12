@@ -184,6 +184,26 @@ async def test_compute_an_operator_who_settles_during_a_fetch_keeps_the_last_wor
         await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
 
     assert_left_as_the_operator_settled_it(env, attempt.id, "giving up on it")
+    kept = [path for path in (tmp_path / "out").rglob("*") if path.is_file()]
+    assert kept == []  # files whose fetch was not recorded are not left behind
+
+
+async def test_compute_discarding_a_refused_fetch_leaves_other_files_alone(env, tmp_path):
+    attempt = await finished(env)
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "notes.txt").write_text("written by someone else")
+    original = env.backend.fetch
+
+    async def settled_meanwhile(job_id, out_dir, max_bytes):
+        await env.service.settle_attempt(attempt.id, "carol", "giving up on it")
+        return await original(job_id, out_dir, max_bytes)
+
+    env.backend.fetch = settled_meanwhile
+    with pytest.raises(Denied):
+        await env.service.fetch_compute_artifacts(attempt.id, "alice", out_dir)
+
+    assert sorted(path.name for path in out_dir.iterdir()) == ["notes.txt"]
 
 
 async def test_compute_a_fetch_that_a_parallel_fetch_beat_still_returns_its_files(env, tmp_path):

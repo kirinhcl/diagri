@@ -654,8 +654,25 @@ class ComputeService:
             attempt_id, phase=phase, checksums=json.dumps(reported), error=""
         )
         if not recorded and self._load(attempt_id).settled_by:  # not a parallel fetch's win
+            await self._discard(out_dir, reported)  # unrecorded files are not left behind
             raise Denied("state", "an operator settled this attempt during the fetch")
         return reported
+
+    @staticmethod
+    async def _discard(out_dir: Path, reported: Mapping[str, str]) -> None:
+        """Remove exactly the files a fetch brought home; ``_verify`` has already confined
+        every name to ``out_dir``, and anything else in the directory is left alone."""
+
+        def remove() -> None:
+            for name in reported:
+                (out_dir / name).unlink(missing_ok=True)
+
+        try:
+            await asyncio.to_thread(remove)
+        except OSError as error:
+            raise Denied(
+                "state", f"settled during the fetch; the downloaded files remain ({error})"
+            ) from error
 
     def _record_fetch(self, attempt_id: str, **columns: Any) -> bool:
         """Write a fetch's outcome, unless an operator settled the attempt meanwhile."""
