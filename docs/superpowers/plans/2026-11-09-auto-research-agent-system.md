@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python ≥3.11、标准库 `sqlite3`/`zoneinfo`/`statistics`、Pydantic 2、FastAPI、pytest + pytest-asyncio + pytest-cov、ruff；可选依赖 `anthropic`（模型）、`pyfirecrest`（CSC）。
 
-**Spec:** `docs/auto-research-agent-architecture.zh-CN.md`（下文 § 和“附录”都指它）。
+**Spec:** `docs/diagri-agent-architecture.zh-CN.md`（下文 § 和“附录”都指它）。
 
 ## Global Constraints
 
@@ -210,7 +210,7 @@
 
 **Files:** Create `src/growbridge/agents/{llm,loop,tools,roles}.py`、`src/growbridge/sim/llm.py`（`ScriptedClient`）；Test `tests/agents/`。（`agents/__init__.py`、`agents/budget.py` 属于 Task 5；本任务测试里用一个记账的假预算。）
 
-**SDK 用法只能来自文档**：读 `/private/tmp/claude-1618820129/bundled-skills/2.1.317/1ed76f3ff68ddd1d5a967da4db0c792b/claude-api/python/claude-api/README.md` 和同目录 `tool-use.md`（分小块读），以及虚拟环境里已安装的 `anthropic` 2.7.0。要点：`anthropic.Anthropic()` 从环境取凭据；默认模型 `claude-opus-5-5`；不传 `temperature`/`top_p`/`top_k`；思考用 `{"type": "adaptive"}`，深度用 `output_config={"effort": ...}`；工具用 `strict: True` + `additionalProperties: False`，不强制 `tool_choice`；先看 `stop_reason`（`refusal`、`max_tokens` 时不执行工具，`pause_turn` 原样追加后重发）；一轮的全部工具结果放进同一条 user 消息，出错用 `is_error: True`。
+**SDK 用法只能来自文档**：读 Claude Code 自带的 `claude-api` 技能里的 `python/claude-api/README.md` 和同目录 `tool-use.md`（分小块读），以及虚拟环境里已安装的 `anthropic` 2.7.0。要点：`anthropic.Anthropic()` 从环境取凭据；默认模型 `claude-opus-5-5`；不传 `temperature`/`top_p`/`top_k`；思考用 `{"type": "adaptive"}`，深度用 `output_config={"effort": ...}`；工具用 `strict: True` + `additionalProperties: False`，不强制 `tool_choice`；先看 `stop_reason`（`refusal`、`max_tokens` 时不执行工具，`pause_turn` 原样追加后重发）；一轮的全部工具结果放进同一条 user 消息，出错用 `is_error: True`。
 
 **Produces**
 - `llm.ModelReply(Model)`：`stop_reason`、`text`、`tool_calls: tuple[ToolCall, ...]`、`content: Any`（原样回填的 assistant 内容）、`input_tokens`、`output_tokens`；`llm.ModelClient`（协议）`create(*, model, system, messages, tools, max_tokens, effort) -> ModelReply`；`llm.AnthropicClient`（延迟导入 SDK）。
