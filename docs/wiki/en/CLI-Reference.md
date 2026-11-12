@@ -63,7 +63,7 @@ The steps are in `_serve_auto_research` and `_serve_listeners`.
 
 | Order | Step |
 | --- | --- |
-| 1 | Builds the runtime with `build_runtime(settings)`. No external heartbeat and no compute service are passed, so neither is started. |
+| 1 | Reads `GROWBRIDGE_HEARTBEAT_HOST_URL` and `GROWBRIDGE_HEARTBEAT_RUN_URL`: one without the other stops the command here; neither means no heartbeat and a standing warning. Then builds the runtime with `build_runtime(settings, heartbeats=...)`. Also reads the compute settings (`compute_templates_dir`, `compute_member` and the seven `FIRECREST_*` variables) and passes the compute service only when all of them are present; a partial setup logs what is missing, a bad template stops the command here. |
 | 2 | Reads the model-role tokens from `GROWBRIDGE_ROLE_TOKEN_<ROLE>` and builds the workbench routes. A token shorter than 32 characters stops the command here. |
 | 3 | Starts the runtime. If this machine is not the registered write host, the Bluetooth connection stays closed and an alert is raised. |
 | 4 | Starts the tick loop: `Runtime.tick()` once a second (`TICK_SECONDS`). |

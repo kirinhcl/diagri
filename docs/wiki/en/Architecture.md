@@ -25,7 +25,7 @@ flowchart TD
     CTL["Control service<br/>the only BLE writer"]
     ARC["Project archive<br/>owns records"]
     AC5[("AC5 controller")]
-    CMP["Compute service<br/>not started by serve"]
+    CMP["Compute service<br/>started when fully configured"]
     MON["External monitor<br/>not started by serve"]
 
     OP -->|"approve, start, take over, resume"| WB
@@ -46,7 +46,7 @@ flowchart TD
     OBS -.->|"heartbeat"| MON
 ```
 
-Solid arrows are paths that run inside the daemon. The two dashed arrows lead to parts that exist in the code and its tests but are not started by `growbridge serve`: [`cli.py`](../../../src/growbridge/cli.py) calls `build_runtime(settings)` without a compute backend and without heartbeat endpoints, so `Runtime.compute` and `Runtime.monitor` are `None`.
+Solid arrows are paths that run inside the daemon. The two dashed arrows are optional. The compute arrow leads to a part that exists in the code and its tests but is not started by `growbridge serve`: [`cli.py`](../../../src/growbridge/cli.py) calls `build_runtime` without a compute backend, so `Runtime.compute` is `None`. The heartbeat arrow runs only when both heartbeat URLs are set in the environment; otherwise `Runtime.monitor` is `None` and the runtime raises the standing warning `monitor_unconfigured`.
 
 The workbench is the operator's HTTP interface: JSON routes under `/wb` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py). It has no web page of its own. The page in `src/growbridge/web/` is the bridge dashboard and never calls `/wb`.
 

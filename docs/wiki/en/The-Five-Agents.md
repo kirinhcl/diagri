@@ -68,7 +68,7 @@ The system prompts are in [`agents/roles.py`](../../../src/growbridge/agents/rol
 | --- | --- |
 | `freeze_dataset` | Freezes a stage's data into a verified snapshot. If the snapshot is complete, moves the round from `data_verification` to `analysis`. |
 | `run_local_analysis` | Runs a script on a snapshot in the sandbox. The result is always labelled exploratory. |
-| `submit_compute_job`, `fetch_compute_artifacts` | Submit a job from a registered template and fetch its outputs. Return `unavailable` under `growbridge serve`, which starts no compute service. |
+| `submit_compute_job`, `fetch_compute_artifacts` | Submit a job from a registered template and fetch its outputs. Return `unavailable` unless the compute service is configured; inputs must be verified snapshots of the task's own project. |
 | `publish_research_report` | Writes the report. The label and the numbers are computed from the frozen data. A final report moves the round from `analysis` to `delivered`. |
 
 **Scoped to its task.** `freeze_dataset`, `run_local_analysis` and `publish_research_report` take a `task_id`, and that id must be the task the dispatcher is running (see "Bound to the running task" below), which must be one owned by the researcher. Every stage, round or snapshot id in the same call must then belong to that task's project, or the call is refused with `Denied("scope")` before anything is written, mounted or read. An unknown snapshot and another project's snapshot get the same answer, so the reply reveals nothing. A snapshot that contains outcomes of a held-out batch is refused as well. The reason: a model names ids freely, and without this check a task in one project could read another project's data or advance another project's round. The checks are `own_task` in [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) and `require_round` and `scoped_snapshot` in [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py).
@@ -132,7 +132,7 @@ Each tick does six things in order: pump-off interlock; protection rules; link o
 
 **Why it never calls a model.** An alert that depends on a model would be silent exactly when the model is down. The daily report is template-only: `render_daily_report` accepts an optional model-written narrative, but `Runtime._report_text` never passes one.
 
-**Not started yet.** The runtime ships with an empty alert-rule list (`DEFAULT_ALERT_RULES`), and `growbridge serve` passes no heartbeat endpoints, so the external monitor (`ExternalMonitor`) does not run. Delivery to real Telegram and email has not been verified.
+**Not started yet.** The runtime ships with an empty alert-rule list (`DEFAULT_ALERT_RULES`), and the external monitor (`ExternalMonitor`) runs only when both heartbeat URLs are set in the environment. Delivery to real Telegram and email has not been verified.
 
 **Code.** [`observer/`](../../../src/growbridge/observer/): `service.py`, `alerts.py`, `outbox.py`, `metrics.py`, `report.py`, `health.py`, `channels.py`. See [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md).
 

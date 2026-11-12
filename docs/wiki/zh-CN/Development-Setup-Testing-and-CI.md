@@ -39,9 +39,9 @@ python3 -m venv .venv
 | 名称 | 安装的包 | 用途 | 不装会怎样 |
 | --- | --- | --- | --- |
 | `agents` | `anthropic` | [`agents/llm.py`](../../../src/growbridge/agents/llm.py) 里的 `AnthropicClient`，模型角色通过它调用模型。 | 包照常导入和运行。开启 DiAGRI 并配置了 `roles` 时，`growbridge serve` 会产生一条告警，模型角色保持关闭。有两个测试被跳过。 |
-| `csc` | `pyfirecrest` | 构造 [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend`。 | `FirecrestBackend()` 抛出 `BackendUnavailable`。没有测试依赖这个包。 |
+| `csc` | `pyfirecrest` | 构造 [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend`。 | 不注入客户端时，`FirecrestBackend()` 抛出 `BackendUnavailable`。没有测试依赖这个包：测试传入的是假客户端。 |
 
-装了 `csc` 也不等于能用远程计算。`FirecrestBackend` 的每个远端操作都抛出 `NotImplementedError`，这个适配器从未连接过 CSC。见[状态与已知限制](Status-and-Known-Limitations.md)。
+`csc` 只安装客户端库。适配器依据它的文档实现，只对假客户端测试过，从未连接过 CSC。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 要加装可选依赖，把名称写在 `dev` 后面：
 
@@ -88,7 +88,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | `tests/research/` | 统计方法、确认性分析的关口、留出数据、报告发布和代码沙箱。 |
 | `tests/agents/` | 模型客户端的适配、Agent 循环、角色定义和工具注册表。 |
 | `tests/dispatch/` | 各模型角色的工具处理函数接在真实服务上的行为，包括模型给出的 ID 是否被限定在范围内。 |
-| `tests/compute/` | 计算服务：作业的生命周期、额度、并发竞争，以及 `FirecrestBackend` 在条件不满足时的拒绝。 |
+| `tests/compute/` | 计算服务：作业的生命周期、额度、并发竞争，`FirecrestBackend` 对假客户端的行为、模板加载，以及工作台的余额和预算路由（`tests/workbench/test_workbench_compute.py`）。 |
 | `tests/observer/` | 告警、通知渠道、发件箱、每日指标和日报、运行健康检查与心跳。 |
 | `tests/workbench/` | 工作台的路由：操作员登录与会话、入口、请求关口、阶段操作和人工操作，以及发起和掌控一轮研究。 |
 | `tests/transport/` | 两种 BLE 传输的 `halt`，以及原生传输对 pid 文件和目录权限的检查。 |

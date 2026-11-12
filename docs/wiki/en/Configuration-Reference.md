@@ -18,7 +18,7 @@ The fields are `Settings` and `RoleModel` in [`config.py`](../../../src/growbrid
 
 ## `Settings` fields
 
-There are 23 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
+There are 25 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
 
 | Field | Type | Default | Allowed values | What it does | DiAGRI only |
 | --- | --- | --- | --- | --- | --- |
@@ -45,6 +45,8 @@ There are 23 fields. "Required" means the field has no default. The last column 
 | `roles` | table of `RoleModel` | `{}` | keys are role names | Model configuration of each model role. While it is empty, `serve` builds no model client and no model role runs. | yes |
 | `backup_dir` | path or unset | unset | any path; `~` is expanded | Directory for the SQLite online backups. While unset there are no backups and the runtime raises a `backup_unconfigured` warning alert at start. | yes |
 | `backup_interval_seconds` | number | `21600` | 60 or more | Seconds between two backups. | yes |
+| `compute_templates_dir` | path or unset | unset | a directory holding `*.json` files; `~` is expanded | One reviewed job template (`JobTemplate`) per JSON file. With `compute_member` and the seven `FIRECREST_*` variables it turns the compute service on. Every file is validated at start; a bad one stops `serve` and the message names the file. | yes |
+| `compute_member` | string or unset | unset | at least 1 character | The CSC account name under which the researcher role's jobs are submitted. | yes |
 
 The exact pattern of `report_time` is:
 
@@ -72,6 +74,19 @@ There are 9 fields. Each key of `roles` holds one `RoleModel`, written as a `[ro
 
 Role names that are read are `orchestrator`, `planner` and `researcher` (`ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tools.py)). Other keys pass validation and are ignored. When `roles` has at least one key, a role that is not listed runs with the defaults above (`make_dispatcher` in [`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)).
 
+## Job template files
+
+Each `*.json` file in `compute_templates_dir` is one `JobTemplate` ([`compute/backend.py`](../../../src/growbridge/compute/backend.py)). Every file is validated when `serve` starts, and the first bad one stops it with the file name. The rules:
+
+| Field | Rule |
+| --- | --- |
+| `id`, `version` | A pair must be unique across the files. The newest version of an `id` is the one that runs; a retry of an attempt whose version has been replaced is refused. |
+| `script` | A Slurm batch script. It must start with `#!`, must set a time limit (`#SBATCH --time=...` or `-t`) so that a job is bounded, and must not set its own job name (the service adds `gb-<attempt id>`). Parameters arrive only as `DIAGRI_PARAM_<NAME>`, inputs as `DIAGRI_INPUT_<NAME>`; results go to `DIAGRI_OUTPUT_DIR`. |
+| `parameters` | A name must be usable in an environment variable name. `kind` is `int`, `float`, `str` or `bool`. A number may have `minimum` and `maximum`, and a float must be finite. A `str` must either list `choices` or declare a `pattern`: a regular expression that the whole value has to match. `max_length` shortens the allowed length; no text is longer than 1000 characters, and a value with a control character is always refused. A `default` must itself pass these rules. A parameter without a `default` is required. |
+| `max_cpu_hours`, `max_storage_gb` | Finite numbers, 0 or more. They are what one attempt reserves and, when the API reports no usage, what it is charged. |
+| `result_changing` | Names of parameters; each must exist. Changing one in a retry starts a new analysis version. |
+| `max_retries` | Default 2. |
+
 ## What `load` checks
 
 `load` runs for every command that reads the file. The CLI does not catch these errors, so the command ends with a traceback.
@@ -84,7 +99,7 @@ Role names that are read are `orchestrator`, `planner` and `researcher` (`ROLE_T
 | 4 | Every field has the type, range and pattern in the tables above, and there is no unknown key. `report_timezone` is a known zone. A role on a model other than the default states both prices. | `pydantic.ValidationError` |
 | 5 | `pump_outlet`, `light_outlet`, `exhaust_outlet` and `fan_outlet` are four different numbers. | `ValueError: Each device must have a separate outlet` |
 
-`load` does not check these: that `data_dir` or `backup_dir` exist, that `lan_bind` and `lan_port` are set together, the role names in `roles`, and the tool names in `tools`.
+Template files are not read by `load`; `serve` checks them at start. `load` does not check these: that `data_dir`, `backup_dir` or `compute_templates_dir` exist, that `lan_bind` and `lan_port` are set together, the role names in `roles`, and the tool names in `tools`.
 
 ## What `initialize` writes
 
@@ -120,6 +135,13 @@ Credentials are read from the environment of the `growbridge serve` process. All
 | `GROWBRIDGE_SMTP_USER` | `_smtp_send` | SMTP login name | No login when unset. |
 | `GROWBRIDGE_SMTP_PASSWORD` | `_smtp_send` | SMTP password | Default empty. |
 | `GROWBRIDGE_SMTP_FROM` | `_smtp_send` | `From` address | Default: the SMTP user, or `growbridge@localhost`. |
+| `FIRECREST_URL` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | Base address of the FirecREST API, e.g. `https://api.roihu.csc.fi/v1` (FirecREST v2). | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
+| `FIRECREST_TOKEN_URL` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | OAuth token endpoint of the robot account, e.g. `https://user-auth.csc.fi/idp/profile/oidc/token`. | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
+| `FIRECREST_CLIENT_ID` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | Client id of the CSC robot account (the account name). | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
+| `FIRECREST_CLIENT_SECRET` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | Client secret of the robot account (its password). Never logged, never in an error, not in `repr`. | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
+| `FIRECREST_SYSTEM` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | The Roihu subsystem: only `cpu` or `gpu`. | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
+| `FIRECREST_ACCOUNT` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | The CSC project the jobs are charged to, e.g. `project_2001234`. Letters, digits and `_` only. | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
+| `FIRECREST_WORKDIR` | `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) | Absolute remote directory under which each job gets its own `gb-<attempt id>` directory, e.g. `/scratch/project_2001234/diagri`. No `..`. | Part of the all-or-nothing compute setting: with any of the nine names missing (these seven, `compute_templates_dir`, `compute_member`) the compute service does not start and the log names what is missing, never a value. |
 
 When neither channel is configured, no notification is queued. Alerts are still recorded and shown by `GET /wb/alerts`, and the runtime raises a `notify_unconfigured` warning alert at start (`build_runtime` and `Runtime.start` in [`runtime.py`](../../../src/growbridge/runtime.py)).
 
@@ -127,8 +149,8 @@ When neither channel is configured, no notification is queued. Alerts are still 
 
 | Feature | State in the code |
 | --- | --- |
-| External heartbeat (`ExternalMonitor`, `HeartbeatChannel`) | No `Settings` field. `build_runtime` takes a `heartbeats` argument and `serve` does not pass one, so the daemon starts no external heartbeat. |
-| Compute service (`ComputeService`) | No `Settings` field. `serve` passes no `compute_backend`, so the daemon has no compute service. The `FIRECREST_*` variables in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) are read only by `FirecrestBackend`, which `serve` never builds. |
+| External heartbeat (`ExternalMonitor`, `HeartbeatChannel`) | No `Settings` field; it is set by the environment variables `GROWBRIDGE_HEARTBEAT_HOST_URL` and `GROWBRIDGE_HEARTBEAT_RUN_URL`. Both or neither: one alone stops `serve`, neither raises the warning alert `monitor_unconfigured`. The URLs are secrets and are never logged. See [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
+| Compute service (`ComputeService`) | Set by `compute_templates_dir`, `compute_member` and the seven `FIRECREST_*` environment variables, all or none. All set: `serve` builds the compute service over `FirecrestBackend`. None set: no compute service. Some set: no compute service and a warning in the log that names what is missing. A bad template, a missing `pyfirecrest` or an invalid `FIRECREST_SYSTEM`, `FIRECREST_ACCOUNT` or `FIRECREST_WORKDIR` stops `serve`. Not verified against the real CSC service; see [Status and known limitations](Status-and-Known-Limitations.md). |
 | Alert rules | No `Settings` field. `DEFAULT_ALERT_RULES` in `runtime.py` is empty. |
 | Operator accounts | Stored in `data_dir` by `growbridge operator add`, not in the file. |
 

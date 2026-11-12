@@ -35,7 +35,7 @@
 | [`planning/`](../../../src/growbridge/planning) | 纯函数：`design.py` 做实验设计检查，`validate.py` 做运行单校验。 |
 | [`research/`](../../../src/growbridge/research) | 分析库：统计方法、确认性分析的关口、`HoldoutRegistry`、报告发布和代码沙箱。 |
 | [`agents/`](../../../src/growbridge/agents) | 三个模型角色：提示词在 `roles.py`，工具注册表在 `tools.py`，工具处理函数在 `handlers*.py`，此外还有 Agent 循环、`Dispatcher`、`CallBudget`，以及 `llm.py` 里的模型客户端。 |
-| [`compute/`](../../../src/growbridge/compute) | `ComputeService`：额度检查和作业跟踪。`ComputeBackend` 协议。`FirecrestBackend`，它的远端操作尚未实现。 |
+| [`compute/`](../../../src/growbridge/compute) | `ComputeService`：额度检查和作业跟踪。`ComputeBackend` 协议。`FirecrestBackend`，没有对 CSC 验证过。 |
 | [`workbench/`](../../../src/growbridge/workbench) | 操作员使用的 HTTP 路由，都在 `/wb` 下：会话、阶段控制、人工写入和读取在 `api.py`，发起和掌控一轮研究在 `rounds.py`。`auth.py` 里是操作员凭据、会话和入口的判定。 |
 | [`sim/`](../../../src/growbridge/sim) | 模拟器和测试数据，测试和 `growbridge simulate` 都用它。 |
 
@@ -118,10 +118,10 @@ grep -rnE '^[[:space:]]*(from|import) +growbridge\.' src/growbridge/executor
 
 - **文件。** 契约在 [`compute/backend.py`](../../../src/growbridge/compute/backend.py)。新的适配器放在 [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 旁边。
 - **契约。** `ComputeBackend` 协议：`submit`、`find_by_name`、`status`、`fetch`、`cleanup`、`cancel` 和 `balance`。`submit` 收到的作业名是 `gb-<attempt_id>`，`find_by_name` 必须能凭这个名字把作业找回来。这样回执丢失时可以对账，而不是重新提交。作业肯定没被接受时抛 `SubmitRejected`，结果不确定时抛 `BackendError`。
-- **装配。** `build_runtime` 有一个 `compute_backend` 参数，但 `serve` 没有传。所以在运行中的守护进程里 `Runtime.compute` 是 `None`，研究 Agent 的计算工具会被拒绝。新增后端时要把这一段也接上，同时补上 `runtime.py` 的 `_compute` 里留空的作业模板和成员名单。
+- **装配。** `build_runtime` 有 `compute_backend`、`compute_templates` 和 `compute_members` 三个参数。只有计算服务配置齐全时，`serve` 才通过 [`runtime_compute.py`](../../../src/growbridge/runtime_compute.py) 里的 `compute_options` 传入它们，并装上输入检查，对模型指定的每个输入做范围检查。新增后端就在那里选择。
 - **测试。** [`tests/compute/`](../../../tests/compute) 用 `FakeBackend` 驱动 `ComputeService`。适配器自身的拒绝逻辑，照 [`tests/compute/test_compute_firecrest.py`](../../../tests/compute/test_compute_firecrest.py) 的方式测。
 
-`FirecrestBackend` 目前只检查 `pyfirecrest` 和所需的环境变量在不在。它的每个远端操作都抛出 `NotImplementedError`，`src/` 里也没有任何地方构造它。
+`FirecrestBackend` 接受可注入的客户端，所以所有测试都不需要 `pyfirecrest`。它不报告用量和余额（接口没有）：服务按预留全额给作业计账，余额由操作员录入。
 
 ### 给模型角色新增工具
 
@@ -162,7 +162,7 @@ grep -rnE '^[[:space:]]*(from|import) +growbridge\.' src/growbridge/executor
 
 1. **研究目标的网页或命令。** 入口已经有了，是 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里的工作台路由。它们调用 `WorkflowService` 的 `create_project`、`save_protocol`、`create_round`，调用 `CallBudget.set`，并用 `TaskBoard.create` 建立第一个编排任务。这些路由之上没有网页，也没有 CLI 命令；还有几类读取没有路由，[运行一轮研究](Run-a-Research-Round.md)里列了出来。新路由加在 `rounds.py` 或 `api.py` 里，挂在工作台的 `operator` 或 `fresh` 依赖后面。它在 [`tests/workbench/`](../../../tests/workbench/) 里的测试要证明：角色令牌、没有会话、别处来的 Origin、另一个入口的会话，都会被拒绝。
 2. **计算后端。** 见上文：`serve` 没有传 `compute_backend`。
-3. **心跳。** `build_runtime` 的 `heartbeats` 参数接受一对 `Heartbeat` 对象。`serve` 没有传，所以 `Runtime.monitor` 是 `None`，`src/` 里也没有任何地方构造 `HeartbeatChannel`。
+3. **心跳端点。** `build_runtime` 的 `heartbeats` 参数接受一对 `Heartbeat` 对象。`serve` 在 [`runtime_heartbeat.py`](../../../src/growbridge/runtime_heartbeat.py) 里根据 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL` 构造它们：两个都设或者都不设。想换一个监控服务，就在那里构造一对新的 `Heartbeat`。
 4. **搜索后端。** `runtime_agents.py` 的 `role_tools` 传的是 `search=None`，所以计划 Agent 的两个联网工具 `lookup_crop_conditions` 和 `search_and_verify_sources` 会被拒绝。
 
 完整的清单在[状态与已知限制](Status-and-Known-Limitations.md)。

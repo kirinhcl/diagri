@@ -63,7 +63,7 @@ growbridge [-h] [--version] [--config CONFIG]
 
 | 顺序 | 步骤 |
 | --- | --- |
-| 1 | 用 `build_runtime(settings)` 构建运行时。没有传入外部心跳和计算服务，所以这两样都不会启动。 |
+| 1 | 读取 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL`：只设一个，命令在这里停下；都不设，就不发心跳并留下常驻警告。然后用 `build_runtime(settings, heartbeats=...)` 构建运行时。同时读取计算服务的设置（`compute_templates_dir`、`compute_member` 和七个 `FIRECREST_*` 变量），全部齐了才传入计算服务；只配了一部分时，日志里写出缺了哪些，模板有错则命令在这里停下。 |
 | 2 | 从 `GROWBRIDGE_ROLE_TOKEN_<ROLE>` 读取模型角色令牌，并构建工作台路由。有令牌短于 32 个字符时，命令在这一步退出。 |
 | 3 | 启动运行时。如果本机不是已登记的写入主机，蓝牙连接保持关闭，并发出一条告警。 |
 | 4 | 启动 tick 循环：每秒调用一次 `Runtime.tick()`（`TICK_SECONDS`）。 |

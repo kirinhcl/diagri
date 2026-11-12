@@ -35,7 +35,7 @@ The package has two layers. The **bridge**, GrowBridge, is the original daemon: 
 | [`planning/`](../../../src/growbridge/planning) | Pure functions: experimental-design checks in `design.py`, run-sheet validation in `validate.py`. |
 | [`research/`](../../../src/growbridge/research) | The analysis library: statistics, the confirmatory gate, `HoldoutRegistry`, report publishing and the code sandbox. |
 | [`agents/`](../../../src/growbridge/agents) | The three model roles: prompts in `roles.py`, the tool registry in `tools.py`, tool handlers in `handlers*.py`, the agent loop, `Dispatcher`, `CallBudget` and the model client in `llm.py`. |
-| [`compute/`](../../../src/growbridge/compute) | `ComputeService`: quota checks and job tracking. The `ComputeBackend` protocol. `FirecrestBackend`, whose remote operations are not implemented. |
+| [`compute/`](../../../src/growbridge/compute) | `ComputeService`: quota checks and job tracking. The `ComputeBackend` protocol. `FirecrestBackend`, unverified against CSC. |
 | [`workbench/`](../../../src/growbridge/workbench) | The operator's HTTP routes under `/wb`: sessions, stage control, manual writes and reads in `api.py`; starting and steering a round in `rounds.py`. Operator credentials, sessions and the entry decision in `auth.py`. |
 | [`sim/`](../../../src/growbridge/sim) | Simulators and fixtures, used by the tests and by `growbridge simulate`. |
 
@@ -118,10 +118,10 @@ No channel has been tried against a real service. See [Status and known limitati
 
 - **File.** [`compute/backend.py`](../../../src/growbridge/compute/backend.py) holds the contract. Put the adapter next to [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py).
 - **Contract.** The `ComputeBackend` protocol: `submit`, `find_by_name`, `status`, `fetch`, `cleanup`, `cancel` and `balance`. `submit` receives the job name `gb-<attempt_id>`, and `find_by_name` must find the job again by that name, so that a lost receipt is reconciled and not resubmitted. Raise `SubmitRejected` when the job was certainly not accepted and `BackendError` when the outcome is uncertain.
-- **Wiring.** `build_runtime` takes a `compute_backend` argument. `serve` does not pass one, so `Runtime.compute` is `None` in the running daemon and the researcher's compute tools are refused. A new backend also needs this wiring, together with the job templates and members that `_compute` in `runtime.py` leaves empty.
+- **Wiring.** `build_runtime` takes `compute_backend`, `compute_templates` and `compute_members`. `serve` passes them from `compute_options` in [`runtime_compute.py`](../../../src/growbridge/runtime_compute.py) only when the compute service is fully configured, and then installs the input guard that scope-checks every input the model names. A new backend is chosen there.
 - **Tests.** [`tests/compute/`](../../../tests/compute) drives `ComputeService` with `FakeBackend`. Test the adapter's own refusals as [`tests/compute/test_compute_firecrest.py`](../../../tests/compute/test_compute_firecrest.py) does.
 
-`FirecrestBackend` only checks that `pyfirecrest` and its environment variables are present. Every remote operation raises `NotImplementedError`, and nothing in `src/` constructs it.
+`FirecrestBackend` takes an injectable client, so every test runs without `pyfirecrest`. It reports no usage and no balance (the API has none): the service charges a job's whole reservation and an operator enters the balance.
 
 ### A new tool for a model role
 
@@ -162,7 +162,7 @@ These pieces exist as code and tests, and `growbridge serve` does not connect th
 
 1. **A page or a command for the research goal.** The entry point exists as workbench routes in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). They call `create_project`, `save_protocol` and `create_round` on `WorkflowService`, `CallBudget.set`, and `TaskBoard.create` for the first orchestrator task. There is no web page and no CLI command on top of them, and several reads still have no route; [Run a research round](Run-a-Research-Round.md) lists them. A new route goes into `rounds.py` or `api.py` behind the workbench's `operator` or `fresh` dependency. Its tests in [`tests/workbench/`](../../../tests/workbench/) show that a role token, a missing session, a foreign origin and a session of the other entry are refused.
 2. **A compute backend.** See above: `serve` passes no `compute_backend`.
-3. **The heartbeat.** `build_runtime` takes `heartbeats`, a pair of `Heartbeat` objects. `serve` passes none, so `Runtime.monitor` is `None`, and nothing in `src/` constructs `HeartbeatChannel`.
+3. **The heartbeat endpoints.** `build_runtime` takes `heartbeats`, a pair of `Heartbeat` objects. `serve` builds them in [`runtime_heartbeat.py`](../../../src/growbridge/runtime_heartbeat.py) from `GROWBRIDGE_HEARTBEAT_HOST_URL` and `GROWBRIDGE_HEARTBEAT_RUN_URL`: both or neither. A different monitoring service would be a new `Heartbeat` pair built there.
 4. **A search backend.** `role_tools` in `runtime_agents.py` passes `search=None`, so the planner's two web tools, `lookup_crop_conditions` and `search_and_verify_sources`, are refused.
 
 [Status and known limitations](Status-and-Known-Limitations.md) keeps the full list.

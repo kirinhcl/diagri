@@ -68,7 +68,7 @@
 | --- | --- |
 | `freeze_dataset` | 把一个阶段的数据冻结成校验过的快照。快照完整时，把轮次从 `data_verification` 推进到 `analysis`。 |
 | `run_local_analysis` | 在沙箱里对快照运行脚本。结果一律标为探索性。 |
-| `submit_compute_job`、`fetch_compute_artifacts` | 按登记的模板提交作业、取回产物。`growbridge serve` 不启动计算服务，所以目前返回 `unavailable`。 |
+| `submit_compute_job`、`fetch_compute_artifacts` | 按登记的模板提交作业、取回产物。没有配置计算服务时返回 `unavailable`；输入必须是任务所属项目的、已通过校验的快照。 |
 | `publish_research_report` | 写出报告。结论等级和数值都由冻结的数据算出。报告为终稿时，把轮次从 `analysis` 推进到 `delivered`。 |
 
 **只能在自己任务的范围内操作。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要带上 `task_id`，而且这个编号必须就是调度器正在运行的任务（见下面的“绑定到正在运行的任务”），该任务必须归研究 Agent 所有。同一次调用里出现的阶段、轮次、快照编号，都必须属于这个任务所在的项目，否则在写入、挂载或读取任何东西之前，就以 `Denied("scope")` 拒绝。不存在的快照和别的项目的快照，得到的答复一模一样，所以从答复里探不出任何信息。含有留出批次结局的快照同样被拒绝。原因是：编号是模型随手写的，没有这道检查，一个项目里的任务就能读到另一个项目的数据，或者推进另一个项目的轮次。检查代码是 [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 的 `own_task`，以及 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `require_round` 和 `scoped_snapshot`。
@@ -132,7 +132,7 @@
 
 **为什么从不调用模型。** 告警如果依赖模型，模型一宕机，告警恰好也哑了。日报完全由模板生成：`render_daily_report` 可以附带一段模型写的叙述，但 `Runtime._report_text` 从不传入。
 
-**目前没有启动的部分。** 运行时自带的告警规则清单是空的（`DEFAULT_ALERT_RULES`）；`growbridge serve` 不传心跳端点，所以外部监测（`ExternalMonitor`）不运行。向真实的 Telegram 和邮件投递也还没有验证过。
+**目前没有启动的部分。** 运行时自带的告警规则清单是空的（`DEFAULT_ALERT_RULES`）；外部监测（`ExternalMonitor`）只在环境变量里两个心跳 URL 都设了时才运行。向真实的 Telegram 和邮件投递也还没有验证过。
 
 **代码。** [`observer/`](../../../src/growbridge/observer/)：`service.py`、`alerts.py`、`outbox.py`、`metrics.py`、`report.py`、`health.py`、`channels.py`。另见[通知、日报与备份](Notifications-Reports-and-Backup.md)。
 

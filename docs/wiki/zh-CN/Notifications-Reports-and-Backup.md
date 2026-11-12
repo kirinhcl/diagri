@@ -4,7 +4,7 @@
 
 这一页写给负责配置“守护进程往外发什么、往下存什么”的操作员：日报时间，通知渠道和它们的凭据，发给外部监控的心跳，以及数据库备份和恢复。
 
-> **未验证。** 经 Telegram 和邮件投递，以及发给外部服务的心跳，都只用假的传输层测试过，没有任何消息真正发到过外部服务。心跳也没有接进 `serve`。见[状态与已知限制](Status-and-Known-Limitations.md)。
+> **未验证。** 经 Telegram 和邮件投递，以及发给外部服务的心跳，都只用假的传输层测试过，没有任何消息真正发到过外部服务。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 现在有什么
 
@@ -13,7 +13,7 @@
 | 日报 | 配置文件里的 `report_time`、`report_timezone` | 有阶段管着设备时，由 `serve` 生成。 |
 | Telegram 渠道 | 环境变量 | 设了对应变量，`serve` 就会建立。 |
 | 邮件渠道 | 环境变量 | 设了对应变量，`serve` 就会建立。 |
-| 发给外部监控的心跳 | 没有可配置的地方 | 已实现、已测试，但 `serve` 不会启动它。 |
+| 发给外部监控的心跳 | 环境变量 | 两个 URL 都设了时由 `serve` 构建；只设一个则拒绝启动。 |
 | 数据库备份 | `backup_dir`、`backup_interval_seconds` | 配了 `backup_dir`，`serve` 就会执行。 |
 
 这一页的所有改动都在 `serve` 启动时生效。配置项的说明见[配置参考](Configuration-Reference.md)。
@@ -92,7 +92,21 @@
 - `HeartbeatChannel` 从某个环境变量里读 URL：发心跳时请求这个 URL，报失败时请求这个 URL 加上 `/fail`。
 - 信号发不出去时，产生告警 `external_monitor`，键是 `host` 或 `run`。
 
-缺的部分：`serve` 装配运行时的时候没有传入心跳端点（[`cli.py`](../../../src/growbridge/cli.py) 的 `_serve_auto_research`），所以从来不会发出任何信号。没有哪个配置项，也没有哪个 `serve` 会读取的环境变量，可以用来指定心跳 URL。[`tests/observer/test_observer_channels.py`](../../../tests/observer/test_observer_channels.py) 里出现的变量名只存在于测试中。目前不改代码就没法打开心跳。
+### 怎样配置
+
+`serve` 读取两个环境变量（[`runtime_heartbeat.py`](../../../src/growbridge/runtime_heartbeat.py)，由 [`cli.py`](../../../src/growbridge/cli.py) 的 `_serve_auto_research` 调用）。两个都填监控服务给你的 URL，例如 Healthchecks.io 的 ping 地址：
+
+| 变量 | 信号 |
+| --- | --- |
+| `GROWBRIDGE_HEARTBEAT_HOST_URL` | 主机心跳。 |
+| `GROWBRIDGE_HEARTBEAT_RUN_URL` | 运行心跳。失败信号发到同一个 URL 加上 `/fail`。 |
+
+- **两个都设或者都不设。** 两个都设时，`serve` 发送心跳。只设一个时，`serve` 拒绝启动，并说明缺哪个变量：只监控一半的故障，看起来像有监控，其实没有。空白值按未设置处理。
+- **都不设。** 不发任何请求。运行时发出常驻警告告警 `monitor_unconfigured`（键 `heartbeats`），下次 `serve` 带着两个变量启动时自动解除。
+- **URL 是机密。** 只从环境变量读取，在发送信号时才读。它不会出现在任何日志行、告警文本、错误信息或 `repr` 里。请求 URL 从不写进日志：`serve` 以 INFO 级别运行，HTTP 库在这个级别会记录每个请求的 URL，所以 [`logging_setup.py`](../../../src/growbridge/logging_setup.py) 把 `httpx` 和 `httpcore` 的日志级别固定在 WARNING。这同时保护了 Telegram 机器人令牌，它是 Bot API 请求路径的一部分。
+- 监控服务的宽限期要设得比 60 秒长；心跳停了，由监控服务自己向手机发告警。
+
+未验证：心跳只用假的 HTTP 客户端测试过，没有任何信号发到过真实的监控服务。
 
 运行健康本身每次评估都会计算，结果体现为 `run_health` 告警。探测项和阈值如下：
 

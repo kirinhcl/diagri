@@ -14,6 +14,7 @@ This page is for an operator whose stage has stopped doing what the run sheet sa
 | Open alerts, among them why a stage waits (`stage_waiting`) | `GET /wb/alerts` |
 | One write | `GET /wb/receipts/REQUEST_ID` |
 | The device | `.venv/bin/growbridge status` |
+| Compute jobs on CSC: balance, budgets, open and stuck attempts | `GET /wb/compute` |
 | The daemon log | the terminal or service log of `serve` |
 
 How to send workbench requests is in [Run a research round](Run-a-Research-Round.md).
@@ -142,6 +143,22 @@ Both end with a higher recovery number, which voids every earlier write right, a
 6. Approve the safety configuration again: [Enable DiAGRI](Enable-DiAGRI.md), step 8. The one approved under the old number is not valid.
 7. Every unfinished stage is in `recovery_check`. If the device differs from the run sheet it stays there until you send the on-site check. It then returns to `pending_review` with its approvals void. Approve and start it again. Starting sets a new start time, so the stage's duration counts from there.
 
+## A stuck compute attempt
+
+**You see.** `GET /wb/compute` lists the attempt under `stuck` with a `reason`: waiting for reconciliation (the outcome of a submit is unknown), an error from the last poll, or no refresh for an hour. Its quota stays reserved.
+
+**The system has.** Every minute the tick looks again at attempts nobody has answered for: an unanswered submit older than 5 minutes is looked up by its job name and never submitted twice; a queued or running job is polled and settled when it ends. If no job is found, the attempt is charged its whole reservation (it may have run) and its remote directory is cleaned up. A job that CSC no longer lists, or a Slurm state the code does not know, cannot be polled: the tick records the error and keeps trying.
+
+**You do.** First check on CSC (MyCSC or `squeue`/`sacct`) what became of the job named `gb-<attempt id>`. If it is gone or cannot be recovered, settle the attempt:
+
+```http
+POST /wb/compute/attempts/ATTEMPT_ID/settle
+
+{"reason": "job 123456 finished on CSC but is no longer listed; outputs lost"}
+```
+
+It needs a recent re-authentication. The attempt becomes `failed`; if its usage was not charged yet, the whole reservation is charged (the real use is unknown), your name and the reason are stored, and the service tries to cancel the job and remove its directory (what fails is written into the attempt's `error`). Settling twice is refused with `state`. A failed attempt can then be retried by the researcher. If the job's outputs are still on CSC you can instead leave the attempt alone and fix the cause (credentials, network); the tick resumes by itself.
+
 ## Other alerts
 
 | Alert kind | Meaning | What to do |
@@ -152,6 +169,8 @@ Both end with a higher recovery number, which voids every earlier write right, a
 | `stage_waiting` | The system paused a stage or put it into the recovery check. The message names the event and its detail. | Find the event in the sections above. The alert resolves when the stage leaves that state. |
 | `backup`, `backup_unconfigured` | A backup failed, or no `backup_dir` is set. | [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
 | `notify_unconfigured` | No notification channel is configured. Alerts are recorded but not sent. | [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
+| `monitor_unconfigured` | Neither heartbeat URL is set, so nobody is told if the host or the run stops. | Set `GROWBRIDGE_HEARTBEAT_HOST_URL` and `GROWBRIDGE_HEARTBEAT_RUN_URL`; see [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
+| `external_monitor` (key `host` or `run`) | A heartbeat or failure signal was not delivered. | Check the monitor URL and the network; see the same page. |
 | `model_client`, `agent_task`, `task_deadline` | Model roles are off, or a model task failed or is overdue. Stage execution is not affected. | Check the SDK and credentials. There is **no route** to settle a task. |
 
 If the workbench cannot be reached at all, the [architecture document](../../diagri-agent-architecture.zh-CN.md) (section 10) gives the last resort: stop the daemon, then use the AC5 panel or cut the power.

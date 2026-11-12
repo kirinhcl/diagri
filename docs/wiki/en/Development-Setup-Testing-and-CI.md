@@ -39,9 +39,9 @@ The environment lives in `.venv/`, which [`.gitignore`](../../../.gitignore) exc
 | Extra | Installs | What it is for | Without it |
 | --- | --- | --- | --- |
 | `agents` | `anthropic` | `AnthropicClient` in [`agents/llm.py`](../../../src/growbridge/agents/llm.py), the client the model roles call. | The package still imports and runs. In DiAGRI mode with `roles` configured, `growbridge serve` raises an alert and leaves the model roles off. Two tests are skipped. |
-| `csc` | `pyfirecrest` | Constructing `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py). | `FirecrestBackend()` raises `BackendUnavailable`. No test needs the package. |
+| `csc` | `pyfirecrest` | Constructing `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py). | `FirecrestBackend()` without an injected client raises `BackendUnavailable`. No test needs the package: they pass a fake client. |
 
-The `csc` extra does not make remote computing work. Every remote operation of `FirecrestBackend` raises `NotImplementedError`, and the adapter has never talked to CSC. See [Status and known limitations](Status-and-Known-Limitations.md).
+The `csc` extra installs only the client library. The adapter follows its documentation and has only been tested against a fake client; it has never talked to CSC. See [Status and known limitations](Status-and-Known-Limitations.md).
 
 To add an extra, list it next to `dev`:
 
@@ -88,7 +88,7 @@ Tests live in [`tests/`](../../../tests), one folder per area. The folders are n
 | `tests/research/` | Statistics, the confirmatory gate, holdout data, report publishing and the code sandbox. |
 | `tests/agents/` | The model client adapter, the agent loop, the roles and the tool registry. |
 | `tests/dispatch/` | The tool handlers of each model role on real services, including the scoping of ids a model supplies. |
-| `tests/compute/` | The compute service: job lifecycle, quotas, races, and the refusals of `FirecrestBackend`. |
+| `tests/compute/` | The compute service: job lifecycle, quotas, races, `FirecrestBackend` against a fake client, the template loading and the workbench balance and budget routes (`tests/workbench/test_workbench_compute.py`). |
 | `tests/observer/` | Alerts, notification channels, the outbox, daily metrics and reports, run health and heartbeat. |
 | `tests/workbench/` | The workbench routes: operator login and sessions, entry, the request gate, stage and manual actions, and starting and steering a round. |
 | `tests/transport/` | `halt` on both BLE transports, and the pid file and folder checks of the native transport. |

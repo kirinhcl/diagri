@@ -14,6 +14,7 @@
 | 未解决的告警，其中包括阶段为什么在等待（`stage_waiting`） | `GET /wb/alerts` |
 | 某一次写入 | `GET /wb/receipts/REQUEST_ID` |
 | 设备 | `.venv/bin/growbridge status` |
+| CSC 上的计算作业：余额、预算、进行中和卡住的尝试 | `GET /wb/compute` |
 | 守护进程日志 | `serve` 所在的终端或服务日志 |
 
 怎么给工作台发请求，见[运行一轮研究](Run-a-Research-Round.md)。
@@ -142,6 +143,22 @@ POST /wb/stages/STAGE_ID/onsite-check
 6. 重新批准安全配置：见[启用 DiAGRI](Enable-DiAGRI.md)第 8 步。旧编号下批准的那一份已经无效。
 7. 所有没结束的阶段都在 `recovery_check`。设备状态和运行单不一致时，它会一直停在那里，直到你发现场核查请求。之后它回到 `pending_review`，原有审批作废。重新批准、重新启动。启动会记一个新的开始时间，阶段的时长从这里重新算起。
 
+## 卡住的计算尝试
+
+**你会看到。** `GET /wb/compute` 在 `stuck` 里列出这次尝试，并给出 `reason`：在等对账（提交的结果未知）、上一次轮询的错误，或者一个小时没有刷新。它的额度仍被预留着。
+
+**系统已做的。** 每分钟，tick 会再看一遍没有人回应的尝试：超过 5 分钟没有回执的提交，按作业名去查，绝不会再提交一次；排队或运行中的作业会被轮询，结束时结算。查不到作业时，这次尝试按全额预留计账（它可能已经跑过），并清理远端目录。CSC 不再列出的作业，或代码不认识的 Slurm 状态，无法轮询：tick 记下错误，继续重试。
+
+**你要做的。** 先到 CSC 上（MyCSC，或 `squeue`/`sacct`）查清名为 `gb-<尝试编号>` 的作业怎么了。如果它已不在或无法恢复，就结算这次尝试：
+
+```http
+POST /wb/compute/attempts/ATTEMPT_ID/settle
+
+{"reason": "作业 123456 已在 CSC 上结束但不再被列出，产物丢失"}
+```
+
+需要近期重新认证。尝试变成 `failed`；如果它的用量还没计账，就按全额预留计账（真实用量未知），记下你的名字和原因，服务还会尽力取消作业并删除它的目录（失败的步骤写进这次尝试的 `error`）。重复结算会被以 `state` 拒绝。之后研究 Agent 可以重试这次失败的尝试。如果作业的产物还在 CSC 上，也可以不动这次尝试，先排除原因（凭据、网络），tick 会自己恢复。
+
 ## 其他告警
 
 | 告警类型 | 含义 | 怎么办 |
@@ -152,6 +169,8 @@ POST /wb/stages/STAGE_ID/onsite-check
 | `stage_waiting` | 系统暂停了某个阶段，或把它送进了恢复待核对。消息里写明事件和事件携带的内容。 | 按事件名到上面对应的小节处理。阶段离开这个状态时告警自动解除。 |
 | `backup`、`backup_unconfigured` | 备份失败，或者没有配置 `backup_dir`。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `notify_unconfigured` | 没有配置任何通知渠道。告警会记录，但不会发出。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
+| `monitor_unconfigured` | 两个心跳 URL 都没有设，主机或运行停了也没有人会被通知。 | 设置 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL`；见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
+| `external_monitor`（键为 `host` 或 `run`） | 心跳或失败信号没有送达。 | 检查监控 URL 和网络；见同一页。 |
 | `model_client`、`agent_task`、`task_deadline` | 模型角色没启用，或者某个模型任务失败、超期。阶段执行不受影响。 | 检查 SDK 和凭据。处理任务**无路由**。 |
 
 如果工作台完全连不上，[架构设计文档](../../diagri-agent-architecture.zh-CN.md)第 10 节给出的最后手段是：停掉守护进程，然后用 AC5 面板操作，或者断电。

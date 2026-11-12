@@ -72,7 +72,7 @@ Where to look up an identifier: data models are in [`archive/models.py`](../../.
 | workflow service | 工作流服务 | `WorkflowService` | The only owner of round, stage and task state. |
 | control service | 控制服务 | `ControlService` | The single checkpoint for every BLE write. |
 | project archive | 项目档案 | `Archive` | The owner of records: samples, actions, snapshots and artifacts. |
-| compute service | 计算服务（远程计算） | `ComputeService` | Reserves quota and tracks jobs meant for CSC. Remote calls are not implemented yet, and `serve` does not start it. |
+| compute service | 计算服务（远程计算） | `ComputeService` | Reserves quota and tracks jobs meant for CSC. `serve` starts it only when it is fully configured; the remote calls have not been verified against CSC. |
 | workbench | 工作台 | `create_workbench()`, routes under `/wb` | The operator's HTTP interface: JSON routes under `/wb`. It has no web page yet. |
 | dashboard | 控制台 | `growbridge dashboard`, files in `web/` | GrowBridge's local web page. In DiAGRI mode its controls are refused and it only shows data. |
 | runtime | 运行时 | `Runtime` | Wires all services together in one process. |

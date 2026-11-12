@@ -4,7 +4,7 @@
 
 这一页写给已经在跑仅桥接模式守护进程、想打开 DiAGRI 的操作员：要改哪些配置项，怎么登记写入主机和第一个操作员，凭据从哪里来，怎么启动 `serve`、怎么确认它起来了，以及怎么再关掉。
 
-> **现在打开之后能得到什么。** 设了 `auto_research = true`，`serve` 会启动运行时，大约每秒跑一次执行 Agent，挂上 `/wb` 下的工作台路由；配置了 `roles` 时，每 30 秒处理一次未完成的模型任务。操作员通过这些路由发起一轮研究：项目、研究协议、轮次、模型调用预算和目标，见[运行一轮研究](Run-a-Research-Round.md)。这件事没有网页，也没有 CLI 命令。真实模型拿到目标后会做什么，从没有运行过：测试用的是脚本化的模型。`serve` 也不发送外部心跳，不启动计算服务。以上这些都只在模拟的 AC5 上测试过。见[状态与已知限制](Status-and-Known-Limitations.md)。
+> **现在打开之后能得到什么。** 设了 `auto_research = true`，`serve` 会启动运行时，大约每秒跑一次执行 Agent，挂上 `/wb` 下的工作台路由；配置了 `roles` 时，每 30 秒处理一次未完成的模型任务。操作员通过这些路由发起一轮研究：项目、研究协议、轮次、模型调用预算和目标，见[运行一轮研究](Run-a-Research-Round.md)。这件事没有网页，也没有 CLI 命令。真实模型拿到目标后会做什么，从没有运行过：测试用的是脚本化的模型。`serve` 只在环境变量里两个心跳 URL 都设了时才发送外部心跳（见[通知、日报与备份](Notifications-Reports-and-Backup.md)），只有计算服务的九项设置都齐了才启动计算服务（见第 5 步）。以上这些都只在模拟的 AC5 上测试过。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 开始之前
 
@@ -103,6 +103,15 @@ max_tokens = 16000
 | 模型调用 | Anthropic SDK 自己读取环境变量；测试里设的是 `ANTHROPIC_API_KEY`（[`tests/agents/test_agents_llm.py`](../../../tests/agents/test_agents_llm.py)）。SDK 是 [`pyproject.toml`](../../../pyproject.toml) 里的可选依赖 `agents`：`.venv/bin/python -m pip install '.[agents]'`。`constraints-tested.txt` 没有固定它的版本。 |
 | 模型角色经 HTTP 调用 `/wb` | `GROWBRIDGE_ROLE_TOKEN_<ROLE>`，例如 `GROWBRIDGE_ROLE_TOKEN_PLANNER`，请求时放在 `Authorization: Bearer ...` 里。至少 32 个字符，太短会让 `serve` 启动时退出。`serve` 自己运行的模型任务不用这些令牌。 |
 | 通知 | `GROWBRIDGE_TELEGRAM_*`、`GROWBRIDGE_EMAIL_TO`、`GROWBRIDGE_SMTP_*`。见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
+| CSC 上的计算服务 | `FIRECREST_URL`、`FIRECREST_TOKEN_URL`、`FIRECREST_CLIENT_ID`、`FIRECREST_CLIENT_SECRET`（CSC 机器人账户）、`FIRECREST_SYSTEM`（`cpu` 或 `gpu`）、`FIRECREST_ACCOUNT`（CSC 项目）和 `FIRECREST_WORKDIR`，再加配置项 `compute_templates_dir` 和 `compute_member`。九项要么全设、要么都不设。见下文。 |
+| 外部心跳 | `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL`：两个都设或者都不设。只设一个，`serve` 拒绝启动；都不设，留下常驻警告 `monitor_unconfigured`。见同一页。 |
+
+**计算服务（可选）。** 九项设置都齐了，`serve` 才启动它。缺了一部分时，`serve` 不带计算服务启动，日志里写出缺了哪些（不写取值）；模板有错或项目设置无效则让 `serve` 启动失败。
+
+1. 安装可选的客户端：`.venv/bin/python -m pip install pyfirecrest`。它不在 `constraints-tested.txt` 里，这里的一切也没有对真实的 CSC 服务运行过。
+2. 把每个审核过的模板放成 `compute_templates_dir` 里的一个 JSON 文件（字段见 [`compute/backend.py`](../../../src/growbridge/compute/backend.py) 里的 `JobTemplate`）。`script` 是 Slurm 批处理脚本：必须以 `#!` 开头，必须设置运行时限（`#SBATCH --time`），不能自己设置作业名。自由文本参数必须声明 `pattern`；全部规则见[配置参考](Configuration-Reference.md)。参数只以环境变量 `DIAGRI_PARAM_<NAME>` 传给脚本，输入位置以 `DIAGRI_INPUT_<NAME>` 传入，结果必须写进 `DIAGRI_OUTPUT_DIR`。服务启动时会记录每个模板的 id、版本和文件摘要。
+3. FirecREST 不报告项目余额。请在 MyCSC 读到后录入：`POST /wb/compute/balance`，请求体 `{"cpu_hours": 500}`。然后给每个研究任务设预算：`POST /wb/compute/tasks/TASK_ID/budget`，请求体 `{"cpu_hours": 40, "storage_gb": 20}`。两样都有之前，每次提交都会被 `quota` 拒绝。两者都需要近期重新认证。
+4. 接口也不报告 CPU 用量，所以每个作业按模板的 `max_cpu_hours` 全额计账。请时不时从 MyCSC 录入新的余额；`GET /wb/compute` 显示录入的余额、各任务预算、已用和已预留的量，以及进行中的作业。
 
 `scripts/` 里的安装脚本不会往 launchd 或 systemd 服务里写环境变量。要在后台服务里用这些变量，得自己改服务定义。未验证。真实的模型调用也没有在任何测试里发生过：测试里都是打桩的。
 

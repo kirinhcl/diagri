@@ -109,8 +109,12 @@
 | `POST` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 | `POST` | `/wb/evidence/{card_id}/verify` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `POST` | `/wb/compute/balance` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required` |
+| `POST` | `/wb/compute/tasks/{task_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope` |
+| `POST` | `/wb/compute/attempts/{attempt_id}/settle` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
+| `GET` | `/wb/compute` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 
-最后十七个路由只给操作员用，其中的五个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
+最后二十一个路由只给操作员用，其中的六个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
 下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。
 
@@ -154,6 +158,10 @@
 | `POST` | `/wb/evidence/{card_id}/verify` | 可选 `note`（最多 500 个字符），可选 `calibrated`（默认为假：操作员证明这个数值已用本地测量校准过） | `card_id`、`verified`、`verified_by`、`verified_at`、`note`、`calibrated`。重复核实返回第一条记录（含证明），不再写入；对已核实的卡再传 `calibrated: true` 不会改变任何东西。卡不存在以 `state` 拒绝 |
 | `GET` | `/wb/evidence` | 无 | `cards`：每张卡，另有 `source`（`operator:<姓名>` 或 `model:planner`）、`task_id`、`added_at`、`verified`、`verified_by`、`verified_at`、`note` |
 | `GET` | `/wb/holdouts` | 查询参数 `project_id` | `holdouts`：每个登记如上，另有 `reads`，一组 `reader`、`at`、`label`、`model_sha` |
+| `POST` | `/wb/compute/balance` | `cpu_hours`（有限的数，0 或更大；字符串和布尔值会被拒绝），可选 `note`（最多 500 个字符） | 这条录入：`cpu_hours`、`entered_by`（会话里的操作员；请求体里的姓名会被丢弃）、`note`、`recorded_at` |
+| `POST` | `/wb/compute/tasks/{task_id}/budget` | `cpu_hours`、`storage_gb`（有限的数，0 或更大） | 该任务的一行：`task_id`、`cpu_hours_budget`、`storage_gb_budget`、`cpu_hours_used`、`storage_gb_used`、`cpu_hours_reserved`、`storage_gb_reserved`。任务不存在时以 `scope` 拒绝。 |
+| `POST` | `/wb/compute/attempts/{attempt_id}/settle` | `reason`（去掉首尾空白后 1 到 500 个字符） | `attempt_id`、`phase`（`failed`）、`task_state`、`used_cpu`、`used_storage`、`settled_by`（会话里的操作员）、`settle_reason`、`error`。仍在进行的尝试按全额预留计账；用量已经计过账的，保持原来的账。已经是终态的或不存在的尝试以 `state` 拒绝。 |
+| `GET` | `/wb/compute` | 无 | `balance`（最近一条录入，或 `null`）、`tasks`（如上的行）、`service`（`cpu_hours_cap`、`storage_gb_cap`、`cpu_hours_committed`、`storage_gb_committed`）、`jobs`（进行中的尝试：`attempt_id`、`task_id`、`template_id`、`phase`、`task_state`、`remote_job_id`、`created_at`）、`stuck`（需要人处理的尝试：`attempt_id`、`task_id`、`phase`、`reason`、`since`） |
 
 已保存的协议版本不会被覆盖：`id` 和 `version` 相同而内容不同，会以 `state` 被拒绝。`POST /wb/rounds` 使用最新保存的版本。读取路由给出的 `run_sheet_digest` 就是审批记录里的那个摘要。再设一次预算只改上限，已记录的用量保留。`POST /wb/goals` 创建一个归编排 Agent 所有的研究任务；项目还没有预算，或者预算已经用完时，它以 `budget` 被拒绝。带 `request_id` 时，同一个操作员对同一个项目把同样的请求再发一次，得到的是第一次建的任务，并带 `"reused": true`；同一个 ID 下换了目标文本、轮次或约束条件，会以 `state` 被拒绝。不带 `request_id` 时，每次请求都新建一个任务。这些路由路径里的 ID 为 1 到 100 个字符。分析路由冻结协议最新版本的分析脚本（这个版本下一旦有阶段启动，冻结就以 `state` 被拒绝），并在一份数据快照上把它运行一次；它们的检查顺序见[开展一轮研究](Run-a-Research-Round.md#运行冻结的分析)。
 
@@ -223,7 +231,7 @@
 
 另外两个角色以同样的方式绑定。编排和计划 Agent 调用里的每个 `project_id`、`round_id`、`stage_id` 和 `experiment_id`，都必须属于正在运行的任务所在的项目，而且该实验必须只有一个所属项目。`get_task_status` 只回答正在运行的任务和它下面委派出去的任务；`read_artifact` 只回答本项目任务的产物；`delegate_task` 只接受正在运行的任务作为 `parent_task_id`。以上情况都以 `scope` 拒绝。
 
-`growbridge serve` 构建的守护进程没有传入搜索后端和计算服务。因此 `lookup_crop_conditions`、`search_and_verify_sources`、`submit_compute_job`、`get_compute_job` 和 `fetch_compute_artifacts` 都返回 `denied (unavailable)`。沙箱只在 macOS 上存在；在其他系统上，`run_local_analysis` 返回 `denied (sandbox_unavailable)`。
+`growbridge serve` 构建的守护进程没有传入搜索后端，所以 `lookup_crop_conditions` 和 `search_and_verify_sources` 返回 `denied (unavailable)`。`submit_compute_job`、`get_compute_job` 和 `fetch_compute_artifacts` 只在配置了计算服务时才可用（见[启用 DiAGRI](Enable-DiAGRI.md)第 5 步），否则同样返回 `denied (unavailable)`。计算输入的 `ref` 是 `<快照 id>` 或 `<快照 id>/<文件>`，服务只接受任务所属项目的、已通过校验且不含留出结果的快照；其他一律在任何字节离开本机之前被拒绝。工作台的三个计算路由只在有计算服务时存在。沙箱只在 macOS 上存在；在其他系统上，`run_local_analysis` 返回 `denied (sandbox_unavailable)`。
 
 `agents/tools.py` 的 `CONTROL_TOOLS` 列出了 14 个阶段和设备控制类的工具名，任何模型角色都拿不到它们。这些名字都没有对应的处理函数。
 

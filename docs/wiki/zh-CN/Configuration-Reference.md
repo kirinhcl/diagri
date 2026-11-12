@@ -18,7 +18,7 @@
 
 ## `Settings` 字段
 
-共 23 个字段。"必填"表示没有默认值。最后一列说明该字段是否只在 DiAGRI 模式下起作用。
+共 25 个字段。"必填"表示没有默认值。最后一列说明该字段是否只在 DiAGRI 模式下起作用。
 
 | 字段 | 类型 | 默认值 | 允许的取值 | 作用 | 仅 DiAGRI |
 | --- | --- | --- | --- | --- | --- |
@@ -45,6 +45,8 @@
 | `roles` | `RoleModel` 表 | `{}` | 键是角色名 | 每个模型角色的模型配置。为空时，`serve` 不创建模型客户端，模型角色都不运行。 | 是 |
 | `backup_dir` | 路径或不设置 | 不设置 | 任意路径；`~` 会展开 | SQLite 在线备份的目录。不设置就没有备份，运行时启动时会发出一条 `backup_unconfigured` 警告级告警。 | 是 |
 | `backup_interval_seconds` | 数值 | `21600` | 不小于 60 | 两次备份之间的秒数。 | 是 |
+| `compute_templates_dir` | 路径或未设置 | 未设置 | 一个存放 `*.json` 文件的目录；`~` 会被展开 | 每个 JSON 文件是一个审核过的作业模板（`JobTemplate`）。与 `compute_member` 和七个 `FIRECREST_*` 变量一起启用计算服务。启动时逐个校验；有坏文件时 `serve` 启动失败，错误信息指出文件名。 | 是 |
+| `compute_member` | 字符串或未设置 | 未设置 | 至少 1 个字符 | 研究 Agent 的作业以哪个 CSC 账户名提交。 | 是 |
 
 `report_time` 的准确模式是：
 
@@ -72,6 +74,19 @@
 
 会被读取的角色名是 `orchestrator`、`planner` 和 `researcher`（[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`）。其他键能通过校验，但会被忽略。只要 `roles` 里有一个键，没有列出的角色就按上表的默认值运行（[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py) 的 `make_dispatcher`）。
 
+## 作业模板文件
+
+`compute_templates_dir` 里的每个 `*.json` 文件是一个 `JobTemplate`（[`compute/backend.py`](../../../src/growbridge/compute/backend.py)）。`serve` 启动时逐个校验，第一个有错的文件会让它停下，并指出文件名。规则如下：
+
+| 字段 | 规则 |
+| --- | --- |
+| `id`、`version` | 这一对在所有文件里必须唯一。同一个 `id` 的最新版本是实际运行的版本；被重试的尝试所用的版本已被取代时，重试会被拒绝。 |
+| `script` | Slurm 批处理脚本。必须以 `#!` 开头，必须设置运行时限（`#SBATCH --time=...` 或 `-t`），让作业有界，且不能自己设置作业名（服务会加上 `gb-<尝试编号>`）。参数只以 `DIAGRI_PARAM_<NAME>` 传入，输入以 `DIAGRI_INPUT_<NAME>` 传入；结果写进 `DIAGRI_OUTPUT_DIR`。 |
+| `parameters` | 名字必须能用作环境变量名。`kind` 是 `int`、`float`、`str` 或 `bool`。数值可以有 `minimum` 和 `maximum`，浮点数必须是有限的。`str` 必须列出 `choices`，或者声明 `pattern`：整个取值都要匹配的正则表达式。`max_length` 可以进一步限制长度；任何文本都不超过 1000 个字符，含控制字符的值一律被拒绝。`default` 本身也要通过这些规则。没有 `default` 的参数是必填的。 |
+| `max_cpu_hours`、`max_storage_gb` | 有限的数，0 或更大。这是一次尝试预留的量；接口不报告用量时，也按它计账。 |
+| `result_changing` | 参数名的列表，每个都必须存在。重试时改了其中之一，就开始新的分析版本。 |
+| `max_retries` | 默认 2。 |
+
 ## `load` 做哪些检查
 
 每个需要读配置的命令都会调用 `load`。CLI 不捕获这些错误，命令会带着回溯信息退出。
@@ -84,7 +99,7 @@
 | 4 | 每个字段符合上面两张表的类型、范围和模式，并且没有未知的键。`report_timezone` 是已知时区。使用非默认模型的角色写明了两个单价。 | `pydantic.ValidationError` |
 | 5 | `pump_outlet`、`light_outlet`、`exhaust_outlet`、`fan_outlet` 是四个不同的编号。 | `ValueError: Each device must have a separate outlet` |
 
-`load` 不检查这些：`data_dir` 和 `backup_dir` 是否存在，`lan_bind` 和 `lan_port` 是否成对设置，`roles` 里的角色名，以及 `tools` 里的工具名。
+`load` 不读取模板文件，`serve` 在启动时检查它们。`load` 不检查这些：`data_dir`、`backup_dir` 和 `compute_templates_dir` 是否存在，`lan_bind` 和 `lan_port` 是否成对设置，`roles` 里的角色名，以及 `tools` 里的工具名。
 
 ## `initialize` 写入什么
 
@@ -120,6 +135,13 @@
 | `GROWBRIDGE_SMTP_USER` | `_smtp_send` | SMTP 登录名 | 不设置就不登录。 |
 | `GROWBRIDGE_SMTP_PASSWORD` | `_smtp_send` | SMTP 密码 | 默认为空。 |
 | `GROWBRIDGE_SMTP_FROM` | `_smtp_send` | 发件人地址（`From`） | 默认是 SMTP 登录名；没有登录名时是 `growbridge@localhost`。 |
+| `FIRECREST_URL` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | FirecREST API 的基础地址，例如 `https://api.roihu.csc.fi/v1`（FirecREST v2）。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
+| `FIRECREST_TOKEN_URL` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | 机器人账户的 OAuth 令牌地址，例如 `https://user-auth.csc.fi/idp/profile/oidc/token`。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
+| `FIRECREST_CLIENT_ID` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | CSC 机器人账户的客户端 ID（即账户名）。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
+| `FIRECREST_CLIENT_SECRET` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | 机器人账户的客户端密钥（即它的密码）。不写日志，不进错误信息，不出现在 `repr` 里。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
+| `FIRECREST_SYSTEM` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | Roihu 的子系统：只接受 `cpu` 或 `gpu`。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
+| `FIRECREST_ACCOUNT` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | 作业计费的 CSC 项目，例如 `project_2001234`。只允许字母、数字和 `_`。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
+| `FIRECREST_WORKDIR` | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend` | 远端工作目录的绝对路径，每个作业在其下有自己的 `gb-<尝试编号>` 目录，例如 `/scratch/project_2001234/diagri`。不能含 `..`。 | 属于"要么全配、要么都不配"的计算服务设置：这九项（这七个变量加 `compute_templates_dir`、`compute_member`）缺任何一项，计算服务都不会启动，日志只写缺了哪些名字，不写取值。 |
 
 两个渠道都没有配置时，不会有任何通知入队。告警照常记录，`GET /wb/alerts` 可以看到，运行时启动时还会发出一条 `notify_unconfigured` 警告级告警（[`runtime.py`](../../../src/growbridge/runtime.py) 的 `build_runtime` 和 `Runtime.start`）。
 
@@ -127,8 +149,8 @@
 
 | 功能 | 代码里的现状 |
 | --- | --- |
-| 外部心跳（`ExternalMonitor`、`HeartbeatChannel`） | `Settings` 里没有字段。`build_runtime` 有 `heartbeats` 参数，但 `serve` 没有传，所以守护进程不启动外部心跳。 |
-| 计算服务（`ComputeService`） | `Settings` 里没有字段。`serve` 没有传 `compute_backend`，所以守护进程里没有计算服务。[`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FIRECREST_*` 变量只被 `FirecrestBackend` 读取，而 `serve` 从不创建它。 |
+| 外部心跳（`ExternalMonitor`、`HeartbeatChannel`） | `Settings` 里没有字段，由环境变量 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL` 设置。两个都设或者都不设：只设一个，`serve` 拒绝启动；都不设，发出警告 `monitor_unconfigured`。URL 是机密，不会写进日志。见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
+| 计算服务（`ComputeService`） | 由 `compute_templates_dir`、`compute_member` 和七个 `FIRECREST_*` 环境变量设置，要么全配、要么都不配。全配：`serve` 在 `FirecrestBackend` 上创建计算服务。都不配：没有计算服务。配了一部分：没有计算服务，日志里警告缺了哪些名字。模板有错、没装 `pyfirecrest`，或 `FIRECREST_SYSTEM`、`FIRECREST_ACCOUNT`、`FIRECREST_WORKDIR` 无效，都会让 `serve` 启动失败。没有对真实的 CSC 服务验证过；见[状态与已知限制](Status-and-Known-Limitations.md)。 |
 | 告警规则 | `Settings` 里没有字段。`runtime.py` 的 `DEFAULT_ALERT_RULES` 是空的。 |
 | 操作员账号 | 由 `growbridge operator add` 存进 `data_dir`，不在配置文件里。 |
 

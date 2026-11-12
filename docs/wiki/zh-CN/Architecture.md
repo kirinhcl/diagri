@@ -25,7 +25,7 @@ flowchart TD
     CTL["控制服务<br/>唯一的 BLE 写入方"]
     ARC["项目档案<br/>管记录"]
     AC5[("AC5 控制器")]
-    CMP["计算服务<br/>serve 不启动"]
+    CMP["计算服务<br/>配置齐全时启动"]
     MON["外部监测<br/>serve 不启动"]
 
     OP -->|"审批、启动、接管、续跑"| WB
@@ -46,7 +46,7 @@ flowchart TD
     OBS -.->|"心跳"| MON
 ```
 
-实线是守护进程里真正在跑的通路。两条虚线指向的部分，代码和测试里都有，但 `growbridge serve` 不会启动：[`cli.py`](../../../src/growbridge/cli.py) 调用 `build_runtime(settings)` 时既没有传计算后端，也没有传心跳端点，所以 `Runtime.compute` 和 `Runtime.monitor` 都是 `None`。
+实线是守护进程里真正在跑的通路。两条虚线都是可选的。计算那条指向的部分，代码和测试里都有，但 `growbridge serve` 不会启动：[`cli.py`](../../../src/growbridge/cli.py) 调用 `build_runtime` 时没有传计算后端，所以 `Runtime.compute` 是 `None`。心跳那条只在环境变量里两个心跳 URL 都设了时才会运行；否则 `Runtime.monitor` 是 `None`，运行时会发出常驻警告 `monitor_unconfigured`。
 
 工作台是操作员使用的 HTTP 接口，也就是 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 里 `/wb` 下的一组 JSON 路由。它自己没有网页。`src/growbridge/web/` 里的页面是原有的控制台，从不调用 `/wb`。
 

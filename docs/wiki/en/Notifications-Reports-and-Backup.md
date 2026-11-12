@@ -4,7 +4,7 @@
 
 This page is for an operator who sets up what the daemon sends out and what it saves: the daily report time, the notification channels and their credentials, the heartbeat to an outside monitor, and the database backups, including how to restore one.
 
-> **Not verified.** Delivery through Telegram and email, and the heartbeat to an outside service, have been tested with fake transports only. No message has been sent to a real service. The heartbeat is also not wired into `serve`. See [Status and known limitations](Status-and-Known-Limitations.md).
+> **Not verified.** Delivery through Telegram and email, and the heartbeat to an outside service, have been tested with fake transports only. No message has been sent to a real service. See [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## What exists today
 
@@ -13,7 +13,7 @@ This page is for an operator who sets up what the daemon sends out and what it s
 | Daily report | `report_time`, `report_timezone` in the configuration file | Made by `serve` while a stage governs the device. |
 | Telegram channel | Environment variables | Built by `serve` when its variables are set. |
 | Email channel | Environment variables | Built by `serve` when its variables are set. |
-| Heartbeat to an outside monitor | Nothing | Implemented and tested, but `serve` never starts it. |
+| Heartbeat to an outside monitor | Environment variables | Built by `serve` when both URLs are set; one alone stops the start. |
 | Database backups | `backup_dir`, `backup_interval_seconds` | Run by `serve` when `backup_dir` is set. |
 
 Every change on this page takes effect when `serve` starts. Configuration fields are described in the [Configuration reference](Configuration-Reference.md).
@@ -92,7 +92,21 @@ What is implemented, in [`observer/health.py`](../../../src/growbridge/observer/
 - `HeartbeatChannel` requests a URL read from an environment variable for a heartbeat, and the same URL followed by `/fail` for a failure.
 - A signal that cannot be delivered raises the alert `external_monitor` with the key `host` or `run`.
 
-What is missing: `serve` builds the runtime without heartbeat endpoints ([`cli.py`](../../../src/growbridge/cli.py), `_serve_auto_research`), so no signal is ever sent. No configuration field and no environment variable read by `serve` names a heartbeat URL. The variable names in [`tests/observer/test_observer_channels.py`](../../../tests/observer/test_observer_channels.py) exist only in the tests. Today you cannot switch the heartbeat on without changing code.
+### How to configure it
+
+`serve` reads two environment variables ([`runtime_heartbeat.py`](../../../src/growbridge/runtime_heartbeat.py), called from `_serve_auto_research` in [`cli.py`](../../../src/growbridge/cli.py)). Both hold a URL from your monitoring service, for example a Healthchecks.io ping URL:
+
+| Variable | Signal |
+| --- | --- |
+| `GROWBRIDGE_HEARTBEAT_HOST_URL` | The host heartbeat. |
+| `GROWBRIDGE_HEARTBEAT_RUN_URL` | The run heartbeat. A failure goes to the same URL followed by `/fail`. |
+
+- **Both or neither.** With both set, `serve` sends the heartbeats. With only one set, `serve` refuses to start and says which variable is missing: watching half of the failures would look like monitoring while it is not. A blank value counts as not set.
+- **Neither set.** No request is made. The runtime raises the standing warning alert `monitor_unconfigured` with the key `heartbeats`, and resolves it the next time `serve` starts with both variables.
+- **The URLs are secrets.** They are read only from the environment, when a signal is sent. They appear in no log line, alert text, error message or `repr`. Request URLs are never logged: `serve` runs at INFO, and the HTTP library would log every request URL at that level, so [`logging_setup.py`](../../../src/growbridge/logging_setup.py) holds the `httpx` and `httpcore` loggers at WARNING. This also protects the Telegram bot token, which is part of the Bot API request path.
+- Give the monitor a grace period of more than 60 seconds; the monitor's own phone alert is what tells you when a heartbeat stops.
+
+Not verified: the heartbeat has only been tested against a fake HTTP client. No signal has been sent to a real monitoring service.
 
 The run health itself is computed on every tick and is visible as the alert `run_health`. Its probes and limits:
 
