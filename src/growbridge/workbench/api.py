@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import BaseModel, ConfigDict, Field, StrictInt
+from pydantic import Field, StrictInt
 
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import (
@@ -35,25 +35,21 @@ from growbridge.workbench.auth import (
     entry_for,
     host_only,
 )
+from growbridge.workbench.common import REQUEST_ID, Body, rejected
+from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
+from growbridge.workflow.tasks import TaskBoard
 
 COOKIE = "growbridge_operator"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
-REQUEST_ID = r"^[a-zA-Z0-9_-]{8,100}$"
 MAX_IRRIGATION_SECONDS = 60
 MIN_ROLE_TOKEN_LENGTH = 32
 STATUS_BY_CODE = {"state": 409, "session": 401, "locked": 429}
 
 
 # --- request bodies ----------------------------------------------------------------------------
-
-
-class Body(BaseModel):
-    """Unknown fields are dropped: an identity or permission in a body never counts."""
-
-    model_config = ConfigDict(extra="ignore", allow_inf_nan=False)
 
 
 class Login(Body):
@@ -140,10 +136,6 @@ class GuardedRoute(APIRoute):
         return guarded
 
 
-def rejected(message: str) -> HTTPException:
-    return HTTPException(422, detail={"code": "param", "message": message})
-
-
 def runtime_json(runtime: StageRuntime) -> dict:
     return runtime.model_dump(mode="json", exclude={"run_sheet"})
 
@@ -169,6 +161,8 @@ class Workbench:
         settings: Settings,
         role_tokens: Mapping[str, str],
         alerts: AlertBook | None = None,
+        tasks: TaskBoard | None = None,
+        budget: ProjectBudget | None = None,
     ):
         self.workflow = workflow
         self.control = control
@@ -192,6 +186,7 @@ class Workbench:
         self._write_routes()
         self._record_routes()
         self._read_routes()
+        add_round_routes(self.router, self.operator, self.fresh, workflow, tasks, budget)
 
     # --- who is calling ------------------------------------------------------------------------
 
@@ -479,6 +474,10 @@ def create_workbench(
     settings: Settings,
     role_tokens: Mapping[str, str],
     alerts: AlertBook | None = None,
+    tasks: TaskBoard | None = None,
+    budget: ProjectBudget | None = None,
 ) -> APIRouter:
-    """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given."""
-    return Workbench(workflow, control, archive, operators, settings, role_tokens, alerts).router
+    """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
+    ``tasks`` and ``budget`` together add the call budget and research goal routes."""
+    args = (workflow, control, archive, operators, settings, role_tokens)
+    return Workbench(*args, alerts, tasks, budget).router

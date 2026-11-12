@@ -5,6 +5,7 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
+from growbridge.agents.budget import CallBudget
 from growbridge.api import create_app
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
@@ -27,6 +28,7 @@ from growbridge.sim.fixtures import make_protocol, make_run_sheet
 from growbridge.workbench.api import create_workbench
 from growbridge.workbench.auth import Operators
 from growbridge.workflow.service import WorkflowService
+from growbridge.workflow.tasks import TaskBoard
 
 LAN_HOST = "lan.test"
 OVERLAY_HOST = "overlay.test"
@@ -88,6 +90,8 @@ class Bench:
         self.workflow = WorkflowService(self.db, self.clock, self.control)
         self.archive = Archive(self.db, tmp_path / "archive", self.clock)
         self.alerts = AlertBook(self.db, self.clock)
+        self.tasks = TaskBoard(self.db, self.clock)
+        self.budget = CallBudget(self.db, self.clock)
         self.operators = Operators(self.db, self.clock, scrypt_n=FAST_SCRYPT)
         self.settings = Settings(
             device="SIMULATED",
@@ -107,6 +111,8 @@ class Bench:
             self.settings,
             ROLE_TOKENS,
             alerts=self.alerts,
+            tasks=self.tasks,
+            budget=self.budget,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)
         self.lan = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")

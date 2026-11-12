@@ -300,7 +300,7 @@ class Runtime:
 
     def workbench(self, role_tokens: Mapping[str, str] | None = None) -> APIRouter:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
-        return create_workbench(*args, role_tokens or {}, self.book)
+        return create_workbench(*args, role_tokens or {}, self.book, self.tasks, self.budget)
 
     @property
     def _device(self) -> str:
