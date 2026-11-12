@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .config import default_config, initialize, load
+from .logging_setup import configure_logging
 
 ROLE_TOKEN_PREFIX = "GROWBRIDGE_ROLE_TOKEN_"
 TICK_SECONDS = 1.0
@@ -259,7 +260,7 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 parser.error("A daemon already owns this data directory")
-            logging.basicConfig(level=logging.INFO)
+            configure_logging()  # also keeps httpx from logging request URLs (secrets)
             if settings.auto_research:
                 asyncio.run(_serve_auto_research(settings))
                 return

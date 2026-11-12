@@ -64,7 +64,7 @@ class TelegramChannel:
         self.client = client
 
     async def send(self, text: str) -> Outcome:
-        token = os.environ.get(TELEGRAM_TOKEN_ENV)
+        token = os.environ.get(TELEGRAM_TOKEN_ENV, "").strip()
         if not token or not self.chat_ids:
             return "failed"
         url = f"{TELEGRAM_API}/bot{token}/sendMessage"
@@ -137,7 +137,7 @@ class HeartbeatChannel:
         self.client = client
 
     async def _get(self, suffix: str) -> bool:
-        base = os.environ.get(self.env)
+        base = os.environ.get(self.env, "").strip()
         if not base:
             return False
         client = self.client or httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
