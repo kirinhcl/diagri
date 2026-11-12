@@ -29,3 +29,18 @@ async def test_mcp_tool_inventory_and_annotations(settings):
     assert by_name["get_status"].annotations.readOnlyHint
     assert by_name["run_pump"].annotations.destructiveHint
     assert "request_id" in by_name["run_pump"].inputSchema["required"]
+
+
+async def test_a_lone_surrogate_in_a_bridge_body_is_a_readable_422(bridge, settings):
+    core, device = bridge
+    app = create_app(settings, core)
+    raw = '{"request_id": "\\ud800bad-id", "seconds": 1}'  # JSON text: a lone surrogate escape
+    headers = {"Authorization": f"Bearer {settings.token}", "content-type": "application/json"}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post("/pump", content=raw, headers=headers)
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"][-1] == "request_id"
+    assert not device.commands
