@@ -50,9 +50,9 @@
 
 **能读。** 传感器、通道和档位范围（`get_device_capabilities`）；本项目以往实验的快照和测量条数（`find_prior_runs`）；联网搜索结果（`lookup_crop_conditions`、`search_and_verify_sources`）。运行时没有接入搜索后端，所以这两个工具目前都返回 `unavailable`。
 
-**能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。这个工具能保存的只有运行单。
+**能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。这个工具能保存的只有运行单。搜索证据卡（`query_evidence`，每张卡都标明是否已核实），并提议新卡（`propose_evidence_card`）以便在运行单里引用。不管输入怎么写，提议都存成**未核实**，来源记为 `model:planner` 和正在运行的任务；卡 ID 由服务器生成，一个任务最多提议 20 张。读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。
 
-**绝对做不了。** 批准自己的草稿。保存或修改研究协议：它没有这样的工具，`save_protocol` 也拒绝模型身份。提交带阻断性问题的草稿：同样的校验在工作流服务里还会再做一遍。
+**绝对做不了。** 核实证据卡：那是操作员的事，是一条独立的记录，在核实之前，运行单的审阅会一直显示 `unverified_source` 提示。批准自己的草稿。保存或修改研究协议：它没有这样的工具，`save_protocol` 也拒绝模型身份。提交带阻断性问题的草稿：同样的校验在工作流服务里还会再做一遍。
 
 **代码。** [`agents/handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)，校验逻辑在 [`planning/`](../../../src/growbridge/planning/)。
 

@@ -132,6 +132,21 @@ The answer is `{"protocol_id": "...", "version": 1, "script_sha256": "...", "fro
 - Freezing the same text again returns the same answer while no stage has started. Another text for the same version is refused with `script_hash`.
 - `GET /wb/protocols/PROTOCOL_ID/analysis?project_id=PROJECT_ID` needs no re-authentication. It shows `started`, `frozen` (`null`, or `script_sha256`, `frozen_at`, `frozen_by` and the `script` itself) and `snapshots`: for each data snapshot of the protocol's rounds its `snapshot_id`, `experiment_id`, `complete` and `run_status` (`none`, `running`, `succeeded` or `failed`).
 
+## Register a holdout before the outcome data exists
+
+A prediction model needs data it has never touched. The operator registers the held-out batches before any outcome measurement of them is recorded. The request needs a re-authentication within the last 300 seconds.
+
+```sh
+curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "PROJECT_ID", "batch_ids": ["batch-3"], "development_batch_ids": ["batch-1", "batch-2"], "outcome_fields": ["yield_g"]}' \
+  "$BASE/wb/holdouts"
+```
+
+The answer holds the `holdout_id` the server made, the three lists, `registered_at` and `registered_by`. Held-out batches and development batches must not overlap, there must be at least 2 development batches, and no name may be empty or repeated (`batches`, or `param` for the outcome fields). The project must exist (`scope`).
+
+If any experiment of the project already has a manual measurement of a held-out batch with one of the outcome fields, registering is refused with `state`: that data may already have been seen. So is an experiment that no stage runs and that holds such a measurement, because it cannot be shown to belong to another project. Register first, then collect. From then on the held-out outcomes are left out of every snapshot and hidden from the model tools. `GET /wb/holdouts?project_id=PROJECT_ID` lists the registrations with their read logs and needs no re-authentication. Nothing scores a model on a holdout yet (see [Research methodology](Research-Methodology.md#holdout-data-for-prediction-models)).
+
 ## 2. The plan arrives for review
 
 The planner checks its run sheet with `validate_run_sheet` and files it with `save_plan_draft`. A run sheet with a blocking finding is not saved. A saved one creates the stage in `pending_review` and moves the round to `stage_review`. Nothing has been written to the device.
@@ -153,6 +168,23 @@ GET /wb/stages/STAGE_ID/run-sheet
 ```
 
 The answer has the full `run_sheet`, its `run_sheet_version` and `run_sheet_digest`, the validation `findings` as they are now, and `blocking`, which is `true` when a finding stops the approval. Reading changes nothing. A model role cannot call this route. There is **no route** to read a saved research protocol.
+
+The `findings` also carry the evidence hints of every set point (the timed actions, feedback rules and care steps): `no_evidence` when it cites no card (a card id that does not exist counts as no card, and `user:...` means you told the planner yourself), `unverified_source` when no operator has verified the card (this holds for every class of card, `local` included: a card the planner proposed is never `local`, because a model cannot propose a local card, and an unverified card always gets the hint), and `uncalibrated` when the card says its value was not calibrated against a local measurement. They are hints and never block the approval. A card counts as verified once an operator has recorded a verification. Read and verify the cards before you approve:
+
+```http
+GET /wb/evidence
+POST /wb/evidence/CARD_ID/verify
+{"note": "checked against the handbook, p. 41"}
+```
+
+The list shows every card with its source (`operator:<name>`, or `model:planner` with the task id when the planner proposed it), whether it is verified, who verified it and when. Verifying is idempotent: a second call keeps the first record. It does not edit the card. To add a card yourself:
+
+```http
+POST /wb/evidence
+{"source_class": "handbook", "citation": "Handbook of Lettuce Production, 3rd ed., p. 41", "claim": "200 umol m-2 s-1 suits lettuce", "value": 200, "unit": "umol m-2 s-1"}
+```
+
+A card you enter is verified by you in the same step; the answer has the new `id` to give the planner. Neither call asks for a recent re-authentication.
 
 ## 3. Approve the run sheet
 
@@ -236,7 +268,7 @@ Every stage of the round hands back the write rights it holds. Stages that have 
 
 The researcher freezes a data snapshot of the stage with its `freeze_dataset` tool. When the snapshot is complete (coverage of at least 0.9) and passes verification, the round moves to `analysis`. Otherwise it stays in `data_verification`.
 
-Measurements taken by hand must be recorded with `POST /wb/measurements` before the snapshot is frozen.
+Measurements taken by hand must be recorded with `POST /wb/measurements` before the snapshot is frozen. A measurement belongs to an experiment of an existing stage: for an experiment id that no stage runs, the route refuses with `scope`, so every measurement can be traced to a project.
 
 The researcher needs a research task to do this. In the end-to-end test the operator states a second goal with `POST /wb/goals`, and the scripted orchestrator hands it to the researcher. Whether a real model does the same has not been verified.
 
@@ -281,8 +313,7 @@ There is **no route** to read the report, to read or list research tasks, or to 
 - Read a research task or list the tasks of a project.
 - Read the stage history or the reason for a pause.
 - Revoke an approval, or switch the run sheet of a live stage.
-- Add an evidence card.
-- Register a held-out batch or a model for it.
+- Register a model for a holdout, or score one.
 - Read the daily reports, the data snapshot or the research report.
 
 The services already have methods for most of these, many of them in [`workflow/service.py`](../../../src/growbridge/workflow/service.py). The routes and commands do not exist yet. No step of a round has a CLI command.

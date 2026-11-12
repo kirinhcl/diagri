@@ -132,6 +132,21 @@ curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
 - 在没有阶段启动之前，再次冻结同一份文本会得到同样的响应。同一版本换一份文本，以 `script_hash` 被拒绝。
 - `GET /wb/protocols/PROTOCOL_ID/analysis?project_id=PROJECT_ID` 不要求重新认证。它给出 `started`、`frozen`（`null`，或者 `script_sha256`、`frozen_at`、`frozen_by` 和脚本原文 `script`）以及 `snapshots`：协议各轮的每一份数据快照的 `snapshot_id`、`experiment_id`、`complete` 和 `run_status`（`none`、`running`、`succeeded` 或 `failed`）。
 
+## 在结局数据出现之前登记留出集
+
+评价预测模型，需要它从没碰过的数据。操作员要在留出批次的任何结局测量被记录之前，先把这些批次登记下来。这个请求要求最近 300 秒内重新认证过。
+
+```sh
+curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "PROJECT_ID", "batch_ids": ["batch-3"], "development_batch_ids": ["batch-1", "batch-2"], "outcome_fields": ["yield_g"]}' \
+  "$BASE/wb/holdouts"
+```
+
+响应里有服务端生成的 `holdout_id`、三个列表、`registered_at` 和 `registered_by`。留出批次和开发批次不能重叠，开发批次至少 2 个，名字不能为空或重复（`batches`；结局字段的问题是 `param`）。项目必须存在（`scope`）。
+
+项目的任何实验里，只要已经有一条人工测量属于留出批次、又用了其中一个结局字段，登记就以 `state` 被拒绝：那些数据可能已经被看过。没有任何阶段运行、却带着这种测量的实验也一样，因为无法证明它属于别的项目。先登记，再采集。此后留出批次的结局不进入任何快照，模型工具也看不到。`GET /wb/holdouts?project_id=PROJECT_ID` 列出登记及其读取记录，不要求重新认证。目前没有任何流程用留出数据给模型打分（见[研究方法](Research-Methodology.md#预测模型与留出数据)）。
+
 ## 2. 计划送审
 
 计划 Agent 先用 `validate_run_sheet` 检查运行单，再用 `save_plan_draft` 提交。带有阻断性问题的运行单不会被保存。保存成功后，阶段以 `pending_review` 状态建立，轮次进入 `stage_review`。到这里为止，设备上没有发生任何写入。
@@ -153,6 +168,23 @@ GET /wb/stages/STAGE_ID/run-sheet
 ```
 
 响应里有完整的 `run_sheet`、它的 `run_sheet_version` 和 `run_sheet_digest`、此刻的校验结果 `findings`，以及 `blocking`：有阻断性问题、批准会被拒绝时为 `true`。读取不改变任何东西。模型角色调不了这个路由。读取已保存的研究协议**无路由**。
+
+`findings` 里还有每个设定值（定时动作、反馈规则和养护步骤）的证据提示：`no_evidence` 表示它没有引用任何证据卡（引用了不存在的卡 ID 同样算没有，`user:...` 表示是你自己告诉计划 Agent 的）；`unverified_source` 表示这张卡还没有任何操作员核实（每个类别的卡都一样，包括 `local`：模型不能提议 `local` 卡，所以计划 Agent 提议的卡不会是 `local`；未核实的卡一律带这个提示）；`uncalibrated` 表示卡片自己标明数值没有用本地测量校准过。它们只是提示，不阻塞审批。操作员记录了核实之后，这张卡才算已核实。批准之前先读卡、核实卡：
+
+```http
+GET /wb/evidence
+POST /wb/evidence/CARD_ID/verify
+{"note": "对照手册第 41 页核实过"}
+```
+
+列表里每张卡都有来源（`operator:<姓名>`；计划 Agent 提议的则是 `model:planner` 加任务 ID）、是否已核实、谁核实的、什么时候核实的。核实是幂等的：再核实一次，保留第一条记录；它不会修改卡片。你自己录入一张卡：
+
+```http
+POST /wb/evidence
+{"source_class": "handbook", "citation": "Handbook of Lettuce Production, 3rd ed., p. 41", "claim": "200 umol m-2 s-1 适合生菜", "value": 200, "unit": "umol m-2 s-1"}
+```
+
+你录入的卡由你当场核实；响应里的 `id` 就是要告诉计划 Agent 的卡编号。这两个调用都不要求近期重新认证。
 
 ## 3. 批准运行单
 
@@ -236,7 +268,7 @@ POST /wb/rounds/ROUND_ID/abort
 
 研究 Agent 用 `freeze_dataset` 工具冻结这个阶段的数据快照。快照完整（覆盖率不低于 0.9）并且通过校验时，轮次进入 `analysis`；否则停在 `data_verification`。
 
-人工测量必须在快照冻结之前用 `POST /wb/measurements` 记录进去。
+人工测量必须在快照冻结之前用 `POST /wb/measurements` 记录进去。测量属于某个已存在阶段的实验：对没有任何阶段运行的实验 ID，路由以 `scope` 拒绝，这样每条测量都能追溯到一个项目。
 
 研究 Agent 要有一个研究任务才会做这件事。端到端测试里，操作员用 `POST /wb/goals` 提出第二个目标，脚本化的编排 Agent 把它交给研究 Agent。真实模型是否也这样做，没有验证过。
 
@@ -281,8 +313,7 @@ curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
 - 读取某个研究任务，或列出一个项目的任务。
 - 读取阶段历史或暂停原因。
 - 撤销审批，给执行中的阶段切换运行单。
-- 添加证据卡。
-- 登记留出批次，或登记它所用的模型。
+- 给留出数据登记模型，或者给模型打分。
 - 读取日报、数据快照或研究报告。
 
 其中大部分功能在服务里已经有对应的方法，不少在 [`workflow/service.py`](../../../src/growbridge/workflow/service.py) 里。路由和命令还没有。一轮研究的任何一步都没有 CLI 命令。

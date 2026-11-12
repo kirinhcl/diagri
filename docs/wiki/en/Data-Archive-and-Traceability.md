@@ -18,13 +18,15 @@ The record types are frozen models in [`archive/models.py`](../../../src/growbri
 | Intervention | a table row, no model | The workflow service. `InterventionMirror` copies each one into the archive once | `intv_...` |
 | Data snapshot | `Snapshot` | The researcher's `freeze_dataset` tool | `snap_...`, plus a version per experiment |
 | Artifact | `Artifact` | `publish_research_report` in [`research/report.py`](../../../src/growbridge/research/report.py) | `artifact_...` |
-| Evidence card | `EvidenceCard` | `Archive.add_evidence` | `id` |
+| Evidence card | `EvidenceCard` | `POST /wb/evidence` (an operator) or the planner's `propose_evidence_card` tool, both through `Archive.add_evidence` | `evidence_...` |
+| Evidence source | `EvidenceEntry` | The same call, in the table `evidence_sources` | the card id |
+| Evidence verification | `EvidenceVerification` | `POST /wb/evidence/{card_id}/verify`, or the operator's own entry, through `Archive.verify_evidence`, in the table `evidence_verifications` | the card id |
 
 Three points are easy to miss:
 
 - **A sample belongs to an experiment only if it arrived after the stage started.** For every sample, ingestion asks which stage was running when the sample was received. A sample from before the start is stored without an experiment.
 - **The action ledger exists twice.** The control service keeps the working copy in its own database. The archive receives a copy of every state, so the history `pending`, `maybe_sent`, `confirmed` of one write can be read later.
-- **Evidence cards and images are not wired up.** No command, workbench route or model tool calls `add_evidence` in the current code; only tests do. The planner and the researcher can read cards (`validate_run_sheet`, `query_evidence`). There is no image record at all.
+- **An evidence card keeps who added it, and a verification is a record of its own.** The source is `operator:<name>`, or `model:planner` with the id of the task that proposed it. The card text is never edited. A verification (who, when, a note) is appended in its own table, one per card, and the first one stays. `Archive.evidence()` reports a card as verified exactly when that record exists, whatever the stored card says, so a model can never produce a verified card: the planner's tool stores every proposal unverified, and it refuses the class `local`, because only an operator can record a local measurement as evidence. The review of a run sheet gives an unverified card of any class, `local` included, the hint `unverified_source`. A card an operator enters is verified by that operator in the same step. Images are not recorded at all.
 
 ## Where the data is kept
 

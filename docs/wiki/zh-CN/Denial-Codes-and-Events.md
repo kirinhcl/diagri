@@ -16,7 +16,7 @@
 | `controls_disabled` | 配置文件里 `controls_enabled` 是 `false`。 | 控制服务 | 设置 `controls_enabled = true` 并重启守护进程。 |
 | `right_invalid` | 写入权不存在、已撤销，或属于更早的恢复编号；人工写入权没有绑定操作员；灌溉请求用的不是人工写入权；或者排队中的动作在发送前被作废。 | 控制服务、[`control/rights.py`](../../../src/growbridge/control/rights.py) | 不要重复同一个请求。通过工作流重新取得写入权（启动、恢复或接管阶段），再发新的请求。 |
 | `right_held` | 这台设备的阶段写入权已被持有，此时又申请阶段写入权或人工写入权。 | 控制服务 | 先把持有写入权的阶段暂停、停止或接管。 |
-| `scope` | 请求超出了写入权或调用方的范围：不是这台设备，通道或档位不在写入权列出的范围里，阶段、实验或操作员对不上，灌溉时间过长或不是"开泵"。对模型工具来说：任务编号不是这次运行所对应的任务，在调度运行之外发起调用，任务、阶段、轮次、实验、数据快照、产物或计算作业属于其他项目或其他角色，实验被两个项目同时占用，或者快照里含有留出数据的结果。对工作流来说：运行单的 `experiment_id` 属于另一个项目。 | 控制服务、`control/rights.py`、计算服务、工作流服务（`WorkflowService.submit_run_sheet`）、模型工具的处理函数（[`agents/`](../../../src/growbridge/agents)） | 修改请求。原样重发还会被拒绝。 |
+| `scope` | 请求超出了写入权或调用方的范围：不是这台设备，通道或档位不在写入权列出的范围里，阶段、实验或操作员对不上，灌溉时间过长或不是"开泵"。对模型工具来说：任务编号不是这次运行所对应的任务，在调度运行之外发起调用，任务、阶段、轮次、实验、数据快照、产物或计算作业属于其他项目或其他角色，实验被两个项目同时占用，或者快照里含有留出数据的结果。对工作流来说：运行单的 `experiment_id` 属于另一个项目。对人工测量来说：`experiment_id` 没有任何阶段拥有（`POST /wb/measurements`）。 | 控制服务、`control/rights.py`、计算服务、工作流服务（`WorkflowService.submit_run_sheet`）、模型工具的处理函数（[`agents/`](../../../src/growbridge/agents)） | 修改请求。原样重发还会被拒绝。 |
 | `pump_on_forbidden` | 一次普通写入试图开泵。 | `control/rights.py`；[`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `POST /wb/manual/{channel}` | 在局域网入口上使用 `POST /wb/irrigation`。 |
 | `interlock` | 关泵联锁生效：关泵没有得到确认。普通写入被拒绝，阶段也不能启动或恢复。 | 控制服务；工作流服务（[`workflow/service.py`](../../../src/growbridge/workflow/service.py)） | 到现场检查水泵，然后用 `POST /wb/stages/{stage_id}/onsite-check` 记录现场核对。执行 Agent 会持续尝试关泵。 |
 | `not_connected` | 没有有效的 BLE 连接，或者读不到设备状态。 | 控制服务 | 等连接恢复后重新发送请求。 |
@@ -27,18 +27,18 @@
 | `reauth_required` | 这个操作要求最近 300 秒内重新认证过。 | `workflow/permissions.py` | 调用 `POST /wb/reauth`，然后重发请求。 |
 | `entry` | 请求不是从已登记的入口进来的，没有通过 `Origin` 和 `X-GrowBridge-UI` 检查，进来的入口和会话所属的入口不一致，或者该操作只在局域网入口提供。 | `workbench/api.py` | 使用 `lan_hosts` 或 `overlay_hosts` 里的地址和对应的端口，并带上这两个请求头。灌溉要从局域网入口发起。 |
 | `approval_invalid` | 阶段没有有效审批；审批已经对不上（运行单内容或版本、阶段、实验、设备、能力版本或恢复编号变了）；运行单有阻断性问题；或者安全配置没有审批人。 | 工作流服务；控制服务（`approve_safety`） | 解决校验发现的问题，再重新审批这个阶段。 |
-| `state` | 对象不存在，当前状态不允许这个操作，或者在请求处理期间发生了变化。对分析来说：协议版本下已有阶段启动之后还要冻结脚本，没有冻结脚本就要运行，或者运行一份被后来的更正作废的快照。对报告来说：脚本已冻结，而引用的某份快照的运行还没有结束。另外：冻结脚本时已经有快照或测量，或者快照背后的阶段或测量早于冻结。 | 工作流服务、[`workflow/store.py`](../../../src/growbridge/workflow/store.py)、[`workflow/tasks.py`](../../../src/growbridge/workflow/tasks.py)、`workbench/api.py`、[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)、计算服务、留出数据登记、`AlertBook`、模型工具的处理函数 | 先读取当前状态，例如 `GET /wb/stages/{stage_id}`，再决定怎么做。 |
+| `state` | 对象不存在，当前状态不允许这个操作，或者在请求处理期间发生了变化。对证据来说：核实一张不存在的卡。对分析来说：协议版本下已有阶段启动之后还要冻结脚本，没有冻结脚本就要运行，或者运行一份被后来的更正作废的快照。对报告来说：脚本已冻结，而引用的某份快照的运行还没有结束。对留出集来说：项目里已经记录了留出批次的结局，那些数据可能已经被看过。另外：冻结脚本时已经有快照或测量，或者快照背后的阶段或测量早于冻结。 | 工作流服务、[`workflow/store.py`](../../../src/growbridge/workflow/store.py)、[`workflow/tasks.py`](../../../src/growbridge/workflow/tasks.py)、`workbench/api.py`、[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)、计算服务、留出数据登记、`AlertBook`、模型工具的处理函数 | 先读取当前状态，例如 `GET /wb/stages/{stage_id}`，再决定怎么做。 |
 | `safety_conflict` | 已批准的安全配置里有保护规则要动某个通道，而运行单没有把这个通道设为主机控制。 | 工作流服务，依据 `ControlService.safety_conflicts` | 修改运行单（生成新版本）或安全配置，然后重新审批。 |
 | `budget` | 项目的调用预算或费用预算用完了，或者从未设置；或者任务超过了修订次数上限或委派深度上限。 | [`agents/budget.py`](../../../src/growbridge/agents/budget.py)；`workflow/tasks.py` | 停下来。这个任务需要人来决定。操作员用 `POST /wb/projects/PROJECT_ID/budget` 设置或提高项目的预算；已经进入 `needs_attention` 的任务不会因此恢复。 |
 | `session` | 没有会话，或者会话无效、已过期、早于当前恢复编号；名字或密码不对；或者角色令牌不匹配。 | `workbench/api.py`、[`workbench/auth.py`](../../../src/growbridge/workbench/auth.py) | 用 `POST /wb/login` 重新登录。 |
 | `member` | 提交者没有对应到 CSC 项目成员。 | 计算服务（[`compute/service.py`](../../../src/growbridge/compute/service.py)） | 在守护进程里不会出现，见下面的说明。 |
-| `quota` | 没有登记任务预算或项目余额；作业会超出任务预算、服务上限或项目余额；或者达到了模板的重试上限。 | 计算服务 | 在守护进程里不会出现，见下面的说明。 |
-| `param` | 计算作业的模板或模板版本不存在，参数未知或缺失，取值的类型或范围不对，或者输入路径在快照之外。对报告来说：同一个实验被列进两个轮次，处理不存在，或者测量数据和分配对不上。对冻结的分析脚本来说：脚本为空，或者编译不过（语法错误或含 NUL 字节）。对报告来说：引用的快照来自不止一个协议版本，或者来自别的协议。 | 计算服务；[`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) | 改正输入后重新发送。 |
+| `quota` | 没有登记任务预算或项目余额；作业会超出任务预算、服务上限或项目余额；或者达到了模板的重试上限。对模型工具来说：一个计划任务已经提议了 20 张证据卡。 | 计算服务、[`agents/handlers_evidence.py`](../../../src/growbridge/agents/handlers_evidence.py) | 计算相关的情况在守护进程里不会出现，见下面的说明。提议数量的上限：请操作员自己录入这张卡。 |
+| `param` | 计算作业的模板或模板版本不存在，参数未知或缺失，取值的类型或范围不对，或者输入路径在快照之外。对证据来说：模型提议 `local` 卡（只有操作员才能记录本地测量）。对报告来说：同一个实验被列进两个轮次，处理不存在，或者测量数据和分配对不上。对冻结的分析脚本来说：脚本为空，或者编译不过（语法错误或含 NUL 字节）。对报告来说：引用的快照来自不止一个协议版本，或者来自别的协议。 | 计算服务；[`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`agents/handlers_evidence.py`](../../../src/growbridge/agents/handlers_evidence.py) | 改正输入后重新发送。 |
 | `clock_unsynced` | 时钟没有同步，数据不能冻结。 | [`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py) | 等时钟同步后再冻结。 |
 | `script_hash` | 分析脚本和研究协议里的哈希不一致，或者和这个协议版本已经冻结的脚本不一致（路由 `POST /wb/protocols/{protocol_id}/analysis`）。 | [`research/analysis.py`](../../../src/growbridge/research/analysis.py) | 使用已冻结的脚本。 |
 | `snapshot_incomplete` | 数据快照被标记为不完整，或者它的文件和清单对不上。 | `research/analysis.py`；[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)；`agents/handlers_report.py` | 重新冻结一个快照，改用新的。 |
 | `already_run` | 这个快照上已经跑过确认性分析，或者正在跑（路由 `POST /wb/analysis/runs`）。 | `research/analysis.py` | 不要再跑；确认性分析只运行一次。 |
-| `batches` | 登记留出数据时，开发批次少于 2 个，或者没有留出批次。 | [`research/holdout.py`](../../../src/growbridge/research/holdout.py) | 登记时至少提供 2 个开发批次和 1 个留出批次。 |
+| `batches` | 登记留出数据时，开发批次少于 2 个，没有留出批次，同一个批次同时在两边，或者批次名为空或重复（路由 `POST /wb/holdouts`）。 | [`research/holdout.py`](../../../src/growbridge/research/holdout.py) | 登记时至少提供 2 个开发批次和 1 个留出批次。 |
 | `model_unregistered` | 评估之前，模型没有在这份留出数据上登记，或者给出的模型哈希不是登记过的那个。 | `research/holdout.py` | 先登记模型、特征和预处理方式。 |
 | `sandbox_unavailable` | 当前平台没有隔离后端，所以不会运行任何分析脚本。 | [`research/sandbox.py`](../../../src/growbridge/research/sandbox.py) | 换到有沙箱的平台上运行分析（这份代码里是 macOS）。 |
 | `unsettled` | 控制服务还没有启动完；旧传输停止还没有得到确认；或者之前有动作结果未知。 | 控制服务 | 等启动完成。其他情况下，要先通过回读或现场核对把结果确定下来，普通写入才能继续。 |

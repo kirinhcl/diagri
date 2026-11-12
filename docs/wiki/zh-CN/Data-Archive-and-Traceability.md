@@ -18,13 +18,15 @@
 | 干预 | 表里的一行，没有模型 | 工作流服务。`InterventionMirror` 把每条干预向档案复制一次 | `intv_...` |
 | 数据快照 | `Snapshot` | 研究 Agent 的 `freeze_dataset` 工具 | `snap_...`，每个实验另有版本号 |
 | 产物 | `Artifact` | [`research/report.py`](../../../src/growbridge/research/report.py) 的 `publish_research_report` | `artifact_...` |
-| 证据卡 | `EvidenceCard` | `Archive.add_evidence` | `id` |
+| 证据卡 | `EvidenceCard` | `POST /wb/evidence`（操作员）或计划 Agent 的 `propose_evidence_card` 工具，都经 `Archive.add_evidence` | `evidence_...` |
+| 证据来源 | `EvidenceEntry` | 同一次调用，写入表 `evidence_sources` | 卡编号 |
+| 证据核实 | `EvidenceVerification` | `POST /wb/evidence/{card_id}/verify`，或操作员自己录入时，经 `Archive.verify_evidence` 写入表 `evidence_verifications` | 卡编号 |
 
 有三点容易忽略：
 
 - **阶段启动之后收到的样本才归属实验。** 归档时逐条判断：这条样本收到的时候，哪个阶段在运行。阶段启动之前的样本照样保存，但不挂在任何实验下。
 - **动作账本有两份。** 控制服务在自己的数据库里保留工作副本。每个状态都会向档案追加一份，所以一次写入从 `pending` 到 `maybe_sent` 再到 `confirmed` 的经过，事后都查得到。
-- **证据卡和图像还没有接通。** 当前代码里没有任何命令、工作台路由或模型工具调用 `add_evidence`，只有测试在调用。计划 Agent 和研究 Agent 可以读证据卡（`validate_run_sheet`、`query_evidence`）。图像记录在代码里完全没有。
+- **证据卡记着是谁加的，核实是一条独立的记录。** 来源是 `operator:<姓名>`，或 `model:planner` 加提议它的任务 ID。卡片原文永不改动。核实（谁、什么时候、备注）追加在自己的表里，每张卡一条，第一条保留。`Archive.evidence()` 只在这条记录存在时才把卡报告为已核实，卡里存了什么都不算，所以模型永远产生不了已核实的卡：计划 Agent 的工具把每个提议都存成未核实，并且拒绝 `local` 类别，因为只有操作员才能把本地测量记成证据。运行单的审阅对任何类别的未核实卡，包括 `local`，都给出 `unverified_source` 提示。操作员录入的卡，由这位操作员当场核实。图像记录在代码里完全没有。
 
 ## 数据放在哪里
 

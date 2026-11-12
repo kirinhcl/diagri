@@ -160,11 +160,13 @@ The code does not compute a confidence interval. It does not judge how wide an i
 
 A prediction model must be judged on data it has never touched. `HoldoutRegistry` in [`research/holdout.py`](../../../src/growbridge/research/holdout.py) keeps the books:
 
-- A holdout is registered by batch before development starts. It needs at least 2 development batches (`MIN_DEVELOPMENT_BATCHES`).
+- A holdout is registered by batch with `POST /wb/holdouts`, which names the held-out batches, the development batches and the outcome fields. It needs at least 2 development batches (`MIN_DEVELOPMENT_BATCHES`), no batch on both sides, and no empty or repeated name. The registration keeps the development batches and who registered it.
+- **Registration must come before the outcome data.** If any experiment of the project already has a manual measurement of a held-out batch with an outcome metric, registering is refused (`state`): that data may already have been seen. A measurement with no batch counts, a corrected measurement still counts, and so does one in an experiment that no stage owns (it cannot be shown to belong to another project; the measurement route no longer accepts such a measurement). The check runs as one query over the stored measurements. The same idea as freezing an analysis script before the data.
 - From then on, outcome measurements of the held-out batches are left out when a dataset is frozen. An outcome with no batch is treated as held out. The snapshot manifest records how many were left out.
 - Before an evaluation, the model, its features and its preprocessing are registered by hash. An unregistered model is refused (`model_unregistered`).
 - The first evaluation on a holdout may be confirmatory. Every later one is exploratory. Every read is logged with its time and reader.
 - `late_features` lists features that were received only after the time of the prediction.
+- **There is no process yet that scores a model on the holdout.** `register_model` and `evaluate` are a label gate only: they check hashes and count reads. Nothing computes a prediction score without showing the held-out outcomes to the model, which needs its own design. Registering a model has no route.
 
 ## What the researcher can reach
 
@@ -178,7 +180,7 @@ The researcher is a language model, so its tools are fenced in ([`agents/handler
 
 ## What is not there yet
 
-- No model tool and no CLI command freezes or runs the analysis script; the operator does both through the workbench. `HoldoutRegistry.register` and `register_model` have no route or tool: only tests call them.
+- No model tool and no CLI command freezes or runs the analysis script; the operator does both through the workbench. `register_model` has no route or tool: only tests call it.
 - `randomize_series`, `randomize_tents` and the make-up rule for a failed round (`make_up_allocation`) are functions without a tool. The design check only compares an allocation with its seed.
 - The effect and the p-value in a report are computed by the server with `paired_block_estimate`. The output of the frozen script stays in the run folder and is not copied into the report.
 - One confirmatory run covers one snapshot. Section 6.5 of the architecture document describes a single run over all rounds of a series; the code has no such run.
