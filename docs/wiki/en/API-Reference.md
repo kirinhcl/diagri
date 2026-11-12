@@ -58,7 +58,7 @@ Source: `create_app` in [`api.py`](../../../src/growbridge/api.py). There are 14
 
 ## Workbench routes
 
-The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The workbench has no web page of its own; the files in `web/` are the bridge dashboard. There are 30 routes. The two alert routes exist when an alert book is passed, and the budget and goal routes exist when a task board and a call budget are passed. The runtime always passes all three.
+The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The workbench has no web page of its own; the files in `web/` are the bridge dashboard. There are 33 routes. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed. The runtime always passes all of them.
 
 | Caller | Credential | Checks |
 | --- | --- | --- |
@@ -101,8 +101,11 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | operator | LAN, overlay | yes | `reauth_required`, `state` |
 | `POST` | `/wb/goals` | operator | LAN, overlay | no | `budget`, `state` |
+| `POST` | `/wb/protocols/{protocol_id}/analysis` | operator | LAN, overlay | yes | `reauth_required`, `state`, `script_hash`, `param` |
+| `GET` | `/wb/protocols/{protocol_id}/analysis` | operator | LAN, overlay | no | `state` |
+| `POST` | `/wb/analysis/runs` | operator | LAN, overlay | yes | `reauth_required`, `state`, `scope`, `snapshot_incomplete`, `already_run`, `sandbox_unavailable` |
 
-The last nine routes, the two reads among them, are for operators only: a role token is refused with `model_role`.
+The last twelve routes, the three reads among them, are for operators only: a role token is refused with `model_role`.
 
 A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `experiment_id`, `project_id`, `state`, `prior_state`, `right_number`, `care_right`, `manual_right`, `started_at`, `paused_at`, `end_pending`. `RunSheet`, `ResearchProtocol`, `SafetyConfig`, `Approval` and `ActionRecord` are in [`archive/models.py`](../../../src/growbridge/archive/models.py). A `RunSheet` and a `SafetyConfig` refuse NaN and infinity, also spelled as text, in every number they hold, wherever they come from: a route answers `422`, a model tool returns an error result, and nothing is saved or approved.
 
@@ -138,8 +141,11 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | none | `stage_id`, `state`, `run_sheet_version`, `run_sheet_digest`, `run_sheet` (the `RunSheet`), `findings` (a list of `code`, `message`, `blocking`), `blocking` |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls` (integer, 0 to 1000000), `max_cost` (US dollars, 0 to 1000000) | `project_id`, `max_calls`, `max_cost`, `remaining_calls`, `remaining_cost` |
 | `POST` | `/wb/goals` | `project_id`, `goal` (1 to 2000 after trimming); optional `round_id`, `constraints` (at most 20 texts of 1 to 500 each), `request_id` | `task_id`, `state`, `reused` |
+| `POST` | `/wb/protocols/{protocol_id}/analysis` | `project_id` (1 to 100), `script` (text, 1 to 20000 characters, compiled but never run) | `protocol_id`, `version`, `script_sha256`, `frozen_at`, `note` (a frozen script cannot be corrected) |
+| `GET` | `/wb/protocols/{protocol_id}/analysis` | query `project_id` (1 to 100) | `protocol_id`, `version`, `started`, `frozen` (`null`, or `script_sha256`, `frozen_at`, `frozen_by`, `script`), `snapshots` (a list of `snapshot_id`, `experiment_id`, `complete`, `run_status`) |
+| `POST` | `/wb/analysis/runs` | `project_id`, `protocol_id`, `snapshot_id` (1 to 100 each) | `run_id`, `status`, `exit_code`, `timed_out`, `stdout`, `stderr` (the last two cut at 4000 characters) |
 
-A saved protocol version is never overwritten: the same `id` and `version` with other content is refused with `state`. `POST /wb/rounds` uses the latest saved version. The `run_sheet_digest` of the read route is the digest an approval records. Setting a budget again changes the limits and keeps the recorded usage. `POST /wb/goals` creates a research task owned by the orchestrator and is refused with `budget` while the project has no budget or nothing is left of it. With a `request_id`, the same operator sending the same request for the same project again gets the first task back with `"reused": true`; another goal text, round or set of constraints under that id is refused with `state`. Without a `request_id` every request creates a task. The ids in the paths of these nine routes have 1 to 100 characters.
+A saved protocol version is never overwritten: the same `id` and `version` with other content is refused with `state`. `POST /wb/rounds` uses the latest saved version. The `run_sheet_digest` of the read route is the digest an approval records. Setting a budget again changes the limits and keeps the recorded usage. `POST /wb/goals` creates a research task owned by the orchestrator and is refused with `budget` while the project has no budget or nothing is left of it. With a `request_id`, the same operator sending the same request for the same project again gets the first task back with `"reused": true`; another goal text, round or set of constraints under that id is refused with `state`. Without a `request_id` every request creates a task. The ids in the paths of these routes have 1 to 100 characters. The analysis routes freeze the analysis script of the latest protocol version, which is refused with `state` once a stage under that version has started, and run it once on a data snapshot; the order of their checks is in [Run a research round](Run-a-Research-Round.md#run-the-frozen-analysis).
 
 `request_id` follows the same rule as in the bridge API. `POST /wb/manual/{channel}` and `POST /wb/irrigation` need a stage in the state `manual`. On `POST /wb/manual/pump` a `level` of 1 is refused with `pump_on_forbidden`.
 

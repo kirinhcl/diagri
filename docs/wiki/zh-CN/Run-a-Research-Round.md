@@ -15,7 +15,7 @@
 1. 发到入口地址：在现场用 `http://YOUR_LAN_HOST:LAN_PORT`，经覆盖网络用 `https://YOUR_OVERLAY_HOST`。发到别的地址会被拒绝，拒绝码 `entry`。
 2. 先用 `POST /wb/login` 登录一次，请求体 `{"name": "YOUR_OPERATOR", "secret": "..."}`。响应会设置 Cookie `growbridge_operator`，有效 8 小时，并且只在签发它的那个入口上有效。
 3. 除 `GET` 以外的请求都要带两个请求头：`Origin`（和你正在用的地址一致）和 `x-growbridge-ui: 1`。
-4. 审批、续跑、接管、批准安全配置和设置调用预算，要求最近 300 秒内重新认证过。登录本身算一次。之后需要先发 `POST /wb/reauth`，请求体 `{"secret": "..."}`。
+4. 审批、续跑、接管、批准安全配置、设置调用预算、冻结分析脚本和启动分析运行，要求最近 300 秒内重新认证过。登录本身算一次。之后需要先发 `POST /wb/reauth`，请求体 `{"secret": "..."}`。
 5. 被拒绝时，响应体是 `{"detail": {"code": "...", "message": "..."}}`。`state` 对应状态码 `409`，`session` 对应 `401`，`locked` 对应 `429`，其余拒绝码都是 `403`。请求体格式不对是 `422`。
 
 用 `curl` 的话，开头几个请求是这样的。`login.json` 里放登录请求体，注意保密，用完删掉。
@@ -41,7 +41,7 @@ curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
 | 4. 启动阶段 | 操作员 | `POST /wb/stages/STAGE_ID/start` | `stage_running` | `running` |
 | 5. 阶段执行 | 执行 Agent、观察与通知 Agent | 读取类路由，`pause`、`resume`、`takeover` | `stage_running` | `running`，之后 `ended` |
 | 6. 数据核验 | 研究 Agent | `POST /wb/measurements`、`POST /wb/goals` | `data_verification`，之后 `analysis` | `ended` |
-| 7. 分析 | 研究 Agent | `GET /wb/rounds/ROUND_ID` | `analysis` | `ended` |
+| 7. 分析 | 操作员、研究 Agent | `GET /wb/protocols/PROTOCOL_ID/analysis`、`POST /wb/analysis/runs`、`GET /wb/rounds/ROUND_ID` | `analysis` | `ended` |
 | 8. 报告交付 | 研究 Agent | `GET /wb/rounds/ROUND_ID` | `delivered` | `ended` |
 
 状态名取自 [`workflow/states.py`](../../../src/growbridge/workflow/states.py)。状态为什么这样划分，见[工作流与状态机](Workflow-and-State-Machines.md)。
@@ -111,6 +111,25 @@ GET /wb/rounds/ROUND_ID
 响应里有 `state`、`awaiting_choice`、`stages_done`、`stage_total`、协议的 ID 和版本、`snapshot_id`、`report_artifact_id`，以及 `stages`：一组 `{"stage_id": "...", "state": "..."}`。新建的轮次处于 `designing`，还没有阶段。
 
 真实模型拿到目标后会怎么做，没有验证过。测试用的是脚本化的模型，见 [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)。
+
+## 在第一个阶段之前冻结分析脚本
+
+只有分析方法在结局数据出现之前就已经定下来，结果才可以标为确认性（见[研究方法](Research-Methodology.md)）。在 DiAGRI 模式下，操作员用一个请求把它定下来，时间必须在这个协议的任何阶段启动之前。这个请求要求最近 300 秒内重新认证过。
+
+```sh
+curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "PROJECT_ID", "script": "print(\"analysis\")\n"}' \
+  "$BASE/wb/protocols/PROTOCOL_ID/analysis"
+```
+
+响应是 `{"protocol_id": "...", "version": 1, "script_sha256": "...", "frozen_at": 1800000000.0, "note": "..."}`。其中的 `note` 说明：冻结之后脚本不能再更正。
+
+- `script` 是 1 到 20 000 个字符的 UTF-8 文本。冻结时它只被编译，从不运行：有语法错误或含 NUL 字节的脚本以 `param` 被拒绝。**冻结之后脚本不能再更正**，只有新的协议版本才能再冻结另一份，所以发送之前请先读一遍。它连同冻结它的操作员的名字一起保存。名字来自会话，从不来自请求体。
+- 它作用于协议最新保存的版本，也就是新建轮次所用的版本。要改分析，先把协议存成新版本。
+- 只要运行这个协议版本的任何一轮里有任何一个阶段启动过，冻结就以 `state` 被拒绝：分析必须在能看到结局数据之前定下来（架构文档 6.5 节）。
+- 在没有阶段启动之前，再次冻结同一份文本会得到同样的响应。同一版本换一份文本，以 `script_hash` 被拒绝。
+- `GET /wb/protocols/PROTOCOL_ID/analysis?project_id=PROJECT_ID` 不要求重新认证。它给出 `started`、`frozen`（`null`，或者 `script_sha256`、`frozen_at`、`frozen_by` 和脚本原文 `script`）以及 `snapshots`：协议各轮的每一份数据快照的 `snapshot_id`、`experiment_id`、`complete` 和 `run_status`（`none`、`running`、`succeeded` 或 `failed`）。
 
 ## 2. 计划送审
 
@@ -226,6 +245,30 @@ POST /wb/rounds/ROUND_ID/abort
 
 研究 Agent 分析冻结的快照，然后调用 `publish_research_report`。报告保存为数据目录下 `agent_work/reports/` 里的 `research_report_<artifact id>.json`，并在项目档案里登记为 `research_report` 类型的产物。正式报告会让轮次进入 `delivered`。需要复核的报告会让轮次留在 `analysis`。`GET /wb/rounds/ROUND_ID` 给出轮次状态；报告发布后，还给出它的 `report_artifact_id`。
 
+### 运行冻结的分析
+
+研究 Agent 冻结了快照（第 6 步）之后，操作员对它启动冻结脚本的那唯一一次运行。这个请求要求最近 300 秒内重新认证过。
+
+```sh
+curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "PROJECT_ID", "protocol_id": "PROTOCOL_ID", "snapshot_id": "SNAPSHOT_ID"}' \
+  "$BASE/wb/analysis/runs"
+```
+
+响应有 `run_id`、`status`（`succeeded` 或 `failed`）、`exit_code`、`timed_out`，以及 `stdout` 和 `stderr`，各截到 4000 个字符。运行结束时才有响应，最长 600 秒。守护进程的其余部分，包括保护规则和关泵，在这期间照常运行。
+
+请求会在沙箱启动之前按下面的顺序被拒绝：
+
+1. `state`：项目里没有这个协议，或者它的最新版本还没有冻结脚本。
+2. `scope`：这份快照不是运行这个协议版本的某一轮的快照。`state`：快照被后来的更正作废了。
+3. `snapshot_incomplete`：快照不完整，或者某个文件和清单对不上了。
+4. `scope`：快照里有留出批次的结局数据。留出数据不进入任何分析。
+5. `already_run`：这份快照以前运行过。失败或超时的运行同样用掉了这一次机会。
+6. `sandbox_unavailable`：这个平台没有沙箱（只有 macOS 有）。这一次机会不会被用掉。
+
+协议版本已经冻结脚本时，只要研究 Agent 的 `publish_research_report` 引用的快照里有任何一份的运行状态是 `none` 或 `running`，它就以 `state` 被拒绝。所有运行都结束后，报告才会发布：所有运行都成功、也没有别的原因压低标签时，它可以是确认性的；有一次运行失败，它就是探索性的。没有冻结脚本时一切照旧：报告是探索性的。
+
 读取报告、读取或列出研究任务、处理 `needs_review` 或 `needs_attention` 的任务，都**无路由**。`GET /wb/alerts` 里类型为 `agent_task` 的告警，说明某个模型任务失败了或者需要处理。
 
 ## 目前没有路由或命令的步骤
@@ -236,6 +279,7 @@ POST /wb/rounds/ROUND_ID/abort
 - 读取阶段历史或暂停原因。
 - 撤销审批，给执行中的阶段切换运行单。
 - 添加证据卡。
+- 登记留出批次，或登记它所用的模型。
 - 读取日报、数据快照或研究报告。
 
 其中大部分功能在服务里已经有对应的方法，不少在 [`workflow/service.py`](../../../src/growbridge/workflow/service.py) 里。路由和命令还没有。一轮研究的任何一步都没有 CLI 命令。

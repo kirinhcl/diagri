@@ -337,3 +337,47 @@ def test_standard_library_imports_still_work_under_deny_by_default(tmp_path, dir
 
     assert result.exit_code == 0, result.stderr
     assert "2.0" in result.stdout
+
+
+@needs_seatbelt
+def test_a_data_directory_outside_home_is_unreadable_except_the_mounted_snapshot(
+    tmp_path, tmp_path_factory
+):
+    """The runtime denies ``data_dir`` wherever it lives; only the snapshot mounted for the run
+    and the run's own folder are allowed back (seatbelt applies the last matching rule)."""
+    data_dir = tmp_path_factory.mktemp("data_dir")  # not under $HOME
+    assert Path.home().resolve() not in data_dir.resolve().parents
+    own = data_dir / "archive" / "snapshots" / "own"
+    other = data_dir / "archive" / "snapshots" / "other"
+    own.mkdir(parents=True)
+    other.mkdir(parents=True)
+    (own / "measurements.jsonl").write_text("own rows")
+    (other / "measurements.jsonl").write_text("HELD-OUT-ROWS")
+    (data_dir / "agents.db").write_text("DATABASE-CONTENT")
+    out = data_dir / "analysis" / "run-1" / "out"
+    out.mkdir(parents=True)
+    script = write_script(
+        tmp_path,
+        f"""
+        import pathlib, sys
+        def attempt(path):
+            try:
+                return pathlib.Path(path).read_text()
+            except OSError:
+                return "blocked"
+        print("own:", attempt(sys.argv[1] + "/measurements.jsonl"))
+        print("sibling:", attempt({str(other / "measurements.jsonl")!r}))
+        print("database:", attempt({str(data_dir / "agents.db")!r}))
+        print("parent listing:", attempt({str(data_dir / "archive")!r}))
+        pathlib.Path(sys.argv[2], "result.txt").write_text("written")
+        """,
+    )
+
+    result = SeatbeltSandbox(deny_read=[data_dir]).run(script, own, out, TIMEOUT)
+
+    assert result.exit_code == 0, result.stderr
+    assert "own: own rows" in result.stdout
+    assert "sibling: blocked" in result.stdout
+    assert "database: blocked" in result.stdout
+    assert "HELD-OUT-ROWS" not in result.stdout and "DATABASE-CONTENT" not in result.stdout
+    assert (out / "result.txt").read_text() == "written"

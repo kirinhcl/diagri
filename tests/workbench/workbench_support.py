@@ -2,6 +2,7 @@
 recording fake control, served through FastAPI's TestClient on a LAN and an overlay address."""
 
 import asyncio
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -22,6 +23,9 @@ from growbridge.archive.store import Archive
 from growbridge.config import Settings
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor
+from growbridge.research.analysis import ConfirmatoryRunner
+from growbridge.research.holdout import HoldoutRegistry
+from growbridge.research.sandbox import SandboxResult
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.control import FakeControl
 from growbridge.sim.fixtures import make_protocol, make_run_sheet
@@ -80,6 +84,18 @@ class RecordingControl(FakeControl):
         return self.receipts.get(request_id)
 
 
+class ScriptedSandbox:
+    """Stands in for the code sandbox: records every run and answers with ``result``."""
+
+    def __init__(self):
+        self.result = SandboxResult(0, "analysis finished", "", False)
+        self.runs: list[tuple[bytes, Path, Path]] = []
+
+    def run(self, script, snapshot_dir, out_dir, timeout):
+        self.runs.append((script.read_bytes(), snapshot_dir, out_dir))
+        return self.result
+
+
 class Bench:
     """One database, one clock, the services and an app with the workbench mounted."""
 
@@ -93,6 +109,9 @@ class Bench:
         self.tasks = TaskBoard(self.db, self.clock)
         self.budget = CallBudget(self.db, self.clock)
         self.operators = Operators(self.db, self.clock, scrypt_n=FAST_SCRYPT)
+        self.sandbox = ScriptedSandbox()
+        self.runner = ConfirmatoryRunner(self.db, self.clock, self.sandbox, tmp_path / "analysis")
+        self.holdout = HoldoutRegistry(self.db, self.clock)
         self.settings = Settings(
             device="SIMULATED",
             token="s" * 32,
@@ -113,6 +132,8 @@ class Bench:
             alerts=self.alerts,
             tasks=self.tasks,
             budget=self.budget,
+            runner=self.runner,
+            holdout=self.holdout,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)
         self.lan = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")

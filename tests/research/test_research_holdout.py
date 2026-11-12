@@ -3,7 +3,7 @@ import pytest
 from growbridge.archive.db import Database
 from growbridge.archive.models import ManualMeasurement
 from growbridge.ports import Denied
-from growbridge.research.holdout import HoldoutRegistry
+from growbridge.research.holdout import HoldoutRegistry, refuse_holdout_rows
 from growbridge.sim.clock import FakeClock
 
 OUTCOMES = ("yield_g", "canopy_score")
@@ -196,3 +196,46 @@ def test_development_filter_ignores_other_projects_and_sees_later_registrations(
 
     assert keep(measurement("yield_g", "b3")) is False
     assert keep(measurement("yield_g", "b1")) is True
+
+
+# --- the check a snapshot goes through before any analysis -----------------------------------
+
+
+def write_rows(path, rows):
+    path.write_text("".join(row.model_dump_json() + "\n" for row in rows), encoding="utf-8")
+    return path
+
+
+def test_a_snapshot_with_holdout_outcomes_is_refused_without_quoting_a_value(registered, tmp_path):
+    path = write_rows(
+        tmp_path / "measurements.jsonl",
+        [measurement("temp", "b3"), measurement("yield_g", "b3")],
+    )
+
+    with pytest.raises(Denied) as caught:
+        refuse_holdout_rows(registered, "project-1", "snap-1", path)
+
+    assert caught.value.code == "scope"
+    assert "snap-1" in str(caught.value) and "1.0" not in str(caught.value)
+
+
+def test_a_snapshot_of_development_rows_passes(registered, tmp_path):
+    path = write_rows(
+        tmp_path / "measurements.jsonl",
+        [measurement("yield_g", "b1"), measurement("temp", "b3")],
+    )
+
+    refuse_holdout_rows(registered, "project-1", "snap-1", path)
+
+
+def test_without_a_registry_there_is_nothing_to_check(tmp_path):
+    path = write_rows(tmp_path / "measurements.jsonl", [measurement("yield_g", "b3")])
+
+    refuse_holdout_rows(None, "project-1", "snap-1", path)
+
+
+def test_a_row_without_a_batch_is_refused_when_its_metric_is_an_outcome(registered, tmp_path):
+    path = write_rows(tmp_path / "measurements.jsonl", [measurement("yield_g", "")])
+
+    with pytest.raises(Denied):
+        refuse_holdout_rows(registered, "project-1", "snap-1", path)

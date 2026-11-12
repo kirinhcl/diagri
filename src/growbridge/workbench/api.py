@@ -28,6 +28,9 @@ from growbridge.archive.store import Archive
 from growbridge.config import Settings
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
+from growbridge.research.analysis import ConfirmatoryRunner
+from growbridge.research.holdout import HoldoutRegistry
+from growbridge.workbench.analysis import add_analysis_routes
 from growbridge.workbench.auth import (
     SESSION_SECONDS,
     Operators,
@@ -163,6 +166,8 @@ class Workbench:
         alerts: AlertBook | None = None,
         tasks: TaskBoard | None = None,
         budget: ProjectBudget | None = None,
+        runner: ConfirmatoryRunner | None = None,
+        holdout: HoldoutRegistry | None = None,
     ):
         self.workflow = workflow
         self.control = control
@@ -187,6 +192,9 @@ class Workbench:
         self._record_routes()
         self._read_routes()
         add_round_routes(self.router, self.operator, self.fresh, workflow, tasks, budget)
+        if runner is not None:
+            args = (self.router, self.operator, self.fresh, workflow, archive, runner, holdout)
+            add_analysis_routes(*args)
 
     # --- who is calling ------------------------------------------------------------------------
 
@@ -476,8 +484,11 @@ def create_workbench(
     alerts: AlertBook | None = None,
     tasks: TaskBoard | None = None,
     budget: ProjectBudget | None = None,
+    runner: ConfirmatoryRunner | None = None,
+    holdout: HoldoutRegistry | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
-    ``tasks`` and ``budget`` together add the call budget and research goal routes."""
+    ``tasks`` and ``budget`` together add the call budget and research goal routes; ``runner``
+    adds the analysis freeze and run routes (``holdout`` guards what they may analyse)."""
     args = (workflow, control, archive, operators, settings, role_tokens)
-    return Workbench(*args, alerts, tasks, budget).router
+    return Workbench(*args, alerts, tasks, budget, runner, holdout).router

@@ -27,26 +27,26 @@
 | `reauth_required` | 这个操作要求最近 300 秒内重新认证过。 | `workflow/permissions.py` | 调用 `POST /wb/reauth`，然后重发请求。 |
 | `entry` | 请求不是从已登记的入口进来的，没有通过 `Origin` 和 `X-GrowBridge-UI` 检查，进来的入口和会话所属的入口不一致，或者该操作只在局域网入口提供。 | `workbench/api.py` | 使用 `lan_hosts` 或 `overlay_hosts` 里的地址和对应的端口，并带上这两个请求头。灌溉要从局域网入口发起。 |
 | `approval_invalid` | 阶段没有有效审批；审批已经对不上（运行单内容或版本、阶段、实验、设备、能力版本或恢复编号变了）；运行单有阻断性问题；或者安全配置没有审批人。 | 工作流服务；控制服务（`approve_safety`） | 解决校验发现的问题，再重新审批这个阶段。 |
-| `state` | 对象不存在，当前状态不允许这个操作，或者在请求处理期间发生了变化。 | 工作流服务、[`workflow/store.py`](../../../src/growbridge/workflow/store.py)、[`workflow/tasks.py`](../../../src/growbridge/workflow/tasks.py)、`workbench/api.py`、计算服务、留出数据登记、`AlertBook`、模型工具的处理函数 | 先读取当前状态，例如 `GET /wb/stages/{stage_id}`，再决定怎么做。 |
+| `state` | 对象不存在，当前状态不允许这个操作，或者在请求处理期间发生了变化。对分析来说：协议版本下已有阶段启动之后还要冻结脚本，没有冻结脚本就要运行，或者运行一份被后来的更正作废的快照。对报告来说：脚本已冻结，而引用的某份快照的运行还没有结束。 | 工作流服务、[`workflow/store.py`](../../../src/growbridge/workflow/store.py)、[`workflow/tasks.py`](../../../src/growbridge/workflow/tasks.py)、`workbench/api.py`、[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)、计算服务、留出数据登记、`AlertBook`、模型工具的处理函数 | 先读取当前状态，例如 `GET /wb/stages/{stage_id}`，再决定怎么做。 |
 | `safety_conflict` | 已批准的安全配置里有保护规则要动某个通道，而运行单没有把这个通道设为主机控制。 | 工作流服务，依据 `ControlService.safety_conflicts` | 修改运行单（生成新版本）或安全配置，然后重新审批。 |
 | `budget` | 项目的调用预算或费用预算用完了，或者从未设置；或者任务超过了修订次数上限或委派深度上限。 | [`agents/budget.py`](../../../src/growbridge/agents/budget.py)；`workflow/tasks.py` | 停下来。这个任务需要人来决定。操作员用 `POST /wb/projects/PROJECT_ID/budget` 设置或提高项目的预算；已经进入 `needs_attention` 的任务不会因此恢复。 |
 | `session` | 没有会话，或者会话无效、已过期、早于当前恢复编号；名字或密码不对；或者角色令牌不匹配。 | `workbench/api.py`、[`workbench/auth.py`](../../../src/growbridge/workbench/auth.py) | 用 `POST /wb/login` 重新登录。 |
 | `member` | 提交者没有对应到 CSC 项目成员。 | 计算服务（[`compute/service.py`](../../../src/growbridge/compute/service.py)） | 在守护进程里不会出现，见下面的说明。 |
 | `quota` | 没有登记任务预算或项目余额；作业会超出任务预算、服务上限或项目余额；或者达到了模板的重试上限。 | 计算服务 | 在守护进程里不会出现，见下面的说明。 |
-| `param` | 计算作业的模板或模板版本不存在，参数未知或缺失，取值的类型或范围不对，或者输入路径在快照之外。对报告来说：同一个实验被列进两个轮次，处理不存在，或者测量数据和分配对不上。 | 计算服务；[`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) | 改正输入后重新发送。 |
+| `param` | 计算作业的模板或模板版本不存在，参数未知或缺失，取值的类型或范围不对，或者输入路径在快照之外。对报告来说：同一个实验被列进两个轮次，处理不存在，或者测量数据和分配对不上。对冻结的分析脚本来说：脚本为空，或者编译不过（语法错误或含 NUL 字节）。 | 计算服务；[`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) | 改正输入后重新发送。 |
 | `clock_unsynced` | 时钟没有同步，数据不能冻结。 | [`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py) | 等时钟同步后再冻结。 |
-| `script_hash` | 分析脚本和研究协议里的哈希不一致，或者和这个协议版本已经冻结的脚本不一致。 | [`research/analysis.py`](../../../src/growbridge/research/analysis.py) | 使用已冻结的脚本。 |
+| `script_hash` | 分析脚本和研究协议里的哈希不一致，或者和这个协议版本已经冻结的脚本不一致（路由 `POST /wb/protocols/{protocol_id}/analysis`）。 | [`research/analysis.py`](../../../src/growbridge/research/analysis.py) | 使用已冻结的脚本。 |
 | `snapshot_incomplete` | 数据快照被标记为不完整，或者它的文件和清单对不上。 | `research/analysis.py`；[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)；`agents/handlers_report.py` | 重新冻结一个快照，改用新的。 |
-| `already_run` | 这个快照上已经跑过确认性分析。 | `research/analysis.py` | 不要再跑；确认性分析只运行一次。 |
+| `already_run` | 这个快照上已经跑过确认性分析，或者正在跑（路由 `POST /wb/analysis/runs`）。 | `research/analysis.py` | 不要再跑；确认性分析只运行一次。 |
 | `batches` | 登记留出数据时，开发批次少于 2 个，或者没有留出批次。 | [`research/holdout.py`](../../../src/growbridge/research/holdout.py) | 登记时至少提供 2 个开发批次和 1 个留出批次。 |
-| `model_unregistered` | 评估之前，模型没有在这份留出数据上登记。 | `research/holdout.py` | 先登记模型、特征和预处理方式。 |
+| `model_unregistered` | 评估之前，模型没有在这份留出数据上登记，或者给出的模型哈希不是登记过的那个。 | `research/holdout.py` | 先登记模型、特征和预处理方式。 |
 | `sandbox_unavailable` | 当前平台没有隔离后端，所以不会运行任何分析脚本。 | [`research/sandbox.py`](../../../src/growbridge/research/sandbox.py) | 换到有沙箱的平台上运行分析（这份代码里是 macOS）。 |
 | `unsettled` | 控制服务还没有启动完；旧传输停止还没有得到确认；或者之前有动作结果未知。 | 控制服务 | 等启动完成。其他情况下，要先通过回读或现场核对把结果确定下来，普通写入才能继续。 |
 | `cooldown` | 有一次灌溉正在进行，或者距上一次开始还不到 `pump_cooldown_seconds`。 | 控制服务 | 等一等，再重新发送灌溉请求。 |
 | `unavailable` | 某个可选后端没有配置：搜索、计算服务、沙箱或留出数据登记。 | [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) | 调用方无法解决；守护进程构建时就没有这个后端。 |
 | `locked` | 15 分钟内登录失败次数过多：同一名字从同一地址失败 5 次，或者同一名字从所有地址累计失败 25 次。 | `workbench/auth.py` | 等到这些失败记录超过 15 分钟。 |
 
-关于哪些拒绝码实际会出现。`growbridge serve` 不启动计算服务，所以 `member`、`quota`，以及 `param`、`scope`、`state` 里和计算有关的情况，在守护进程里都不会出现。`batches`、`script_hash` 和 `already_run` 只由 `HoldoutRegistry.register`、`ConfirmatoryRunner.freeze_analysis` 和 `ConfirmatoryRunner.run` 抛出，而 `src/` 里没有任何地方调用这三个方法。另外，工作台在 HTTP 422 的响应体里也用了 `param` 这个词作为 code，那不是 `Denied`。
+关于哪些拒绝码实际会出现。`growbridge serve` 不启动计算服务，所以 `member`、`quota`，以及 `param`、`scope`、`state` 里和计算有关的情况，在守护进程里都不会出现。`batches` 只由 `HoldoutRegistry.register` 抛出，而 `src/` 里没有任何地方调用它。`script_hash` 和 `already_run` 来自 `ConfirmatoryRunner.freeze_analysis` 和 `run_frozen`，经由工作台的两个分析路由出现。另外，工作台在 HTTP 422 的响应体里也用了 `param` 这个词作为 code，那不是 `Denied`。
 
 请求在刚提交时被拒绝，动作账本里不会留下记录，所以同一个 `request_id` 可以再发一次。如果是在发送前的复核环节被拒绝，这个动作会以 `void` 状态存下来；之后用同一个 `request_id` 只会拿回这条记录，所以需要换一个新的 ID。
 

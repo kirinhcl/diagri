@@ -273,6 +273,7 @@ class Runtime:
 
     async def start(self) -> None:
         protect_history(self.bridge.store, lambda: self.archive.cursor(self._device), self.clock)
+        self.runner.settle_interrupted()  # a run the last process left open cannot be running
         if self.backups.directory is None:
             message = "No backup_dir is configured: the databases are not being backed up"
             self._alert("backup_unconfigured", "backups", message, "warning")
@@ -300,7 +301,8 @@ class Runtime:
 
     def workbench(self, role_tokens: Mapping[str, str] | None = None) -> APIRouter:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
-        return create_workbench(*args, role_tokens or {}, self.book, self.tasks, self.budget)
+        more = (self.book, self.tasks, self.budget, self.runner, self.holdout)
+        return create_workbench(*args, role_tokens or {}, *more)
 
     @property
     def _device(self) -> str:
@@ -626,7 +628,10 @@ def build_runtime(
     # only channels that have a sender: a notification queued for any other name is never sent
     notify = tuple(selected)
     observer = Observer(flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify)
-    sandbox = make_runtime_sandbox([Path.home(), data_dir])
+    unreadable = [Path.home(), data_dir]  # reads are denied by default; these stay denied
+    if settings.backup_dir is not None:  # even where an allowed path would cover them
+        unreadable.append(settings.backup_dir)
+    sandbox = make_runtime_sandbox(unreadable)
     backups = Backups(
         dict(zip(DATABASES, dbs.values(), strict=True)),
         settings.backup_dir,

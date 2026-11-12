@@ -8,6 +8,7 @@ evaluation is exploratory, and every read is logged.
 import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from growbridge.archive.clock import Clock
@@ -159,3 +160,20 @@ class HoldoutRegistry:
     ) -> tuple[str, ...]:
         """Features that were only received after the prediction time (data leakage)."""
         return tuple(sorted(name for name, at in feature_times.items() if at > prediction_time))
+
+
+def refuse_holdout_rows(
+    registry: "HoldoutRegistry | None", project_id: str, snapshot_id: str, measurements: Path
+) -> None:
+    """Refuse a snapshot whose measurements hold an outcome of a held-out batch.
+
+    ``Snapshot`` carries no marker for rows frozen without the development filter (the manifest
+    only counts the excluded ones), so the rows are checked against the registry's own predicate.
+    The message never quotes a value. Without a registry there is nothing to check.
+    """
+    if registry is None:
+        return
+    keep = registry.development_filter(project_id)
+    for line in measurements.read_text(encoding="utf-8").splitlines():
+        if line and not keep(ManualMeasurement.model_validate_json(line)):
+            raise Denied("scope", f"snapshot {snapshot_id} holds outcomes of a held-out batch")

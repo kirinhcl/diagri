@@ -16,9 +16,10 @@ from typing import Any, NoReturn
 
 from pydantic import BaseModel, ConfigDict
 
-from growbridge.archive.models import ManualMeasurement, ResearchTask, RunSheet, Snapshot
+from growbridge.archive.models import ResearchTask, RunSheet, Snapshot
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, Finding
+from growbridge.research.holdout import refuse_holdout_rows
 from growbridge.workflow.states import RoundState, StageState
 
 MAX_ITEMS = 20
@@ -194,18 +195,9 @@ def require_experiment_project(deps: Deps, experiment_id: str) -> None:
 
 
 def _refuse_holdout_rows(deps: Deps, snap: Snapshot, project_id: str) -> None:
-    """A snapshot frozen without the development filter may hold outcomes of a holdout batch.
-
-    ``Snapshot`` carries no marker for that (the manifest only counts excluded rows), so the rows
-    are checked against the registry's own predicate. The message never quotes a value.
-    """
-    if deps.holdout is None:
-        return
-    keep = deps.holdout.development_filter(project_id)
+    """A snapshot frozen without the development filter may hold outcomes of a holdout batch."""
     path = deps.archive.root / "snapshots" / snap.id / "measurements.jsonl"
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if line and not keep(ManualMeasurement.model_validate_json(line)):
-            raise Denied("scope", f"snapshot {snap.id} holds outcomes of a held-out batch")
+    refuse_holdout_rows(deps.holdout, project_id, snap.id, path)
 
 
 def scoped_snapshot(deps: Deps, task: ResearchTask, snapshot_id: str) -> Snapshot:

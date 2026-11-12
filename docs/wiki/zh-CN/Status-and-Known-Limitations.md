@@ -21,6 +21,7 @@
 | 覆盖率 | 测量时是 95 %，当时有 1292 个测试。CI 不测覆盖率，之后也没有重新测过。 | 仓库里没有记录 |
 | 完整的一轮研究 | 在模拟的 AC5 上，从创建项目一直到 `delivered`，中间有一次人工接管和交还。 | [`test_e2e_round.py`](../../../tests/e2e/test_e2e_round.py) |
 | 模型角色的端到端流程 | 用脚本化的模型客户端驱动编排、计划和研究三个 Agent，不联网，不需要密钥，从派发任务一直到轮次交付。 | [`test_e2e_agents.py`](../../../tests/e2e/test_e2e_agents.py) |
+| 经工作台得出确认性结论 | 在模拟的 AC5 上走四轮，操作员的每一步都是发给 `/wb` 的 HTTP 请求。分析脚本在第一个阶段之前冻结；阶段一旦启动，冻结就被拒绝；冻结的分析没有在每份快照上运行之前，报告被拒绝；之后报告是确认性的，轮次交付。这个测试里的代码沙箱是假的。 | [`test_e2e_confirmatory.py`](../../../tests/e2e/test_e2e_confirmatory.py)、[`test_workbench_analysis.py`](../../../tests/workbench/test_workbench_analysis.py) |
 | 经工作台路由走完一轮 | 在模拟的 AC5 上，从登录一直到 `delivered`。操作员的每一步都是发给 `/wb` 的 HTTP 请求，由进程内的客户端发给 `serve` 所构建的那个应用；模型角色用脚本化的客户端。另一个测试停止一个阶段、选择 `redo`、再中止轮次。没有 `serve` 进程参与，也没有真实模型参与。 | [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)、[`test_workbench_rounds.py`](../../../tests/workbench/test_workbench_rounds.py) |
 | 没有模型时阶段照常执行 | 没有模型客户端时，已批准的阶段能跑到结束；每次模型调用都失败时也一样。`tick` 从不调用模型。 | [`test_e2e_runtime.py`](../../../tests/e2e/test_e2e_runtime.py)、[`test_e2e_agents.py`](../../../tests/e2e/test_e2e_agents.py) |
 | 重启与恢复 | 重启后，进行中的阶段先进入 `recovery_check`，再到 `paused`，由操作员确认续跑。重启时还在等待审查的阶段会自己回到 `pending_review`。写入应答丢失会让阶段暂停。恢复编号加一后，审批和会话全部失效。 | [`test_e2e_runtime.py`](../../../tests/e2e/test_e2e_runtime.py)、[`test_e2e_reviewed.py`](../../../tests/e2e/test_e2e_reviewed.py) |
@@ -54,9 +55,11 @@
 | 在 CSC 上跑作业 | 未实现 | `FirecrestBackend` 的每个远端操作都抛出 `NotImplementedError`。`serve` 不构建计算服务，所以计算相关的工具一律回答 `unavailable`。计算模板和成员名单都是空的。 | [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py)、[`runtime.py`](../../../src/growbridge/runtime.py) |
 | 文献检索 | 未实现 | 没有检索后端。计划 Agent 的 `lookup_crop_conditions` 和 `search_and_verify_sources` 两个工具回答 `unavailable`。 | [`agents/handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py) |
 | 运行模型所写代码的沙箱 | 只支持 macOS | 沙箱依赖 `sandbox-exec`。在其他系统上，包括 Linux 和树莓派，它拒绝运行任何代码，拒绝码是 `sandbox_unavailable`。因此在这些系统上，本地分析和确认性分析都跑不了。 | [`research/sandbox.py`](../../../src/growbridge/research/sandbox.py) |
+| 确认性分析 | 只在测试里验证过 | 操作员通过工作台冻结脚本、启动每一次运行；端到端测试用的是假沙箱。每份快照各运行一次，而不是架构文档 6.5 节所说的对系列各轮做一次总的运行。进程在运行途中死掉，这次运行会保持未结束，直到下一次启动把它按失败处理并标为 `interrupted`：这一次机会仍然算用掉，引用这份快照的报告随后以探索性发布。留出数据的登记没有路由。 | [`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)、[`research/analysis.py`](../../../src/growbridge/research/analysis.py)、[研究方法](Research-Methodology.md) |
 | 告警规则 | 默认为空 | `DEFAULT_ALERT_RULES` 是空的，配置里也没有设置告警规则的字段，所以观察与通知 Agent 不会发出任何阈值告警。 | [`runtime.py`](../../../src/growbridge/runtime.py) |
 | 相机采集 | 未实现 | 没有任何相机相关的代码。长势观察靠录入人工测量。 | [`observer/report.py`](../../../src/growbridge/observer/report.py) |
 | 备份 | 只备份 SQLite 数据库 | 一次备份复制的是 DiAGRI 的六个数据库，不包括仅桥接模式的历史文件 `growbridge.sqlite3`，也不包括数据目录下 `archive/` 里的文件（例如数据快照）。目前还没有图像采集，所以也没有图像可备份。没有设置 `backup_dir` 时什么都不备份，并且会有一条常驻的警告。 | [`runtime_backup.py`](../../../src/growbridge/runtime_backup.py)、[`archive/backup.py`](../../../src/growbridge/archive/backup.py) |
+| 在事件循环里冻结快照 | 已知限制 | 冻结数据快照（`freeze_dataset`）以及本地分析前重新核验快照，都要读文件、算哈希，同时持有数据库事务，而且是在承担每秒一次执行循环的同一个事件循环里进行。阶段较长时，执行循环可能因此停顿几秒。沙箱运行本身和确认性运行前的检查已经移出事件循环。 | [`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py)、[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py) |
 | 被跳过的测试 | 是「跳过」，不是「通过」 | 需要 `sandbox-exec` 的测试在没有它的系统上会被跳过，Linux 上的 CI 就是这种情况。需要构建 Anthropic 客户端的测试在没装 `anthropic` 包时会被跳过；CI 只安装 `dev` 这一组可选依赖，所以这些测试在两个 CI 系统上都被跳过。 | [`test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py)、[`test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py)、[`test_agents_llm.py`](../../../tests/agents/test_agents_llm.py) |
 
 ## 怎样重新核对

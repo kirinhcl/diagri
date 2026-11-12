@@ -194,6 +194,26 @@ def _decide(
     return decision
 
 
+def _require_registered_runs(deps: Deps, protocol: ResearchProtocol, frozen: Frozen) -> None:
+    """With a frozen analysis script, every cited snapshot's pre-registered run must be over.
+
+    A run that failed still counts as over: the report is then published and capped at
+    exploratory. Refusing here, before anything is read from the holdout or written, keeps a
+    round from being delivered with an exploratory conclusion before the operator has run the
+    analysis it froze.
+    """
+    runner = deps.runner
+    if runner is None or runner.frozen_info(protocol) is None:
+        return
+    for snap in frozen.snaps:
+        if runner.status(snap.id, protocol) in ("none", "running"):
+            raise Denied(
+                "state",
+                f"快照 {snap.id} 的预注册确认性运行还没有完成；"
+                "由操作员通过 POST /wb/analysis/runs 启动",
+            )
+
+
 def _table(protocol: ResearchProtocol, data: PublishInput, frozen: Frozen) -> UnitTable:
     if data.treatment_id not in {t.id for t in protocol.treatments}:
         raise Denied("param", f"unknown treatment {data.treatment_id}")
@@ -229,6 +249,7 @@ def _precheck(deps: Deps, data: PublishInput) -> tuple[ResearchTask, ResearchPro
 def publish(deps: Deps, data: PublishInput) -> dict:
     task, protocol = _precheck(deps, data)
     frozen = _freeze_inputs(deps, task, data)
+    _require_registered_runs(deps, protocol, frozen)
     table = _table(protocol, data, frozen)
     facts = _facts(deps, protocol, data, frozen, table)
     decision = _decide(deps, protocol, frozen, facts)

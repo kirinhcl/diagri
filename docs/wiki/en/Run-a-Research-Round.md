@@ -15,7 +15,7 @@ Every request follows these rules:
 1. Send it to an entry address: `http://YOUR_LAN_HOST:LAN_PORT` on site, or `https://YOUR_OVERLAY_HOST` over the overlay network. Other addresses are refused with `entry`.
 2. Log in once with `POST /wb/login` and the body `{"name": "YOUR_OPERATOR", "secret": "..."}`. The answer sets the cookie `growbridge_operator`, valid for 8 hours and only on the entry it was issued on.
 3. Every request that is not a `GET` needs two headers: `Origin`, equal to the address you are using, and `x-growbridge-ui: 1`.
-4. Approve, resume, takeover, safety approval and setting the call budget need a re-authentication within the last 300 seconds. Login counts. Later, send `POST /wb/reauth` with `{"secret": "..."}` first.
+4. Approve, resume, takeover, safety approval, setting the call budget, freezing an analysis script and starting an analysis run need a re-authentication within the last 300 seconds. Login counts. Later, send `POST /wb/reauth` with `{"secret": "..."}` first.
 5. A refusal has the body `{"detail": {"code": "...", "message": "..."}}`. The status is `409` for `state`, `401` for `session`, `429` for `locked` and `403` for every other code. A malformed body is `422`.
 
 With `curl`, the first requests look like this. `login.json` holds the login body; keep it private and delete it afterwards.
@@ -41,10 +41,10 @@ These commands are not verified against a running `serve`: the tests in [`tests/
 | 4. Start the stage | operator | `POST /wb/stages/STAGE_ID/start` | `stage_running` | `running` |
 | 5. The stage runs | executor, observer | read routes, `pause`, `resume`, `takeover` | `stage_running` | `running`, then `ended` |
 | 6. Data verification | researcher | `POST /wb/measurements`, `POST /wb/goals` | `data_verification`, then `analysis` | `ended` |
-| 7. Analysis | researcher | `GET /wb/rounds/ROUND_ID` | `analysis` | `ended` |
+| 7. Analysis | operator, researcher | `GET /wb/protocols/PROTOCOL_ID/analysis`, `POST /wb/analysis/runs`, `GET /wb/rounds/ROUND_ID` | `analysis` | `ended` |
 | 8. Report delivered | researcher | `GET /wb/rounds/ROUND_ID` | `delivered` | `ended` |
 
-State names are those in [`workflow/states.py`](../../../src/growbridge/workflow/states.py). Why the states are shaped this way is on [Workflow and state machines](Workflow-and-State-Machines.md).
+Before step 4 the operator can also freeze the analysis script of the protocol (`POST /wb/protocols/PROTOCOL_ID/analysis`); see [Freeze the analysis script before the first stage](#freeze-the-analysis-script-before-the-first-stage). State names are those in [`workflow/states.py`](../../../src/growbridge/workflow/states.py). Why the states are shaped this way is on [Workflow and state machines](Workflow-and-State-Machines.md).
 
 ## 1. State the goal
 
@@ -111,6 +111,25 @@ GET /wb/rounds/ROUND_ID
 The answer has `state`, `awaiting_choice`, `stages_done`, `stage_total`, the protocol id and version, `snapshot_id`, `report_artifact_id` and `stages`, a list of `{"stage_id": "...", "state": "..."}`. A new round is in `designing` and has no stage.
 
 How a real model handles a goal has not been verified. The tests use a scripted model; see [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py).
+
+## Freeze the analysis script before the first stage
+
+A result can be called confirmatory only if its analysis was fixed before the outcome data existed (see [Research methodology](Research-Methodology.md)). In DiAGRI mode the operator fixes it with one request, before any stage of the protocol has started. The request needs a re-authentication within the last 300 seconds.
+
+```sh
+curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "PROJECT_ID", "script": "print(\"analysis\")\n"}' \
+  "$BASE/wb/protocols/PROTOCOL_ID/analysis"
+```
+
+The answer is `{"protocol_id": "...", "version": 1, "script_sha256": "...", "frozen_at": 1800000000.0, "note": "..."}`. The note says that a frozen script cannot be corrected afterwards.
+
+- The `script` is UTF-8 text of 1 to 20 000 characters. It is compiled when it is frozen, never run: a syntax error or a NUL byte is refused with `param`. **A frozen script cannot be corrected afterwards**, and nothing but a new protocol version lets you freeze another one, so read it before you send it. It is stored with the name of the operator who froze it. The name comes from the session, never from the body.
+- It applies to the latest saved version of the protocol, the version a new round uses. To change the analysis, save the protocol as a new version first.
+- Once any stage of any round that runs this protocol version has started, freezing is refused with `state`: the analysis must be fixed before the outcome data can be seen (architecture document, section 6.5).
+- Freezing the same text again returns the same answer while no stage has started. Another text for the same version is refused with `script_hash`.
+- `GET /wb/protocols/PROTOCOL_ID/analysis?project_id=PROJECT_ID` needs no re-authentication. It shows `started`, `frozen` (`null`, or `script_sha256`, `frozen_at`, `frozen_by` and the `script` itself) and `snapshots`: for each data snapshot of the protocol's rounds its `snapshot_id`, `experiment_id`, `complete` and `run_status` (`none`, `running`, `succeeded` or `failed`).
 
 ## 2. The plan arrives for review
 
@@ -226,6 +245,30 @@ The researcher needs a research task to do this. In the end-to-end test the oper
 
 The researcher analyzes the frozen snapshot and calls `publish_research_report`. The report is saved as `research_report_<artifact id>.json` under `agent_work/reports/` in the data directory and registered in the project archive as an artifact of kind `research_report`. A final report moves the round to `delivered`. A report that needs review leaves the round in `analysis`. `GET /wb/rounds/ROUND_ID` shows the state and, once the report is published, its `report_artifact_id`.
 
+### Run the frozen analysis
+
+When the researcher has frozen a snapshot (step 6), the operator starts the one run of the frozen script on it. The request needs a re-authentication within the last 300 seconds.
+
+```sh
+curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id": "PROJECT_ID", "protocol_id": "PROTOCOL_ID", "snapshot_id": "SNAPSHOT_ID"}' \
+  "$BASE/wb/analysis/runs"
+```
+
+The answer has `run_id`, `status` (`succeeded` or `failed`), `exit_code`, `timed_out`, and `stdout` and `stderr`, each cut at 4000 characters. The answer comes when the run is over, after at most 600 seconds. The rest of the daemon, the protection rules and the pump-off included, keeps running meanwhile.
+
+The request is refused before the sandbox starts, in this order:
+
+1. `state`: there is no such protocol in the project, or no script is frozen for its latest version.
+2. `scope`: the snapshot is not a snapshot of a round that runs this protocol version. `state`: a later correction invalidated the snapshot.
+3. `snapshot_incomplete`: the snapshot is incomplete, or a file no longer matches its manifest.
+4. `scope`: the snapshot holds an outcome of a held-out batch. Held-out data goes into no analysis.
+5. `already_run`: this snapshot was run before. A run that failed or timed out also used up the attempt.
+6. `sandbox_unavailable`: this platform has no sandbox (it exists on macOS only). The attempt is not used up.
+
+While a script is frozen for the protocol version, the researcher's `publish_research_report` is refused with `state` as long as the run of any snapshot it cites is `none` or `running`. If every run has ended, the report is published: it can be confirmatory when all runs succeeded and nothing else lowers the label, and it is exploratory when one run failed. Without a frozen script nothing changes: the report is exploratory.
+
 There is **no route** to read the report, to read or list research tasks, or to settle a task in `needs_review` or `needs_attention`. An alert of kind `agent_task` in `GET /wb/alerts` tells you that a model task failed or needs attention.
 
 ## Steps with no route or command today
@@ -236,6 +279,7 @@ There is **no route** to read the report, to read or list research tasks, or to 
 - Read the stage history or the reason for a pause.
 - Revoke an approval, or switch the run sheet of a live stage.
 - Add an evidence card.
+- Register a held-out batch or a model for it.
 - Read the daily reports, the data snapshot or the research report.
 
 The services already have methods for most of these, many of them in [`workflow/service.py`](../../../src/growbridge/workflow/service.py). The routes and commands do not exist yet. No step of a round has a CLI command.

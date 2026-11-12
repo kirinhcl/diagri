@@ -117,12 +117,12 @@ The floors in the code:
 
 A confirmatory analysis is one whose method was fixed before the data were seen. A result may be called confirmatory only if all of the following hold. The code is `ConfirmatoryRunner` in [`research/analysis.py`](../../../src/growbridge/research/analysis.py).
 
-1. **The script is frozen by its hash.** `freeze_analysis` records the SHA-256 of the analysis script for one version of the protocol. A version has one script. A script that differs from the recorded hash, or from the hash written in the protocol, is refused (`script_hash`).
+1. **The script is frozen by its hash, before any stage has started.** The operator freezes it with `POST /wb/protocols/PROTOCOL_ID/analysis`, which calls `freeze_analysis`. It records the SHA-256, the text of the script and who froze it, for one version of the protocol. A version has one script. A script that differs from the recorded hash, or from the hash written in the protocol, is refused (`script_hash`). The script is compiled when it is frozen, never run, and a script that does not compile is refused (`param`): a frozen script cannot be corrected, so a typo must not burn the only attempt. Freezing is refused (`state`) once any stage of a round that runs the protocol version has started, because the analysis must be fixed before the outcome data can be seen (section 6.5 of the architecture document).
 2. **The data are a frozen, complete and verified snapshot.** Before the run, the manifest and every file of the data snapshot are hashed again and compared, and the snapshot must be complete (coverage of at least 0.9). Otherwise the run is refused (`snapshot_incomplete`). See [Data, archive and traceability](Data-Archive-and-Traceability.md).
-3. **One run.** A protocol version can run its script on a given snapshot once. A second attempt is refused (`already_run`). A run that fails or exceeds 600 seconds still uses up the attempt, and it is recorded as exploratory.
+3. **One run.** The operator starts it with `POST /wb/analysis/runs`, which runs the stored script. A protocol version can run its script on a given snapshot once. A second attempt is refused (`already_run`). A run that fails or exceeds 600 seconds still uses up the attempt, and it is recorded as exploratory.
 4. **The script runs in a sandbox**, with no network and a read-only view of the snapshot ([`research/sandbox.py`](../../../src/growbridge/research/sandbox.py)). The sandbox exists on macOS only. On any other system, a Raspberry Pi included, it refuses to run anything (`sandbox_unavailable`).
 
-When a report is published, the server checks that such a run succeeded for every snapshot the report uses. If not, the label is at most exploratory.
+When a report is published, the server checks that such a run succeeded for every snapshot the report uses. If not, the label is at most exploratory. While a script is frozen for the protocol version, publishing is refused (`state`) until the run of every snapshot the report cites has ended, so that a round is not delivered with an exploratory conclusion before the operator has run the analysis. A run that ended in failure lets the report through, as exploratory. The whole path, from the freeze to a confirmatory report, is exercised by [`test_e2e_confirmatory.py`](../../../tests/e2e/test_e2e_confirmatory.py) with a fake sandbox.
 
 ## Honest downgrade
 
@@ -177,7 +177,7 @@ The researcher is a language model, so its tools are fenced in ([`agents/handler
 
 ## What is not there yet
 
-- No command, workbench route or model tool calls `freeze_analysis`, `ConfirmatoryRunner.run`, `HoldoutRegistry.register` or `register_model`. Only tests call them. Until an entry point exists, a report published through the tools is exploratory or descriptive.
+- No model tool and no CLI command freezes or runs the analysis script; the operator does both through the workbench. `HoldoutRegistry.register` and `register_model` have no route or tool: only tests call them.
 - `randomize_series`, `randomize_tents` and the make-up rule for a failed round (`make_up_allocation`) are functions without a tool. The design check only compares an allocation with its seed.
 - The effect and the p-value in a report are computed by the server with `paired_block_estimate`. The output of the frozen script stays in the run folder and is not copied into the report.
 - One confirmatory run covers one snapshot. Section 6.5 of the architecture document describes a single run over all rounds of a series; the code has no such run.

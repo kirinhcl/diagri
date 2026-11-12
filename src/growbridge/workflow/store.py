@@ -308,6 +308,25 @@ class WorkflowStore:
         )
         return None if row is None else self._stage_row(row)
 
+    def protocol_started(self, protocol_id: str, version: int) -> bool:
+        """Whether any stage of any round that runs this protocol version has ever started."""
+        row = self.db.one(
+            "SELECT 1 FROM wf_stages s JOIN wf_rounds r ON r.id = s.round_id"
+            " WHERE r.protocol_id = ? AND r.protocol_version = ? AND s.started_at IS NOT NULL"
+            " LIMIT 1",
+            (protocol_id, version),
+        )
+        return row is not None
+
+    def experiments_under(self, protocol_id: str, version: int) -> tuple[str, ...]:
+        """The experiments of the stages of the rounds that run this protocol version."""
+        rows = self.db.query(
+            "SELECT DISTINCT s.experiment_id FROM wf_stages s JOIN wf_rounds r ON r.id = s.round_id"
+            " WHERE r.protocol_id = ? AND r.protocol_version = ? ORDER BY s.experiment_id",
+            (protocol_id, version),
+        )
+        return tuple(row["experiment_id"] for row in rows)
+
     # --- approvals -----------------------------------------------------------------------------
 
     def add_approval(self, approval: Approval) -> None:
