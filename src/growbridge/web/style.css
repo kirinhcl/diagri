@@ -1,24 +1,3 @@
-:root {
-  --ink: #172e28;
-  --muted: #6d7d75;
-  --green: #23684d;
-  --green-dark: #174d38;
-  --pale: #e7f0e7;
-  --line: #e2e8de;
-  --paper: #fff;
-  --bg: #f4f6ef;
-  --amber: #8d6019;
-  --red: #a63d36;
-  --radius: 18px;
-  font-family:
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
-  color: var(--ink);
-  background: var(--bg);
-  font-synthesis: none;
 }
 * {
   box-sizing: border-box;

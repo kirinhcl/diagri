@@ -135,6 +135,12 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
     async def dashboard():
         return FileResponse(web / "index.html")
 
+    if workbench is not None:
+
+        @app.get("/workbench", include_in_schema=False)
+        async def workbench_page():
+            return FileResponse(web / "workbench.html")
+
     @app.post("/ui/session", dependencies=[Depends(bearer)])
     async def browser_link():
         return {"code": sessions.issue(), "expires_in": 60}

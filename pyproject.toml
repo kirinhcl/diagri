@@ -23,7 +23,11 @@ growbridge = "growbridge.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-growbridge = ["native/*.swift", "web/*.html", "web/*.css", "web/*.js"]
+growbridge = [
+    "native/*.swift", "web/*.html", "web/*.css", "web/*.js",
+    "web/workbench/*.js", "web/workbench/*.css", "web/workbench/i18n/*.js",
+    "web/workbench/ui/*.js", "web/workbench/pages/*.js",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
