@@ -94,8 +94,179 @@ code {
 .button-danger { background: var(--red); color: var(--paper); }
 .button-danger:hover:enabled { background: color-mix(in srgb, var(--red) 82%, var(--ink)); }
 
+/* --- stage page: heading, controls and the results of the operator's writes --------------------- */
+.stage-title { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+/* Each part may shrink to the block: a wide table or form never widens the page. */
+.page.stage .block { grid-template-columns: minmax(0, 1fr); }
+.stage-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+}
+.action-group {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+.action-group-wide { grid-column: 1 / -1; }
+.action-group[data-action="stop"] { border-color: color-mix(in srgb, var(--red) 28%, var(--line)); }
+.action-group .form { max-width: none; }
+.action-title { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.1px; }
+.check { display: inline-flex; align-items: flex-start; gap: 8px; font-size: 13px; line-height: 1.4; }
+.check input { margin-top: 2px; accent-color: var(--green); }
+
+.activity-wrap {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.activity { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.activity-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+.activity-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.activity-detail p,
+.activity-meta { margin: 0; font-size: 12px; overflow-wrap: anywhere; }
+.activity-meta { color: var(--muted-strong); }
+
+/* --- stage page: run sheet review -------------------------------------------------------------- */
+.review { display: grid; gap: 16px; }
+.findings { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  font-size: 13px;
+}
+.finding-text { min-width: 0; overflow-wrap: anywhere; }
+.draft-findings { display: grid; gap: 8px; }
+.sheet-json summary {
+  width: fit-content;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--green);
+  cursor: pointer;
+}
+.sheet-json summary:hover { color: var(--green-dark); }
+.sheet-json[open] summary { margin-bottom: 10px; }
+
+/* --- stage page: environment curves (one small chart per reading) ------------------------------ */
+.readings { display: grid; gap: 14px; }
+.chart-notes { display: grid; gap: 2px; font-size: 12px; color: var(--muted-strong); }
+.chart-notes p { margin: 0; }
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 14px;
+}
+.chart {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px 10px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+.chart-head { display: grid; gap: 2px; }
+.chart-name { font-size: 12px; font-weight: 650; color: var(--muted-strong); }
+.chart-value {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-meta { font-size: 11px; color: var(--muted); }
+.chart-plot { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-rule { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-line {
+  fill: none;
+  stroke: var(--green);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+.chart-hit { fill: var(--green); opacity: 0; transition: opacity var(--fast); }
+.chart-hit:hover { opacity: 1; }
+.chart-flagged {
+  fill: var(--paper);
+  stroke: var(--amber);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.chart-flagged:hover { fill: var(--amber-soft); }
+.chart-empty { margin: 0; font-size: 13px; color: var(--muted-strong); }
+
+/* --- stage page: history and measurements ------------------------------------------------------ */
+.timeline {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+  border-left: 2px solid var(--line);
+}
+.timeline-item { position: relative; display: grid; gap: 4px; }
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: -24px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  background: var(--green);
+}
+.timeline-intervention::before { background: var(--amber); }
+.timeline-time { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.timeline-what {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.timeline-detail { margin: 0; font-size: 12px; color: var(--muted-strong); overflow-wrap: anywhere; }
+.measure-new { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.form-columns {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: 14px 18px;
+}
+.form-columns > .form-status,
+.form-columns > .form-actions { grid-column: 1 / -1; }
+
 @media (max-width: 600px) {
   .block { padding: 16px; }
   .data-table th,
   .data-table td { padding: 8px 10px; }
+  .action-group { padding: 14px; }
+  .chart-value { font-size: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-hit { transition: none; }
 }

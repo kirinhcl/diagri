@@ -1,0 +1,326 @@
+// Stage controls. Which ones show follows stage-rules.js; the server stays the judge and every
+// refusal is shown with its reason. Nothing is shown as done before the server answered.
+import { ApiError } from "../api.js";
+import { newRequestId, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
+import { availableActions, heldByEntry } from "../stage-rules.js";
+import { confirmAction } from "../ui/dialog.js";
+import { h } from "../ui/dom.js";
+import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
+import { errorBox, note, showErrors, timeText } from "../ui/section.js";
+
+// A manual write may only switch the pump off; irrigation is what switches it on.
+const CHANNELS = ["light", "exhaust", "fan", "pump"];
+const RECEIPT_TONE = {
+  pending: "pill",
+  applied: "pill pill-active",
+  unknown: "pill pill-waiting",
+  failed: "pill pill-onsite",
+  unsettled: "pill pill-waiting",
+};
+// Controls that are one request without a body: the route verb, the button tone, an optional ask.
+const PLAIN = {
+  start: { verb: "start", tone: "primary" },
+  resume: { verb: "resume", tone: "primary" },
+  takeover: { verb: "takeover", tone: "quiet", ask: true },
+  stop: { verb: "stop", tone: "danger", ask: true },
+};
+let counter = 0;
+
+const stagePath = (stage, verb) => `/stages/${encodeURIComponent(stage.stage_id)}/${verb}`;
+
+function group(name, title, ...children) {
+  const wide = name === "draft";
+  return h(
+    "div",
+    { class: ["action-group", wide && "action-group-wide"], attrs: { "data-action": name } },
+    h("h3", { class: "action-title", text: title }),
+    ...children,
+  );
+}
+
+// After a write the server accepted: say so, then read the page again.
+async function accepted(env, label) {
+  env.ctx.notify(env.ctx.t("stage.actionDone", { action: label }), "ok");
+  await env.onChanged();
+}
+
+// A refusal stays under its button; a state conflict is also announced and the page read again.
+async function refused(env, box, error) {
+  showErrors(box, error, env.ctx);
+  if (error instanceof ApiError && error.code === "state") {
+    env.ctx.notify(errorLines(error, env.ctx.lang, env.ctx.t).join(" "), "error");
+    await env.onChanged();
+  }
+}
+
+// A button that asks first when `ask` gives the dialog's text, and is disabled while it works.
+function actionButton(env, { label, tone = "primary", ask = null, run }) {
+  const box = errorBox();
+  const button = h("button", { class: ["button", `button-${tone}`], attrs: { type: "button" }, text: label });
+  button.addEventListener("click", async () => {
+    box.hidden = true;
+    const question = typeof ask === "function" ? ask() : ask;
+    if (question && !(await confirmAction(env.ctx.t, { ...question, confirmLabel: label }))) return;
+    button.disabled = true;
+    try {
+      await run();
+      await accepted(env, label);
+    } catch (error) {
+      await refused(env, box, error);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return { button, element: h("div", { class: "action" }, button, box) };
+}
+
+function plainAction(env, name) {
+  const { ctx, stage } = env;
+  const spec = PLAIN[name];
+  const label = ctx.t(`stage.${name}`);
+  const ask = spec.ask ? { title: ctx.t(`stage.${name}.title`), lines: [ctx.t(`stage.${name}.line`, { id: stage.stage_id })] } : null;
+  const run = () => ctx.api.post(stagePath(stage, spec.verb), {}, { action: label });
+  const control = actionButton(env, { label, tone: spec.tone, ask, run });
+  return group(name, label, note(ctx.t(`stage.${name}.note`)), control.element);
+}
+
+export function findingsList(ctx, findings) {
+  const list = Array.isArray(findings) ? findings : [];
+  if (!list.length) return note(ctx.t("stage.review.noFindings"));
+  const item = (finding) =>
+    h(
+      "li",
+      { class: "finding" },
+      h("span", { class: ["pill", finding.blocking ? "pill-onsite" : "pill-waiting"], text: ctx.t(finding.blocking ? "finding.blocking" : "finding.hint") }),
+      h("code", { text: finding.code }),
+      h("span", { class: "finding-text", text: finding.message }),
+    );
+  return h("ul", { class: "findings" }, list.map(item));
+}
+
+// --- pending review -------------------------------------------------------------------------------
+function approveGroup(env) {
+  const { ctx, stage, review } = env;
+  const label = ctx.t("stage.approve");
+  const run = async () => {
+    const approval = await ctx.api.post(stagePath(stage, "approve"), {}, { action: label });
+    const line = ctx.t("stage.approved", {
+      version: approval.run_sheet_version,
+      digest: approval.run_sheet_digest,
+      time: timeText(ctx, approval.approved_at),
+    });
+    env.log.add(label, [line]);
+  };
+  const control = actionButton(env, { label, run });
+  // Never approve what was not read, nor what the check blocks; the server checks both again.
+  const why = !review ? ctx.t("stage.approve.unread") : review.blocking ? ctx.t("stage.approve.blocked") : null;
+  control.button.disabled = Boolean(why);
+  return group("approve", label, note(why || ctx.t("stage.approve.note")), control.element);
+}
+
+function draftGroup(env) {
+  const { ctx, stage, review } = env;
+  const title = ctx.t("stage.draft");
+  if (!review) return group("draft", title, note(ctx.t("stage.approve.unread")));
+  const submitLabel = ctx.t("stage.draft.submit");
+  const findings = h("div", { class: "draft-findings", attrs: { hidden: true } });
+  const onSubmit = async (body) => {
+    findings.hidden = true;
+    const answer = await ctx.api.post("/drafts/run-sheet", body, { action: submitLabel });
+    const list = Array.isArray(answer && answer.findings) ? answer.findings : [];
+    findings.replaceChildren(findingsList(ctx, list));
+    findings.hidden = list.length === 0;
+    if (list.some((finding) => finding.blocking)) throw new Error(ctx.t("stage.draft.refused"));
+    await accepted(env, submitLabel);
+  };
+  const value = { round_id: env.roundId || "", run_sheet: review.run_sheet };
+  const label = ctx.t("stage.draft.json");
+  const editor = jsonEditor({ label, value, submitLabel, onSubmit, draftKey: `run-sheet:${stage.stage_id}`, ctx });
+  const missingRound = env.roundId ? null : note(ctx.t("stage.draft.noRound"));
+  return group("draft", title, note(ctx.t("stage.draft.note")), missingRound, editor, findings);
+}
+
+// --- running and paused ---------------------------------------------------------------------------
+function pauseGroup(env) {
+  const { ctx, stage } = env;
+  const submitLabel = ctx.t("stage.pause");
+  const onSubmit = async ({ reason }) => {
+    await ctx.api.post(stagePath(stage, "pause"), reason ? { reason } : {}, { action: submitLabel });
+    await accepted(env, submitLabel);
+  };
+  const field = { name: "reason", label: ctx.t("stage.pause.reason") };
+  return group("pause", submitLabel, simpleForm({ fields: [field], submitLabel, onSubmit, ctx }));
+}
+
+// --- manual control -------------------------------------------------------------------------------
+function manualGroup(env) {
+  const { ctx, stage } = env;
+  const title = ctx.t("stage.manual");
+  const options = CHANNELS.map((value) => ({ value, label: ctx.t(`channel.${value}`) }));
+  const fields = [
+    { name: "channel", label: ctx.t("stage.manual.channel"), type: "select", options, required: true },
+    { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true },
+    { name: "note", label: ctx.t("stage.manual.note") },
+  ];
+  const onSubmit = async ({ channel, level, note: text }) => {
+    const body = { stage_id: stage.stage_id, request_id: newRequestId(), level, note: text || "" };
+    const record = await ctx.api.post(`/manual/${encodeURIComponent(channel)}`, body, { action: title });
+    env.log.track(ctx.t("receipt.manual", { channel: ctx.t(`channel.${channel}`), level }), record);
+    await env.onChanged();
+  };
+  const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
+  return group("manual", title, note(ctx.t("stage.manual.ranges")), form);
+}
+
+// Off the on-site entry the button stays visible but disabled, with the reason beside it.
+function irrigationGroup(env, allowed) {
+  const { ctx, stage } = env;
+  const title = ctx.t("stage.irrigation");
+  const submitLabel = ctx.t("stage.irrigation.submit");
+  if (!allowed) {
+    const id = `irrigation-why-${++counter}`;
+    const why = h("p", { class: "block-note", attrs: { id }, text: ctx.t("stage.irrigation.lanOnly") });
+    const attrs = { type: "button", disabled: true, "aria-describedby": id };
+    return group("irrigation", title, why, h("button", { class: "button button-primary", attrs, text: submitLabel }));
+  }
+  const fields = [
+    { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true },
+    { name: "note", label: ctx.t("stage.manual.note") },
+  ];
+  const onSubmit = async ({ seconds, note: text }) => {
+    const body = { stage_id: stage.stage_id, request_id: newRequestId(), seconds, note: text || "" };
+    const record = await ctx.api.post("/irrigation", body, { action: submitLabel });
+    env.log.track(ctx.t("receipt.irrigation", { seconds }), record);
+    await env.onChanged();
+  };
+  return group("irrigation", title, simpleForm({ fields, submitLabel, onSubmit, ctx }));
+}
+
+function differenceLines(ctx, differences) {
+  const list = Array.isArray(differences) ? differences : [];
+  if (!list.length) return [ctx.t("stage.handback.none")];
+  const line = (item) =>
+    ctx.t("stage.handback.difference", {
+      channel: ctx.t(`channel.${item.channel}`),
+      field: item.field,
+      expected: item.expected,
+      actual: item.actual ?? "—",
+    });
+  return [ctx.t("stage.handback.differences"), ...list.map(line)];
+}
+
+function handbackGroup(env) {
+  const { ctx, stage } = env;
+  const label = ctx.t("stage.handback");
+  const id = `handback-accept-${++counter}`;
+  const check = h("input", { attrs: { id, type: "checkbox", name: "accept_as_intervention" } });
+  const choice = h("label", { class: "check", attrs: { for: id } }, check, h("span", { text: ctx.t("stage.handback.accept") }));
+  const ask = () => ({
+    title: ctx.t("stage.handback.title"),
+    lines: [ctx.t("stage.handback.line"), ctx.t(check.checked ? "stage.handback.willRecord" : "stage.handback.wontRecord")],
+  });
+  const run = async () => {
+    const body = { accept_as_intervention: check.checked };
+    const answer = await ctx.api.post(stagePath(stage, "handback"), body, { action: label });
+    env.log.add(label, differenceLines(ctx, answer && answer.differences));
+  };
+  const control = actionButton(env, { label, ask, run });
+  return group("handback", label, note(ctx.t("stage.handback.note")), choice, control.element);
+}
+
+// --- recovery check -------------------------------------------------------------------------------
+function onsiteGroup(env) {
+  const { ctx, stage } = env;
+  const submitLabel = ctx.t("stage.onsite");
+  const onSubmit = async ({ note: text }) => {
+    await ctx.api.post(stagePath(stage, "onsite-check"), { note: text }, { action: submitLabel });
+    await accepted(env, submitLabel);
+  };
+  const field = { name: "note", label: ctx.t("stage.onsite.note"), type: "textarea", required: true };
+  return group("onsite_check", submitLabel, note(ctx.t("stage.onsite.lead")), simpleForm({ fields: [field], submitLabel, onSubmit, ctx }));
+}
+
+const BUILDERS = {
+  approve: approveGroup,
+  start: (env) => plainAction(env, "start"),
+  draft: draftGroup,
+  pause: pauseGroup,
+  resume: (env) => plainAction(env, "resume"),
+  takeover: (env) => plainAction(env, "takeover"),
+  stop: (env) => plainAction(env, "stop"),
+  manual: manualGroup,
+  irrigation: (env) => irrigationGroup(env, true),
+  handback: handbackGroup,
+  onsite_check: onsiteGroup,
+};
+
+// env = { ctx, stage, review (null when unread), roundId, log, onChanged }
+export function actionsView(env) {
+  const { ctx, stage } = env;
+  const entry = ctx.me && ctx.me.entry;
+  const offered = availableActions(stage.state, entry).map((action) => BUILDERS[action](env));
+  const held = heldByEntry(stage.state, entry).map(() => irrigationGroup(env, false));
+  if (!offered.length && !held.length) return note(ctx.t("stage.noControls"));
+  return h("div", { class: "stage-actions" }, offered, held);
+}
+
+// --- what came of the operator's writes: kept while the controls above are redrawn --------------
+function logItem(ctx, title, record) {
+  const pill = h("span", { class: "pill" });
+  const detail = h("div", { class: "activity-detail" });
+  const meta = record ? ctx.t("receipt.request", { id: record.request_id, time: timeText(ctx, record.created_at) }) : null;
+  const element = h(
+    "li",
+    { class: "activity-item" },
+    h("p", { class: "activity-title" }, record ? pill : null, h("span", { text: title })),
+    detail,
+    meta ? h("p", { class: "activity-meta", text: meta }) : null,
+  );
+  const show = (status, lines) => {
+    if (status) {
+      pill.className = RECEIPT_TONE[status];
+      pill.textContent = ctx.t(`receipt.${status}`);
+    }
+    detail.replaceChildren(...lines.filter(Boolean).map((line) => h("p", { text: line })));
+  };
+  return { element, show };
+}
+
+function outcomeLines(ctx, { outcome, record, error }) {
+  const problem = error ? ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }) : null;
+  if (outcome === "applied") {
+    const level = record && record.confirmed_level;
+    return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level })];
+  }
+  if (outcome === "unknown") return [ctx.t("receipt.unknownNote")];
+  if (outcome === "failed") return [record && record.error ? ctx.t("receipt.error", { error: record.error }) : null];
+  return [ctx.t("receipt.unsettledNote", { seconds: RECEIPT_LIMIT_MS / 1000 }), problem];
+}
+
+// life = { signal, alive() }: the page's lifetime; a poll ends when the page is left.
+export function activityLog(ctx, life) {
+  const list = h("ol", { class: "activity" });
+  const title = h("h3", { class: "action-title", text: ctx.t("stage.log") });
+  const element = h("div", { class: "activity-wrap", attrs: { hidden: true, role: "status", "aria-live": "polite" } }, title, list);
+  const push = (item) => {
+    element.hidden = false;
+    list.prepend(item.element);
+    return item;
+  };
+  const add = (heading, lines) => push(logItem(ctx, heading, null)).show(null, lines);
+  const track = (heading, record) => {
+    const item = push(logItem(ctx, heading, record));
+    item.show("pending", []);
+    const onUpdate = ({ error }) => {
+      const lines = error ? [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") })] : [];
+      item.show("pending", lines);
+    };
+    const fetchReceipt = () => ctx.api.get(`/receipts/${encodeURIComponent(record.request_id)}`);
+    pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
+      .then((result) => {
+        if (result.outcome !== "stopped") item.show(result.outcome === "timeout" ? "unsettled" : result.outcome, outcomeLines(ctx, result));
+      })
+      .catch((error) => item.show("unsettled", outcomeLines(ctx, { outcome: "unsettled", record, error })));
+  };
+  return { element, add, track };
+}
