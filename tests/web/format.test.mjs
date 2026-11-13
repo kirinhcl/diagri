@@ -44,6 +44,32 @@ test("formatNumber shows a dash for missing values", () => {
   assert.equal(formatNumber(Infinity, 1, "en"), "—");
 });
 
+test("impossible dates and times are refused", () => {
+  const bad = [
+    "2027-13-01T10:00",
+    "2027-00-10T10:00",
+    "2027-01-32T10:00",
+    "2027-01-00T10:00",
+    "2027-02-31T10:00",
+    "2027-02-29T10:00",
+    "2027-01-15T24:00",
+    "2027-01-15T10:60",
+    "2027-01-15T10:99",
+    "",
+    "not a time",
+    "2027-01-15 10:00",
+  ];
+  for (const local of bad) {
+    assert.throws(() => zonedToEpoch(local, "UTC"), RangeError, local);
+  }
+});
+
+test("a leap day is accepted only in a leap year", () => {
+  assert.equal(zonedToEpoch("2028-02-29T10:00", "UTC").epoch, Date.UTC(2028, 1, 29, 10, 0) / 1000);
+  assert.equal(zonedToEpoch("2100-02-28T10:00", "UTC").epoch, Date.UTC(2100, 1, 28, 10, 0) / 1000);
+  assert.throws(() => zonedToEpoch("2100-02-29T10:00", "UTC"), RangeError);
+});
+
 test("formatNumber applies precision", () => {
   assert.equal(formatNumber(23.14, 1, "en"), "23.1");
   assert.equal(formatNumber(0.5, 2, "en"), "0.50");

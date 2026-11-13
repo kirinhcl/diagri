@@ -53,6 +53,15 @@ export function zonedToEpoch(local, timeZone) {
   if (!match) throw new RangeError(`Invalid local time: ${local}`);
   const [year, month, day, hour, minute] = match.slice(1).map(Number);
   const localMs = Date.UTC(year, month - 1, day, hour, minute);
+  // Date.UTC normalises out-of-range fields, so compare the parts back.
+  const check = new Date(localMs);
+  const exact =
+    check.getUTCFullYear() === year &&
+    check.getUTCMonth() === month - 1 &&
+    check.getUTCDate() === day &&
+    check.getUTCHours() === hour &&
+    check.getUTCMinutes() === minute;
+  if (!exact) throw new RangeError(`Invalid local time: ${local}`);
   const guess = localMs / 1000;
   const offsets = new Set([
     offsetMinutes(guess - HALF_DAY_SECONDS, timeZone),
