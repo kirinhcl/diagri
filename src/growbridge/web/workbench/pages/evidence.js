@@ -10,22 +10,27 @@ const yesNo = (ctx) => [
   { value: "no", label: ctx.t("common.no") },
 ];
 
-function enterForm(ctx) {
-  const submitLabel = ctx.t("evidence.enter");
+// Whether a card was calibrated is recorded as the operator's own choice: no answer is preset.
+export function enterFields(ctx) {
   const classes = SOURCE_CLASSES.map((value) => ({ value, label: ctx.t(`evidence.class.${value}`) }));
-  const fields = [
+  const calibration = [{ value: "", label: ctx.t("form.choose") }, ...yesNo(ctx)];
+  return [
     { name: "source_class", label: ctx.t("evidence.sourceClass"), type: "select", required: true, options: classes },
     { name: "citation", label: ctx.t("evidence.citation"), type: "textarea", required: true },
     { name: "claim", label: ctx.t("evidence.claim"), type: "textarea", required: true },
     { name: "value", label: ctx.t("evidence.value"), type: "number" },
     { name: "unit", label: ctx.t("evidence.unit"), type: "text" },
-    { name: "calibrated", label: ctx.t("evidence.calibrated"), type: "select", value: "yes", options: yesNo(ctx) },
+    { name: "calibrated", label: ctx.t("evidence.calibrated"), type: "select", required: true, options: calibration },
   ];
+}
+
+function enterForm(ctx) {
+  const submitLabel = ctx.t("evidence.enter");
   const onSubmit = async ({ calibrated, ...rest }) => {
-    const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated !== "no" }, { action: submitLabel });
+    const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated === "yes" }, { action: submitLabel });
     afterWrite(ctx, ctx.t("evidence.entered", { id: card.id }));
   };
-  return simpleForm({ fields, submitLabel, onSubmit, draftKey: "evidence:new", ctx });
+  return simpleForm({ fields: enterFields(ctx), submitLabel, onSubmit, draftKey: "evidence:new", ctx });
 }
 
 function verifyForm(ctx, card) {

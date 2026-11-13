@@ -93,6 +93,11 @@ function runResult(ctx, round) {
   );
 }
 
+// The server shows the protocol's latest version; null when that is the round's own version.
+export function versionMismatch(analysis, round) {
+  return analysis.version === round.protocol_version ? null : { latest: analysis.version, round: round.protocol_version };
+}
+
 export async function analysisSection(ctx, round) {
   const { analysis, problem } = await readAnalysis(ctx, round);
   const title = ctx.t("analysis.title");
@@ -100,10 +105,13 @@ export async function analysisSection(ctx, round) {
     const lines = problem.map((line) => h("p", { text: line }));
     return section(title, h("div", { class: "form-status form-status-error" }, lines));
   }
+  const mismatch = versionMismatch(analysis, round);
   return section(
     title,
+    mismatch ? h("div", { class: "form-status form-status-error", attrs: { role: "status" } }, h("p", { text: ctx.t("analysis.otherVersion", mismatch) })) : null,
     keyValues([
       [ctx.t("col.protocol"), `${analysis.protocol_id} v${analysis.version}`],
+      [ctx.t("analysis.roundVersion"), `v${round.protocol_version}`],
       [ctx.t("analysis.started"), ctx.t(analysis.started ? "common.yes" : "common.no")],
     ]),
     frozenView(ctx, analysis),
