@@ -100,6 +100,7 @@ def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
             },
         )
         for alert in alerts.open()
+        if alert.read_at is None
     ]
     return _by_age(items)[:INBOX_LIMIT]
 
@@ -117,16 +118,18 @@ def _compute_items(compute: ComputeService | None) -> list[dict[str, Any]]:
 def _task_items(tasks: TaskBoard | None) -> list[dict[str, Any]]:
     if tasks is None:
         return []
+    found = tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT)
+    since = tasks.state_since([task.id for task in found])
     return [
         _item(
             "task",
             task.id,
             task.project_id,
             None,
-            None,
+            since.get(task.id),
             {"question": task.question, "state": task.state.value, "owner_role": task.owner_role},
         )
-        for task in tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT)
+        for task in found
     ]
 
 
@@ -172,6 +175,19 @@ def add_read_routes(
     alerts: AlertBook | None = None,
     compute: ComputeService | None = None,
 ) -> None:
+    _inbox_routes(router, operator, workflow, tasks, alerts, compute)
+    _project_routes(router, operator, workflow, tasks, budget)
+    _stage_read_routes(router, operator, workflow, archive, clock)
+
+    Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
+
+    @router.get("/safety")
+    async def safety(actor: Operator):
+        config = control.safety()
+        return {"safety": None if config is None else config.model_dump(mode="json")}
+
+
+def _inbox_routes(router, operator, workflow, tasks, alerts, compute) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/inbox")
@@ -179,6 +195,10 @@ def add_read_routes(
         items = _stage_items(workflow) + _round_items(workflow) + _alert_items(alerts)
         items += _compute_items(compute) + _task_items(tasks)
         return {"items": _by_age(items)}
+
+
+def _project_routes(router, operator, workflow, tasks, budget) -> None:
+    Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/projects")
     async def projects(actor: Operator):
@@ -195,6 +215,10 @@ def add_read_routes(
             "budget": _budget_view(budget, project_id),
             "tasks": [task.model_dump(mode="json") for task in listed],
         }
+
+
+def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
+    Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/stages/{stage_id}/readings")
     async def readings(
@@ -223,8 +247,3 @@ def add_read_routes(
             if entry["stage_id"] == stage_id
         ]
         return {"history": workflow.store.history(stage_id), "interventions": mine}
-
-    @router.get("/safety")
-    async def safety(actor: Operator):
-        config = control.safety()
-        return {"safety": None if config is None else config.model_dump(mode="json")}

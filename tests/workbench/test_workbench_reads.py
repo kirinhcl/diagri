@@ -1,7 +1,8 @@
 import pytest
 
-from growbridge.archive.models import SampleRecord
+from growbridge.archive.models import Budget, ResearchTask, SampleRecord
 from growbridge.sim.fixtures import make_safety
+from growbridge.workflow.states import TaskState
 
 READS = [
     "/wb/inbox",
@@ -116,3 +117,30 @@ def test_me_reports_the_timezone(operator):
 def test_reads_work_on_the_overlay_entry(bench):
     assert bench.login(bench.overlay).status_code == 200
     assert bench.overlay.get("/wb/inbox").status_code == 200
+
+
+def test_inbox_drops_alerts_an_operator_has_read(bench, operator):
+    alert = bench.alerts.raise_alert("threshold", "too_hot", "critical", "31 C")
+    kinds = [i["kind"] for i in operator.get("/wb/inbox").json()["items"]]
+    assert kinds.count("alert") == 1
+    assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
+    kinds = [i["kind"] for i in operator.get("/wb/inbox").json()["items"]]
+    assert "alert" not in kinds
+
+
+def test_a_task_item_is_dated_by_its_last_state_change(bench, operator):
+    task = ResearchTask(
+        id="task-1",
+        project_id="p1",
+        question="does more light help?",
+        owner_role="researcher",
+        budget=Budget(max_calls=5, max_cost=1.0),
+        trigger_event_id="ev-1",
+        correlation_id="corr-1",
+    )
+    bench.tasks.create(task)
+    bench.clock.wall = 777.0
+    bench.tasks.transition("task-1", TaskState.NEEDS_ATTENTION, "ev-2", "stuck")
+    bench.clock.wall = 900.0
+    items = [i for i in operator.get("/wb/inbox").json()["items"] if i["kind"] == "task"]
+    assert [(i["id"], i["since"]) for i in items] == [("task-1", 777.0)]

@@ -112,6 +112,19 @@ class TaskBoard:
         )
         return tuple(self._load(row) for row in rows)
 
+    def state_since(self, task_ids: Collection[str]) -> dict[str, float]:
+        """When each task last changed state (its latest event); tasks without one are absent."""
+        ids = list(task_ids)
+        if not ids:
+            return {}
+        marks = ",".join("?" for _ in ids)
+        rows = self.db.query(
+            f"SELECT task_id, MAX(at) AS at FROM task_events WHERE task_id IN ({marks})"
+            " GROUP BY task_id",
+            ids,
+        )
+        return {row["task_id"]: row["at"] for row in rows}
+
     def open_tasks(self, roles: Collection[str]) -> tuple[ResearchTask, ...]:
         """In-progress tasks owned by one of ``roles``, oldest first."""
         rows = self.db.query(

@@ -197,18 +197,8 @@ class Workbench:
         self._write_routes()
         self._record_routes()
         self._read_routes()
-        add_read_routes(
-            self.router,
-            self.operator,
-            workflow,
-            archive,
-            control,
-            self.clock,
-            tasks=tasks,
-            budget=budget,
-            alerts=alerts,
-            compute=compute,
-        )
+        reads = (self.router, self.operator, workflow, archive, control, self.clock)
+        add_read_routes(*reads, tasks=tasks, budget=budget, alerts=alerts, compute=compute)
         add_round_routes(self.router, self.operator, self.fresh, workflow, tasks, budget, archive)
         add_evidence_routes(self.router, self.operator, archive)
         if runner is not None:
