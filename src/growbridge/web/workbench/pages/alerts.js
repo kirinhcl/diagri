@@ -5,8 +5,27 @@ import { severityPill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { isNotMounted } from "./not-mounted.js";
 
+const SEVERITY_ORDER = ["info", "warning", "critical"]; // mildest first
+
+// The inbox's rule (observer/alerts.py awaits_reading): unread, or worse than the severity it was
+// read at. A read recorded without its severity waits once more.
+export function alertWaiting(alert) {
+  if (!alert || alert.read_at === null || alert.read_at === undefined) return true;
+  const readAt = SEVERITY_ORDER.indexOf(alert.read_severity);
+  return readAt < 0 || SEVERITY_ORDER.indexOf(alert.severity) > readAt;
+}
+
+function readLine(ctx, alert) {
+  const read = { name: alert.read_by, time: timeText(ctx, alert.read_at) };
+  if (!alertWaiting(alert)) return ctx.t("alerts.readBy", read);
+  if (!alert.read_severity) return ctx.t("alerts.readBefore", read);
+  const severity = ctx.t(`severity.${alert.severity}`);
+  return ctx.t("alerts.readWorsened", { ...read, severity, last: timeText(ctx, alert.last_at) });
+}
+
 function readCell(ctx, alert) {
-  if (alert.read_by) return ctx.t("alerts.readBy", { name: alert.read_by, time: timeText(ctx, alert.read_at) });
+  const said = alert.read_by ? readLine(ctx, alert) : null;
+  if (!alertWaiting(alert)) return said;
   const box = errorBox();
   const label = ctx.t("alerts.markRead");
   const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
@@ -24,7 +43,7 @@ function readCell(ctx, alert) {
     ctx.notify(ctx.t("alerts.wasRead"), "ok");
     ctx.reload();
   });
-  return h("div", { class: "action" }, button, box);
+  return h("div", { class: "action" }, said ? h("p", { class: "block-note", text: said }) : null, button, box);
 }
 
 function alertsTable(ctx, alerts) {

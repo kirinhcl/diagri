@@ -157,6 +157,17 @@ def test_inbox_shows_an_alert_raised_again_after_it_was_read(bench, operator):
     assert [i["id"] for i in items if i["kind"] == "alert"] == [alert.event_id]
 
 
+def test_inbox_keeps_a_read_alert_hidden_while_it_is_raised_again_at_the_same_severity(
+    bench, operator
+):
+    alert = bench.alerts.raise_alert("data_gap", "temperature", "warning", "no data")
+    assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
+    for _ in range(3):  # the observer raises an ongoing gap again on every tick
+        bench.clock.advance(5)
+        bench.alerts.raise_alert("data_gap", "temperature", "warning", "no data")
+    assert "alert" not in [i["kind"] for i in operator.get("/wb/inbox").json()["items"]]
+
+
 def test_inbox_keeps_a_new_critical_alert_when_alerts_overflow(bench, operator):
     for number in range(50):
         bench.alerts.raise_alert("threshold", f"key-{number}", "warning", "warm")

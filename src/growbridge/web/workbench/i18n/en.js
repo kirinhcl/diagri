@@ -338,6 +338,8 @@ export default {
   "alerts.last": "Last seen",
   "alerts.read": "Read",
   "alerts.readBy": "Read by {name}, {time}",
+  "alerts.readWorsened": "Read by {name}, {time}; worsened to {severity} at {last}.",
+  "alerts.readBefore": "Read by {name}, {time}, before the severity read was recorded; mark it read again.",
   "alerts.markRead": "Mark as read",
   "alerts.wasRead": "The alert was marked as read.",
   "evidence.lead": "Every evidence card with its source. A model's card stays unverified until a person checks it. A card is never edited.",

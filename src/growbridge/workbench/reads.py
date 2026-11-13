@@ -15,7 +15,7 @@ from growbridge.archive.clock import Clock
 from growbridge.archive.readings import DEFAULT_POINTS, MAX_POINTS, bucketed_samples
 from growbridge.archive.store import Archive
 from growbridge.compute.service import ComputeService
-from growbridge.observer.alerts import AlertBook
+from growbridge.observer.alerts import AlertBook, awaits_reading
 from growbridge.ports import Actor, ControlPort, Denied
 from growbridge.workbench.rounds import PathId, ProjectBudget
 from growbridge.workflow.listing import (
@@ -125,7 +125,7 @@ def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
             },
         )
         for alert in alerts.open()
-        if alert.read_at is None or alert.read_at < alert.last_at  # raised again after the read
+        if awaits_reading(alert)  # unread, or worse than when it was read
     ]
     return items
 

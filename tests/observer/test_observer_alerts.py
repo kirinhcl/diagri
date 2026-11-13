@@ -2,9 +2,12 @@ import pytest
 
 from growbridge.archive.models import Condition
 from growbridge.observer.alerts import (
+    NAMESPACE,
+    STEPS,
     AlertBook,
     AlertRule,
     RuleState,
+    awaits_reading,
     evaluate_alert_rules,
 )
 from growbridge.ports import Actor, Denied, Reading
@@ -126,6 +129,57 @@ def test_only_an_operator_may_mark_an_alert_read(db, clock):
     book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
 
     assert book.open()[0].read_by == "alice"
+
+
+def test_mark_read_keeps_the_severity_it_was_read_at(db, clock):
+    book = AlertBook(db, clock)
+    alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
+
+    book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
+
+    assert book.get(alert.event_id).read_severity == "warning"
+
+
+@pytest.mark.parametrize(
+    ("read_at", "now", "waiting"),
+    [
+        ("warning", "warning", False),  # raised again at the same severity: still read
+        ("warning", "info", False),  # milder: still read
+        ("warning", "critical", True),  # worse: waits again
+        ("info", "warning", True),
+    ],
+)
+def test_a_read_alert_waits_again_only_when_it_gets_worse(db, clock, read_at, now, waiting):
+    book = AlertBook(db, clock)
+    alert = book.raise_alert("data_gap", "temperature", read_at, "no data")
+    book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
+    clock.advance(30)
+
+    again = book.raise_alert("data_gap", "temperature", now, "still no data")
+
+    assert awaits_reading(again) is waiting
+
+
+def test_an_unread_alert_waits_and_one_read_before_severity_was_kept_waits_again(db, clock):
+    book = AlertBook(db, clock)
+    alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
+    assert awaits_reading(alert) is True
+    legacy = alert.model_copy(update={"read_by": "alice", "read_at": alert.last_at})
+
+    assert awaits_reading(legacy) is True  # no severity kept at reading: ask once more
+
+
+def test_an_older_alert_table_gains_the_column_and_keeps_its_rows(db, clock):
+    db.migrate(NAMESPACE, STEPS[:2])  # the table as it was before read_severity
+    db.execute(
+        "INSERT INTO observer_alerts(event_id, kind, key, severity, message, count, first_at, "
+        "last_at, read_by, read_at) VALUES ('a1', 'data_gap', 't', 'warning', 'm', 3, 1, 2, "
+        "'alice', 2)"
+    )
+
+    alert = AlertBook(db, clock).get("a1")
+
+    assert (alert.read_by, alert.read_at, alert.count, alert.read_severity) == ("alice", 2, 3, None)
 
 
 def test_mark_read_of_unknown_event_is_denied(db, clock):

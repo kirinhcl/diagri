@@ -23,7 +23,10 @@ STEPS = (
     "message TEXT NOT NULL, count INTEGER NOT NULL, first_at REAL NOT NULL, "
     "last_at REAL NOT NULL, resolved_at REAL, read_by TEXT, read_at REAL)",
     "CREATE INDEX observer_alerts_open ON observer_alerts(kind, key, resolved_at)",
+    # The severity an operator read; NULL for a read recorded before this column existed.
+    "ALTER TABLE observer_alerts ADD COLUMN read_severity TEXT",
 )
+SEVERITY_ORDER: tuple[Severity, ...] = ("info", "warning", "critical")  # mildest first
 
 
 class AlertRule(Model):
@@ -113,10 +116,22 @@ class Alert(Model):
     resolved_at: float | None = None
     read_by: str | None = None
     read_at: float | None = None
+    read_severity: Severity | None = None
 
 
 def _alert(row) -> Alert:
     return Alert(**{name: row[name] for name in Alert.model_fields})
+
+
+def awaits_reading(alert: Alert) -> bool:
+    """An alert waits for an operator until it is read, and again once it gets worse than the
+    severity it was read at. Raised again at the same or a milder severity it stays read; a read
+    recorded without its severity (before that was kept) waits once more."""
+    if alert.read_at is None:
+        return True
+    if alert.read_severity is None:
+        return True
+    return SEVERITY_ORDER.index(alert.severity) > SEVERITY_ORDER.index(alert.read_severity)
 
 
 class AlertBook:
@@ -173,8 +188,10 @@ class AlertBook:
     def mark_read(self, event_id: str, actor: Actor) -> None:
         if actor.kind != "operator":
             raise Denied("not_operator", "only an operator can mark an alert as read")
-        self.get(event_id)
-        self.db.execute(
-            "UPDATE observer_alerts SET read_by = ?, read_at = ? WHERE event_id = ?",
-            (actor.id, self.clock.now(), event_id),
-        )
+        with self.db.transaction():  # the severity read is the one stored at this moment
+            current = self.get(event_id)
+            self.db.execute(
+                "UPDATE observer_alerts SET read_by = ?, read_at = ?, read_severity = ? "
+                "WHERE event_id = ?",
+                (actor.id, self.clock.now(), current.severity, event_id),
+            )
