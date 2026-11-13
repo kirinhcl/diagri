@@ -70,7 +70,7 @@ class Reauth(Body):
 
 
 class Approve(Body):
-    """The digest of the run sheet the operator reviewed; without it the current sheet is approved."""
+    """The digest of the run sheet reviewed; without it the current sheet is approved."""
 
     expected_digest: str | None = Field(default=None, min_length=1, max_length=128)
 
