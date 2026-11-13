@@ -469,9 +469,9 @@ class Workbench:
             runtime = self.workflow.stage(stage_id)
             body = runtime_json(runtime)
             if actor.kind != "operator":
-                # A model role sees the stage's state, not where it belongs: naming the round
-                # would let it aim a run-sheet draft at that round.
-                return {key: value for key, value in body.items() if key != "project_id"}
+                # Models get the stage as they always did (project id included) but not its round:
+                # naming the round would let a model aim a run-sheet draft at it.
+                return body
             row = self.workflow.store.find_stage(stage_id)  # the runtime does not name its round
             return {
                 **body,

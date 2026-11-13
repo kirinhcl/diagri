@@ -7,6 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 from workbench_support import SECRET, Bench
 
+from growbridge.workbench.api import runtime_json
+
 STAGE_ACTIONS = ("approve", "start", "pause", "resume", "stop", "takeover", "handback")
 
 
@@ -77,14 +79,15 @@ def test_stage_read_names_its_round_and_project(bench, operator):
     assert body["project_id"] == bench.project_id
 
 
-def test_model_token_reads_the_stage_without_its_round_or_project(bench):
+def test_model_token_reads_the_stage_as_before_the_console(bench):
     bench.pending()
 
     response = bench.lan.get("/wb/stages/stage-1", headers=bench.model("analyst"))
 
-    assert response.status_code == 200 and response.json()["state"] == "pending_review"
-    assert "round_id" not in response.json()
-    assert "project_id" not in response.json()
+    body = response.json()
+    assert response.status_code == 200 and body["state"] == "pending_review"
+    assert "round_id" not in body  # naming the round would let a model aim a draft at it
+    assert body == runtime_json(bench.workflow.stage("stage-1"))  # project_id included, as always
 
 
 # --- recent re-authentication ------------------------------------------------------------------
