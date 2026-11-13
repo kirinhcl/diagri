@@ -279,6 +279,31 @@ def test_inbox_shows_an_alert_raised_again_after_it_was_read(bench, operator):
     assert [i["id"] for i in items if i["kind"] == "alert"] == [alert.event_id]
 
 
+def test_inbox_cap_keeps_never_read_alerts_ahead_of_re_asked_ones(bench, operator):
+    for number in range(5):  # read at a mild severity, then worse: asked again
+        alert = bench.alerts.raise_alert("threshold", f"hot{number}", "warning", "31 C")
+        assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
+        bench.alerts.raise_alert("threshold", f"hot{number}", "critical", "35 C")
+    fresh = {
+        bench.alerts.raise_alert("data_gap", f"s{number}", "info", "no data").event_id
+        for number in range(50)
+    }
+
+    body = operator.get("/wb/inbox").json()
+
+    alerts = {item["id"] for item in body["items"] if item["kind"] == "alert"}
+    assert alerts == fresh and body["truncated"]["alert"] == 5
+
+
+def test_inbox_asks_again_when_the_clock_is_not_synced(bench, operator):
+    alert = bench.alerts.raise_alert("data_gap", "temperature", "warning", "no data")
+    assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
+    assert "alert" not in [i["kind"] for i in operator.get("/wb/inbox").json()["items"]]
+    bench.clock.synced = False
+
+    assert "alert" in [i["kind"] for i in operator.get("/wb/inbox").json()["items"]]
+
+
 def test_inbox_keeps_a_read_alert_hidden_while_it_is_raised_again_at_the_same_severity(
     bench, operator
 ):

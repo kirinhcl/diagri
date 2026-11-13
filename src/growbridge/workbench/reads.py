@@ -66,10 +66,12 @@ def _by_age(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return items
 
 
-def _urgency(item: dict[str, Any]) -> tuple[int, float]:
-    """Alerts survive the cap by severity, then by how recently they were raised."""
+def _urgency(item: dict[str, Any]) -> tuple[bool, int, float]:
+    """Alerts survive the cap never-read first (a re-asked one never pushes out an unseen one), then
+    by severity, then by how recently they were raised."""
     detail = item["detail"]
-    return (SEVERITY_RANK.get(detail["severity"], len(SEVERITY_RANK)), -detail["last_at"])
+    severity = SEVERITY_RANK.get(detail["severity"], len(SEVERITY_RANK))
+    return (not detail["never_read"], severity, -detail["last_at"])
 
 
 def _cap(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
@@ -117,7 +119,7 @@ def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
     return items
 
 
-def _alert_items(alerts: AlertBook | None, now: float) -> list[dict[str, Any]]:
+def _alert_items(alerts: AlertBook | None, now: float, trusted: bool) -> list[dict[str, Any]]:
     if alerts is None:
         return []
     items = [
@@ -133,10 +135,13 @@ def _alert_items(alerts: AlertBook | None, now: float) -> list[dict[str, Any]]:
                 "message": alert.message,
                 "count": alert.count,
                 "last_at": alert.last_at,
+                "never_read": alert.read_at is None or alert.read_severity is None,
             },
         )
         for alert in alerts.open()
-        if awaits_reading(alert, now)  # unread, worse than when read, or read over a day ago
+        if awaits_reading(
+            alert, now, trusted
+        )  # unread, worse than when read, or read over a day ago
     ]
     return items
 
@@ -259,7 +264,9 @@ def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock) -> 
     @router.get("/inbox")
     async def inbox(actor: Operator):
         kept, truncated = _cap(
-            _stage_items(workflow) + _alert_items(alerts, clock.now()) + _compute_items(compute)
+            _stage_items(workflow)
+            + _alert_items(alerts, clock.now(), clock.synced)
+            + _compute_items(compute)
         )
         fetched = {"round_choice": _round_items(workflow), "task": _task_items(tasks)}
         counts = {

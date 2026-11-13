@@ -10,13 +10,13 @@ const nowSeconds = () => Date.now() / 1000;
 export const REASK_SECONDS = 24 * 3600; // observer/alerts.py REASK_SECONDS
 
 // The inbox's rule (observer/alerts.py awaits_reading): unread, or worse than the severity it was
-// read at, or read more than a day ago by the clock (`now`, in seconds); a clock that went back
-// before the reading counts as unread. A read recorded without its severity waits once more.
+// read at, or read more than a day ago by the clock (`now`, in seconds); a clock behind the reading or the
+// last raise counts as unread (the browser clock is taken as trusted). A read recorded without its severity waits once more.
 export function alertWaiting(alert, now) {
   if (!alert || alert.read_at === null || alert.read_at === undefined) return true;
   const readAt = SEVERITY_ORDER.indexOf(alert.read_severity);
   if (readAt < 0 || SEVERITY_ORDER.indexOf(alert.severity) > readAt) return true;
-  return now < alert.read_at || now - alert.read_at > REASK_SECONDS;
+  return now < Math.max(alert.read_at, alert.last_at || 0) || now - alert.read_at > REASK_SECONDS;
 }
 
 function readLine(ctx, alert) {

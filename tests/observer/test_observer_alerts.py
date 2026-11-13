@@ -157,7 +157,7 @@ def test_a_read_alert_waits_again_only_when_it_gets_worse(db, clock, read_at, no
 
     again = book.raise_alert("data_gap", "temperature", now, "still no data")
 
-    assert awaits_reading(again, clock.now()) is waiting
+    assert awaits_reading(again, clock.now(), True) is waiting
 
 
 def test_a_drop_then_a_rise_in_severity_waits_again(db, clock):
@@ -167,12 +167,12 @@ def test_a_drop_then_a_rise_in_severity_waits_again(db, clock):
     clock.advance(30)
 
     lowered = book.raise_alert("data_gap", "temperature", "warning", "late data")
-    assert awaits_reading(lowered, clock.now()) is False
+    assert awaits_reading(lowered, clock.now(), True) is False
     assert lowered.read_severity == "warning"  # re-armed at the lower severity
     clock.advance(30)
     raised = book.raise_alert("data_gap", "temperature", "critical", "no data")
 
-    assert awaits_reading(raised, clock.now()) is True
+    assert awaits_reading(raised, clock.now(), True) is True
 
 
 @pytest.mark.parametrize(
@@ -189,16 +189,38 @@ def test_a_read_alert_is_asked_again_by_the_clock(db, clock, elapsed, waiting):
     book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
     read = book.get(alert.event_id)
 
-    assert awaits_reading(read, read.read_at + elapsed) is waiting
+    assert awaits_reading(read, read.read_at + elapsed, True) is waiting
+
+
+def test_an_untrusted_clock_leaves_a_read_alert_waiting(db, clock):
+    book = AlertBook(db, clock)
+    alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
+    book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
+    read = book.get(alert.event_id)
+
+    assert awaits_reading(read, read.read_at + 60, True) is False
+    assert awaits_reading(read, read.read_at + 60, False) is True
+
+
+def test_a_future_dated_last_raise_leaves_a_read_alert_waiting(db, clock):
+    book = AlertBook(db, clock)
+    alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
+    book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
+    read = book.get(alert.event_id)
+    future = read.model_copy(update={"last_at": read.read_at + 3600})
+
+    assert awaits_reading(future, read.read_at + 60, True) is True  # last_at is after now
 
 
 def test_an_unread_alert_waits_and_one_read_before_severity_was_kept_waits_again(db, clock):
     book = AlertBook(db, clock)
     alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
-    assert awaits_reading(alert, clock.now()) is True
+    assert awaits_reading(alert, clock.now(), True) is True
     legacy = alert.model_copy(update={"read_by": "alice", "read_at": alert.last_at})
 
-    assert awaits_reading(legacy, clock.now()) is True  # no severity kept at reading: ask once more
+    assert (
+        awaits_reading(legacy, clock.now(), True) is True
+    )  # no severity kept at reading: ask once more
 
 
 def test_an_older_alert_table_gains_the_column_and_keeps_its_rows(db, clock):
