@@ -7,7 +7,7 @@ import * as loginPage from "./pages/login.js";
 import { hrefFor, parseHash } from "./router.js";
 import { askSecret } from "./ui/dialog.js";
 import { clear, h } from "./ui/dom.js";
-import { bindFormContext, errorLines } from "./ui/forms.js";
+import { bindFormContext, dropDetachedDraftSavers, errorLines, saveAllDrafts } from "./ui/forms.js";
 import { shell } from "./ui/layout.js";
 
 const LANGUAGE_KEY = "growbridge-workbench-language";
@@ -87,9 +87,11 @@ function navigate(href) {
   else location.hash = href;
 }
 
-// Remembers where the operator was, so signing in again leads back there.
+// Remembers where the operator was, so signing in again leads back there, and keeps what was typed
+// into every form on the page (never a password), whichever request found the session gone.
 function onSessionLost() {
   if (parseHash(location.hash).page === "login") return;
+  saveAllDrafts();
   state.returnTo = location.hash || hrefFor("inbox");
   state.me = null;
   navigate(hrefFor("login"));
@@ -198,6 +200,7 @@ async function showPage(page, params, token) {
   if (token !== state.token) return;
   frame.main.removeAttribute("aria-busy");
   clear(frame.main).append(result.element);
+  dropDetachedDraftSavers(); // the forms of the page before are gone
   // After a move inside the console the clicked link may be gone; put the keyboard at the new content.
   const focusLost = !document.activeElement || document.activeElement === document.body;
   if (!firstView && focusLost) frame.main.focus({ preventScroll: true });

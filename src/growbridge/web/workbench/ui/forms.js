@@ -24,12 +24,41 @@ export function minutePrecision(text) {
   return text.replace(ZERO_SECONDS, "$1");
 }
 
-// [explanation, advice] for a denial; the server's own message for a code without a translation.
+// --- drafts on a lost session: every form with a draft key says how to save itself now ----------
+// main.js calls saveAllDrafts() before it leaves for the sign-in page, whatever request found the
+// session gone, and dropDetachedDraftSavers() after each page is shown. A form that left the
+// document is dropped and never saved.
+const draftSavers = new Set();
+
+export function registerDraftSaver(form, save) {
+  const entry = { form, save };
+  draftSavers.add(entry);
+  return () => draftSavers.delete(entry);
+}
+
+export function dropDetachedDraftSavers() {
+  let dropped = 0;
+  for (const entry of [...draftSavers]) {
+    if (entry.form.isConnected) continue;
+    draftSavers.delete(entry);
+    dropped += 1;
+  }
+  return dropped;
+}
+
+export function saveAllDrafts() {
+  dropDetachedDraftSavers();
+  for (const entry of draftSavers) entry.save();
+  return draftSavers.size;
+}
+
+// [explanation, advice, the server's own message] for a denial (the message only when it says more
+// than the code); [title, message] for a code without a translation.
 export function errorLines(error, lang, t) {
   const code = error instanceof ApiError ? error.code : null;
   const known = code ? describeDenial(code, lang) : null;
-  if (known) return [known.text, known.advice];
   const message = error && error.message ? String(error.message) : "";
+  if (known) return message && message !== code ? [known.text, known.advice, message] : [known.text, known.advice];
   return message ? [t("error.title"), message] : [t("error.title")];
 }
 
@@ -188,6 +217,18 @@ function formEntries(fields, draft, zone, lang) {
   });
 }
 
+const rawValues = (entries) => Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
+
+// On a lost session the form keeps what differs from its own starting values (never a password).
+function keepOnSessionLoss(form, draftKey, entries, zone, lang) {
+  const secretNames = entries.filter((entry) => entry.field.type === "password").map((entry) => entry.field.name);
+  const start = stripSecrets(Object.fromEntries(entries.map((entry) => [entry.field.name, initialText(entry.field, zone, lang)])), secretNames);
+  registerDraftSaver(form, () => {
+    const now = stripSecrets(rawValues(entries), secretNames);
+    if (Object.keys(now).some((name) => now[name] !== start[name])) saveDraft(draftKey, now);
+  });
+}
+
 export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own }) {
   const getCtx = () => contextOf(own);
   const me = getCtx().me;
@@ -201,7 +242,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     showStatus(status, [], "info");
     const values = convert(entries, zone, ctx.t);
     if (!values) return;
-    const raw = Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
+    const raw = rawValues(entries);
     const secretNames = secrets.map((entry) => entry.field.name);
     try {
       await onSubmit(values);
@@ -223,6 +264,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     }
   };
   const { form, status } = formFrame(submitLabel, entries.map((entry) => entry.row), run, getCtx);
+  if (draftKey) keepOnSessionLoss(form, draftKey, entries, zone, getCtx().lang);
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;
 }
@@ -230,7 +272,8 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
 export function jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx: own }) {
   const getCtx = () => contextOf(own);
   const draft = draftKey ? takeDraft(draftKey) : null;
-  const initial = draft ? String(draft.text) : typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
+  const original = typeof value === "string" ? value : JSON.stringify(value ?? {}, null, 2);
+  const initial = draft ? String(draft.text) : original;
   const entry = fieldRow({ name: "json", label, type: "textarea" }, initial, "");
   entry.input.setAttribute("spellcheck", "false");
   entry.input.setAttribute("rows", String(Math.min(30, Math.max(8, initial.split("\n").length + 1))));
@@ -259,6 +302,9 @@ export function jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx:
     }
   };
   const { form, status } = formFrame(submitLabel, [entry.row], run, getCtx);
+  if (draftKey) {
+    registerDraftSaver(form, () => entry.input.value !== original && saveDraft(draftKey, { text: entry.input.value }));
+  }
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;
 }
