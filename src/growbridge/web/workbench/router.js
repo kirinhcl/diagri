@@ -1,6 +1,10 @@
 // Hash routes of the console.
 const FLAT = ["login", "projects", "alerts", "evidence", "compute", "safety"];
-const WITH_ID = { projects: ["project", "projectId"], rounds: ["round", "roundId"], stages: ["stage", "stageId"] };
+const WITH_ID = new Map([
+  ["projects", ["project", "projectId"]],
+  ["rounds", ["round", "roundId"]],
+  ["stages", ["stage", "stageId"]],
+]);
 
 function decode(part) {
   try {
@@ -16,9 +20,10 @@ export function parseHash(hash) {
   const parts = path.replace(/^\//, "").split("/");
   const [head, id] = parts;
   if (parts.length === 1 && FLAT.includes(head)) return { page: head, params: {} };
-  if (parts.length === 2 && WITH_ID[head] && id) {
+  if (parts.length === 2 && WITH_ID.has(head) && id) {
     const value = decode(id);
-    if (value !== null) return { page: WITH_ID[head][0], params: { [WITH_ID[head][1]]: value } };
+    const [page, key] = WITH_ID.get(head);
+    if (value !== null) return { page, params: { [key]: value } };
   }
   return { page: "not_found", params: {} };
 }
@@ -26,8 +31,8 @@ export function parseHash(hash) {
 export function hrefFor(page, params = {}) {
   if (page === "inbox") return "#/";
   if (FLAT.includes(page)) return `#/${page}`;
-  for (const [segment, [name, key]] of Object.entries(WITH_ID)) {
+  for (const [segment, [name, key]] of WITH_ID) {
     if (name === page) return `#/${segment}/${encodeURIComponent(params[key])}`;
   }
-  return "#/";
+  throw new RangeError(`unknown page: ${String(page)}`);
 }

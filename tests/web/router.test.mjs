@@ -35,3 +35,15 @@ test("hrefFor and parseHash round-trip", () => {
     assert.deepEqual(parseHash(hrefFor(page, params)), { page, params });
   }
 });
+
+test("inherited property names are not routes", () => {
+  for (const h of ["#/constructor/x", "#/__proto__/x", "#/toString/x", "#/constructor", "#/hasOwnProperty"]) {
+    assert.deepEqual(parseHash(h), { page: "not_found", params: {} }, h);
+  }
+});
+
+test("hrefFor throws RangeError for an unknown page", () => {
+  for (const page of ["constructor", "__proto__", "toString", "nope", "not_found"]) {
+    assert.throws(() => hrefFor(page, { projectId: "x" }), RangeError, page);
+  }
+});
