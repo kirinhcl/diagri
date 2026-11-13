@@ -33,7 +33,7 @@ def bucketed_samples(
     points = max(MIN_POINTS, min(int(points), MAX_POINTS))
     bucket = max(1.0, (end - start) / points)
     window = {"start": start, "end": end, "bucket_seconds": bucket}
-    if end <= start:
+    if end < start:
         return _result([], window, 0, 0)
     rows = db.query(_PICKED, (experiment_id, start, end, start, bucket))
     samples = [_sample(row) for row in rows]

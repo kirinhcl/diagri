@@ -66,8 +66,15 @@ def test_readings_clamp_points_to_the_allowed_range(archive, db):
 
 def test_readings_of_a_reversed_window_are_empty(archive, db):
     _add(archive, "a1", 50)
-    for start, end in ((100, 0), (50, 50)):
+    for start, end in ((100, 0), (50, 49)):
         result = bucketed_samples(db, "e1", start, end, 600)
         assert result["samples"] == [] and result["total_samples"] == 0
         assert result["flagged_total"] == 0 and not result["downsampled"]
         assert set(result["window"]) == {"start", "end", "bucket_seconds"}
+
+
+def test_readings_of_a_zero_width_window_include_a_sample_at_that_instant(archive, db):
+    _add(archive, "a1", 50)
+    result = bucketed_samples(db, "e1", 50, 50, 600)
+    assert [s["timestamp"] for s in result["samples"]] == [50]
+    assert result["total_samples"] == 1
