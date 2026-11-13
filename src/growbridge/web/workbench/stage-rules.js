@@ -21,6 +21,14 @@ export function availableActions(stageState, entry) {
   return actionsOf(stageState).filter((action) => entry === "lan" || !LAN_ONLY.has(action));
 }
 
+// Approval is the human gate over a proposed run sheet: it goes ahead only for the digest the review
+// block showed. "unread" when nothing was reviewed, "changed" when the sheet read again (or the one
+// the server approved) has another digest, or none.
+export function sheetCheck(reviewedDigest, currentDigest) {
+  if (!reviewedDigest) return "unread";
+  return reviewedDigest === currentDigest ? "same" : "changed";
+}
+
 // The actions this state would offer but the entry holds back; shown disabled with the reason.
 export function heldByEntry(stageState, entry) {
   if (entry === "lan") return [];

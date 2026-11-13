@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { availableActions, heldByEntry } from "../../src/growbridge/web/workbench/stage-rules.js";
+import { availableActions, heldByEntry, sheetCheck } from "../../src/growbridge/web/workbench/stage-rules.js";
+
+test("approval goes ahead only for the run sheet digest the operator reviewed", () => {
+  assert.equal(sheetCheck("sha-a", "sha-a"), "same");
+  assert.equal(sheetCheck("sha-a", "sha-b"), "changed");
+  assert.equal(sheetCheck("sha-a", undefined), "changed"); // an answer without a digest proves nothing
+  assert.equal(sheetCheck(null, "sha-a"), "unread");
+  assert.equal(sheetCheck("", "sha-a"), "unread");
+});
 
 test("each stage state offers the actions of the plan's table", () => {
   assert.deepEqual(availableActions("pending_review", "lan"), ["approve", "start", "draft"]);

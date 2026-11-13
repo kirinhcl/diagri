@@ -1,4 +1,4 @@
-// Plain-language messages for every denial code (33 from the wiki, plus three client-side codes).
+// Plain-language messages for every denial code (33 from the wiki, plus four client-side codes).
 // Row: [code, zh text, zh advice, en text, en advice]
 const ROWS = [
   ["host_unregistered", "这台电脑不是该设备登记的写入主机。", "请在登记的主机上操作，或先把这台电脑登记为写入主机。", "This computer is not the registered write host for the device.", "Work from the registered host, or register this computer as the write host first."],
@@ -36,7 +36,8 @@ const ROWS = [
   ["locked", "登录失败次数太多，暂时被锁定。", "等 15 分钟后再试。", "Too many failed sign-ins, so sign-in is locked for now.", "Wait 15 minutes, then try again."],
   ["validation", "有些输入不符合要求。", "按字段旁的提示改正后再提交。", "Some of the input is not valid.", "Fix the fields marked below and submit again."],
   ["reauth_failed", "口令不对，没有重新认证。", "请再试一次；连续输错会被暂时锁定。", "The secret was wrong, so you were not re-authenticated.", "Try again. Several wrong tries in a row lock sign-in for a while."],
-  ["network", "连不上服务器。", "检查网络连接，稍后再试。", "Could not reach the server.", "Check the network connection and try again in a moment."],
+  ["network", "连不上服务器，或没有收到答复。", "检查网络连接，稍后再试。", "Could not reach the server, or no answer came back.", "Check the network connection and try again in a moment."],
+  ["server_error", "服务器返回了错误；这个操作可能已经执行，也可能没有。", "先刷新页面看当前状态，再决定是否重试；设备操作会在操作记录里按请求编号核对结果。", "The server answered with an error; the action may or may not have been carried out.", "Refresh the page to see the current state before trying again; a device action is checked by its request ID in the action log."],
 ];
 
 export const DENIALS = Object.fromEntries(

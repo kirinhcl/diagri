@@ -36,6 +36,7 @@ function toError(status, body) {
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
     return new ApiError(status, detail.code || null, detail.message || detail.code);
   }
+  if (status >= 500) return new ApiError(status, "server_error", `HTTP ${status}`);
   return new ApiError(status, null, `HTTP ${status}`);
 }
 
@@ -54,10 +55,11 @@ export function createApi({ fetchImpl, askReauth, onSessionLost } = {}) {
     } catch (cause) {
       throw new ApiError(0, "network", String(cause && cause.message ? cause.message : cause));
     }
+    // An answer came, but not one that says what happened: "network" is kept for no answer at all.
     const { data, valid } = await readBody(response);
-    if (!valid) throw new ApiError(response.status, "network", `HTTP ${response.status}: not JSON`);
+    if (!valid) throw new ApiError(response.status, "server_error", `HTTP ${response.status}: not JSON`);
     if (response.ok) return data;
-    if (data === null) throw new ApiError(response.status, "network", `HTTP ${response.status}`);
+    if (data === null) throw new ApiError(response.status, "server_error", `HTTP ${response.status}`);
     throw toError(response.status, data);
   }
 

@@ -1,8 +1,8 @@
 // Stage controls. Which ones show follows stage-rules.js; the server stays the judge and every
 // refusal is shown with its reason. Nothing is shown as done before the server answered.
 import { ApiError } from "../api.js";
-import { newRequestId, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
-import { availableActions, heldByEntry } from "../stage-rules.js";
+import { answerLost, pollReceipt, RECEIPT_LIMIT_MS, requestIdKeeper } from "../receipts.js";
+import { availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
@@ -99,19 +99,40 @@ export function findingsList(ctx, findings) {
 }
 
 // --- pending review -------------------------------------------------------------------------------
+// The env of a button whose own refusals carry their own title (not "the request failed").
+function titledRefusals(env) {
+  const own = { title: null };
+  const t = (key, values) => (key === "error.title" && own.title ? own.title : env.ctx.t(key, values));
+  return { own, env: { ...env, ctx: { ...env.ctx, t } } };
+}
+
+// Approve only the run sheet the review block shows: it is read again first and nothing is sent when
+// its digest changed; what the server approved is compared too. Either refusal stays in the log.
 function approveGroup(env) {
   const { ctx, stage, review } = env;
   const label = ctx.t("stage.approve");
-  const run = async () => {
-    const approval = await ctx.api.post(stagePath(stage, "approve"), {}, { action: label });
-    const line = ctx.t("stage.approved", {
-      version: approval.run_sheet_version,
-      digest: approval.run_sheet_digest,
-      time: timeText(ctx, approval.approved_at),
-    });
-    env.log.add(label, [line]);
+  const reviewed = review ? review.run_sheet_digest : null;
+  const { own, env: titled } = titledRefusals(env);
+  const refuse = async (titleKey, lineKey, values) => {
+    own.title = ctx.t(titleKey);
+    const line = ctx.t(lineKey, values);
+    env.log.add(label, [own.title, line]);
+    ctx.notify(`${own.title}. ${line}`, "error");
+    await env.onChanged();
+    return new ApiError(0, "not_approved", line);
   };
-  const control = actionButton(env, { label, run });
+  const run = async () => {
+    own.title = null;
+    const current = await ctx.api.get(`/stages/${encodeURIComponent(stage.stage_id)}/run-sheet`);
+    if (sheetCheck(reviewed, current && current.run_sheet_digest) !== "same") throw await refuse("stage.approve.notApproved", "stage.approve.changed");
+    const approval = await ctx.api.post(stagePath(stage, "approve"), {}, { action: label });
+    const time = timeText(ctx, approval.approved_at);
+    env.log.add(label, [ctx.t("stage.approved", { version: approval.run_sheet_version, digest: approval.run_sheet_digest, time })]);
+    if (sheetCheck(reviewed, approval.run_sheet_digest) !== "same") {
+      throw await refuse("stage.approve.mismatchTitle", "stage.approve.mismatch", { approved: approval.run_sheet_digest, reviewed });
+    }
+  };
+  const control = actionButton(titled, { label, run });
   // Never approve what was not read, nor what the check blocks; the server checks both again.
   const why = !review ? ctx.t("stage.approve.unread") : review.blocking ? ctx.t("stage.approve.blocked") : null;
   control.button.disabled = Boolean(why);
@@ -152,6 +173,27 @@ function pauseGroup(env) {
 }
 
 // --- manual control -------------------------------------------------------------------------------
+// A device write. Its request id is made before it is sent; when no readable answer comes back the
+// write may have happened, so it is listed as "result unknown, checking" and its receipt is followed
+// under that id, and sending the identical request again reuses the id.
+async function deviceWrite(env, { keeper, path, body, heading, action }) {
+  const requestId = keeper.idFor({ path, body });
+  let record;
+  try {
+    record = await env.ctx.api.post(path, { ...body, request_id: requestId }, { action });
+  } catch (error) {
+    if (!answerLost(error)) {
+      keeper.settle();
+      throw error;
+    }
+    env.log.track(heading, { request_id: requestId, created_at: Date.now() / 1000, state: "pending" }, { lost: true });
+    throw error;
+  }
+  keeper.settle();
+  env.log.track(heading, record);
+  await env.onChanged();
+}
+
 function manualGroup(env) {
   const { ctx, stage } = env;
   const title = ctx.t("stage.manual");
@@ -161,11 +203,11 @@ function manualGroup(env) {
     { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true },
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
+  const keeper = requestIdKeeper();
   const onSubmit = async ({ channel, level, note: text }) => {
-    const body = { stage_id: stage.stage_id, request_id: newRequestId(), level, note: text || "" };
-    const record = await ctx.api.post(`/manual/${encodeURIComponent(channel)}`, body, { action: title });
-    env.log.track(ctx.t("receipt.manual", { channel: ctx.t(`channel.${channel}`), level }), record);
-    await env.onChanged();
+    const body = { stage_id: stage.stage_id, level, note: text || "" };
+    const heading = ctx.t("receipt.manual", { channel: ctx.t(`channel.${channel}`), level });
+    await deviceWrite(env, { keeper, path: `/manual/${encodeURIComponent(channel)}`, body, heading, action: title });
   };
   const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
   return group("manual", title, note(ctx.t("stage.manual.ranges")), form);
@@ -186,11 +228,11 @@ function irrigationGroup(env, allowed) {
     { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true },
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
+  const keeper = requestIdKeeper();
   const onSubmit = async ({ seconds, note: text }) => {
-    const body = { stage_id: stage.stage_id, request_id: newRequestId(), seconds, note: text || "" };
-    const record = await ctx.api.post("/irrigation", body, { action: submitLabel });
-    env.log.track(ctx.t("receipt.irrigation", { seconds }), record);
-    await env.onChanged();
+    const body = { stage_id: stage.stage_id, seconds, note: text || "" };
+    const heading = ctx.t("receipt.irrigation", { seconds });
+    await deviceWrite(env, { keeper, path: "/irrigation", body, heading, action: submitLabel });
   };
   return group("irrigation", title, simpleForm({ fields, submitLabel, onSubmit, ctx }));
 }
@@ -285,8 +327,14 @@ function logItem(ctx, title, record) {
   return { element, show };
 }
 
+// Why a receipt could not be read; a 404 means the server holds nothing under that request id (yet).
+function checkLine(ctx, error) {
+  if (error instanceof ApiError && error.status === 404) return ctx.t("receipt.noRecord");
+  return ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") });
+}
+
 function outcomeLines(ctx, { outcome, record, error }) {
-  const problem = error ? ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }) : null;
+  const problem = error ? checkLine(ctx, error) : null;
   if (outcome === "applied") {
     const level = record && record.confirmed_level;
     return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level })];
@@ -307,13 +355,12 @@ export function activityLog(ctx, life) {
     return item;
   };
   const add = (heading, lines) => push(logItem(ctx, heading, null)).show(null, lines);
-  const track = (heading, record) => {
+  // lost: no readable answer came for this write; it is followed under its request id all the same.
+  const track = (heading, record, { lost = false } = {}) => {
     const item = push(logItem(ctx, heading, record));
-    item.show("pending", []);
-    const onUpdate = ({ error }) => {
-      const lines = error ? [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") })] : [];
-      item.show("pending", lines);
-    };
+    const note = lost ? ctx.t("receipt.lost") : null;
+    item.show("pending", [note]);
+    const onUpdate = ({ error }) => item.show("pending", [note, error ? checkLine(ctx, error) : null]);
     const fetchReceipt = () => ctx.api.get(`/receipts/${encodeURIComponent(record.request_id)}`);
     pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
       .then((result) => {

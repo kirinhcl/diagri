@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   RECEIPT_INTERVAL_MS,
   RECEIPT_LIMIT_MS,
+  answerLost,
   newRequestId,
   pollReceipt,
   receiptOutcome,
+  requestIdKeeper,
   sleep,
 } from "../../src/growbridge/web/workbench/receipts.js";
 
@@ -34,6 +36,26 @@ function fetcher(states) {
   };
   return calls;
 }
+
+test("an identical resubmission keeps its request id until the write is settled", () => {
+  let made = 0;
+  const keeper = requestIdKeeper(() => `wb-id-${++made}`);
+  const intent = { path: "/manual/light", body: { stage_id: "s1", level: 40, note: "" } };
+  const first = keeper.idFor(intent);
+  assert.equal(keeper.idFor({ path: "/manual/light", body: { stage_id: "s1", level: 40, note: "" } }), first);
+  assert.notEqual(keeper.idFor({ ...intent, body: { ...intent.body, level: 41 } }), first);
+  const other = keeper.idFor(intent);
+  assert.notEqual(other, first); // a different request came in between: a new id
+  keeper.settle();
+  assert.notEqual(keeper.idFor(intent), other); // answered: the next write is a new action
+});
+
+test("only a missing or unreadable answer leaves the result of a write unknown", () => {
+  assert.equal(answerLost({ code: "network", status: 0 }), true);
+  assert.equal(answerLost({ code: "server_error", status: 502 }), true);
+  for (const code of ["state", "validation", "reauth_required", "session", null]) assert.equal(answerLost({ code }), false);
+  assert.equal(answerLost(null), false);
+});
 
 test("the poll runs every 2 seconds for at most 60 seconds", () => {
   assert.equal(RECEIPT_INTERVAL_MS, 2000);

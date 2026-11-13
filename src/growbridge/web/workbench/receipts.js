@@ -35,6 +35,28 @@ export function newRequestId(randomUUID = () => globalThis.crypto.randomUUID()) 
   return `wb-${randomUUID()}`;
 }
 
+// One request id per intended write, made before the request is sent. Sending the identical request
+// again (after an answer that was lost) reuses it, so the server can tell it is the same write; a
+// different request, or any write after a settled answer, gets a new one.
+export function requestIdKeeper(makeId = newRequestId) {
+  let held = null;
+  return {
+    idFor(intent) {
+      const key = JSON.stringify(intent);
+      if (!held || held.key !== key) held = { key, id: makeId() };
+      return held.id;
+    },
+    settle() {
+      held = null;
+    },
+  };
+}
+
+// No answer came, or one that does not say what happened: the write may or may not have been done.
+export function answerLost(error) {
+  return Boolean(error) && (error.code === "network" || error.code === "server_error");
+}
+
 // Polls until the record settles, the time limit passes, or the page no longer wants it.
 // Returns {outcome: "applied"|"unknown"|"failed"|"timeout"|"stopped", record, error}.
 export async function pollReceipt({

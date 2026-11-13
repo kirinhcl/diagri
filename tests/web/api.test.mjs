@@ -184,16 +184,29 @@ test("a failed reauth (403) does not retry the original request", async () => {
   assert.equal(f.calls.length, 2);
 });
 
-test("an HTML error page becomes a network error with its status", async () => {
+test("an HTML error page is a server error with its status, not a lost connection", async () => {
   const f = fakeFetch([reply(502, "<html>Bad Gateway</html>"), reply(503, "")]);
   const api = createApi({ fetchImpl: f });
-  await assert.rejects(api.get("/x"), (e) => e.code === "network" && e.status === 502);
-  await assert.rejects(api.get("/x"), (e) => e.code === "network" && e.status === 503);
+  await assert.rejects(api.get("/x"), (e) => e.code === "server_error" && e.status === 502);
+  await assert.rejects(api.get("/x"), (e) => e.code === "server_error" && e.status === 503);
 });
 
-test("a 2xx response that is not JSON is an error", async () => {
+test("a 2xx response that is not JSON is a server error", async () => {
   const f = fakeFetch([reply(200, "<html>oops</html>"), reply(204, "")]);
   const api = createApi({ fetchImpl: f });
-  await assert.rejects(api.get("/x"), (e) => e.code === "network" && e.status === 200);
+  await assert.rejects(api.get("/x"), (e) => e.code === "server_error" && e.status === 200);
   assert.equal(await api.get("/x"), null);
+});
+
+test("a 5xx JSON answer without a refusal is a server error; one with a refusal keeps its code", async () => {
+  const f = fakeFetch([reply(500, { detail: "Internal Server Error" }), reply(503, { detail: { code: "unavailable", message: "m" } })]);
+  const api = createApi({ fetchImpl: f });
+  await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 500);
+  await assert.rejects(api.post("/x"), (e) => e.code === "unavailable" && e.status === 503);
+});
+
+test("a 4xx JSON answer without a refusal object keeps no code", async () => {
+  const f = fakeFetch([reply(404, { detail: "Unknown request id" })]);
+  const api = createApi({ fetchImpl: f });
+  await assert.rejects(api.get("/receipts/x"), (e) => e.code === null && e.status === 404);
 });
