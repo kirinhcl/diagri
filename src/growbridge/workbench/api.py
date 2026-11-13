@@ -43,6 +43,7 @@ from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
 from growbridge.workbench.holdouts import add_holdout_routes
+from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
 from growbridge.workflow.service import WorkflowService
@@ -196,6 +197,18 @@ class Workbench:
         self._write_routes()
         self._record_routes()
         self._read_routes()
+        add_read_routes(
+            self.router,
+            self.operator,
+            workflow,
+            archive,
+            control,
+            self.clock,
+            tasks=tasks,
+            budget=budget,
+            alerts=alerts,
+            compute=compute,
+        )
         add_round_routes(self.router, self.operator, self.fresh, workflow, tasks, budget, archive)
         add_evidence_routes(self.router, self.operator, archive)
         if runner is not None:
@@ -318,6 +331,7 @@ class Workbench:
                 "operator": actor.id if actor.kind == "operator" else None,
                 "entry": actor.entry.value if actor.entry else None,
                 "reauth_at": actor.reauth_at,
+                "timezone": self.settings.report_timezone,
             }
 
     # --- stages --------------------------------------------------------------------------------
