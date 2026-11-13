@@ -131,7 +131,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/logout` | none | `{"operator": null}`; the cookie is deleted |
 | `POST` | `/wb/reauth` | `secret` (1 to 256) | `reauth_seconds` |
 | `GET` | `/wb/me` | none | `kind`, `id`, `operator`, `entry`, `reauth_at`, `timezone` (the setting `report_timezone`, the zone the console shows times in) |
-| `POST` | `/wb/stages/{stage_id}/approve` | none | the `Approval` |
+| `POST` | `/wb/stages/{stage_id}/approve` | optional `expected_digest` (1 to 128 characters): the digest of the run sheet that was reviewed; the route refuses with `state` when the current sheet differs. No body approves the current sheet | the `Approval` |
 | `POST` | `/wb/stages/{stage_id}/start` | none | stage runtime |
 | `POST` | `/wb/stages/{stage_id}/pause` | optional `reason` (at most 200, default `operator request`) | stage runtime |
 | `POST` | `/wb/stages/{stage_id}/resume` | none | stage runtime |
@@ -144,7 +144,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/irrigation` | `stage_id`, `request_id`, `seconds` (more than 0, at most 60, and at most `max_pump_seconds`), optional `note` (at most 200) | the `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`, `batch`, `plant_id`, `layout_version`, `measured_at`, `position`, `method`, `metric`, `value`, `unit`; optional `id`, `corrects`; the `experiment_id` must belong to an existing stage, or the route refuses with `scope` | `id` |
 | `POST` | `/wb/safety/approve` | `config` (a `SafetyConfig`) | `protection_right` |
-| `GET` | `/wb/stages/{stage_id}` | none | stage runtime; for an operator also `round_id` and `project_id` of the stored stage (a role token gets the runtime as before, without `round_id`) |
+| `GET` | `/wb/stages/{stage_id}` | none | stage runtime; for an operator also `round_id`, `project_id` and `state_at` of the stored stage (a role token gets the runtime as before, without `round_id`) |
 | `GET` | `/wb/receipts/{request_id}` | none | the `ActionRecord` |
 | `GET` | `/wb/alerts` | none | `alerts`: the open alerts |
 | `POST` | `/wb/alerts/{event_id}/read` | none | `event_id` |

@@ -69,6 +69,12 @@ class Reauth(Body):
     secret: str = Field(min_length=1, max_length=256)
 
 
+class Approve(Body):
+    """The digest of the run sheet the operator reviewed; without it the current sheet is approved."""
+
+    expected_digest: str | None = Field(default=None, min_length=1, max_length=128)
+
+
 class Pause(Body):
     reason: str = Field(default="operator request", max_length=200)
 
@@ -332,8 +338,9 @@ class Workbench:
         Fresh = Annotated[Actor, Depends(self.fresh)]  # noqa: N806
 
         @router.post("/stages/{stage_id}/approve")
-        async def approve(stage_id: str, actor: Fresh):
-            return workflow.approve(stage_id, actor).model_dump(mode="json")
+        async def approve(stage_id: str, actor: Fresh, body: Approve | None = None):
+            expected = body.expected_digest if body else None
+            return workflow.approve(stage_id, actor, expected).model_dump(mode="json")
 
         @router.post("/stages/{stage_id}/start")
         async def start(stage_id: str, actor: Operator):

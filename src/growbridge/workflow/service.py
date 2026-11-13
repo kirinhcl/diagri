@@ -217,13 +217,17 @@ class WorkflowService(StageRecovery):
 
     # --- approval ------------------------------------------------------------------------------
 
-    def approve(self, stage_id: str, actor: Actor) -> Approval:
+    def approve(self, stage_id: str, actor: Actor, expected_digest: str | None = None) -> Approval:
+        """Approve the stage's run sheet; when the caller names the digest it reviewed, only that
+        sheet is approved."""
         now = self.clock.now()
         require_operator(actor, now, recent=True)
         stage = self.store.stage(stage_id)
         if stage.state is not S.PENDING_REVIEW:
             raise Denied("state", f"stage {stage_id} is {stage.state.value}; nothing to approve")
         sheet = self._sheet(stage)
+        if expected_digest is not None and expected_digest != sheet.digest():
+            raise Denied("state", "the run sheet changed since it was reviewed")
         if any(finding.blocking for finding in self._findings(sheet)):
             raise Denied("approval_invalid", "the run sheet has blocking findings")
         approval = self._approval_for(sheet, actor, now)

@@ -131,7 +131,7 @@
 | `POST` | `/wb/logout` | 无 | `{"operator": null}`；Cookie 被删除 |
 | `POST` | `/wb/reauth` | `secret`（1 到 256） | `reauth_seconds` |
 | `GET` | `/wb/me` | 无 | `kind`、`id`、`operator`、`entry`、`reauth_at`、`timezone`（即设置 `report_timezone`，控制台显示时间用的时区） |
-| `POST` | `/wb/stages/{stage_id}/approve` | 无 | 这次的 `Approval` |
+| `POST` | `/wb/stages/{stage_id}/approve` | 可选的 `expected_digest`（1 到 128 个字符）：审阅过的运行单的摘要；当前运行单与它不同时，路由以 `state` 拒绝。不带请求体则批准当前运行单 | 这次的 `Approval` |
 | `POST` | `/wb/stages/{stage_id}/start` | 无 | 阶段运行信息 |
 | `POST` | `/wb/stages/{stage_id}/pause` | 可选 `reason`（最长 200，默认 `operator request`） | 阶段运行信息 |
 | `POST` | `/wb/stages/{stage_id}/resume` | 无 | 阶段运行信息 |
@@ -144,7 +144,7 @@
 | `POST` | `/wb/irrigation` | `stage_id`、`request_id`、`seconds`（大于 0，不超过 60，且不超过 `max_pump_seconds`）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`） | `protection_right` |
-| `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id` 和 `project_id`（角色令牌得到的运行信息和以前一样，没有 `round_id`） |
+| `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id`、`project_id` 和 `state_at`（角色令牌得到的运行信息和以前一样，没有 `round_id`） |
 | `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord` |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警 |
 | `POST` | `/wb/alerts/{event_id}/read` | 无 | `event_id` |

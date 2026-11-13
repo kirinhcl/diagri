@@ -271,6 +271,51 @@ def test_unexpected_service_failure_does_not_leak_internals(bench, operator, mon
     assert "secret" not in response.text and "sqlite3" not in response.text
 
 
+# --- approval bound to the reviewed run sheet ----------------------------------------------------
+
+
+def test_approve_refuses_a_run_sheet_that_changed_since_it_was_reviewed(bench, operator):
+    bench.pending()
+
+    refused = bench.post(operator, "/wb/stages/stage-1/approve", {"expected_digest": "0" * 64})
+
+    assert refused.status_code == 409 and detail(refused)["code"] == "state"
+    assert "changed since it was reviewed" in detail(refused)["message"]
+    assert bench.state() == "pending_review"
+
+
+def test_approve_goes_ahead_for_the_reviewed_digest(bench, operator):
+    bench.pending()
+    reviewed = operator.get("/wb/stages/stage-1/run-sheet").json()["run_sheet_digest"]
+
+    response = bench.post(operator, "/wb/stages/stage-1/approve", {"expected_digest": reviewed})
+
+    assert response.status_code == 200 and response.json()["run_sheet_digest"] == reviewed
+
+
+@pytest.mark.parametrize("body", [None, {}, {"expected_digest": None}])
+def test_approve_without_a_digest_is_still_accepted(bench, operator, body):
+    bench.pending()
+
+    assert bench.post(operator, "/wb/stages/stage-1/approve", body).status_code == 200
+
+
+def test_approve_with_no_request_body_at_all_is_still_accepted(bench, operator):
+    bench.pending()
+
+    response = operator.post("/wb/stages/stage-1/approve", headers=Bench.ui(operator))
+
+    assert response.status_code == 200
+
+
+def test_approve_digest_has_a_length_bound(bench, operator):
+    bench.pending()
+
+    response = bench.post(operator, "/wb/stages/stage-1/approve", {"expected_digest": "x" * 300})
+
+    assert response.status_code == 422
+
+
 # --- on-site check -----------------------------------------------------------------------------
 
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { availableActions, heldByEntry, sheetCheck } from "../../src/growbridge/web/workbench/stage-rules.js";
+import { approveBody, availableActions, heldByEntry, sheetCheck } from "../../src/growbridge/web/workbench/stage-rules.js";
 
 test("approval goes ahead only for the run sheet digest the operator reviewed", () => {
   assert.equal(sheetCheck("sha-a", "sha-a"), "same");
@@ -53,4 +53,8 @@ test("the returned lists are fresh copies", () => {
   const held = heldByEntry("manual", "overlay");
   held.pop();
   assert.deepEqual(heldByEntry("manual", "overlay"), ["irrigation"]);
+});
+
+test("the approve request carries the reviewed digest for the server to hold it to", () => {
+  assert.deepEqual(approveBody("sha-a"), { expected_digest: "sha-a" });
 });

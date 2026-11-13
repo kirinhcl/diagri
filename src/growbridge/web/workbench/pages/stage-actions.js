@@ -2,7 +2,7 @@
 // refusal is shown with its reason. Nothing is shown as done before the server answered.
 import { ApiError } from "../api.js";
 import { answerLost, pollReceipt, RECEIPT_LIMIT_MS, requestIdKeeper } from "../receipts.js";
-import { availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
+import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
@@ -125,7 +125,7 @@ function approveGroup(env) {
     own.title = null;
     const current = await ctx.api.get(`/stages/${encodeURIComponent(stage.stage_id)}/run-sheet`);
     if (sheetCheck(reviewed, current && current.run_sheet_digest) !== "same") throw await refuse("stage.approve.notApproved", "stage.approve.changed");
-    const approval = await ctx.api.post(stagePath(stage, "approve"), {}, { action: label });
+    const approval = await ctx.api.post(stagePath(stage, "approve"), approveBody(reviewed), { action: label });
     const time = timeText(ctx, approval.approved_at);
     env.log.add(label, [ctx.t("stage.approved", { version: approval.run_sheet_version, digest: approval.run_sheet_digest, time })]);
     if (sheetCheck(reviewed, approval.run_sheet_digest) !== "same") {

@@ -29,6 +29,9 @@ export function sheetCheck(reviewedDigest, currentDigest) {
   return reviewedDigest === currentDigest ? "same" : "changed";
 }
 
+// The approve request names the digest that was reviewed; the server refuses a sheet that differs.
+export const approveBody = (reviewedDigest) => ({ expected_digest: reviewedDigest });
+
 // The actions this state would offer but the entry holds back; shown disabled with the reason.
 export function heldByEntry(stageState, entry) {
   if (entry === "lan") return [];
