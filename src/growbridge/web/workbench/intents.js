@@ -33,9 +33,23 @@ export function settleIntent(key, id) {
   if (held && held.id === id) unsettled.delete(key);
 }
 
-// Runs `settle` once the follow-up ends by any path: a final outcome, a timeout, the page being
-// left, or a rejection. The promise keeps its own result or error.
-export const afterTerminal = (promise, settle) => Promise.resolve(promise).finally(settle);
+// Releases the intent only when the follow-up ends in a final outcome (applied, failed, unknown).
+// A timeout, the page being left or a rejection says nothing about whether the write reached the
+// device, so the intent stays (until it expires) and a resubmission carries the same id.
+const FINAL = new Set(["applied", "failed", "unknown"]);
+export const settleOnFinal = (promise, settle) =>
+  Promise.resolve(promise).then((result) => {
+    if (result && FINAL.has(result.outcome)) settle();
+    return result;
+  });
+
+// A session lost and signed in again does not say what happened to a write; another operator
+// taking over does start afresh. True when the intents were cleared.
+export function clearOnHandOver(previousOperator, operator) {
+  const changed = Boolean(previousOperator) && previousOperator !== operator;
+  if (changed) unsettled.clear();
+  return changed;
+}
 
 // A resent request is said so in the action log, so a stored receipt is not taken for a new write.
 export const resentHeading = (heading, resentText, reused) => (reused ? `${heading} (${resentText})` : heading);

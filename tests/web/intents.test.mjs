@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  afterTerminal,
+  settleOnFinal,
   clearIntents,
+  clearOnHandOver,
   idForIntent,
   intentKey,
   settleIntent,
@@ -99,13 +100,40 @@ test("the log heading says when an earlier request is resent", () => {
   assert.equal(resentHeading("Light 40", "Resent earlier request wb-1", true), "Light 40 (Resent earlier request wb-1)");
 });
 
-test("the intent is settled on every terminal path of the receipt follow-up", async () => {
-  for (const outcome of ["applied", "failed", "unknown", "timeout", "stopped"]) {
+test("only a final outcome releases the intent; timeout, stopped and rejection keep it", async () => {
+  for (const outcome of ["applied", "failed", "unknown"]) {
     let settled = 0;
-    await afterTerminal(Promise.resolve({ outcome }), () => (settled += 1));
+    await settleOnFinal(Promise.resolve({ outcome }), () => (settled += 1));
     assert.equal(settled, 1, outcome);
   }
+  for (const outcome of ["timeout", "stopped", "unsettled"]) {
+    let settled = 0;
+    await settleOnFinal(Promise.resolve({ outcome }), () => (settled += 1));
+    assert.equal(settled, 0, outcome);
+  }
   let settled = 0;
-  await afterTerminal(Promise.reject(new Error("poll broke")), () => (settled += 1)).catch(() => {});
-  assert.equal(settled, 1);
+  await settleOnFinal(Promise.reject(new Error("poll broke")), () => (settled += 1)).catch(() => {});
+  await settleOnFinal(Promise.resolve(undefined), () => (settled += 1));
+  assert.equal(settled, 0);
+});
+
+test("a kept intent is reused while young and not once it expired", () => {
+  clearIntents();
+  const makeId = counter();
+  const key = intentKey("s1", "irrigation");
+  const first = claimIntent(key, body, { makeId, now: () => 0 });
+  assert.equal(claimIntent(key, body, { makeId, now: () => INTENT_TTL_MS - 1 }).id, first.id);
+  assert.notEqual(claimIntent(key, body, { makeId, now: () => INTENT_TTL_MS }).id, first.id);
+});
+
+test("only an operator change clears the intents, not a lost session", () => {
+  clearIntents();
+  const key = intentKey("s1", "irrigation");
+  const first = idForIntent(key, body, counter());
+  assert.equal(clearOnHandOver("alice", "alice"), false); // the same operator signed in again
+  assert.equal(unsettledCount(), 1);
+  assert.equal(idForIntent(key, body, counter()), first);
+  assert.equal(clearOnHandOver("alice", "bob"), true);
+  assert.equal(unsettledCount(), 0);
+  assert.equal(clearOnHandOver(null, "bob"), false); // the first sign-in clears nothing
 });

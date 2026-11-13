@@ -1,7 +1,7 @@
 // Stage controls. Which ones show follows stage-rules.js; the server stays the judge and every
 // refusal is shown with its reason. Nothing is shown as done before the server answered.
 import { ApiError } from "../api.js";
-import { afterTerminal, claimIntent, intentKey, resentHeading, settleIntent } from "../intents.js";
+import { claimIntent, intentKey, resentHeading, settleIntent, settleOnFinal } from "../intents.js";
 import { answerLost, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
 import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
 import { confirmAction } from "../ui/dialog.js";
@@ -178,8 +178,9 @@ function pauseGroup(env) {
 // (stage and action, so a re-render or an interleaved submission does not lose it); when no readable
 // answer comes back the write may have happened, so it is listed as "result unknown, checking" and
 // its receipt is followed under that id, and sending the identical request again reuses the id. The
-// intent goes when an answer settles it, or when its followed receipt ends by any path (it also
-// expires after a few minutes). A resent request is named as such in the log.
+// intent goes when an answer settles it, or when its followed receipt reaches a final outcome
+// (applied, failed, unknown); a timeout, a left page or a failed follow-up keeps it until it expires
+// after a few minutes. A resent request is named as such in the log.
 async function deviceWrite(env, { action, path, body, heading, label }) {
   const key = intentKey(env.stage.stage_id, action);
   const { id: requestId, reused } = claimIntent(key, body);
@@ -370,9 +371,10 @@ export function activityLog(ctx, life) {
     const followed = pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
       .then((result) => {
         if (result.outcome !== "stopped") item.show(result.outcome === "timeout" ? "unsettled" : result.outcome, outcomeLines(ctx, result));
+        return result;
       })
       .catch((error) => item.show("unsettled", outcomeLines(ctx, { outcome: "unsettled", record, error })));
-    afterTerminal(followed, onDone);
+    settleOnFinal(followed, onDone);
   };
   return { element, add, track };
 }
