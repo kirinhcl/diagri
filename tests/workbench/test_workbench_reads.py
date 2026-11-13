@@ -279,20 +279,39 @@ def test_inbox_shows_an_alert_raised_again_after_it_was_read(bench, operator):
     assert [i["id"] for i in items if i["kind"] == "alert"] == [alert.event_id]
 
 
-def test_inbox_cap_keeps_never_read_alerts_ahead_of_re_asked_ones(bench, operator):
-    for number in range(5):  # read at a mild severity, then worse: asked again
-        alert = bench.alerts.raise_alert("threshold", f"hot{number}", "warning", "31 C")
-        assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
-        bench.alerts.raise_alert("threshold", f"hot{number}", "critical", "35 C")
-    fresh = {
-        bench.alerts.raise_alert("data_gap", f"s{number}", "info", "no data").event_id
-        for number in range(50)
+def _re_asked(bench, operator, key, read_at, now):
+    """An alert read at one severity and then raised at a worse one: it asks to be read again."""
+    alert = bench.alerts.raise_alert("threshold", key, read_at, "31 C")
+    assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
+    bench.alerts.raise_alert("threshold", key, now, "35 C")
+    return alert.event_id
+
+
+def _never_read(bench, severity, count):
+    return {
+        bench.alerts.raise_alert("data_gap", f"s{number}", severity, "no data").event_id
+        for number in range(count)
     }
+
+
+def test_inbox_cap_keeps_a_re_asked_critical_alert_over_never_read_info_alerts(bench, operator):
+    critical = _re_asked(bench, operator, "hot", "warning", "critical")
+    _never_read(bench, "info", 50)
 
     body = operator.get("/wb/inbox").json()
 
-    alerts = {item["id"] for item in body["items"] if item["kind"] == "alert"}
-    assert alerts == fresh and body["truncated"]["alert"] == 5
+    kept = {item["id"] for item in body["items"] if item["kind"] == "alert"}
+    assert critical in kept and len(kept) == 50 and body["truncated"]["alert"] == 1
+
+
+def test_inbox_cap_within_one_severity_keeps_never_read_ahead_of_re_asked(bench, operator):
+    re_asked = _re_asked(bench, operator, "hot", "info", "warning")
+    fresh = _never_read(bench, "warning", 50)
+
+    body = operator.get("/wb/inbox").json()
+
+    kept = {item["id"] for item in body["items"] if item["kind"] == "alert"}
+    assert kept == fresh and re_asked not in kept and body["truncated"]["alert"] == 1
 
 
 def test_inbox_asks_again_when_the_clock_is_not_synced(bench, operator):

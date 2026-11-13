@@ -67,11 +67,11 @@ def _by_age(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _urgency(item: dict[str, Any]) -> tuple[bool, int, float]:
-    """Alerts survive the cap never-read first (a re-asked one never pushes out an unseen one), then
-    by severity, then by how recently they were raised."""
+    """Alerts survive the cap by severity first (a mild unread alert never pushes out a critical one
+    asked about again), then never-read before re-asked, then by how recently they were raised."""
     detail = item["detail"]
     severity = SEVERITY_RANK.get(detail["severity"], len(SEVERITY_RANK))
-    return (not detail["never_read"], severity, -detail["last_at"])
+    return (severity, not detail["never_read"], -detail["last_at"])
 
 
 def _cap(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
