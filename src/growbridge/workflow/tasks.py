@@ -98,6 +98,20 @@ class TaskBoard:
         rows = self.db.query(sql + " ORDER BY seq", params)
         return tuple(self._load(row) for row in rows)
 
+    def in_states(
+        self, states: Collection[TaskState], limit: int = 100
+    ) -> tuple[ResearchTask, ...]:
+        """Tasks of any project in one of ``states``, oldest first."""
+        wanted = [state.value for state in states]
+        if not wanted:
+            return ()
+        marks = ",".join("?" for _ in wanted)
+        rows = self.db.query(
+            f"SELECT * FROM task_board WHERE state IN ({marks}) ORDER BY seq LIMIT ?",
+            (*wanted, limit),
+        )
+        return tuple(self._load(row) for row in rows)
+
     def open_tasks(self, roles: Collection[str]) -> tuple[ResearchTask, ...]:
         """In-progress tasks owned by one of ``roles``, oldest first."""
         rows = self.db.query(
