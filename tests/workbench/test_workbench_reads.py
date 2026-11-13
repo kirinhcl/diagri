@@ -39,8 +39,9 @@ def test_inbox_caps_each_kind_at_fifty(bench, operator):
     for _ in range(51):
         round_id = bench.workflow.create_round(bench.project_id, protocol_id, bench.designer)
         bench.workflow.store.update_round(round_id, awaiting_choice="stage-1")
-    items = operator.get("/wb/inbox").json()["items"]
-    assert sum(i["kind"] == "round_choice" for i in items) == 50
+    body = operator.get("/wb/inbox").json()
+    assert sum(i["kind"] == "round_choice" for i in body["items"]) == 50
+    assert body["truncated"]["round_choice"] == 1
 
 
 def test_projects_and_project_detail(bench, operator):
@@ -154,3 +155,19 @@ def test_inbox_shows_an_alert_raised_again_after_it_was_read(bench, operator):
     bench.alerts.raise_alert("threshold", "too_hot", "critical", "35 C")
     items = operator.get("/wb/inbox").json()["items"]
     assert [i["id"] for i in items if i["kind"] == "alert"] == [alert.event_id]
+
+
+def test_inbox_keeps_a_new_critical_alert_when_alerts_overflow(bench, operator):
+    for number in range(50):
+        bench.alerts.raise_alert("threshold", f"key-{number}", "warning", "warm")
+    bench.clock.advance(60)
+    critical = bench.alerts.raise_alert("threshold", "fresh", "critical", "35 C")
+    body = operator.get("/wb/inbox").json()
+    alerts = [i["id"] for i in body["items"] if i["kind"] == "alert"]
+    assert len(alerts) == 50 and critical.event_id in alerts
+    assert body["truncated"] == {"alert": 1}
+
+
+def test_inbox_reports_no_truncation_when_nothing_is_cut(bench, operator):
+    bench.pending()
+    assert operator.get("/wb/inbox").json()["truncated"] == {}

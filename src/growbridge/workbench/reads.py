@@ -25,6 +25,8 @@ from growbridge.workflow.store import StageRow
 from growbridge.workflow.tasks import TaskBoard
 
 INBOX_LIMIT = 50
+SCAN_LIMIT = 1000  # how many rows of one kind are read so the number cut can be reported
+SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 PROJECT_LIMIT = 200
 TASK_LIMIT = 100
 Dependency = Callable[..., Awaitable[Actor]]
@@ -54,17 +56,35 @@ def _by_age(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return items
 
 
+def _urgency(item: dict[str, Any]) -> tuple[int, float]:
+    """Alerts survive the cap by severity, then by how recently they were raised."""
+    detail = item["detail"]
+    return (SEVERITY_RANK.get(detail["severity"], len(SEVERITY_RANK)), -detail["last_at"])
+
+
+def _cap(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """At most ``INBOX_LIMIT`` of each kind (oldest first; alerts most urgent first), the
+    survivors oldest first, and how many items of each kind were cut."""
+    kept: list[dict[str, Any]] = []
+    truncated: dict[str, int] = {}
+    for kind in sorted({item["kind"] for item in items}):
+        of_kind = [item for item in items if item["kind"] == kind]
+        ranked = sorted(of_kind, key=_urgency) if kind == "alert" else _by_age(list(of_kind))
+        kept += ranked[:INBOX_LIMIT]
+        if len(ranked) > INBOX_LIMIT:
+            truncated[kind] = len(ranked) - INBOX_LIMIT
+    return _by_age(kept), truncated
+
+
 def _stage_items(workflow: WorkflowService) -> list[dict[str, Any]]:
     store = workflow.store
     found: list[dict[str, Any]] = []
     for state, kind in STAGE_KINDS.items():
-        items = []
         for row in store.stages_in((state,)):
             entered = store.entered(row.stage_id, state)
             since = entered["at"] if entered else row.state_at
             detail = {"state": state.value, "device_id": row.device_id}
-            items.append(_item(kind, row.stage_id, row.project_id, row.round_id, since, detail))
-        found += _by_age(items)[:INBOX_LIMIT]
+            found.append(_item(kind, row.stage_id, row.project_id, row.round_id, since, detail))
     return found
 
 
@@ -78,7 +98,7 @@ def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
             row["created_at"],
             {"awaiting_choice": row["awaiting_choice"]},
         )
-        for row in rounds_awaiting_choice(workflow.store, INBOX_LIMIT)
+        for row in rounds_awaiting_choice(workflow.store, SCAN_LIMIT)
     ]
 
 
@@ -97,28 +117,28 @@ def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
                 "severity": alert.severity,
                 "message": alert.message,
                 "count": alert.count,
+                "last_at": alert.last_at,
             },
         )
         for alert in alerts.open()
         if alert.read_at is None or alert.read_at < alert.last_at  # raised again after the read
     ]
-    return _by_age(items)[:INBOX_LIMIT]
+    return items
 
 
 def _compute_items(compute: ComputeService | None) -> list[dict[str, Any]]:
     if compute is None:
         return []
-    items = [
+    return [
         _item("compute_stuck", job["attempt_id"], None, None, job["since"], dict(job))
         for job in compute.overview()["stuck"]
     ]
-    return _by_age(items)[:INBOX_LIMIT]
 
 
 def _task_items(tasks: TaskBoard | None) -> list[dict[str, Any]]:
     if tasks is None:
         return []
-    found = tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT)
+    found = tasks.in_states(ATTENTION_TASKS, SCAN_LIMIT)
     since = tasks.state_since([task.id for task in found])
     return [
         _item(
@@ -194,7 +214,8 @@ def _inbox_routes(router, operator, workflow, tasks, alerts, compute) -> None:
     async def inbox(actor: Operator):
         items = _stage_items(workflow) + _round_items(workflow) + _alert_items(alerts)
         items += _compute_items(compute) + _task_items(tasks)
-        return {"items": _by_age(items)}
+        kept, truncated = _cap(items)
+        return {"items": kept, "truncated": truncated}
 
 
 def _project_routes(router, operator, workflow, tasks, budget) -> None:
