@@ -428,6 +428,8 @@ export default {
   "safety.confirmTitle": "Approve these safety limits?",
   "safety.noChanges": "No change from the approved limits.",
   "safety.absent": "(none)",
-  "safety.cancelled": "Not approved: nothing was sent.",
+  "safety.cancelled": "Nothing was sent.",
+  "safety.notApproved": "Not approved",
+  "safety.changedMeanwhile": "The approved limits changed while you were reviewing; check the changes again.",
   "safety.approved": "Approved. Protection right {right}.",
 };

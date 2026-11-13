@@ -428,6 +428,8 @@ export default {
   "safety.confirmTitle": "批准这套安全限值？",
   "safety.noChanges": "与已批准的限值没有差别。",
   "safety.absent": "（无）",
-  "safety.cancelled": "未批准：什么都没有发送。",
+  "safety.cancelled": "什么都没有发送。",
+  "safety.notApproved": "未批准",
+  "safety.changedMeanwhile": "你查看期间，已批准的限值发生了变化；请重新核对这些改动。",
   "safety.approved": "已批准。保护权 {right}。",
 };

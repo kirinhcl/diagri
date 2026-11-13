@@ -4,7 +4,7 @@ import test from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { isNotMounted } from "../../src/growbridge/web/workbench/pages/not-mounted.js";
-import { diffLines, formatValue, visibleChanges } from "../../src/growbridge/web/workbench/pages/safety-diff.js";
+import { baselineChanged, diffLines, formatValue, visibleChanges } from "../../src/growbridge/web/workbench/pages/safety-diff.js";
 import { safetySkeleton } from "../../src/growbridge/web/workbench/pages/safety-skeleton.js";
 
 const MODELS = new URL("../../src/growbridge/archive/models.py", import.meta.url);
@@ -78,6 +78,28 @@ test("visibleChanges leaves out the fields the server stamps itself", () => {
     { path: "version", before: 1, after: 2 },
   ];
   assert.deepEqual(visibleChanges(changes), [{ path: "version", before: 1, after: 2 }]);
+});
+
+test("baselineChanged: same version and time is unchanged", () => {
+  const a = { version: 1, approved_at: 10, rules: [] };
+  assert.equal(baselineChanged(a, { ...a }), false);
+  assert.equal(baselineChanged(null, null), false);
+});
+
+test("baselineChanged: a different version or approval time is a change", () => {
+  const a = { version: 1, approved_at: 10 };
+  assert.equal(baselineChanged(a, { version: 2, approved_at: 10 }), true);
+  assert.equal(baselineChanged(a, { version: 1, approved_at: 11 }), true);
+});
+
+test("baselineChanged: none to some and some to none are changes", () => {
+  assert.equal(baselineChanged(null, { version: 1, approved_at: 1 }), true);
+  assert.equal(baselineChanged({ version: 1, approved_at: 1 }, null), true);
+});
+
+test("baselineChanged compares the whole config when version and time are absent", () => {
+  assert.equal(baselineChanged({ rules: [1] }, { rules: [1] }), false);
+  assert.equal(baselineChanged({ rules: [1] }, { rules: [2] }), true);
 });
 
 test("isNotMounted is true only for a plain 404 without a refusal code", () => {
