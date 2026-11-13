@@ -467,9 +467,14 @@ class Workbench:
         @router.get("/stages/{stage_id}")
         async def stage(stage_id: str, actor: Anyone):
             runtime = self.workflow.stage(stage_id)
+            body = runtime_json(runtime)
+            if actor.kind != "operator":
+                # A model role sees the stage's state, not where it belongs: naming the round
+                # would let it aim a run-sheet draft at that round.
+                return {key: value for key, value in body.items() if key != "project_id"}
             row = self.workflow.store.find_stage(stage_id)  # the runtime does not name its round
             return {
-                **runtime_json(runtime),
+                **body,
                 "round_id": row.round_id if row else None,
                 "project_id": row.project_id if row else runtime.project_id,
             }

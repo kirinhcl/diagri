@@ -77,6 +77,16 @@ def test_stage_read_names_its_round_and_project(bench, operator):
     assert body["project_id"] == bench.project_id
 
 
+def test_model_token_reads_the_stage_without_its_round_or_project(bench):
+    bench.pending()
+
+    response = bench.lan.get("/wb/stages/stage-1", headers=bench.model("analyst"))
+
+    assert response.status_code == 200 and response.json()["state"] == "pending_review"
+    assert "round_id" not in response.json()
+    assert "project_id" not in response.json()
+
+
 # --- recent re-authentication ------------------------------------------------------------------
 
 
