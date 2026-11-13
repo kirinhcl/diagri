@@ -1,0 +1,101 @@
+/* Styles of the project, round and stage pages. Colours come only from tokens.css and the mixes in workbench.css. */
+
+/* --- blocks: a titled section of a page --------------------------------------------------- */
+.page > .block + .block { margin-top: 18px; }
+.block {
+  display: grid;
+  gap: 16px;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+.block-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.block-note { margin: 0; font-size: 13px; color: var(--muted-strong); }
+.block .form { max-width: 760px; }
+.block > .form-status { margin: 0; }
+
+/* --- tables ----------------------------------------------------------------------------------- */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table th,
+.data-table td {
+  padding: 10px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.data-table th {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  color: var(--muted-strong);
+  background: var(--bg);
+}
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:hover td { background: color-mix(in srgb, var(--pale) 45%, var(--paper)); }
+.cell-stack { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.text-link {
+  font-weight: 600;
+  color: var(--green);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.text-link:hover { color: var(--green-dark); }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+/* --- key and value pairs, code ------------------------------------------------------------- */
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+.kv-row { display: grid; gap: 2px; min-width: 0; }
+.kv dt { font-size: 11px; font-weight: 650; letter-spacing: 0.3px; color: var(--muted-strong); }
+.kv dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.code-block {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.run-result { display: grid; gap: 12px; }
+
+/* --- actions ---------------------------------------------------------------------------------- */
+.action { display: grid; gap: 10px; justify-items: start; }
+.action .form-status { width: 100%; max-width: 760px; }
+.button-danger { background: var(--red); color: var(--paper); }
+.button-danger:hover:enabled { background: color-mix(in srgb, var(--red) 82%, var(--ink)); }
+
+@media (max-width: 600px) {
+  .block { padding: 16px; }
+  .data-table th,
+  .data-table td { padding: 8px 10px; }
+}
