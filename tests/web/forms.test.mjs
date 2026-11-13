@@ -8,6 +8,7 @@ import {
   errorLines,
   registerDraftSaver,
   saveAllDrafts,
+  worthKeeping,
 } from "../../src/growbridge/web/workbench/ui/forms.js";
 
 const t = (key) => `t:${key}`;
@@ -71,4 +72,13 @@ test("an unregistered form is not saved", () => {
   const form = { isConnected: true };
   registerDraftSaver(form, () => saved.push("form"))();
   assert.equal(saveAllDrafts(), 0);
+});
+
+test("a form started from a restored draft keeps its values on a lost session", () => {
+  assert.equal(worthKeeping(null, { a: "x" }), true);
+});
+
+test("a form started fresh keeps its values only when they changed", () => {
+  assert.equal(worthKeeping({ a: "x" }, { a: "x" }), false);
+  assert.equal(worthKeeping({ a: "x" }, { a: "y" }), true);
 });

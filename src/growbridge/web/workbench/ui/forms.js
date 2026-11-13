@@ -219,13 +219,19 @@ function formEntries(fields, draft, zone, lang) {
 
 const rawValues = (entries) => Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
 
-// On a lost session the form keeps what differs from its own starting values (never a password).
-function keepOnSessionLoss(form, draftKey, entries, zone, lang) {
+// On a lost session the form keeps its values (never a password) when they differ from what it
+// started with, or when it started from a restored draft.
+export function worthKeeping(start, now) {
+  if (!start) return true;
+  return Object.keys(now).some((name) => now[name] !== start[name]);
+}
+
+function keepOnSessionLoss(form, draftKey, entries, restored) {
   const secretNames = entries.filter((entry) => entry.field.type === "password").map((entry) => entry.field.name);
-  const start = stripSecrets(Object.fromEntries(entries.map((entry) => [entry.field.name, initialText(entry.field, zone, lang)])), secretNames);
+  const start = restored ? null : stripSecrets(rawValues(entries), secretNames);
   registerDraftSaver(form, () => {
     const now = stripSecrets(rawValues(entries), secretNames);
-    if (Object.keys(now).some((name) => now[name] !== start[name])) saveDraft(draftKey, now);
+    if (worthKeeping(start, now)) saveDraft(draftKey, now);
   });
 }
 
@@ -264,7 +270,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     }
   };
   const { form, status } = formFrame(submitLabel, entries.map((entry) => entry.row), run, getCtx);
-  if (draftKey) keepOnSessionLoss(form, draftKey, entries, zone, getCtx().lang);
+  if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft));
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;
 }
