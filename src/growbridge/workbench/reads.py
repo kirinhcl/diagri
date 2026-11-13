@@ -4,10 +4,11 @@ Operators only: no login is refused with ``session`` and a model role with ``mod
 these routes writes. The inbox gathers what waits for a person, at most ``INBOX_LIMIT`` items of
 each kind, oldest first (alerts: most urgent first); a kind whose service is not mounted is simply
 empty. Rounds and tasks are fetched with that limit and the number cut comes from a COUNT query.
-A stage's readings are reused for 15 s per (stage, points), so the page's refresh does not scan the
-whole stage window every time.
+A stage's readings are reused for 15 s per (stage, points, stage state), so the page's refresh
+does not scan the whole stage window every time.
 """
 
+import copy
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
@@ -187,9 +188,10 @@ def _stage(workflow: WorkflowService, stage_id: str) -> StageRow:
 
 
 class ReadingsCache:
-    """A stage's readings per (stage, points), reused for ``seconds`` of the injected monotonic
-    clock: the stage page asks every 15 s, and each answer scans the whole stage window. At most
-    ``size`` answers are kept; the one used least recently goes first."""
+    """A stage's readings per key (stage, points and the stage state the answer depends on), reused
+    for ``seconds`` of the injected monotonic clock: the stage page asks every 15 s, and each answer
+    scans the whole stage window. At most ``size`` answers are kept; the one used least recently
+    goes first. Callers get a copy, so none can change the shared entry."""
 
     def __init__(
         self, clock: Clock, seconds: float = READINGS_CACHE_SECONDS, size: int = READINGS_CACHE_SIZE
@@ -197,23 +199,23 @@ class ReadingsCache:
         self.clock = clock
         self.seconds = seconds
         self.size = size
-        self._entries: OrderedDict[tuple[str, int], tuple[float, dict[str, Any]]] = OrderedDict()
+        self._entries: OrderedDict[tuple[Any, ...], tuple[float, dict[str, Any]]] = OrderedDict()
 
     def __len__(self) -> int:
         return len(self._entries)
 
-    def get(self, key: tuple[str, int], compute: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+    def get(self, key: tuple[Any, ...], compute: Callable[[], dict[str, Any]]) -> dict[str, Any]:
         now = self.clock.monotonic()
         kept = self._entries.get(key)
         if kept is not None and now - kept[0] < self.seconds:
             self._entries.move_to_end(key)
-            return kept[1]
+            return copy.deepcopy(kept[1])
         value = compute()
         self._entries[key] = (now, value)
         self._entries.move_to_end(key)
         while len(self._entries) > self.size:
             self._entries.popitem(last=False)
-        return value
+        return copy.deepcopy(value)
 
 
 def _empty_readings() -> dict[str, Any]:
@@ -310,7 +312,8 @@ def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
         def compute() -> dict[str, Any]:
             return bucketed_samples(archive.db, row.experiment_id, started_at, end, points)
 
-        return cache.get((stage_id, points), compute)
+        key = (stage_id, points, row.state, row.state_at, started_at, row.experiment_id)
+        return cache.get(key, compute)
 
     @router.get("/stages/{stage_id}/measurements")
     async def measurements(stage_id: PathId, actor: Operator):

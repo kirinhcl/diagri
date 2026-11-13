@@ -1,18 +1,30 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { coalesce, frozenReadings } from "../../src/growbridge/web/workbench/pages/stage.js";
+import { coalesce, FINISHED_REREAD_SECONDS, frozenReadings, keptIsFresh } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { detailText, timeline } from "../../src/growbridge/web/workbench/pages/stage-history.js";
 import { correctionLinks } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
 
-test("readings read after the stage was known to be finished are kept; others are read again", () => {
-  const read = { value: { samples: [], window: [1, 2] } };
-  assert.equal(frozenReadings("ended", read), read);
-  assert.equal(frozenReadings("stopped", read), read);
-  assert.equal(frozenReadings("running", read), null);
-  assert.equal(frozenReadings(null, read), null); // the first read: the state was not known yet
-  assert.equal(frozenReadings("ended", { error: new Error("x") }), null);
-  assert.equal(frozenReadings("ended", undefined), null);
+const finished = { state: "ended", state_at: 200 };
+const windowTo = (end) => ({ value: { samples: [], window: { start: 100, end } } });
+
+test("readings are kept only when their window ends at the stage's state_at", () => {
+  const read = windowTo(200);
+  assert.equal(frozenReadings(finished, read), read);
+  assert.equal(frozenReadings({ state: "stopped", state_at: 200 }, read), read);
+  assert.equal(frozenReadings(finished, windowTo(150)), null); // a stale running-window curve
+  assert.equal(frozenReadings({ state: "running", state_at: 200 }, read), null);
+  assert.equal(frozenReadings(finished, { error: new Error("x") }), null);
+  assert.equal(frozenReadings(finished, undefined), null);
+  assert.equal(frozenReadings(finished, { value: { samples: [], window: null } }), null);
+  assert.equal(frozenReadings({ state: "ended" }, windowTo(200)), null); // no state_at to prove it
+});
+
+test("kept readings are read again after five minutes", () => {
+  assert.equal(FINISHED_REREAD_SECONDS, 300);
+  assert.equal(keptIsFresh(null, 1000), false);
+  assert.equal(keptIsFresh(1000, 1000 + 299_999), true);
+  assert.equal(keptIsFresh(1000, 1000 + 300_000), false);
 });
 
 // A run that waits until the test lets it finish.

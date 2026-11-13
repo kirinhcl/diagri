@@ -139,6 +139,39 @@ def test_readings_are_kept_for_fifteen_seconds_per_stage_and_points(bench, opera
     assert _stamps(operator) == [150, 190]  # fresh once fifteen seconds have passed
 
 
+def test_a_reading_cached_before_the_stage_finished_is_not_served_after(bench, operator):
+    bench.pending()
+    store = bench.workflow.store
+    store.update_stage(store.find_stage("stage-1"), started_at=100.0)
+    for name, at in (("a", 150.0), ("b", 250.0)):
+        _sample(bench, name, at)
+    bench.clock.wall = 300.0
+    assert _stamps(operator) == [150, 250]  # running: the window runs up to now
+    store.update_stage(store.find_stage("stage-1"), state=StageState.ENDED, state_at=200.0)
+    bench.clock.advance(1)  # well inside the cache lifetime
+    assert _stamps(operator) == [150]  # the finished window, not the running one
+
+
+def test_the_operator_stage_names_when_it_reached_its_state(bench, operator):
+    bench.pending()
+    store = bench.workflow.store
+    store.update_stage(
+        store.find_stage("stage-1"), started_at=100.0, state=StageState.ENDED, state_at=200.0
+    )
+
+    assert operator.get("/wb/stages/stage-1").json()["state_at"] == 200.0
+
+
+def test_the_cache_hands_out_copies_that_cannot_change_the_shared_entry():
+    cache = ReadingsCache(FakeClock(), seconds=15.0, size=2)
+    first = cache.get(("s1",), lambda: {"samples": [1]})
+    first["samples"].append(99)
+    second = cache.get(("s1",), lambda: {"samples": ["recomputed"]})
+    second["samples"].append(100)
+
+    assert cache.get(("s1",), lambda: {}) == {"samples": [1]}
+
+
 def test_the_readings_cache_holds_a_bounded_number_of_entries():
     clock = FakeClock()
     cache = ReadingsCache(clock, seconds=15.0, size=2)

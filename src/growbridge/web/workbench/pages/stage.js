@@ -1,7 +1,7 @@
 // One stage: status, controls, environment curves, run sheet review, measurements and history.
 // Read again every 15 s; each part is redrawn only when what it shows changed, so nothing typed
 // into a form is lost, and the results of writes stay listed while the controls change. The readings
-// of a finished stage are not asked for again once they were read after it finished.
+// of a finished stage are asked for again only every five minutes.
 import { formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
@@ -54,14 +54,19 @@ export function coalesce(fn) {
 // --- reading ----------------------------------------------------------------------------------------
 const settle = (result) => (result.status === "fulfilled" ? { value: result.value } : { error: result.reason });
 
-// A finished stage's window never changes. Readings are kept once they were read after the page
-// already knew the stage had finished (a read started together with the first such answer may
-// still describe the running window); anything else is read again.
+// A finished stage's window can still gain late backlog samples, so its readings are re-read every
+// FINISHED_REREAD_SECONDS rather than every poll or never. They are kept only when the payload
+// proves it is the finished window: the stage is finished and the window ends at the stage's state_at.
 const FINISHED = new Set(["ended", "stopped"]);
-export function frozenReadings(stateBeforeRead, readings) {
-  if (!FINISHED.has(stateBeforeRead) || !readings || readings.error) return null;
-  return readings;
+export const FINISHED_REREAD_SECONDS = 300;
+export function frozenReadings(stage, readings) {
+  if (!stage || !FINISHED.has(stage.state) || !readings || readings.error) return null;
+  const end = readings.value && readings.value.window ? readings.value.window.end : undefined;
+  return typeof end === "number" && end === stage.state_at ? readings : null;
 }
+
+// Kept readings are used while younger than the re-read interval (times in milliseconds).
+export const keptIsFresh = (keptAt, nowMs) => keptAt !== null && nowMs - keptAt < FINISHED_REREAD_SECONDS * 1000;
 
 // The stage itself must be readable; any other part that fails says so in its own place.
 // `kept` is a finished stage's readings result, used instead of asking again.
@@ -227,14 +232,15 @@ export async function render(shellCtx, params) {
   const element = h("div", { class: "page stage" });
   const problem = h("div", { class: "form-status form-status-error", attrs: { role: "status", hidden: true } });
   const page = { ctx, parts: makeParts(), problem, log: activityLog(ctx, pageLife(element)) };
-  let known = first.stage.state; // the state before the next read starts
-  let kept = null;
+  let kept = null; // { readings, at } of a finished stage, until it is due again
   const refresh = coalesce(async () => {
     try {
-      const before = known;
-      const data = await loadAll(ctx, params.stageId, kept);
-      kept = kept || frozenReadings(before, data.readings);
-      known = data.stage.state;
+      const use = kept && keptIsFresh(kept.at, Date.now()) ? kept.readings : null;
+      const data = await loadAll(ctx, params.stageId, use);
+      if (!use) {
+        const frozen = frozenReadings(data.stage, data.readings);
+        kept = frozen ? { readings: frozen, at: Date.now() } : null;
+      }
       draw(page, data);
       problem.hidden = true;
     } catch (error) {

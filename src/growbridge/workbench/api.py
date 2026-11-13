@@ -476,6 +476,7 @@ class Workbench:
             return {
                 **body,
                 "round_id": row.round_id if row else None,
+                "state_at": row.state_at if row else None,  # the console proves a finished window
                 "project_id": row.project_id if row else runtime.project_id,
             }
 
