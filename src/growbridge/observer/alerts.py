@@ -16,6 +16,7 @@ from growbridge.ports import Actor, Denied, Reading
 
 Severity = Literal["info", "warning", "critical"]
 DEFAULT_MAX_AGE_SECONDS = 120.0
+REASK_SECONDS = 24 * 3600.0  # a persistent alert read earlier is asked about again after this
 NAMESPACE = "observer_alerts"
 STEPS = (
     "CREATE TABLE observer_alerts("
@@ -123,15 +124,19 @@ def _alert(row) -> Alert:
     return Alert(**{name: row[name] for name in Alert.model_fields})
 
 
+def _rank(severity: Severity) -> int:
+    return SEVERITY_ORDER.index(severity)
+
+
 def awaits_reading(alert: Alert) -> bool:
-    """An alert waits for an operator until it is read, and again once it gets worse than the
-    severity it was read at. Raised again at the same or a milder severity it stays read; a read
-    recorded without its severity (before that was kept) waits once more."""
-    if alert.read_at is None:
+    """An alert waits for an operator until it is read, again once it gets worse than the severity
+    it was read at, and again once a day while it persists. A read recorded without its severity
+    (before that was kept) waits once more."""
+    if alert.read_at is None or alert.read_severity is None:
         return True
-    if alert.read_severity is None:
+    if _rank(alert.severity) > _rank(alert.read_severity):
         return True
-    return SEVERITY_ORDER.index(alert.severity) > SEVERITY_ORDER.index(alert.read_severity)
+    return alert.last_at - alert.read_at > REASK_SECONDS
 
 
 class AlertBook:
@@ -145,7 +150,7 @@ class AlertBook:
         now = self.clock.now()
         with self.db.transaction():
             row = self.db.one(
-                "SELECT event_id FROM observer_alerts "
+                "SELECT event_id, read_severity FROM observer_alerts "
                 "WHERE kind = ? AND key = ? AND resolved_at IS NULL",
                 (kind, key),
             )
@@ -158,10 +163,13 @@ class AlertBook:
                 )
             else:
                 event_id = row["event_id"]
+                read_severity = row["read_severity"]
+                if read_severity is not None and _rank(severity) < _rank(read_severity):
+                    read_severity = severity  # re-arm: a later rise waits for a reader again
                 self.db.execute(
                     "UPDATE observer_alerts SET count = count + 1, last_at = ?, "
-                    "message = ?, severity = ? WHERE event_id = ?",
-                    (now, message, severity, event_id),
+                    "message = ?, severity = ?, read_severity = ? WHERE event_id = ?",
+                    (now, message, severity, read_severity, event_id),
                 )
         return self.get(event_id)
 

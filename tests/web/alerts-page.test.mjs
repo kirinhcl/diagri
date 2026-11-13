@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { alertWaiting } from "../../src/growbridge/web/workbench/pages/alerts.js";
+import { alertWaiting, REASK_SECONDS } from "../../src/growbridge/web/workbench/pages/alerts.js";
 
 const alert = (fields) => ({ event_id: "a1", severity: "warning", read_by: null, read_at: null, read_severity: null, ...fields });
 
@@ -21,4 +21,11 @@ test("a read alert that got worse waits again", () => {
 
 test("a read recorded without its severity waits once more, as on the server", () => {
   assert.equal(alertWaiting(alert({ read_by: "alice", read_at: 5, read_severity: null })), true);
+});
+
+test("a persistent alert read earlier is asked about again after a day, as on the server", () => {
+  const read = { read_by: "alice", read_at: 1000, read_severity: "warning" };
+  assert.equal(REASK_SECONDS, 24 * 3600);
+  assert.equal(alertWaiting(alert({ ...read, last_at: 1000 + REASK_SECONDS })), false);
+  assert.equal(alertWaiting(alert({ ...read, last_at: 1000 + REASK_SECONDS + 1 })), true);
 });

@@ -350,6 +350,7 @@ export default {
   "alerts.readBy": "{name} 已读，{time}",
   "alerts.readWorsened": "{name} 已读，{time}；之后在 {last} 加重为{severity}。",
   "alerts.readBefore": "{name} 已读，{time}，当时还没有记录已读时的严重程度；请再标记一次已读。",
+  "alerts.readStale": "{name} 已读，{time}；{last} 仍在触发，因此再次请你确认。",
   "alerts.markRead": "标为已读",
   "alerts.wasRead": "告警已标为已读。",
   "evidence.lead": "全部证据卡及其来源。模型提出的卡片在有人核实之前保持未核实。卡片从不被修改。",
