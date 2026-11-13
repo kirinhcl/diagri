@@ -2,8 +2,9 @@
 
     GROWBRIDGE_DEV_SECRET='<at least 12 characters>' .venv/bin/python scripts/dev_workbench.py
 
-The operator ``dev`` signs in with that secret at http://localhost:8770/workbench. The data
-holds one approved safety limit set and one stage waiting for review.
+The operator ``dev`` signs in with that secret at http://localhost:8770/workbench. A fresh data
+directory gets one approved safety limit set and one stage waiting for review; a reused
+``--data-dir`` (one that already holds databases) is opened as it is, without seeding or approving.
 """
 
 import argparse
@@ -48,6 +49,27 @@ def _seed(runtime) -> None:
         raise RuntimeError("the dev run sheet was refused: " + "; ".join(blocking))
 
 
+def is_fresh(data_dir: Path) -> bool:
+    """True when no database of an earlier run is there: only then is anything seeded."""
+    return not any(data_dir.glob("*.sqlite3"))
+
+
+def prepare(runtime, secret: str, fresh: bool) -> None:
+    """A fresh data directory gets the operator, the fixture safety limits and one stage to review.
+    A reused one is left as it is: the fixture limits are never approved over what is there."""
+    if fresh:
+        runtime.operators.add(OPERATOR, secret)
+    runtime.control.register_host()
+    if fresh:
+        _seed(runtime)
+        return
+    print(
+        f"Reusing the data in {runtime.settings.data_dir}: nothing seeded, no safety limits "
+        f"approved, no operator added (sign in as before).",
+        file=sys.stderr,
+    )
+
+
 async def poll_status(request, interval: float = STATUS_SECONDS, sleep=asyncio.sleep) -> None:
     """Ask the device for its status forever so readings stay fresh; a failed ask is retried."""
     while True:
@@ -64,11 +86,10 @@ async def _run(settings, secret: str) -> None:
     from growbridge.runtime import build_runtime
     from growbridge.sim.device import SimulatedTransport
 
+    fresh = is_fresh(settings.data_dir)  # decided before build_runtime creates the databases
     runtime = build_runtime(settings, lambda _: SimulatedTransport(), channels={})
     try:
-        runtime.operators.add(OPERATOR, secret)
-        runtime.control.register_host()
-        _seed(runtime)
+        prepare(runtime, secret, fresh)
         router = runtime.workbench({})
         await runtime.start()
         ticker = asyncio.create_task(_tick_forever(runtime))

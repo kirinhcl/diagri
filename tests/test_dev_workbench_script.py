@@ -23,6 +23,35 @@ def _load_script():
     return module
 
 
+def _dev_runtime(data_dir, clock):
+    from growbridge.config import Settings
+    from growbridge.runtime import build_runtime
+    from growbridge.sim.device import SimulatedTransport
+
+    settings = Settings(device="SIMULATED", token="x" * 32, data_dir=data_dir)
+    return build_runtime(settings, lambda _: SimulatedTransport(), clock, channels={})
+
+
+def test_a_reused_data_dir_is_neither_seeded_nor_approved_again(tmp_path):
+    from growbridge.sim.clock import FakeClock
+
+    script = _load_script()
+    data_dir, clock, secret = tmp_path / "data", FakeClock(), "a dev secret only"
+    assert script.is_fresh(data_dir)
+    first = _dev_runtime(data_dir, clock)
+    script.prepare(first, secret, fresh=True)
+    approved_at = first.control.safety().approved_at
+    projects = first.workflow.store.db.one("SELECT COUNT(*) AS n FROM wf_projects")["n"]
+
+    clock.advance(60)
+    assert not script.is_fresh(data_dir)
+    again = _dev_runtime(data_dir, clock)
+    script.prepare(again, secret, fresh=script.is_fresh(data_dir))
+
+    assert again.control.safety().approved_at == approved_at  # no second fixture approval
+    assert again.workflow.store.db.one("SELECT COUNT(*) AS n FROM wf_projects")["n"] == projects
+
+
 async def test_poll_status_asks_the_device_on_every_beat_and_survives_a_failure():
     script = _load_script()
     asked, beats = [], []
