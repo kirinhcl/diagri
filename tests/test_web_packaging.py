@@ -30,3 +30,13 @@ def test_both_pages_share_the_design_tokens():
     index_html = (WEB / "index.html").read_text()
     assert "--ink: #172e28" in tokens_css and "--ink:" not in style_css
     assert index_html.index("/assets/tokens.css") < index_html.index("/assets/style.css")
+
+
+def test_the_token_move_keeps_both_stylesheets_well_formed():
+    tokens_css = (WEB / "tokens.css").read_text().strip()
+    style_css = (WEB / "style.css").read_text().strip()
+    assert tokens_css.startswith(":root {") and tokens_css.endswith("}")
+    assert not style_css.startswith("}")
+    assert style_css.startswith("* {")
+    assert tokens_css.count("{") == tokens_css.count("}")
+    assert style_css.count("{") == style_css.count("}")
