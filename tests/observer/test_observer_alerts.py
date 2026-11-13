@@ -3,11 +3,11 @@ import pytest
 from growbridge.archive.models import Condition
 from growbridge.observer.alerts import (
     NAMESPACE,
+    REASK_SECONDS,
     STEPS,
     AlertBook,
     AlertRule,
     RuleState,
-    REASK_SECONDS,
     awaits_reading,
     evaluate_alert_rules,
 )
@@ -181,7 +181,9 @@ def test_a_persistent_alert_is_asked_again_once_a_day(db, clock):
     alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
     book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
     clock.advance(REASK_SECONDS - 60)
-    assert awaits_reading(book.raise_alert("data_gap", "temperature", "warning", "no data")) is False
+    assert (
+        awaits_reading(book.raise_alert("data_gap", "temperature", "warning", "no data")) is False
+    )
 
     clock.advance(120)
 
