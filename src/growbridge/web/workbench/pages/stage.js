@@ -1,6 +1,7 @@
 // One stage: status, controls, environment curves, run sheet review, measurements and history.
 // Read again every 15 s; each part is redrawn only when what it shows changed, so nothing typed
-// into a form is lost, and the results of writes stay listed while the controls change.
+// into a form is lost, and the results of writes stay listed while the controls change. The readings
+// of a finished stage are not asked for again once they were read after it finished.
 import { formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
@@ -53,14 +54,26 @@ export function coalesce(fn) {
 // --- reading ----------------------------------------------------------------------------------------
 const settle = (result) => (result.status === "fulfilled" ? { value: result.value } : { error: result.reason });
 
+// A finished stage's window never changes. Readings are kept once they were read after the page
+// already knew the stage had finished (a read started together with the first such answer may
+// still describe the running window); anything else is read again.
+const FINISHED = new Set(["ended", "stopped"]);
+export function frozenReadings(stateBeforeRead, readings) {
+  if (!FINISHED.has(stateBeforeRead) || !readings || readings.error) return null;
+  return readings;
+}
+
 // The stage itself must be readable; any other part that fails says so in its own place.
-async function loadAll(ctx, stageId) {
+// `kept` is a finished stage's readings result, used instead of asking again.
+async function loadAll(ctx, stageId, kept = null) {
   const base = `/stages/${enc(stageId)}`;
-  const paths = [base, `${base}/run-sheet`, `${base}/readings?points=${READING_POINTS}`, `${base}/measurements`, `${base}/history`];
-  const results = (await Promise.allSettled(paths.map((path) => ctx.api.get(path)))).map(settle);
+  const readingsPath = kept ? null : `${base}/readings?points=${READING_POINTS}`;
+  const paths = [base, `${base}/run-sheet`, readingsPath, `${base}/measurements`, `${base}/history`];
+  const ask = (path) => (path ? ctx.api.get(path) : Promise.resolve(null));
+  const results = (await Promise.allSettled(paths.map(ask))).map(settle);
   const [stage, review, readings, measurements, history] = results;
   if (stage.error) throw stage.error;
-  return { stage: stage.value, review, readings, measurements, history };
+  return { stage: stage.value, review, readings: kept || readings, measurements, history };
 }
 
 // --- parts ------------------------------------------------------------------------------------------
@@ -214,9 +227,15 @@ export async function render(shellCtx, params) {
   const element = h("div", { class: "page stage" });
   const problem = h("div", { class: "form-status form-status-error", attrs: { role: "status", hidden: true } });
   const page = { ctx, parts: makeParts(), problem, log: activityLog(ctx, pageLife(element)) };
+  let known = first.stage.state; // the state before the next read starts
+  let kept = null;
   const refresh = coalesce(async () => {
     try {
-      draw(page, await loadAll(ctx, params.stageId));
+      const before = known;
+      const data = await loadAll(ctx, params.stageId, kept);
+      kept = kept || frozenReadings(before, data.readings);
+      known = data.stage.state;
+      draw(page, data);
       problem.hidden = true;
     } catch (error) {
       problem.replaceChildren(...[ctx.t("stage.stale"), ...errorLines(error, ctx.lang, ctx.t)].map((line) => h("p", { text: line })));

@@ -82,7 +82,10 @@ const DESCRIBERS = {
   round_choice: (ctx, item, d) => ({
     title: ctx.t("inbox.round", { id: item.id }),
     pill: statePill(ctx.t, "awaiting_choice"),
-    lines: [say(ctx.t, "inbox.roundChoice", { stage: d.awaiting_choice })],
+    lines: [
+      say(ctx.t, "inbox.roundChoice", { stage: d.awaiting_choice }),
+      d.since_from === "round_created" ? ctx.t("inbox.sinceRoundCreated") : null,
+    ],
     meta: where(ctx, item),
   }),
   alert: (ctx, item, d) => ({

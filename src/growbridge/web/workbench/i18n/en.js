@@ -48,6 +48,7 @@ export default {
   "inbox.task": "Task {id}",
   "inbox.owner": "Owner role: {role}",
   "inbox.roundChoice": "Stage {stage} stopped; choose how this round goes on.",
+  "inbox.sinceRoundCreated": "The time shown is when the round was created; when the stage stopped is not recorded.",
   "inbox.alertCount": "Raised: {count}",
   "inbox.lastAt": "Last: {time}",
   "state.pending_review": "Waiting for review",

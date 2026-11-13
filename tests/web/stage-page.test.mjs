@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { coalesce } from "../../src/growbridge/web/workbench/pages/stage.js";
+import { coalesce, frozenReadings } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { detailText, timeline } from "../../src/growbridge/web/workbench/pages/stage-history.js";
 import { correctionLinks } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
+
+test("readings read after the stage was known to be finished are kept; others are read again", () => {
+  const read = { value: { samples: [], window: [1, 2] } };
+  assert.equal(frozenReadings("ended", read), read);
+  assert.equal(frozenReadings("stopped", read), read);
+  assert.equal(frozenReadings("running", read), null);
+  assert.equal(frozenReadings(null, read), null); // the first read: the state was not known yet
+  assert.equal(frozenReadings("ended", { error: new Error("x") }), null);
+  assert.equal(frozenReadings("ended", undefined), null);
+});
 
 // A run that waits until the test lets it finish.
 function gatedRuns() {

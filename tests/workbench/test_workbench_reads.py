@@ -1,8 +1,10 @@
 import pytest
 
 from growbridge.archive.models import Budget, ResearchTask, SampleRecord
+from growbridge.sim.clock import FakeClock
 from growbridge.sim.fixtures import make_safety
-from growbridge.workflow.states import TaskState
+from growbridge.workbench.reads import ReadingsCache
+from growbridge.workflow.states import StageState, TaskState
 
 READS = [
     "/wb/inbox",
@@ -89,6 +91,93 @@ def test_readings_cover_only_the_stage_window(bench, operator):
     bench.clock.wall = 200.0
     stamps = [s["timestamp"] for s in operator.get("/wb/stages/stage-1/readings").json()["samples"]]
     assert stamps == [150]
+
+
+def _sample(bench, name, at):
+    bench.archive.append_sample(
+        SampleRecord(
+            id=name,
+            experiment_id="experiment-stage-1",
+            stage_id="stage-1",
+            device_id="d1",
+            captured_at=at,
+            received_at=at,
+            clock_synced=True,
+            data={"temperature_c": 20.0},
+        )
+    )
+
+
+def _stamps(operator, points=600):
+    body = operator.get(f"/wb/stages/stage-1/readings?points={points}").json()
+    return [sample["timestamp"] for sample in body["samples"]]
+
+
+def test_a_finished_stage_shows_readings_only_up_to_when_it_finished(bench, operator):
+    bench.pending()
+    store = bench.workflow.store
+    row = store.find_stage("stage-1")
+    store.update_stage(row, started_at=100.0, state=StageState.ENDED, state_at=200.0)
+    for name, at in (("a", 150.0), ("b", 250.0)):
+        _sample(bench, name, at)
+    bench.clock.wall = 300.0
+    assert _stamps(operator) == [150]
+
+
+def test_readings_are_kept_for_fifteen_seconds_per_stage_and_points(bench, operator):
+    bench.pending()
+    store = bench.workflow.store
+    store.update_stage(store.find_stage("stage-1"), started_at=100.0)
+    _sample(bench, "a", 150.0)
+    bench.clock.wall = 200.0
+    assert _stamps(operator) == [150]
+    _sample(bench, "b", 190.0)
+    bench.clock.advance(14)
+    assert _stamps(operator) == [150]  # the same answer within the poll interval
+    assert _stamps(operator, points=2000) == [150, 190]  # another point count is its own entry
+    bench.clock.advance(1)
+    assert _stamps(operator) == [150, 190]  # fresh once fifteen seconds have passed
+
+
+def test_the_readings_cache_holds_a_bounded_number_of_entries():
+    clock = FakeClock()
+    cache = ReadingsCache(clock, seconds=15.0, size=2)
+    computed = []
+
+    def compute(key):
+        def run():
+            computed.append(key)
+            return {"key": key}
+
+        return run
+
+    for key in (("s1", 600), ("s2", 600), ("s1", 600), ("s3", 600), ("s1", 600), ("s2", 600)):
+        cache.get(key, compute(key))
+    assert computed == [("s1", 600), ("s2", 600), ("s3", 600), ("s2", 600)]
+    assert len(cache) == 2
+
+
+def test_round_choice_is_dated_by_when_its_stage_stopped(bench, operator):
+    bench.pending()
+    store = bench.workflow.store
+    store.update_stage(store.find_stage("stage-1"), state=StageState.STOPPED, state_at=4321.0)
+    store.update_round(bench.round_id, awaiting_choice="stage-1")
+    items = [i for i in operator.get("/wb/inbox").json()["items"] if i["kind"] == "round_choice"]
+    assert [(i["since"], i["detail"]["since_from"]) for i in items] == [(4321.0, "stage_stopped")]
+
+
+def test_round_choice_without_a_stopped_stage_is_dated_by_the_round_and_says_so(bench, operator):
+    bench.seed_round()
+    created = store_round_created(bench)
+    bench.workflow.store.update_round(bench.round_id, awaiting_choice="stage-gone")
+    items = [i for i in operator.get("/wb/inbox").json()["items"] if i["kind"] == "round_choice"]
+    assert [(i["since"], i["detail"]["since_from"]) for i in items] == [(created, "round_created")]
+
+
+def store_round_created(bench):
+    return bench.workflow.store.db.one(
+        "SELECT created_at FROM wf_rounds WHERE id = ?", (bench.round_id,)
+    )["created_at"]
 
 
 def test_history_of_a_stage_lists_its_transitions(bench, operator):

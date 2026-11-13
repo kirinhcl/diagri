@@ -4,8 +4,11 @@ Operators only: no login is refused with ``session`` and a model role with ``mod
 these routes writes. The inbox gathers what waits for a person, at most ``INBOX_LIMIT`` items of
 each kind, oldest first (alerts: most urgent first); a kind whose service is not mounted is simply
 empty. Rounds and tasks are fetched with that limit and the number cut comes from a COUNT query.
+A stage's readings are reused for 15 s per (stage, points), so the page's refresh does not scan the
+whole stage window every time.
 """
 
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
@@ -30,6 +33,8 @@ from growbridge.workflow.store import StageRow
 from growbridge.workflow.tasks import TaskBoard
 
 INBOX_LIMIT = 50
+READINGS_CACHE_SECONDS = 15.0  # the stage page's refresh interval
+READINGS_CACHE_SIZE = 64  # (stage, points) answers kept at most
 SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 PROJECT_LIMIT = 200
 TASK_LIMIT = 100
@@ -92,18 +97,23 @@ def _stage_items(workflow: WorkflowService) -> list[dict[str, Any]]:
     return found
 
 
+def _choice_since(workflow: WorkflowService, row: dict[str, Any]) -> tuple[float, str]:
+    """A round waits for a choice from when the stage named in ``awaiting_choice`` stopped. When
+    that stage is gone or not stopped, the round's creation time is shown and labelled as such."""
+    stage = workflow.store.find_stage(row["awaiting_choice"])
+    if stage is not None and stage.state is StageState.STOPPED:
+        return stage.state_at, "stage_stopped"
+    return row["created_at"], "round_created"
+
+
 def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
-    return [
-        _item(
-            "round_choice",
-            row["round_id"],
-            row["project_id"],
-            row["round_id"],
-            row["created_at"],
-            {"awaiting_choice": row["awaiting_choice"]},
-        )
-        for row in rounds_awaiting_choice(workflow.store, INBOX_LIMIT)
-    ]
+    items = []
+    for row in rounds_awaiting_choice(workflow.store, INBOX_LIMIT):
+        since, since_from = _choice_since(workflow, row)
+        detail = {"awaiting_choice": row["awaiting_choice"], "since_from": since_from}
+        round_id = row["round_id"]
+        items.append(_item("round_choice", round_id, row["project_id"], round_id, since, detail))
+    return items
 
 
 def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
@@ -174,6 +184,36 @@ def _stage(workflow: WorkflowService, stage_id: str) -> StageRow:
     if row is None:
         raise Denied("state", f"unknown stage {stage_id}")
     return row
+
+
+class ReadingsCache:
+    """A stage's readings per (stage, points), reused for ``seconds`` of the injected monotonic
+    clock: the stage page asks every 15 s, and each answer scans the whole stage window. At most
+    ``size`` answers are kept; the one used least recently goes first."""
+
+    def __init__(
+        self, clock: Clock, seconds: float = READINGS_CACHE_SECONDS, size: int = READINGS_CACHE_SIZE
+    ):
+        self.clock = clock
+        self.seconds = seconds
+        self.size = size
+        self._entries: OrderedDict[tuple[str, int], tuple[float, dict[str, Any]]] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def get(self, key: tuple[str, int], compute: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+        now = self.clock.monotonic()
+        kept = self._entries.get(key)
+        if kept is not None and now - kept[0] < self.seconds:
+            self._entries.move_to_end(key)
+            return kept[1]
+        value = compute()
+        self._entries[key] = (now, value)
+        self._entries.move_to_end(key)
+        while len(self._entries) > self.size:
+            self._entries.popitem(last=False)
+        return value
 
 
 def _empty_readings() -> dict[str, Any]:
@@ -253,6 +293,7 @@ def _project_routes(router, operator, workflow, tasks, budget) -> None:
 
 def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
+    cache = ReadingsCache(clock)
 
     @router.get("/stages/{stage_id}/readings")
     async def readings(
@@ -263,8 +304,13 @@ def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
         row = _stage(workflow, stage_id)
         if row.started_at is None:
             return _empty_readings()
+        started_at = row.started_at
         end = row.state_at if row.state in FINISHED_STAGES else clock.now()
-        return bucketed_samples(archive.db, row.experiment_id, row.started_at, end, points)
+
+        def compute() -> dict[str, Any]:
+            return bucketed_samples(archive.db, row.experiment_id, started_at, end, points)
+
+        return cache.get((stage_id, points), compute)
 
     @router.get("/stages/{stage_id}/measurements")
     async def measurements(stage_id: PathId, actor: Operator):

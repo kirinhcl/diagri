@@ -48,6 +48,7 @@ export default {
   "inbox.task": "任务 {id}",
   "inbox.owner": "负责角色：{role}",
   "inbox.roundChoice": "阶段 {stage} 已停止，请选择这一轮接下来怎么做。",
+  "inbox.sinceRoundCreated": "显示的时间是这一轮的创建时间；没有记录阶段停止的时间。",
   "inbox.alertCount": "出现次数：{count}",
   "inbox.lastAt": "最近一次：{time}",
   "state.pending_review": "待审批",
