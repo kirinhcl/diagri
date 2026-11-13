@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: '22'
       - run: for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done
+      - run: node --test tests/web/*.test.mjs
       - run: python -m pip install -c constraints-tested.txt -e '.[dev]'
       - run: ruff check src tests scripts
       - run: ruff format --check src tests scripts
