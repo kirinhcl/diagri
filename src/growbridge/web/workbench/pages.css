@@ -260,6 +260,37 @@ code {
 .form-columns > .form-status,
 .form-columns > .form-actions { grid-column: 1 / -1; }
 
+/* alerts, evidence, compute and safety */
+.cell-sub { font-size: 12px; color: var(--muted-strong); }
+.data-table .action .button { white-space: nowrap; }
+.evidence-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.evidence-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  min-width: 0;
+}
+.evidence-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.evidence-head code { font-size: 12px; overflow-wrap: anywhere; }
+.evidence-card p { margin: 0; overflow-wrap: anywhere; }
+.evidence-claim { font-size: 15px; font-weight: 600; }
+.row-form { min-width: 230px; }
+.row-form summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--green);
+}
+.row-form summary:hover { color: var(--green-dark); }
+.row-form[open] summary { margin-bottom: 10px; }
+.row-form .form { max-width: none; }
+.inline-control { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inline-control .input { flex: 1 1 160px; min-width: 0; }
+.safety-current { display: grid; gap: 14px; }
+
 @media (max-width: 600px) {
   .block { padding: 16px; }
   .data-table th,
