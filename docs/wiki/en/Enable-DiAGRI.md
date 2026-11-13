@@ -4,7 +4,7 @@
 
 This page is for an operator who already runs the bridge-only daemon and wants to switch DiAGRI on: the configuration fields, the write host, the first operator, where credentials come from, how to start `serve` and how to check it. It also shows how to switch the mode off again.
 
-> **What enabling gives you today.** With `auto_research = true`, `serve` starts the runtime, runs the executor about once a second, mounts the workbench routes under `/wb` and, when `roles` is set, runs open model tasks every 30 seconds. An operator starts a round through those routes: project, research protocol, round, model call budget and goal; see [Run a research round](Run-a-Research-Round.md). There is no web page and no CLI command for it. What a real model does with a goal has not been run: the tests use a scripted model. `serve` sends an external heartbeat only when both heartbeat URLs are set in the environment (see [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md)), and it starts the compute service only when all of its nine settings are present (step 5). All of it has been tested on the simulated AC5 only. See [Status and known limitations](Status-and-Known-Limitations.md).
+> **What enabling gives you today.** With `auto_research = true`, `serve` starts the runtime, runs the executor about once a second, mounts the workbench routes under `/wb` and, when `roles` is set, runs open model tasks every 30 seconds. An operator starts a round through those routes: project, research protocol, round, model call budget and goal; see [Run a research round](Run-a-Research-Round.md). The operator console at `/workbench` is the page for it; there is no CLI command. What a real model does with a goal has not been run: the tests use a scripted model. `serve` sends an external heartbeat only when both heartbeat URLs are set in the environment (see [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md)), and it starts the compute service only when all of its nine settings are present (step 5). All of it has been tested on the simulated AC5 only. See [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## Before you start
 
@@ -141,7 +141,7 @@ The two real listeners are not covered by a test; the tests reach the same appli
    curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8766/wb/me
    ```
 
-3. Log in on the LAN entry. The workbench has no web page, so send the request with any HTTP client that keeps cookies. [Run a research round](Run-a-Research-Round.md) lists the headers every request needs.
+3. Log in on the LAN entry. You can do this in the console (item 4 below) or send the request yourself with any HTTP client that keeps cookies. [Run a research round](Run-a-Research-Round.md) lists the headers every request needs.
 
    ```http
    POST /wb/login
@@ -154,8 +154,9 @@ The two real listeners are not covered by a test; the tests reach the same appli
    ```
 
    You should get `{"operator": "YOUR_OPERATOR", "entry": "lan", "reauth_seconds": 300}` and the cookie `growbridge_operator`, valid for 8 hours on paths under `/wb`.
-4. `GET /wb/alerts` with that cookie returns `{"alerts": [...]}`. On a new setup expect `backup_unconfigured` when `backup_dir` is unset, and `model_client` when model roles could not start. `runtime` with key `write_host` means the host is not registered. With no notification channel configured, expect the standing warning `notify_unconfigured`: alerts are recorded but not sent; see [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md).
-5. The bridge write endpoints `POST /control/{device}`, `POST /outlet` and `POST /pump` now answer `403` with `Device writes go through the workbench`. The dashboard controls and the MCP write tools call those endpoints, so they stop working; reading still works.
+4. To use the operator console instead, open the entry address followed by `/workbench`, for example `http://YOUR_LAN_HOST:9443/workbench`, and sign in with the account you made with `growbridge operator add` in step 4. The console is served only in DiAGRI mode; in bridge-only mode `/workbench` answers `404`. It shows times in the zone set by `report_timezone` (UTC by default). The device-write buttons need the same registered write host as the routes.
+5. `GET /wb/alerts` with that cookie returns `{"alerts": [...]}`. On a new setup expect `backup_unconfigured` when `backup_dir` is unset, and `model_client` when model roles could not start. `runtime` with key `write_host` means the host is not registered. With no notification channel configured, expect the standing warning `notify_unconfigured`: alerts are recorded but not sent; see [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md).
+6. The bridge write endpoints `POST /control/{device}`, `POST /outlet` and `POST /pump` now answer `403` with `Device writes go through the workbench`. The dashboard controls and the MCP write tools call those endpoints, so they stop working; reading still works.
 
 ## 8. Approve the safety configuration
 

@@ -4,7 +4,7 @@
 
 这一页写给已经在跑仅桥接模式守护进程、想打开 DiAGRI 的操作员：要改哪些配置项，怎么登记写入主机和第一个操作员，凭据从哪里来，怎么启动 `serve`、怎么确认它起来了，以及怎么再关掉。
 
-> **现在打开之后能得到什么。** 设了 `auto_research = true`，`serve` 会启动运行时，大约每秒跑一次执行 Agent，挂上 `/wb` 下的工作台路由；配置了 `roles` 时，每 30 秒处理一次未完成的模型任务。操作员通过这些路由发起一轮研究：项目、研究协议、轮次、模型调用预算和目标，见[运行一轮研究](Run-a-Research-Round.md)。这件事没有网页，也没有 CLI 命令。真实模型拿到目标后会做什么，从没有运行过：测试用的是脚本化的模型。`serve` 只在环境变量里两个心跳 URL 都设了时才发送外部心跳（见[通知、日报与备份](Notifications-Reports-and-Backup.md)），只有计算服务的九项设置都齐了才启动计算服务（见第 5 步）。以上这些都只在模拟的 AC5 上测试过。见[状态与已知限制](Status-and-Known-Limitations.md)。
+> **现在打开之后能得到什么。** 设了 `auto_research = true`，`serve` 会启动运行时，大约每秒跑一次执行 Agent，挂上 `/wb` 下的工作台路由；配置了 `roles` 时，每 30 秒处理一次未完成的模型任务。操作员通过这些路由发起一轮研究：项目、研究协议、轮次、模型调用预算和目标，见[运行一轮研究](Run-a-Research-Round.md)。`/workbench` 的操作员控制台就是它的页面；没有 CLI 命令。真实模型拿到目标后会做什么，从没有运行过：测试用的是脚本化的模型。`serve` 只在环境变量里两个心跳 URL 都设了时才发送外部心跳（见[通知、日报与备份](Notifications-Reports-and-Backup.md)），只有计算服务的九项设置都齐了才启动计算服务（见第 5 步）。以上这些都只在模拟的 AC5 上测试过。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 开始之前
 
@@ -141,7 +141,7 @@ max_tokens = 16000
    curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8766/wb/me
    ```
 
-3. 从局域网入口登录。工作台没有网页，用任何能保存 Cookie 的 HTTP 客户端发请求即可。每个请求都要带的请求头见[运行一轮研究](Run-a-Research-Round.md)。
+3. 从局域网入口登录。可以在控制台里登录（见下面第 4 项），也可以用任何能保存 Cookie 的 HTTP 客户端自己发请求。每个请求都要带的请求头见[运行一轮研究](Run-a-Research-Round.md)。
 
    ```http
    POST /wb/login
@@ -154,8 +154,9 @@ max_tokens = 16000
    ```
 
    应该得到 `{"operator": "YOUR_OPERATOR", "entry": "lan", "reauth_seconds": 300}`，以及 Cookie `growbridge_operator`。它有效 8 小时，只对 `/wb` 下的路径生效。
-4. 带上这个 Cookie 请求 `GET /wb/alerts`，返回 `{"alerts": [...]}`。新装的环境里，没填 `backup_dir` 会有 `backup_unconfigured`，模型角色没起来会有 `model_client`。出现 `runtime`、键为 `write_host` 的告警，说明主机没有登记。没有配置任何通知渠道时，会有一条一直挂着的 `notify_unconfigured` 警告：告警会记录，但不会发出；见[通知、日报与备份](Notifications-Reports-and-Backup.md)。
-5. 仅桥接模式的写入接口 `POST /control/{device}`、`POST /outlet` 和 `POST /pump` 现在返回 `403`，提示 `Device writes go through the workbench`。控制台上的控制按钮和 MCP 的写入工具调用的就是这几个接口，所以它们不再可用；读取不受影响。
+4. 想用操作员控制台的话，在入口地址后面加 `/workbench` 打开，例如 `http://YOUR_LAN_HOST:9443/workbench`，用第 4 步 `growbridge operator add` 建的账号登录。控制台只在 DiAGRI 模式下提供；仅桥接模式下 `/workbench` 返回 `404`。它按 `report_timezone` 设置的时区显示时间（默认 UTC）。设备写入按钮和路由一样，需要已登记的写入主机。
+5. 带上这个 Cookie 请求 `GET /wb/alerts`，返回 `{"alerts": [...]}`。新装的环境里，没填 `backup_dir` 会有 `backup_unconfigured`，模型角色没起来会有 `model_client`。出现 `runtime`、键为 `write_host` 的告警，说明主机没有登记。没有配置任何通知渠道时，会有一条一直挂着的 `notify_unconfigured` 警告：告警会记录，但不会发出；见[通知、日报与备份](Notifications-Reports-and-Backup.md)。
+6. 仅桥接模式的写入接口 `POST /control/{device}`、`POST /outlet` 和 `POST /pump` 现在返回 `403`，提示 `Device writes go through the workbench`。控制台上的控制按钮和 MCP 的写入工具调用的就是这几个接口，所以它们不再可用；读取不受影响。
 
 ## 8. 批准安全配置
 

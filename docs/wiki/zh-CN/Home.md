@@ -6,7 +6,7 @@ DiAGRI 是一个面向植物生长研究的 AI Agent 平台。它把一个研究
 
 GrowBridge 是 DiAGRI 的设备桥接部分：通过蓝牙读取并控制 Spider Farmer AC5 种植帐篷控制器。它也可以单独使用，提供本地控制台和 MCP 工具。
 
-> **状态。** DiAGRI 模式目前只在模拟的 AC5 上测试过，没有在真实设备、树莓派、真实通知服务或 CSC 上运行过。单独运行的 GrowBridge 读取并控制过一台真实的 AC5。操作员通过 `/wb` 下的工作台路由发起并掌控一轮研究；这些路由只在测试里用脚本化的模型跑过，没有对应的网页或 CLI 命令。见[状态与已知限制](Status-and-Known-Limitations.md)。
+> **状态。** DiAGRI 模式目前只在模拟的 AC5 上测试过，没有在真实设备、树莓派、真实通知服务或 CSC 上运行过。单独运行的 GrowBridge 读取并控制过一台真实的 AC5。操作员通过 `/wb` 下的工作台路由发起并掌控一轮研究；这些路由只在测试里用脚本化的模型跑过，`/workbench` 的操作员控制台是它们之上的页面，没有 CLI 命令。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 从这里开始
 

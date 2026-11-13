@@ -48,7 +48,7 @@ flowchart TD
 
 Solid arrows are paths that run inside the daemon. The two dashed arrows are optional. The compute arrow leads to a part that exists in the code and its tests but is not started by `growbridge serve`: [`cli.py`](../../../src/growbridge/cli.py) calls `build_runtime` without a compute backend, so `Runtime.compute` is `None`. The heartbeat arrow runs only when both heartbeat URLs are set in the environment; otherwise `Runtime.monitor` is `None` and the runtime raises the standing warning `monitor_unconfigured`.
 
-The workbench is the operator's HTTP interface: JSON routes under `/wb` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py). It has no web page of its own. The page in `src/growbridge/web/` is the bridge dashboard and never calls `/wb`.
+The workbench is the operator's HTTP interface: JSON routes under `/wb` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py). The operator console, the page at `/workbench` under `src/growbridge/web/workbench/`, calls these routes and nothing else. The page in `src/growbridge/web/` at `/` is the bridge dashboard and never calls `/wb`.
 
 Two rules give the diagram its shape.
 

@@ -41,7 +41,7 @@ There are 25 fields. "Required" means the field has no default. The last column 
 | `lan_bind` | string | `""` | an address of this machine | Address the LAN listener binds to. The listener starts only when `lan_bind` and `lan_port` are both set. | yes |
 | `lan_port` | integer or unset | unset | 1024 to 65535 | Port of the LAN listener. A request is on the LAN entry only if it arrived on this port with a `Host` in `lan_hosts`. Unset means there is no LAN entry. | yes |
 | `report_time` | string | `"08:00"` | 24-hour `HH:MM`, `00:00` to `23:59` | Local time from which the daily report of the day before is produced. A report is produced only while a stage is active. | yes |
-| `report_timezone` | string | `"UTC"` | an IANA time zone name known to the host | Time zone of `report_time` and of the report dates. An unknown name is refused on load. | yes |
+| `report_timezone` | string | `"UTC"` | an IANA time zone name known to the host | Time zone of `report_time` and of the report dates. It is also the zone in which the operator console shows and takes times (served as `timezone` by `GET /wb/me`). An unknown name is refused on load. | yes |
 | `roles` | table of `RoleModel` | `{}` | keys are role names | Model configuration of each model role. While it is empty, `serve` builds no model client and no model role runs. | yes |
 | `backup_dir` | path or unset | unset | any path; `~` is expanded | Directory for the SQLite online backups. While unset there are no backups and the runtime raises a `backup_unconfigured` warning alert at start. | yes |
 | `backup_interval_seconds` | number | `21600` | 60 or more | Seconds between two backups. | yes |

@@ -59,7 +59,7 @@ flowchart LR
     O -.->|"pause request"| W
 ```
 
-This is what the code does today. From the run sheet onwards, every step exists as a service and runs in the end-to-end tests on a simulated AC5: drafting and validating a run sheet, the approval, the execution, alerts and the daily report, the snapshot, the analysis and the report. The beginning goes through the workbench routes: an operator creates the project, the research protocol and the round, sets the model call budget and states the question, which becomes a task of the orchestrator. There is no web page and no command for this. No real model has taken a question through a round yet: the tests use a scripted model. See [Status and known limitations](Status-and-Known-Limitations.md).
+This is what the code does today. From the run sheet onwards, every step exists as a service and runs in the end-to-end tests on a simulated AC5: drafting and validating a run sheet, the approval, the execution, alerts and the daily report, the snapshot, the analysis and the report. The beginning goes through the workbench routes: an operator creates the project, the research protocol and the round, sets the model call budget and states the question, which becomes a task of the orchestrator. The console at `/workbench` has forms for it; there is no command. No real model has taken a question through a round yet: the tests use a scripted model. See [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## The five agents
 
@@ -89,7 +89,7 @@ One thing is outside the system's reach: the AC5 panel and the vendor app can st
 ## Status
 
 - GrowBridge on its own (bridge-only mode) has read and controlled one real AC5 from a Mac ([VALIDATION.md](../../../VALIDATION.md)). It has not been verified on a Raspberry Pi.
-- DiAGRI as a whole passes its automated tests on a simulated AC5 only (2184 code tests at the last run, 2026-11-13). It has never run against a real device, real notification services or CSC.
+- DiAGRI as a whole passes its automated tests on a simulated AC5 only (2244 code tests at the last run, 2026-11-13). It has never run against a real device, real notification services or CSC.
 - Several parts are deployment items or are not implemented yet, among them a web page for the workbench and job submission to CSC.
 
 The full list is on [Status and known limitations](Status-and-Known-Limitations.md).

@@ -48,7 +48,7 @@ flowchart TD
 
 实线是守护进程里真正在跑的通路。两条虚线都是可选的。计算那条指向的部分，代码和测试里都有，但 `growbridge serve` 不会启动：[`cli.py`](../../../src/growbridge/cli.py) 调用 `build_runtime` 时没有传计算后端，所以 `Runtime.compute` 是 `None`。心跳那条只在环境变量里两个心跳 URL 都设了时才会运行；否则 `Runtime.monitor` 是 `None`，运行时会发出常驻警告 `monitor_unconfigured`。
 
-工作台是操作员使用的 HTTP 接口，也就是 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 里 `/wb` 下的一组 JSON 路由。它自己没有网页。`src/growbridge/web/` 里的页面是原有的控制台，从不调用 `/wb`。
+工作台是操作员使用的 HTTP 接口，也就是 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 里 `/wb` 下的一组 JSON 路由。操作员控制台，即 `src/growbridge/web/workbench/` 里 `/workbench` 的那个页面，只调用这些路由。`src/growbridge/web/` 里 `/` 的页面是原有的桥接控制台，从不调用 `/wb`。
 
 这张图的形状来自两条规则。
 

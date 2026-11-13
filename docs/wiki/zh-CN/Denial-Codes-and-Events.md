@@ -53,6 +53,7 @@
 | 谁收到这次拒绝 | 它看到什么 |
 | --- | --- |
 | 工作台的 HTTP 客户端 | 上面说的状态码，以及响应体 `{"detail": {"code": "<code>", "message": "<text>"}}`。 |
+| 操作员控制台（`/workbench`） | 33 个拒绝码各有一条中文或英文的白话提示，并说明下一步该做什么。控制台自己还有三个服务器不会发出的码：`validation`（表单没通过自己的检查，或服务器返回 `422`）、`network`（连不上服务器）和 `reauth_failed`（重新认证对话框里的口令不对）。见 [`web/workbench/`](../../../src/growbridge/web/workbench) 里的 `denials.js`。 |
 | 模型角色（在工具调用里） | 一条错误的工具结果 `Error: denied (<code>): <message>`，最多 500 个字符。 |
 | 调度器（工具调用之外，例如 `budget`） | 任务转为 `needs_attention`，原因是 `<code>: <message>`。 |
 | 执行 Agent | 这一拍跳过这次写入，并把 `<request_id>: <code>` 记入 `TickReport.denied`。之后的 tick 会再试。 |

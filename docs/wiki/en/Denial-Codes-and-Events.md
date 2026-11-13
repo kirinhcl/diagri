@@ -53,6 +53,7 @@ A refusal when a request is first submitted leaves no record in the action ledge
 | Who receives the denial | What it sees |
 | --- | --- |
 | HTTP client of the workbench | The status above and the body `{"detail": {"code": "<code>", "message": "<text>"}}`. |
+| Operator console (`/workbench`) | A plain-language text in Chinese or English for each of the 33 codes, with what to do next. The console also has three codes of its own that no server sends: `validation` (the form failed its own checks, or the server answered `422`), `network` (the server could not be reached) and `reauth_failed` (a wrong secret in the re-authentication dialog). See `denials.js` in [`web/workbench/`](../../../src/growbridge/web/workbench). |
 | Model role, inside a tool call | An error tool result `Error: denied (<code>): <message>`, cut at 500 characters. |
 | Dispatcher, outside a tool call (for example `budget`) | The task moves to `needs_attention` with the reason `<code>: <message>`. |
 | Executor | The write is skipped for this tick and `<request_id>: <code>` is added to `TickReport.denied`. A later tick tries again. |

@@ -8,7 +8,7 @@ This page is for an operator who needs to take over a live stage, write to the d
 
 ## Before you start
 
-- You are logged in to the workbench and know how to send requests to it: see "What the workbench is" in [Run a research round](Run-a-Research-Round.md). The workbench has no web page.
+- You are logged in to the workbench and know how to send requests to it: see "What the workbench is" in [Run a research round](Run-a-Research-Round.md). The console at `/workbench` does the same steps with buttons.
 - The stage is `running` or `paused`. Check with `GET /wb/stages/STAGE_ID`.
 - For irrigation you are on site and logged in on the LAN entry (`http://YOUR_LAN_HOST:LAN_PORT`). A session from the overlay entry cannot irrigate.
 - A manual write can reach only the channels the run sheet marks as host-controlled. To irrigate, `pump` must be one of them.

@@ -11,7 +11,7 @@
 | 需要 | 用途 | 在哪里规定 |
 | --- | --- | --- |
 | Python 3.11 或更新版本 | 所有步骤 | [`pyproject.toml`](../../../pyproject.toml) 里的 `requires-python = ">=3.11"` |
-| Node.js | 对控制台脚本做一次语法检查。CI 用的是 Node 22。 | [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) |
+| Node.js | 对桥接控制台和操作员控制台的脚本做语法检查，并运行操作员控制台的单元测试（`node --test`，不需要 npm 包）。CI 用的是 Node 22。 | [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) |
 | Xcode Command Line Tools（仅 macOS） | 编译原生 BLE 辅助程序，也就是 CI 的最后一步 | 同上 |
 
 CI 一共跑四个作业：`ubuntu-latest` 和 `macos-latest`，各配 Python 3.11 和 3.13。本页记录的那次测试结果是在 macOS、Python 3.14 上跑出来的，这个版本不在 CI 的矩阵里。
@@ -55,19 +55,20 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 
 | 步骤 | 命令 | 检查什么 |
 | --- | --- | --- |
-| 1 | `node --check src/growbridge/web/app.js` | 控制台脚本没有语法错误。 |
-| 2 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | 包能按固定的版本装上。 |
-| 3 | `.venv/bin/ruff check src tests scripts` | 代码检查。规则集 `E`、`F`、`I`、`B`、`UP`，行宽 100，都在 `pyproject.toml` 里配置。 |
-| 4 | `.venv/bin/ruff format --check src tests scripts` | 代码格式。 |
-| 5 | `.venv/bin/pytest -q` | 全部测试。 |
-| 6 | `.venv/bin/python -m build` | 源码包和 wheel 能构建出来，产物在 `dist/`。 |
-| 7 | `xcrun swiftc src/growbridge/native/BLEHelper.swift -o /tmp/growbridge-ble -framework CoreBluetooth -framework AppKit` | 仅 macOS。原生辅助程序能编译通过。它只被编译、不会被启动，所以不会用到蓝牙。 |
+| 1 | `for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done` | 桥接控制台脚本和操作员控制台的每个脚本都没有语法错误。 |
+| 2 | `node --test tests/web/*.test.mjs` | 操作员控制台的单元测试（2026-11-13 共 111 个）：路由、格式化、拒绝提示和曲线计算等纯逻辑，以及一个守卫测试，保证控制台脚本不用 `innerHTML` 写入 HTML。它们在 Node 里运行，不需要浏览器、服务器或网络。
+| 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | 包能按固定的版本装上。 |
+| 4 | `.venv/bin/ruff check src tests scripts` | 代码检查。规则集 `E`、`F`、`I`、`B`、`UP`，行宽 100，都在 `pyproject.toml` 里配置。 |
+| 5 | `.venv/bin/ruff format --check src tests scripts` | 代码格式。 |
+| 6 | `.venv/bin/pytest -q` | 全部测试。 |
+| 7 | `.venv/bin/python -m build` | 源码包和 wheel 能构建出来，产物在 `dist/`。 |
+| 8 | `xcrun swiftc src/growbridge/native/BLEHelper.swift -o /tmp/growbridge-ble -framework CoreBluetooth -framework AppKit` | 仅 macOS。原生辅助程序能编译通过。它只被编译、不会被启动，所以不会用到蓝牙。 |
 
 几点说明：
 
-- **第 3、4 步。** 大多数问题可以用 `.venv/bin/ruff check --fix src tests scripts` 和 `.venv/bin/ruff format src tests scripts` 自动修好。
-- **第 5 步。** 整套测试由代码测试加上 `tests/docs/` 里的 Wiki 测试组成。2026-11-13 共收集到 2295 个测试，其中代码测试 2184 个、Wiki 测试 111 个；在 macOS 上用 Python 3.14（装了 `agents`）运行，结果是 `2295 passed`，用时约 65 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
-- **第 6 步。** `build` 会新建一个隔离环境并下载构建后端（`setuptools`），所以这一步需要联网。`dist/` 已被 Git 忽略。
+- **第 4、5 步。** 大多数问题可以用 `.venv/bin/ruff check --fix src tests scripts` 和 `.venv/bin/ruff format src tests scripts` 自动修好。
+- **第 6 步。** 整套测试由代码测试加上 `tests/docs/` 里的 Wiki 测试组成。2026-11-13 共收集到 2355 个测试，其中代码测试 2244 个、Wiki 测试 111 个；在 macOS 上用 Python 3.14（装了 `agents`）运行，结果是 `2355 passed`，用时约 65 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
+- **第 7 步。** `build` 会新建一个隔离环境并下载构建后端（`setuptools`），所以这一步需要联网。`dist/` 已被 Git 忽略。
 
 还有一项 CI 不跑、但很有用的检查：`.venv/bin/growbridge simulate` 会用装配好的运行时在模拟的 AC5 上跑完一个很短的阶段，并打印结果摘要。[教程：在模拟器上跑通一轮研究](Tutorial-Simulated-Round.md)里有完整的讲解。
 
@@ -93,6 +94,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | `tests/workbench/` | 工作台的路由：操作员登录与会话、入口、请求关口、阶段操作和人工操作，以及发起和掌控一轮研究。 |
 | `tests/transport/` | 两种 BLE 传输的 `halt`，以及原生传输对 pid 文件和目录权限的检查。 |
 | `tests/e2e/` | 装配好的运行时：完整的一轮研究、人工干预、模型角色、CLI 命令，以及经 HTTP 路由走完的一轮。 |
+| `tests/web/` | 操作员控制台的脚本，用 `node --test` 运行（见 CI 第 2 步）：路由、格式化、文案、拒绝提示、回执、阶段页的规则、曲线计算，以及对 `innerHTML` 的禁用。用 Node 自带的测试运行器，不需要 npm 包。 |
 | `tests/docs/` | 这个 Wiki 本身：每个页面在 `en/` 和 `zh-CN/` 下都有；[Wiki 的 README](../README.md) 里的页面表和实际存在的页面完全一致；相对链接指向的文件存在；每个页面都链接到另一种语言的版本。 |
 | `tests/test_*.py` | 最初的桥接层：协议分帧、设备控制、HTTP API 与 MCP、控制台。共 32 个测试。 |
 
@@ -100,6 +102,21 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 
 - 异步测试不用加装饰器，因为 `pyproject.toml` 里设置了 `asyncio_mode = "auto"`。
 - [`tests/conftest.py`](../../../tests/conftest.py) 提供两个夹具：`settings`（临时数据目录，设备名为 `SIMULATED`）和 `bridge`（接在 `SimulatedTransport` 上、已经启动的 `Bridge`）。多数目录还有自己的 `conftest.py`，以及一个名为 `*_helpers.py` 或 `*_support.py` 的辅助模块。
+
+## 在模拟设备上运行控制台
+
+[`scripts/dev_workbench.py`](../../../scripts/dev_workbench.py) 在模拟的 AC5 上启动运行时，不用蓝牙、不联网、不碰真实设备，让你可以在浏览器里使用操作员控制台。它预置一套已批准的安全配置和一个等待审核的阶段，每秒向模拟设备轮询一次以便读数持续到来，并且只绑定 `127.0.0.1`。操作员 `dev` 的密码只从环境变量读取，不接受命令行参数，至少 12 个字符。
+
+```sh
+GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.py
+```
+
+| 入口 | 地址 | 说明 |
+| --- | --- | --- |
+| 现场 | `http://localhost:8770/workbench` | 局域网入口：全部功能，包括灌溉。 |
+| 覆盖网络 | `http://127.0.0.1:8765/workbench` | 覆盖网络入口：除灌溉外的全部功能，控制台把灌溉显示为不可用。 |
+
+数据放在新建的临时目录里，除非用 `--data-dir` 指定。按 Ctrl+C 停止脚本。
 
 ## 只跑一部分
 

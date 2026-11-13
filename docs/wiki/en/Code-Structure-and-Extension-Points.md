@@ -20,15 +20,16 @@ The package has two layers. The **bridge**, GrowBridge, is the original daemon: 
 | [`service.py`](../../../src/growbridge/service.py) | `Bridge`: the one owner of the BLE connection. Telemetry, requests and replies, the original controls and pump timing. |
 | [`store.py`](../../../src/growbridge/store.py) | `Store`: the original SQLite history of samples and operations. |
 | [`api.py`](../../../src/growbridge/api.py) | `create_app`: the loopback HTTP API and the dashboard. It mounts the workbench router in DiAGRI mode. |
-| [`dashboard.py`](../../../src/growbridge/dashboard.py), [`web/`](../../../src/growbridge/web) | Browser sessions for the dashboard, and its page, script and stylesheet. |
+| [`dashboard.py`](../../../src/growbridge/dashboard.py), [`web/`](../../../src/growbridge/web) | Browser sessions for the dashboard, and its page, script and stylesheet. `web/tokens.css` holds the design tokens that both pages share. |
+| [`web/workbench.html`](../../../src/growbridge/web/workbench.html), [`web/workbench/`](../../../src/growbridge/web/workbench) | The operator console served at `/workbench` in DiAGRI mode: plain ES modules, no build step and no npm package. `main.js` starts it, `router.js` maps the URL hash to a page, `api.js` calls `/wb`, `pages/` has one module per page, `ui/` the shared widgets, `i18n/` the Chinese and English texts and `denials.js` the message for each denial code. The scripts load only from the same origin and write text only with `textContent`. |
 | [`mcp_server.py`](../../../src/growbridge/mcp_server.py), [`client.py`](../../../src/growbridge/client.py) | The MCP server over stdio, and the HTTP client it uses to reach the running daemon. |
 
 ## The rest of DiAGRI: one package per service
 
 | Package | Owns |
 | --- | --- |
-| [`archive/`](../../../src/growbridge/archive) | The project archive (`Archive` in `store.py`): append-only records, data snapshots, export, backup, storage pressure. It also holds what every service shares: `models.py`, `db.py` (`Database`), `clock.py` (`Clock`) and `ids.py`. |
-| [`workflow/`](../../../src/growbridge/workflow) | `WorkflowService`: round and stage state, approvals and history. `TaskBoard` in `tasks.py`: research tasks. `states.py`: the state enums. |
+| [`archive/`](../../../src/growbridge/archive) | The project archive (`Archive` in `store.py`): append-only records, data snapshots, export, backup, storage pressure. `readings.py` reads a stage's samples in time buckets for the console's chart. It also holds what every service shares: `models.py`, `db.py` (`Database`), `clock.py` (`Clock`) and `ids.py`. |
+| [`workflow/`](../../../src/growbridge/workflow) | `WorkflowService`: round and stage state, approvals and history. `TaskBoard` in `tasks.py`: research tasks. `states.py`: the state enums. `listing.py`: read-only queries for the console, such as project summaries and the rounds waiting for a choice. |
 | [`control/`](../../../src/growbridge/control) | `ControlService`: the single checkpoint for BLE writes. Write rights in `rights.py`, the action ledger and host registration in `ledger.py`, channel mapping and read-back in `device.py`. |
 | [`executor/`](../../../src/growbridge/executor) | `ExecutorEngine`: the deterministic tick that carries out the approved run sheet. Rule evaluation in `rules.py`, clock trust and link outages in `outage.py`. |
 | [`observer/`](../../../src/growbridge/observer) | `Observer`: alert rules and the alert book, the notification outbox and channels, daily metrics and reports, run health and heartbeat. |
@@ -36,7 +37,7 @@ The package has two layers. The **bridge**, GrowBridge, is the original daemon: 
 | [`research/`](../../../src/growbridge/research) | The analysis library: statistics, the confirmatory gate, `HoldoutRegistry`, report publishing and the code sandbox. |
 | [`agents/`](../../../src/growbridge/agents) | The three model roles: prompts in `roles.py`, the tool registry in `tools.py`, tool handlers in `handlers*.py`, the agent loop, `Dispatcher`, `CallBudget` and the model client in `llm.py`. |
 | [`compute/`](../../../src/growbridge/compute) | `ComputeService`: quota checks and job tracking. The `ComputeBackend` protocol. `FirecrestBackend`, unverified against CSC. |
-| [`workbench/`](../../../src/growbridge/workbench) | The operator's HTTP routes under `/wb`: sessions, stage control, manual writes and reads in `api.py`; starting and steering a round in `rounds.py`. Operator credentials, sessions and the entry decision in `auth.py`. |
+| [`workbench/`](../../../src/growbridge/workbench) | The operator's HTTP routes under `/wb`: sessions, stage control, manual writes and reads in `api.py`; starting and steering a round in `rounds.py`; the read routes of the console (inbox, projects, readings, measurements, history, safety) in `reads.py`. Operator credentials, sessions and the entry decision in `auth.py`. |
 | [`sim/`](../../../src/growbridge/sim) | Simulators and fixtures, used by the tests and by `growbridge simulate`. |
 
 Four top-level modules hold the services together:
@@ -89,7 +90,7 @@ Checked with grep on the working tree, `executor/`, `observer/`, `compute/`, `pl
 
 | Where | What it imports | Why it is there |
 | --- | --- | --- |
-| [`workbench/api.py`](../../../src/growbridge/workbench/api.py), [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) | `WorkflowService`, `TaskBoard`, `Archive`, `AlertBook`, and `require_operator` from `workflow/permissions.py` | The workbench is handed the real services and names their classes in its type annotations. `rounds.py` types the call budget with a protocol of its own, so `workbench/` imports nothing from `agents/`. |
+| [`workbench/api.py`](../../../src/growbridge/workbench/api.py), [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py), [`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) | `WorkflowService`, `TaskBoard`, `Archive`, `AlertBook`, `ComputeService` (in `reads.py`), and `require_operator` from `workflow/permissions.py` | The workbench is handed the real services and names their classes in its type annotations. `rounds.py` types the call budget with a protocol of its own, so `workbench/` imports nothing from `agents/`. |
 | [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py) | `TaskBoard` | The dispatcher's task board parameter is typed with the class. |
 | [`control/service.py`](../../../src/growbridge/control/service.py), [`control/device.py`](../../../src/growbridge/control/device.py) | `Bridge`, `BridgeError` from `service.py` | The control service wraps the bridge. No other DiAGRI package imports it. |
 | [`archive/source.py`](../../../src/growbridge/archive/source.py) | `Store` from `store.py` | The adapter that reads the bridge's sample history into the archive. |
@@ -147,6 +148,13 @@ No channel has been tried against a real service. See [Status and known limitati
 
 Today only macOS has a backend (`SeatbeltSandbox`). On Linux, including a Raspberry Pi, analysis scripts are refused.
 
+### A new console page
+
+- **Files.** Add `pages/<name>.js` under [`web/workbench/`](../../../src/growbridge/web/workbench) and a route in `FLAT` or `WITH_ID` in `router.js`; `main.js` loads a page on its first visit. A page builds its elements with the helpers in `ui/dom.js` and sets text with `textContent`. Never use `innerHTML`: a test in `tests/web/` fails the build if a console script does.
+- **Texts.** Add every text to both `i18n/zh.js` and `i18n/en.js`; a test requires the same keys in both. A new denial code needs its two messages in `denials.js`.
+- **Writes.** A page that writes goes through `api.js`, which sends the headers the server needs and asks for the password again once on `reauth_required`. After a control action, read the object again; do not update the screen by guessing the result.
+- **Tests.** Put the logic that can be tested without a browser in a module of its own and test it in `tests/web/` with `node --test`.
+
 ### A new BLE transport
 
 - **File.** [`transport.py`](../../../src/growbridge/transport.py).
@@ -160,7 +168,7 @@ The control service relies on `halt` when write rights change hands. [Control an
 
 These pieces exist as code and tests, and `growbridge serve` does not connect them. Each is a place where a contributor could add something.
 
-1. **A page or a command for the research goal.** The entry point exists as workbench routes in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). They call `create_project`, `save_protocol` and `create_round` on `WorkflowService`, `CallBudget.set`, and `TaskBoard.create` for the first orchestrator task. There is no web page and no CLI command on top of them, and several reads still have no route; [Run a research round](Run-a-Research-Round.md) lists them. A new route goes into `rounds.py` or `api.py` behind the workbench's `operator` or `fresh` dependency. Its tests in [`tests/workbench/`](../../../tests/workbench/) show that a role token, a missing session, a foreign origin and a session of the other entry are refused.
+1. **A page or a command for the research goal.** The entry point exists as workbench routes in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). They call `create_project`, `save_protocol` and `create_round` on `WorkflowService`, `CallBudget.set`, and `TaskBoard.create` for the first orchestrator task. The operator console at `/workbench` sits on top of them and of the read routes; there is no CLI command, and a few reads still have no route; [Run a research round](Run-a-Research-Round.md) lists them. A new route goes into `rounds.py` or `api.py` behind the workbench's `operator` or `fresh` dependency. Its tests in [`tests/workbench/`](../../../tests/workbench/) show that a role token, a missing session, a foreign origin and a session of the other entry are refused.
 2. **A compute backend.** See above: `serve` passes no `compute_backend`.
 3. **The heartbeat endpoints.** `build_runtime` takes `heartbeats`, a pair of `Heartbeat` objects. `serve` builds them in [`runtime_heartbeat.py`](../../../src/growbridge/runtime_heartbeat.py) from `GROWBRIDGE_HEARTBEAT_HOST_URL` and `GROWBRIDGE_HEARTBEAT_RUN_URL`: both or neither. A different monitoring service would be a new `Heartbeat` pair built there.
 4. **A search backend.** `role_tools` in `runtime_agents.py` passes `search=None`, so the planner's two web tools, `lookup_crop_conditions` and `search_and_verify_sources`, are refused.

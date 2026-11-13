@@ -40,7 +40,7 @@ Detail: [Enable DiAGRI](Enable-DiAGRI.md).
 
 ### Can I give it a research question today?
 
-Yes, through the workbench routes; not through a page or a command. An operator creates the project, the research protocol and the round, sets the model call budget and states the question with `POST /wb/goals`. [Run a research round](Run-a-Research-Round.md) lists the requests. The workbench is a set of HTTP routes under `/wb` and has no web page of its own. This path has run only in the tests in [`tests/e2e/`](../../../tests/e2e/), with a scripted model on the simulated AC5. What a real model does with the question has not been verified.
+Yes, through the workbench routes: with the console page at `/workbench` or by hand. There is no command. An operator creates the project, the research protocol and the round, sets the model call budget and states the question with `POST /wb/goals`. [Run a research round](Run-a-Research-Round.md) lists the requests. The workbench is a set of HTTP routes under `/wb`, and the operator console at `/workbench` is its page. This path has run only in the tests in [`tests/e2e/`](../../../tests/e2e/), with a scripted model on the simulated AC5. What a real model does with the question has not been verified.
 
 Detail: [Status and known limitations](Status-and-Known-Limitations.md).
 

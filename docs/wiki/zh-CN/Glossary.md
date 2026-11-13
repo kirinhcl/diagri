@@ -73,7 +73,7 @@
 | 控制服务 | control service | `ControlService` | 所有 BLE 写入的唯一关口。 |
 | 项目档案 | project archive | `Archive` | 记录的所有者：样本、动作、快照和产物。 |
 | 计算服务（远程计算） | compute service | `ComputeService` | 为准备提交到 CSC 的作业预留额度并跟踪状态。`serve` 只在配置齐全时才启动它；远端调用没有对 CSC 验证过。 |
-| 工作台 | workbench | `create_workbench()`，路由在 `/wb` 下 | 操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由。目前还没有网页。 |
+| 工作台 | workbench | `create_workbench()`，路由在 `/wb` 下 | 操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由。`/workbench` 的操作员控制台就是它的网页。 |
 | 控制台 | dashboard | `growbridge dashboard`，文件在 `web/` 下 | GrowBridge 的本地网页。在 DiAGRI 模式下，它的控制操作会被拒绝，只用来看数据。 |
 | 运行时 | runtime | `Runtime` | 在一个进程里把所有服务装配起来。 |
 

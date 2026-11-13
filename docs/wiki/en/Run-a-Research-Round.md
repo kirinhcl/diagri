@@ -4,11 +4,11 @@
 
 This page is for an operator who follows one research round from the goal to the delivered report. For each step it says who acts, which workbench request or command the operator uses, and which round state and stage state the step leaves.
 
-> **Status.** An operator can start and steer a round through `/wb`: create the project, the research protocol and the round, set the model call budget, state the goal, read a run sheet before approving it, choose what follows a stopped stage, and abort the round. This path has run only in the tests, on the simulated AC5, with a scripted model and an in-process HTTP client ([`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)). It has not been run against a `serve` process, a real model or a real device. There is no web page and no CLI command for these steps. Some reads still have no route; they are marked **no route** and listed again at the end. See [Status and known limitations](Status-and-Known-Limitations.md).
+> **Status.** An operator can start and steer a round through `/wb`: create the project, the research protocol and the round, set the model call budget, state the goal, read a run sheet before approving it, choose what follows a stopped stage, and abort the round. This path has run only in the tests, on the simulated AC5, with a scripted model and an in-process HTTP client ([`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)). It has not been run against a `serve` process, a real model or a real device. The console at `/workbench` has forms for most of these steps; there is no CLI command. Some reads still have no route; they are marked **no route** and listed again at the end. See [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## What the workbench is
 
-The workbench is a set of JSON routes under `/wb`, defined in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). It has no web page: the dashboard at `/` is the bridge-only one and never calls `/wb`. You send the requests yourself, with any HTTP client that keeps cookies.
+The workbench is a set of JSON routes under `/wb`, defined in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The dashboard at `/` is the bridge-only one and never calls `/wb`; the console at `/workbench` does. You can also send the requests yourself, with any HTTP client that keeps cookies.
 
 Every request follows these rules:
 

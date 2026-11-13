@@ -58,7 +58,7 @@ Source: `create_app` in [`api.py`](../../../src/growbridge/api.py). There are 14
 
 ## Workbench routes
 
-The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The workbench has no web page of its own; the files in `web/` are the bridge dashboard. There are 38 routes. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed, and the two holdout routes ([`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)) exist when a holdout registry is passed. The runtime always passes all of them.
+The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The operator console is a web page at `/workbench` that only calls these routes (see [Enable DiAGRI](Enable-DiAGRI.md)); the files in `web/` outside `web/workbench/` are the bridge dashboard. There are 49 routes. The seven read routes at the end of the first table are always mounted: [`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) leaves out of the inbox whatever service is not passed. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed, and the two holdout routes ([`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)) exist when a holdout registry is passed. The runtime always passes all of them.
 
 | Caller | Credential | Checks |
 | --- | --- | --- |
@@ -113,8 +113,15 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | operator | LAN, overlay | yes | `reauth_required`, `scope` |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | operator | LAN, overlay | yes | `reauth_required`, `state` |
 | `GET` | `/wb/compute` | operator | LAN, overlay | no | none |
+| `GET` | `/wb/inbox` | operator | LAN, overlay | no | none |
+| `GET` | `/wb/projects` | operator | LAN, overlay | no | none |
+| `GET` | `/wb/projects/{project_id}` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/stages/{stage_id}/readings` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/stages/{stage_id}/measurements` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/stages/{stage_id}/history` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/safety` | operator | LAN, overlay | no | none |
 
-The last twenty-one routes, the six reads among them, are for operators only: a role token is refused with `model_role`.
+The last twenty-eight routes, the thirteen reads among them, are for operators only: a role token is refused with `model_role`.
 
 A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `experiment_id`, `project_id`, `state`, `prior_state`, `right_number`, `care_right`, `manual_right`, `started_at`, `paused_at`, `end_pending`. `RunSheet`, `ResearchProtocol`, `SafetyConfig`, `Approval` and `ActionRecord` are in [`archive/models.py`](../../../src/growbridge/archive/models.py). A `RunSheet` and a `SafetyConfig` refuse NaN and infinity, also spelled as text, in every number they hold, wherever they come from: a route answers `422`, a model tool returns an error result, and nothing is saved or approved.
 
@@ -123,7 +130,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/login` | `name` (1 to 64 characters), `secret` (1 to 256) | `operator`, `entry`, `reauth_seconds`, and the session cookie |
 | `POST` | `/wb/logout` | none | `{"operator": null}`; the cookie is deleted |
 | `POST` | `/wb/reauth` | `secret` (1 to 256) | `reauth_seconds` |
-| `GET` | `/wb/me` | none | `kind`, `id`, `operator`, `entry`, `reauth_at` |
+| `GET` | `/wb/me` | none | `kind`, `id`, `operator`, `entry`, `reauth_at`, `timezone` (the setting `report_timezone`, the zone the console shows times in) |
 | `POST` | `/wb/stages/{stage_id}/approve` | none | the `Approval` |
 | `POST` | `/wb/stages/{stage_id}/start` | none | stage runtime |
 | `POST` | `/wb/stages/{stage_id}/pause` | optional `reason` (at most 200, default `operator request`) | stage runtime |
@@ -137,7 +144,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/irrigation` | `stage_id`, `request_id`, `seconds` (more than 0, at most 60, and at most `max_pump_seconds`), optional `note` (at most 200) | the `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`, `batch`, `plant_id`, `layout_version`, `measured_at`, `position`, `method`, `metric`, `value`, `unit`; optional `id`, `corrects`; the `experiment_id` must belong to an existing stage, or the route refuses with `scope` | `id` |
 | `POST` | `/wb/safety/approve` | `config` (a `SafetyConfig`) | `protection_right` |
-| `GET` | `/wb/stages/{stage_id}` | none | stage runtime |
+| `GET` | `/wb/stages/{stage_id}` | none | stage runtime; for an operator also `round_id` and `project_id` of the stored stage (a role token gets the runtime as before, without `round_id`) |
 | `GET` | `/wb/receipts/{request_id}` | none | the `ActionRecord` |
 | `GET` | `/wb/alerts` | none | `alerts`: the open alerts |
 | `POST` | `/wb/alerts/{event_id}/read` | none | `event_id` |
@@ -162,6 +169,13 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | `cpu_hours`, `storage_gb` (finite numbers, 0 or more) | the task's row: `task_id`, `cpu_hours_budget`, `storage_gb_budget`, `cpu_hours_used`, `storage_gb_used`, `cpu_hours_reserved`, `storage_gb_reserved`. A task that does not exist is refused with `scope`. |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | `reason` (1 to 500 characters after trimming) | `attempt_id`, `phase` (`failed`), `task_state`, `used_cpu`, `used_storage`, `settled_by` (the session's operator), `settle_reason`, `error`. A live attempt is charged its whole reservation; one whose usage is already charged keeps that charge. An attempt that is already final, or unknown, is refused with `state`. |
 | `GET` | `/wb/compute` | none | `balance` (the latest entry, or `null`), `tasks` (rows as above), `service` (`cpu_hours_cap`, `storage_gb_cap`, `cpu_hours_committed`, `storage_gb_committed`), `jobs` (open attempts: `attempt_id`, `task_id`, `template_id`, `phase`, `task_state`, `remote_job_id`, `created_at`), `stuck` (attempts that need a person: `attempt_id`, `task_id`, `phase`, `reason`, `since`) |
+| `GET` | `/wb/inbox` | none | `items` and `truncated`. Each item has `kind` (`stage_review`, `stage_manual`, `stage_recovery`, `stage_paused`, `alert`, `compute_stuck`, `round_choice` or `task`), `id`, `project_id`, `round_id`, `since` and `detail`. At most 50 items of each kind are kept: alerts by severity, then by the latest raise; the other kinds oldest first. The kept items are listed oldest first, and `truncated` maps each kind to the number cut. |
+| `GET` | `/wb/projects` | none | `projects`: a summary of each project, at most 200 |
+| `GET` | `/wb/projects/{project_id}` | none | the project's `project_id`, `name`, `created_at`, `rounds` (newest first) and `protocols` (the latest version of each), `budget` (`calls_left` and `cost_left`, or `null` when no budget is set) and `tasks` (at most 100). An unknown project is refused with `state`. |
+| `GET` | `/wb/stages/{stage_id}/readings` | query `points` (2 to 2000, default 600) | `samples` (a list of `timestamp`, `data`, `quality`, `clock_synced`, `flagged`), `window` (`start`, `end`, `bucket_seconds`, or `null` before the stage started), `total_samples`, `flagged_total` and `downsampled`. The newest sample of each time bucket is kept; `flagged` counts the samples of the bucket whose quality is not `ok` or whose clock was not synchronised. A `points` outside the range is refused with 422. |
+| `GET` | `/wb/stages/{stage_id}/measurements` | none | `measurements`: the stage's experiment's measurements, corrected ones included |
+| `GET` | `/wb/stages/{stage_id}/history` | none | `history` (the stage's state changes) and `interventions` (the experiment's interventions that belong to this stage) |
+| `GET` | `/wb/safety` | none | `safety`: the approved `SafetyConfig`, or `null` when none is approved |
 
 A saved protocol version is never overwritten: the same `id` and `version` with other content is refused with `state`. `POST /wb/rounds` uses the latest saved version. The `run_sheet_digest` of the read route is the digest an approval records. Setting a budget again changes the limits and keeps the recorded usage. `POST /wb/goals` creates a research task owned by the orchestrator and is refused with `budget` while the project has no budget or nothing is left of it. With a `request_id`, the same operator sending the same request for the same project again gets the first task back with `"reused": true`; another goal text, round or set of constraints under that id is refused with `state`. Without a `request_id` every request creates a task. The ids in the paths of these routes have 1 to 100 characters. The analysis routes freeze the analysis script of the latest protocol version, which is refused with `state` once a stage under that version has started, and run it once on a data snapshot; the order of their checks is in [Run a research round](Run-a-Research-Round.md#run-the-frozen-analysis).
 

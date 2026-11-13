@@ -4,11 +4,11 @@
 
 这一页写给跟着一个研究轮次从目标走到报告交付的操作员。每一步都写明：谁在动作，操作员用哪个工作台请求或命令，这一步之后轮次和阶段各处于什么状态。
 
-> **状态。** 操作员可以通过 `/wb` 发起并掌控一轮研究：创建项目、研究协议和轮次，设置模型调用预算，提出目标，批准之前读取运行单，阶段停止后做选择，以及中止轮次。这条路径只在测试里跑过：模拟的 AC5、脚本化的模型、进程内的 HTTP 客户端（[`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)）。它没有对着 `serve` 进程、真实模型或真实设备跑过。这些步骤没有网页，也没有 CLI 命令。有些读取仍然没有路由，文中标为**无路由**，页尾会再列一遍。见[状态与已知限制](Status-and-Known-Limitations.md)。
+> **状态。** 操作员可以通过 `/wb` 发起并掌控一轮研究：创建项目、研究协议和轮次，设置模型调用预算，提出目标，批准之前读取运行单，阶段停止后做选择，以及中止轮次。这条路径只在测试里跑过：模拟的 AC5、脚本化的模型、进程内的 HTTP 客户端（[`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)）。它没有对着 `serve` 进程、真实模型或真实设备跑过。`/workbench` 的控制台为其中大部分步骤提供了表单；没有 CLI 命令。有些读取仍然没有路由，文中标为**无路由**，页尾会再列一遍。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 工作台是什么
 
-工作台是 `/wb` 下的一组 JSON 路由，定义在 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 和 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py)。它没有网页：`/` 上的控制台是仅桥接模式的那一个，从不调用 `/wb`。请求要自己发，用任何能保存 Cookie 的 HTTP 客户端都行。
+工作台是 `/wb` 下的一组 JSON 路由，定义在 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 和 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py)。`/` 上的控制台是仅桥接模式的那一个，从不调用 `/wb`；`/workbench` 的控制台才调用。你也可以自己发请求，用任何能保存 Cookie 的 HTTP 客户端都行。
 
 每个请求都遵守这几条：
 

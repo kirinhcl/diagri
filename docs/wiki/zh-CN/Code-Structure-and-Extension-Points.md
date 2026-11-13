@@ -20,15 +20,16 @@
 | [`service.py`](../../../src/growbridge/service.py) | `Bridge`：BLE 连接的唯一持有者。遥测、请求与应答、最初的控制命令和水泵计时都在这里。 |
 | [`store.py`](../../../src/growbridge/store.py) | `Store`：最初的 SQLite 历史库，存样本和操作记录。 |
 | [`api.py`](../../../src/growbridge/api.py) | `create_app`：本机回环 HTTP API 和控制台。DiAGRI 模式下，工作台的路由也挂在这里。 |
-| [`dashboard.py`](../../../src/growbridge/dashboard.py)、[`web/`](../../../src/growbridge/web) | 控制台的浏览器会话，以及它的页面、脚本和样式表。 |
+| [`dashboard.py`](../../../src/growbridge/dashboard.py)、[`web/`](../../../src/growbridge/web) | 控制台的浏览器会话，以及它的页面、脚本和样式表。`web/tokens.css` 是两个页面共用的设计变量。 |
+| [`web/workbench.html`](../../../src/growbridge/web/workbench.html)、[`web/workbench/`](../../../src/growbridge/web/workbench) | DiAGRI 模式下 `/workbench` 提供的操作员控制台：纯 ES 模块，没有构建步骤，也没有 npm 包。`main.js` 负责启动，`router.js` 把 URL 的 hash 对应到页面，`api.js` 调用 `/wb`，`pages/` 里每个页面一个模块，`ui/` 是共用的控件，`i18n/` 放中英文文案，`denials.js` 给每个拒绝码配提示。脚本只从同源加载，写入文字只用 `textContent`。 |
 | [`mcp_server.py`](../../../src/growbridge/mcp_server.py)、[`client.py`](../../../src/growbridge/client.py) | 走标准输入输出的 MCP 服务器，以及它访问守护进程所用的 HTTP 客户端。 |
 
 ## DiAGRI 的其余部分：一个服务一个包
 
 | 包 | 负责什么 |
 | --- | --- |
-| [`archive/`](../../../src/growbridge/archive) | 项目档案（`store.py` 里的 `Archive`）：只追加的记录、数据快照、导出、备份、存储空间不足时的降级。所有服务共用的东西也放在这里：`models.py`、`db.py`（`Database`）、`clock.py`（`Clock`）和 `ids.py`。 |
-| [`workflow/`](../../../src/growbridge/workflow) | `WorkflowService`：研究轮次和阶段的状态、审批和历史。`tasks.py` 里的 `TaskBoard`：研究任务。`states.py`：各个状态枚举。 |
+| [`archive/`](../../../src/growbridge/archive) | 项目档案（`store.py` 里的 `Archive`）：只追加的记录、数据快照、导出、备份、存储空间不足时的降级。`readings.py` 按时间桶读取一个阶段的样本，供控制台画曲线。所有服务共用的东西也放在这里：`models.py`、`db.py`（`Database`）、`clock.py`（`Clock`）和 `ids.py`。 |
+| [`workflow/`](../../../src/growbridge/workflow) | `WorkflowService`：研究轮次和阶段的状态、审批和历史。`tasks.py` 里的 `TaskBoard`：研究任务。`states.py`：各个状态枚举。`listing.py`：给控制台用的只读查询，比如项目摘要和等待选择的轮次。 |
 | [`control/`](../../../src/growbridge/control) | `ControlService`：所有 BLE 写入的唯一关口。写入权在 `rights.py`，动作账本和写入主机登记在 `ledger.py`，通道映射和回读在 `device.py`。 |
 | [`executor/`](../../../src/growbridge/executor) | `ExecutorEngine`：按已批准的运行单逐拍执行的确定性程序。规则求值在 `rules.py`，时钟是否可信和连接中断的处理在 `outage.py`。 |
 | [`observer/`](../../../src/growbridge/observer) | `Observer`：告警规则和告警簿、通知发件箱和通知渠道、每日指标和日报、运行健康检查与心跳。 |
@@ -36,7 +37,7 @@
 | [`research/`](../../../src/growbridge/research) | 分析库：统计方法、确认性分析的关口、`HoldoutRegistry`、报告发布和代码沙箱。 |
 | [`agents/`](../../../src/growbridge/agents) | 三个模型角色：提示词在 `roles.py`，工具注册表在 `tools.py`，工具处理函数在 `handlers*.py`，此外还有 Agent 循环、`Dispatcher`、`CallBudget`，以及 `llm.py` 里的模型客户端。 |
 | [`compute/`](../../../src/growbridge/compute) | `ComputeService`：额度检查和作业跟踪。`ComputeBackend` 协议。`FirecrestBackend`，没有对 CSC 验证过。 |
-| [`workbench/`](../../../src/growbridge/workbench) | 操作员使用的 HTTP 路由，都在 `/wb` 下：会话、阶段控制、人工写入和读取在 `api.py`，发起和掌控一轮研究在 `rounds.py`。`auth.py` 里是操作员凭据、会话和入口的判定。 |
+| [`workbench/`](../../../src/growbridge/workbench) | 操作员使用的 HTTP 路由，都在 `/wb` 下：会话、阶段控制、人工写入和读取在 `api.py`，发起和掌控一轮研究在 `rounds.py`；控制台的读取路由（待办、项目、读数、测量、历史、安全配置）在 `reads.py`。`auth.py` 里是操作员凭据、会话和入口的判定。 |
 | [`sim/`](../../../src/growbridge/sim) | 模拟器和测试数据，测试和 `growbridge simulate` 都用它。 |
 
 另有四个顶层模块把这些服务连在一起：
@@ -89,7 +90,7 @@ flowchart TD
 
 | 位置 | 导入了什么 | 为什么 |
 | --- | --- | --- |
-| [`workbench/api.py`](../../../src/growbridge/workbench/api.py)、[`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) | `WorkflowService`、`TaskBoard`、`Archive`、`AlertBook`，以及 `workflow/permissions.py` 里的 `require_operator` | 工作台拿到的是真实的服务对象，类型标注里直接写了它们的类。`rounds.py` 用自己定义的协议给调用预算标类型，所以 `workbench/` 不从 `agents/` 导入任何东西。 |
+| [`workbench/api.py`](../../../src/growbridge/workbench/api.py)、[`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py)、[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) | `WorkflowService`、`TaskBoard`、`Archive`、`AlertBook`、`ComputeService`（在 `reads.py` 里），以及 `workflow/permissions.py` 里的 `require_operator` | 工作台拿到的是真实的服务对象，类型标注里直接写了它们的类。`rounds.py` 用自己定义的协议给调用预算标类型，所以 `workbench/` 不从 `agents/` 导入任何东西。 |
 | [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py) | `TaskBoard` | 调度器的任务看板参数用这个类做类型标注。 |
 | [`control/service.py`](../../../src/growbridge/control/service.py)、[`control/device.py`](../../../src/growbridge/control/device.py) | `service.py` 里的 `Bridge`、`BridgeError` | 控制服务包在桥接层外面。DiAGRI 的其他包都不导入它。 |
 | [`archive/source.py`](../../../src/growbridge/archive/source.py) | `store.py` 里的 `Store` | 这是把桥接层的样本历史读进项目档案的适配器。 |
@@ -147,6 +148,13 @@ grep -rnE '^[[:space:]]*(from|import) +growbridge\.' src/growbridge/executor
 
 目前只有 macOS 有可用的后端（`SeatbeltSandbox`）。在 Linux 上，包括树莓派，分析脚本会被拒绝执行。
 
+### 新增控制台页面
+
+- **文件。** 在 [`web/workbench/`](../../../src/growbridge/web/workbench) 下加 `pages/<name>.js`，并在 `router.js` 的 `FLAT` 或 `WITH_ID` 里加一条路由；`main.js` 在页面第一次被访问时才加载它。页面用 `ui/dom.js` 里的函数建元素，文字只用 `textContent` 写入。不要用 `innerHTML`：`tests/web/` 里的测试发现控制台脚本用了它就会失败。
+- **文案。** 每条文案都要同时加进 `i18n/zh.js` 和 `i18n/en.js`，有测试要求两边的键完全一致。新的拒绝码要在 `denials.js` 里写上中英两条提示。
+- **写入。** 会写入的页面都走 `api.js`：它带上服务器要求的请求头，并在收到 `reauth_required` 时只请求一次重新输入密码。控制类操作成功后重新读取对象，不要凭猜测更新屏幕。
+- **测试。** 能脱离浏览器测试的逻辑单独放进一个模块，在 `tests/web/` 里用 `node --test` 测。
+
 ### 新的 BLE 传输
 
 - **文件。** [`transport.py`](../../../src/growbridge/transport.py)。
@@ -160,7 +168,7 @@ grep -rnE '^[[:space:]]*(from|import) +growbridge\.' src/growbridge/executor
 
 下面几块都有代码和测试，但 `growbridge serve` 没有把它们接起来。每一块都是贡献者可以着手的地方。
 
-1. **研究目标的网页或命令。** 入口已经有了，是 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里的工作台路由。它们调用 `WorkflowService` 的 `create_project`、`save_protocol`、`create_round`，调用 `CallBudget.set`，并用 `TaskBoard.create` 建立第一个编排任务。这些路由之上没有网页，也没有 CLI 命令；还有几类读取没有路由，[运行一轮研究](Run-a-Research-Round.md)里列了出来。新路由加在 `rounds.py` 或 `api.py` 里，挂在工作台的 `operator` 或 `fresh` 依赖后面。它在 [`tests/workbench/`](../../../tests/workbench/) 里的测试要证明：角色令牌、没有会话、别处来的 Origin、另一个入口的会话，都会被拒绝。
+1. **研究目标的网页或命令。** 入口已经有了，是 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里的工作台路由。它们调用 `WorkflowService` 的 `create_project`、`save_protocol`、`create_round`，调用 `CallBudget.set`，并用 `TaskBoard.create` 建立第一个编排任务。这些路由和只读路由之上是 `/workbench` 的操作员控制台，没有 CLI 命令；还有少数几类读取没有路由，[运行一轮研究](Run-a-Research-Round.md)里列了出来。新路由加在 `rounds.py` 或 `api.py` 里，挂在工作台的 `operator` 或 `fresh` 依赖后面。它在 [`tests/workbench/`](../../../tests/workbench/) 里的测试要证明：角色令牌、没有会话、别处来的 Origin、另一个入口的会话，都会被拒绝。
 2. **计算后端。** 见上文：`serve` 没有传 `compute_backend`。
 3. **心跳端点。** `build_runtime` 的 `heartbeats` 参数接受一对 `Heartbeat` 对象。`serve` 在 [`runtime_heartbeat.py`](../../../src/growbridge/runtime_heartbeat.py) 里根据 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL` 构造它们：两个都设或者都不设。想换一个监控服务，就在那里构造一对新的 `Heartbeat`。
 4. **搜索后端。** `runtime_agents.py` 的 `role_tools` 传的是 `search=None`，所以计划 Agent 的两个联网工具 `lookup_crop_conditions` 和 `search_and_verify_sources` 会被拒绝。

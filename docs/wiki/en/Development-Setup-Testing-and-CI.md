@@ -11,7 +11,7 @@ Everything on this page runs on simulators. Apart from the install and the packa
 | You need | Used for | Where it is set |
 | --- | --- | --- |
 | Python 3.11 or newer | everything | `requires-python = ">=3.11"` in [`pyproject.toml`](../../../pyproject.toml) |
-| Node.js | one syntax check of the dashboard script. CI uses Node 22. | [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) |
+| Node.js | a syntax check of the dashboard and console scripts, and the console's unit tests (`node --test`, no npm packages). CI uses Node 22. | [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) |
 | Xcode Command Line Tools, macOS only | compiling the native BLE helper, the last CI step | the same file |
 
 CI runs four jobs: `ubuntu-latest` and `macos-latest`, each with Python 3.11 and 3.13. The test run recorded on this page was made on macOS with Python 3.14, which is outside that matrix.
@@ -55,19 +55,20 @@ CI runs these steps in this order. Run them the same way before you push. CI cal
 
 | Step | Command | What it checks |
 | --- | --- | --- |
-| 1 | `node --check src/growbridge/web/app.js` | The dashboard script parses. |
-| 2 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | The package installs with the pinned versions. |
-| 3 | `.venv/bin/ruff check src tests scripts` | Lint. Rule sets `E`, `F`, `I`, `B` and `UP`, line length 100, set in `pyproject.toml`. |
-| 4 | `.venv/bin/ruff format --check src tests scripts` | Formatting. |
-| 5 | `.venv/bin/pytest -q` | The whole test suite. |
-| 6 | `.venv/bin/python -m build` | The source distribution and the wheel build into `dist/`. |
-| 7 | `xcrun swiftc src/growbridge/native/BLEHelper.swift -o /tmp/growbridge-ble -framework CoreBluetooth -framework AppKit` | macOS only. The native helper compiles. The helper is not started, so no radio is used. |
+| 1 | `for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done` | The dashboard script and every console script parse. |
+| 2 | `node --test tests/web/*.test.mjs` | The console's unit tests (111 on 2026-11-13): the pure parts of the console, such as routing, formatting, denial messages and the chart maths, and a guard that no console script writes HTML with `innerHTML`. They run in Node without a browser, a server or a network. |
+| 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | The package installs with the pinned versions. |
+| 4 | `.venv/bin/ruff check src tests scripts` | Lint. Rule sets `E`, `F`, `I`, `B` and `UP`, line length 100, set in `pyproject.toml`. |
+| 5 | `.venv/bin/ruff format --check src tests scripts` | Formatting. |
+| 6 | `.venv/bin/pytest -q` | The whole test suite. |
+| 7 | `.venv/bin/python -m build` | The source distribution and the wheel build into `dist/`. |
+| 8 | `xcrun swiftc src/growbridge/native/BLEHelper.swift -o /tmp/growbridge-ble -framework CoreBluetooth -framework AppKit` | macOS only. The native helper compiles. The helper is not started, so no radio is used. |
 
 Notes on single steps:
 
-- **Steps 3 and 4.** `.venv/bin/ruff check --fix src tests scripts` and `.venv/bin/ruff format src tests scripts` repair most findings.
-- **Step 5.** The suite collects the code tests plus the wiki tests in `tests/docs/`. On 2026-11-13 it collected 2295 tests, 2184 code tests and 111 wiki tests, and gave `2295 passed` in about 65 seconds on macOS with Python 3.14 and the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
-- **Step 6.** `build` creates an isolated environment and downloads the build backend (`setuptools`), so this step needs the network. Git ignores `dist/`.
+- **Steps 4 and 5.** `.venv/bin/ruff check --fix src tests scripts` and `.venv/bin/ruff format src tests scripts` repair most findings.
+- **Step 6.** The suite collects the code tests plus the wiki tests in `tests/docs/`. On 2026-11-13 it collected 2355 tests, 2244 code tests and 111 wiki tests, and gave `2355 passed` in about 65 seconds on macOS with Python 3.14 and the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
+- **Step 7.** `build` creates an isolated environment and downloads the build backend (`setuptools`), so this step needs the network. Git ignores `dist/`.
 
 One more check is useful although CI does not run it: `.venv/bin/growbridge simulate` runs one short stage on the simulated AC5 through the assembled runtime and prints a summary. [Tutorial: a simulated research round](Tutorial-Simulated-Round.md) walks through it.
 
@@ -93,6 +94,7 @@ Tests live in [`tests/`](../../../tests), one folder per area. The folders are n
 | `tests/workbench/` | The workbench routes: operator login and sessions, entry, the request gate, stage and manual actions, and starting and steering a round. |
 | `tests/transport/` | `halt` on both BLE transports, and the pid file and folder checks of the native transport. |
 | `tests/e2e/` | The assembled runtime: a full research round, interventions, model roles, the CLI commands, and a round driven through the HTTP routes. |
+| `tests/web/` | The operator console's scripts, run with `node --test` (see CI step 2): routing, formatting, texts, denials, receipts, the stage page's rules, the chart maths, and the ban on `innerHTML`. Node's own test runner, no npm packages. |
 | `tests/docs/` | This wiki: every page exists in `en/` and `zh-CN/`, the page table in [the wiki README](../README.md) lists exactly the pages that exist, relative links point at existing files, and every page links to its translation. |
 | `tests/test_*.py` | The original bridge: protocol framing, device controls, the HTTP API with MCP, the dashboard. 32 tests. |
 
@@ -100,6 +102,21 @@ Two things apply everywhere:
 
 - Async tests need no decorator, because `asyncio_mode = "auto"` is set in `pyproject.toml`.
 - [`tests/conftest.py`](../../../tests/conftest.py) provides `settings` (a temporary data directory and the device name `SIMULATED`) and `bridge` (a started `Bridge` on a `SimulatedTransport`). Most folders add their own `conftest.py` and a helper module named `*_helpers.py` or `*_support.py`.
+
+## Run the console on a simulated device
+
+[`scripts/dev_workbench.py`](../../../scripts/dev_workbench.py) starts the runtime on the simulated AC5, with no radio, no network and no real device, so you can use the operator console in a browser. It seeds one approved safety configuration and one stage waiting for review, polls the simulated device every second so that readings keep arriving, and binds `127.0.0.1` only. The secret of the operator `dev` is read from the environment, never from an argument; it needs at least 12 characters.
+
+```sh
+GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.py
+```
+
+| Entry | Address | What it is |
+| --- | --- | --- |
+| On-site | `http://localhost:8770/workbench` | The LAN entry: everything, irrigation included. |
+| Overlay | `http://127.0.0.1:8765/workbench` | The overlay entry: everything except irrigation, which the console shows as disabled. |
+
+The data lives in a fresh temporary directory unless you pass `--data-dir`. Stop the script with Ctrl+C.
 
 ## Run part of the suite
 

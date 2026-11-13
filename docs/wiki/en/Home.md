@@ -6,7 +6,7 @@ DiAGRI is an AI agent platform for plant-growth research. It takes one research 
 
 GrowBridge is DiAGRI's device bridge: the part that reads and controls a Spider Farmer AC5 grow-tent controller over Bluetooth. It can also be used on its own, with a local dashboard and MCP tools.
 
-> **Status.** DiAGRI mode has been tested on a simulated AC5 only. It has not been run against a real device, a Raspberry Pi, real notification services or CSC. GrowBridge on its own has read and controlled one real AC5. An operator starts and steers a research round through the workbench routes under `/wb`; these have run only in tests with a scripted model, and there is no web page or CLI command for them. See [Status and known limitations](Status-and-Known-Limitations.md).
+> **Status.** DiAGRI mode has been tested on a simulated AC5 only. It has not been run against a real device, a Raspberry Pi, real notification services or CSC. GrowBridge on its own has read and controlled one real AC5. An operator starts and steers a research round through the workbench routes under `/wb`; these have run only in tests with a scripted model, the operator console at `/workbench` is a page over them, and there is no CLI command. See [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## Start here
 

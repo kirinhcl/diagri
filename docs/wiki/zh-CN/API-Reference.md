@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。工作台没有自己的网页，`web/` 里的文件是桥接控制台。共 38 个路由。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 49 个路由。第一张表末尾的七个读取路由总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -113,8 +113,15 @@
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope` |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
 | `GET` | `/wb/compute` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/inbox` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/projects` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/projects/{project_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/stages/{stage_id}/readings` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/stages/{stage_id}/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/stages/{stage_id}/history` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/safety` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 
-最后二十一个路由只给操作员用，其中的六个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
+最后二十八个路由只给操作员用，其中的十三个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
 下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。
 
@@ -123,7 +130,7 @@
 | `POST` | `/wb/login` | `name`（1 到 64 个字符）、`secret`（1 到 256） | `operator`、`entry`、`reauth_seconds`，以及会话 Cookie |
 | `POST` | `/wb/logout` | 无 | `{"operator": null}`；Cookie 被删除 |
 | `POST` | `/wb/reauth` | `secret`（1 到 256） | `reauth_seconds` |
-| `GET` | `/wb/me` | 无 | `kind`、`id`、`operator`、`entry`、`reauth_at` |
+| `GET` | `/wb/me` | 无 | `kind`、`id`、`operator`、`entry`、`reauth_at`、`timezone`（即设置 `report_timezone`，控制台显示时间用的时区） |
 | `POST` | `/wb/stages/{stage_id}/approve` | 无 | 这次的 `Approval` |
 | `POST` | `/wb/stages/{stage_id}/start` | 无 | 阶段运行信息 |
 | `POST` | `/wb/stages/{stage_id}/pause` | 可选 `reason`（最长 200，默认 `operator request`） | 阶段运行信息 |
@@ -137,7 +144,7 @@
 | `POST` | `/wb/irrigation` | `stage_id`、`request_id`、`seconds`（大于 0，不超过 60，且不超过 `max_pump_seconds`）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`） | `protection_right` |
-| `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息 |
+| `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id` 和 `project_id`（角色令牌得到的运行信息和以前一样，没有 `round_id`） |
 | `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord` |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警 |
 | `POST` | `/wb/alerts/{event_id}/read` | 无 | `event_id` |
@@ -162,6 +169,13 @@
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | `cpu_hours`、`storage_gb`（有限的数，0 或更大） | 该任务的一行：`task_id`、`cpu_hours_budget`、`storage_gb_budget`、`cpu_hours_used`、`storage_gb_used`、`cpu_hours_reserved`、`storage_gb_reserved`。任务不存在时以 `scope` 拒绝。 |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | `reason`（去掉首尾空白后 1 到 500 个字符） | `attempt_id`、`phase`（`failed`）、`task_state`、`used_cpu`、`used_storage`、`settled_by`（会话里的操作员）、`settle_reason`、`error`。仍在进行的尝试按全额预留计账；用量已经计过账的，保持原来的账。已经是终态的或不存在的尝试以 `state` 拒绝。 |
 | `GET` | `/wb/compute` | 无 | `balance`（最近一条录入，或 `null`）、`tasks`（如上的行）、`service`（`cpu_hours_cap`、`storage_gb_cap`、`cpu_hours_committed`、`storage_gb_committed`）、`jobs`（进行中的尝试：`attempt_id`、`task_id`、`template_id`、`phase`、`task_state`、`remote_job_id`、`created_at`）、`stuck`（需要人处理的尝试：`attempt_id`、`task_id`、`phase`、`reason`、`since`） |
+| `GET` | `/wb/inbox` | 无 | `items` 和 `truncated`。每个条目有 `kind`（`stage_review`、`stage_manual`、`stage_recovery`、`stage_paused`、`alert`、`compute_stuck`、`round_choice` 或 `task`）、`id`、`project_id`、`round_id`、`since` 和 `detail`。每一类最多保留 50 条：告警按严重程度、再按最近一次触发的时间取舍，其他类型取最早的。保留下来的条目按最早的在前排列，`truncated` 给出每一类被截掉的条数。 |
+| `GET` | `/wb/projects` | 无 | `projects`：每个项目的摘要，最多 200 个 |
+| `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前）和 `protocols`（每个协议的最新版本）、`budget`（`calls_left` 和 `cost_left`，没有设置预算时为 `null`）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
+| `GET` | `/wb/stages/{stage_id}/readings` | 查询参数 `points`（2 到 2000，默认 600） | `samples`（由 `timestamp`、`data`、`quality`、`clock_synced`、`flagged` 组成的列表）、`window`（`start`、`end`、`bucket_seconds`，阶段尚未开始时为 `null`）、`total_samples`、`flagged_total` 和 `downsampled`。每个时间桶保留最新的一条样本；`flagged` 是该桶里质量不是 `ok` 或时钟未同步的样本数。`points` 超出范围时返回 422。 |
+| `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
+| `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
+| `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`，没有批准过时为 `null` |
 
 已保存的协议版本不会被覆盖：`id` 和 `version` 相同而内容不同，会以 `state` 被拒绝。`POST /wb/rounds` 使用最新保存的版本。读取路由给出的 `run_sheet_digest` 就是审批记录里的那个摘要。再设一次预算只改上限，已记录的用量保留。`POST /wb/goals` 创建一个归编排 Agent 所有的研究任务；项目还没有预算，或者预算已经用完时，它以 `budget` 被拒绝。带 `request_id` 时，同一个操作员对同一个项目把同样的请求再发一次，得到的是第一次建的任务，并带 `"reused": true`；同一个 ID 下换了目标文本、轮次或约束条件，会以 `state` 被拒绝。不带 `request_id` 时，每次请求都新建一个任务。这些路由路径里的 ID 为 1 到 100 个字符。分析路由冻结协议最新版本的分析脚本（这个版本下一旦有阶段启动，冻结就以 `state` 被拒绝），并在一份数据快照上把它运行一次；它们的检查顺序见[开展一轮研究](Run-a-Research-Round.md#运行冻结的分析)。
 
