@@ -1,4 +1,4 @@
-// Plain-language messages for every denial code (33 from the wiki, plus two client-side codes).
+// Plain-language messages for every denial code (33 from the wiki, plus three client-side codes).
 // Row: [code, zh text, zh advice, en text, en advice]
 const ROWS = [
   ["host_unregistered", "这台电脑不是该设备登记的写入主机。", "请在登记的主机上操作，或先把这台电脑登记为写入主机。", "This computer is not the registered write host for the device.", "Work from the registered host, or register this computer as the write host first."],
@@ -35,6 +35,7 @@ const ROWS = [
   ["unavailable", "这个功能的后端没有配置（搜索、计算服务、隔离环境或留出集登记）。", "你无法解决；这个服务在部署时没有包含它。", "An optional backend is not configured (search, compute service, sandbox or holdout registry).", "Nothing you can do; this installation was set up without it."],
   ["locked", "登录失败次数太多，暂时被锁定。", "等 15 分钟后再试。", "Too many failed sign-ins, so sign-in is locked for now.", "Wait 15 minutes, then try again."],
   ["validation", "有些输入不符合要求。", "按字段旁的提示改正后再提交。", "Some of the input is not valid.", "Fix the fields marked below and submit again."],
+  ["reauth_failed", "口令不对，没有重新认证。", "请再试一次；连续输错会被暂时锁定。", "The secret was wrong, so you were not re-authenticated.", "Try again. Several wrong tries in a row lock sign-in for a while."],
   ["network", "连不上服务器。", "检查网络连接，稍后再试。", "Could not reach the server.", "Check the network connection and try again in a moment."],
 ];
 

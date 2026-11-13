@@ -70,12 +70,27 @@ export function createApi({ fetchImpl, askReauth, onSessionLost } = {}) {
       }
       const secret = await askReauth(action);
       if (secret === null || secret === undefined) throw error;
+      await confirmSecret(secret);
       try {
-        await send("POST", "/reauth", { secret });
         return await send("POST", path, body);
       } catch (retryError) {
         throw await sessionCheck(retryError);
       }
+    }
+  }
+
+  // POST /reauth answers 401 "session" for a wrong secret too, so probe /me to tell the cases apart.
+  async function confirmSecret(secret) {
+    try {
+      await send("POST", "/reauth", { secret });
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.code !== "session") throw error;
+      try {
+        await send("GET", "/me");
+      } catch (probeError) {
+        throw await sessionCheck(probeError.code === "session" ? error : probeError);
+      }
+      throw new ApiError(401, "reauth_failed", "reauth_failed");
     }
   }
 

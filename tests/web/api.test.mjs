@@ -142,12 +142,38 @@ test("a session error during the retry calls onSessionLost", async () => {
   assert.equal(lost, 1);
 });
 
-test("a session error from POST /reauth calls onSessionLost and does not retry", async () => {
-  const f = fakeFetch([denial("reauth_required"), lostSession()]);
+test("a wrong re-auth secret keeps the session", async () => {
+  const f = fakeFetch([denial("reauth_required"), lostSession(), reply(200, { name: "ann" })]);
+  let lost = 0;
+  const api = createApi({ fetchImpl: f, askReauth: async () => "bad", onSessionLost: () => (lost += 1) });
+  await assert.rejects(api.post("/x"), (e) => e.code === "reauth_failed" && e.status === 401);
+  assert.equal(lost, 0);
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.calls[2].url, "/wb/me");
+  assert.equal(f.calls[2].init.method, "GET");
+});
+
+test("a re-auth that finds the session gone calls onSessionLost", async () => {
+  const f = fakeFetch([denial("reauth_required"), lostSession(), lostSession()]);
   let lost = 0;
   const api = createApi({ fetchImpl: f, askReauth: async () => "s", onSessionLost: () => (lost += 1) });
   await assert.rejects(api.post("/x"), (e) => e.code === "session");
   assert.equal(lost, 1);
+  assert.equal(f.calls.length, 3);
+});
+
+test("a failed probe for another reason does not call onSessionLost", async () => {
+  const f = fakeFetch([denial("reauth_required"), lostSession(), new TypeError("down")]);
+  let lost = 0;
+  const api = createApi({ fetchImpl: f, askReauth: async () => "s", onSessionLost: () => (lost += 1) });
+  await assert.rejects(api.post("/x"), (e) => e.code === "network");
+  assert.equal(lost, 0);
+});
+
+test("a locked re-auth is thrown as it is", async () => {
+  const f = fakeFetch([denial("reauth_required"), reply(429, { detail: { code: "locked", message: "m" } })]);
+  const api = createApi({ fetchImpl: f, askReauth: async () => "s" });
+  await assert.rejects(api.post("/x"), (e) => e.code === "locked" && e.status === 429);
   assert.equal(f.calls.length, 2);
 });
 
