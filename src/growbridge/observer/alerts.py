@@ -128,15 +128,16 @@ def _rank(severity: Severity) -> int:
     return SEVERITY_ORDER.index(severity)
 
 
-def awaits_reading(alert: Alert) -> bool:
+def awaits_reading(alert: Alert, now: float) -> bool:
     """An alert waits for an operator until it is read, again once it gets worse than the severity
-    it was read at, and again once a day while it persists. A read recorded without its severity
-    (before that was kept) waits once more."""
+    it was read at, and again once a day by the clock (``now``) however it was raised since. A
+    clock that went back before the reading is not trusted: the alert waits. A read recorded
+    without its severity (before that was kept) waits once more."""
     if alert.read_at is None or alert.read_severity is None:
         return True
     if _rank(alert.severity) > _rank(alert.read_severity):
         return True
-    return alert.last_at - alert.read_at > REASK_SECONDS
+    return now < alert.read_at or now - alert.read_at > REASK_SECONDS
 
 
 class AlertBook:

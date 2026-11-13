@@ -3,7 +3,6 @@ import pytest
 from growbridge.archive.models import Condition
 from growbridge.observer.alerts import (
     NAMESPACE,
-    REASK_SECONDS,
     STEPS,
     AlertBook,
     AlertRule,
@@ -158,7 +157,7 @@ def test_a_read_alert_waits_again_only_when_it_gets_worse(db, clock, read_at, no
 
     again = book.raise_alert("data_gap", "temperature", now, "still no data")
 
-    assert awaits_reading(again) is waiting
+    assert awaits_reading(again, clock.now()) is waiting
 
 
 def test_a_drop_then_a_rise_in_severity_waits_again(db, clock):
@@ -168,35 +167,38 @@ def test_a_drop_then_a_rise_in_severity_waits_again(db, clock):
     clock.advance(30)
 
     lowered = book.raise_alert("data_gap", "temperature", "warning", "late data")
-    assert awaits_reading(lowered) is False
+    assert awaits_reading(lowered, clock.now()) is False
     assert lowered.read_severity == "warning"  # re-armed at the lower severity
     clock.advance(30)
     raised = book.raise_alert("data_gap", "temperature", "critical", "no data")
 
-    assert awaits_reading(raised) is True
+    assert awaits_reading(raised, clock.now()) is True
 
 
-def test_a_persistent_alert_is_asked_again_once_a_day(db, clock):
+@pytest.mark.parametrize(
+    ("elapsed", "waiting"),
+    [
+        (23 * 3600, False),  # read less than a day ago
+        (25 * 3600, True),  # a persistent alert nothing re-raised is still asked again
+        (-60, True),  # the clock went back: fail closed
+    ],
+)
+def test_a_read_alert_is_asked_again_by_the_clock(db, clock, elapsed, waiting):
     book = AlertBook(db, clock)
     alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
     book.mark_read(alert.event_id, Actor(kind="operator", id="alice"))
-    clock.advance(REASK_SECONDS - 60)
-    assert (
-        awaits_reading(book.raise_alert("data_gap", "temperature", "warning", "no data")) is False
-    )
+    read = book.get(alert.event_id)
 
-    clock.advance(120)
-
-    assert awaits_reading(book.raise_alert("data_gap", "temperature", "warning", "no data")) is True
+    assert awaits_reading(read, read.read_at + elapsed) is waiting
 
 
 def test_an_unread_alert_waits_and_one_read_before_severity_was_kept_waits_again(db, clock):
     book = AlertBook(db, clock)
     alert = book.raise_alert("data_gap", "temperature", "warning", "no data")
-    assert awaits_reading(alert) is True
+    assert awaits_reading(alert, clock.now()) is True
     legacy = alert.model_copy(update={"read_by": "alice", "read_at": alert.last_at})
 
-    assert awaits_reading(legacy) is True  # no severity kept at reading: ask once more
+    assert awaits_reading(legacy, clock.now()) is True  # no severity kept at reading: ask once more
 
 
 def test_an_older_alert_table_gains_the_column_and_keeps_its_rows(db, clock):

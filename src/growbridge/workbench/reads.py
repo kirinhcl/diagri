@@ -117,7 +117,7 @@ def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
     return items
 
 
-def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
+def _alert_items(alerts: AlertBook | None, now: float) -> list[dict[str, Any]]:
     if alerts is None:
         return []
     items = [
@@ -136,7 +136,7 @@ def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
             },
         )
         for alert in alerts.open()
-        if awaits_reading(alert)  # unread, or worse than when it was read
+        if awaits_reading(alert, now)  # unread, worse than when read, or read over a day ago
     ]
     return items
 
@@ -241,7 +241,7 @@ def add_read_routes(
     alerts: AlertBook | None = None,
     compute: ComputeService | None = None,
 ) -> None:
-    _inbox_routes(router, operator, workflow, tasks, alerts, compute)
+    _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock)
     _project_routes(router, operator, workflow, tasks, budget)
     _stage_read_routes(router, operator, workflow, archive, clock)
 
@@ -253,13 +253,13 @@ def add_read_routes(
         return {"safety": None if config is None else config.model_dump(mode="json")}
 
 
-def _inbox_routes(router, operator, workflow, tasks, alerts, compute) -> None:
+def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/inbox")
     async def inbox(actor: Operator):
         kept, truncated = _cap(
-            _stage_items(workflow) + _alert_items(alerts) + _compute_items(compute)
+            _stage_items(workflow) + _alert_items(alerts, clock.now()) + _compute_items(compute)
         )
         fetched = {"round_choice": _round_items(workflow), "task": _task_items(tasks)}
         counts = {

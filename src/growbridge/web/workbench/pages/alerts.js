@@ -6,21 +6,22 @@ import { table } from "../ui/table.js";
 import { isNotMounted } from "./not-mounted.js";
 
 const SEVERITY_ORDER = ["info", "warning", "critical"]; // mildest first
+const nowSeconds = () => Date.now() / 1000;
 export const REASK_SECONDS = 24 * 3600; // observer/alerts.py REASK_SECONDS
 
 // The inbox's rule (observer/alerts.py awaits_reading): unread, or worse than the severity it was
-// read at, or read more than a day before it was last raised. A read recorded without its severity
-// waits once more.
-export function alertWaiting(alert) {
+// read at, or read more than a day ago by the clock (`now`, in seconds); a clock that went back
+// before the reading counts as unread. A read recorded without its severity waits once more.
+export function alertWaiting(alert, now) {
   if (!alert || alert.read_at === null || alert.read_at === undefined) return true;
   const readAt = SEVERITY_ORDER.indexOf(alert.read_severity);
   if (readAt < 0 || SEVERITY_ORDER.indexOf(alert.severity) > readAt) return true;
-  return alert.last_at - alert.read_at > REASK_SECONDS;
+  return now < alert.read_at || now - alert.read_at > REASK_SECONDS;
 }
 
 function readLine(ctx, alert) {
   const read = { name: alert.read_by, time: timeText(ctx, alert.read_at) };
-  if (!alertWaiting(alert)) return ctx.t("alerts.readBy", read);
+  if (!alertWaiting(alert, nowSeconds())) return ctx.t("alerts.readBy", read);
   if (!alert.read_severity) return ctx.t("alerts.readBefore", read);
   if (SEVERITY_ORDER.indexOf(alert.severity) <= SEVERITY_ORDER.indexOf(alert.read_severity)) {
     return ctx.t("alerts.readStale", { ...read, last: timeText(ctx, alert.last_at) });
@@ -31,7 +32,7 @@ function readLine(ctx, alert) {
 
 function readCell(ctx, alert) {
   const said = alert.read_by ? readLine(ctx, alert) : null;
-  if (!alertWaiting(alert)) return said;
+  if (!alertWaiting(alert, nowSeconds())) return said;
   const box = errorBox();
   const label = ctx.t("alerts.markRead");
   const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
