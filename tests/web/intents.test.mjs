@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  afterTerminal,
   clearIntents,
   idForIntent,
   intentKey,
   settleIntent,
-  settlesIntent,
+  claimIntent,
+  INTENT_TTL_MS,
+  resentHeading,
   unsettledCount,
 } from "../../src/growbridge/web/workbench/intents.js";
 
@@ -67,7 +70,42 @@ test("an older receipt settling does not clear a newer intent", () => {
   assert.equal(idForIntent(key, { ...body, seconds: 5 }, makeId), newer);
 });
 
-test("only a final receipt outcome settles an intent", () => {
-  for (const outcome of ["applied", "failed", "unknown"]) assert.equal(settlesIntent(outcome), true);
-  for (const outcome of ["timeout", "stopped", "unsettled", undefined]) assert.equal(settlesIntent(outcome), false);
+test("an intent expires after the TTL and an expired id is never reused", () => {
+  clearIntents();
+  const makeId = counter();
+  const key = intentKey("s1", "irrigation");
+  assert.equal(INTENT_TTL_MS, 5 * 60 * 1000);
+  const first = claimIntent(key, body, { makeId, now: () => 1000 });
+  assert.equal(first.reused, false);
+  const within = claimIntent(key, body, { makeId, now: () => 1000 + INTENT_TTL_MS - 1 });
+  assert.deepEqual(within, { id: first.id, reused: true });
+  const after = claimIntent(key, body, { makeId, now: () => 1000 + INTENT_TTL_MS });
+  assert.equal(after.reused, false);
+  assert.notEqual(after.id, first.id);
+});
+
+test("clearing all intents (session lost, operator changed) forgets every id", () => {
+  clearIntents();
+  const makeId = counter();
+  const key = intentKey("s1", "irrigation");
+  const first = idForIntent(key, body, makeId);
+  clearIntents();
+  assert.equal(unsettledCount(), 0);
+  assert.notEqual(idForIntent(key, body, makeId), first);
+});
+
+test("the log heading says when an earlier request is resent", () => {
+  assert.equal(resentHeading("Light 40", "Resent earlier request wb-1", false), "Light 40");
+  assert.equal(resentHeading("Light 40", "Resent earlier request wb-1", true), "Light 40 (Resent earlier request wb-1)");
+});
+
+test("the intent is settled on every terminal path of the receipt follow-up", async () => {
+  for (const outcome of ["applied", "failed", "unknown", "timeout", "stopped"]) {
+    let settled = 0;
+    await afterTerminal(Promise.resolve({ outcome }), () => (settled += 1));
+    assert.equal(settled, 1, outcome);
+  }
+  let settled = 0;
+  await afterTerminal(Promise.reject(new Error("poll broke")), () => (settled += 1)).catch(() => {});
+  assert.equal(settled, 1);
 });

@@ -297,6 +297,7 @@ export default {
   "receipt.unsettledNote": "{seconds} 秒内没有最终结果。请求可能仍会完成，服务器按下面的请求编号保存它的结果。",
   "receipt.checkFailed": "无法查询结果：{error}",
   "receipt.lost": "没有收到答复，结果未知；正在按这个请求编号向服务器核对。",
+  "receipt.resent": "重发了较早的请求 {id}；显示的是它的结果",
   "receipt.noRecord": "服务器上还没有这个请求编号的记录。",
   "chart.empty": "这个阶段的时间窗内还没有读数。",
   "chart.window": "时间窗 {start} 至 {end}",

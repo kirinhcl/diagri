@@ -1,7 +1,7 @@
 // Stage controls. Which ones show follows stage-rules.js; the server stays the judge and every
 // refusal is shown with its reason. Nothing is shown as done before the server answered.
 import { ApiError } from "../api.js";
-import { idForIntent, intentKey, settleIntent, settlesIntent } from "../intents.js";
+import { afterTerminal, claimIntent, intentKey, resentHeading, settleIntent } from "../intents.js";
 import { answerLost, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
 import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
 import { confirmAction } from "../ui/dialog.js";
@@ -178,10 +178,12 @@ function pauseGroup(env) {
 // (stage and action, so a re-render or an interleaved submission does not lose it); when no readable
 // answer comes back the write may have happened, so it is listed as "result unknown, checking" and
 // its receipt is followed under that id, and sending the identical request again reuses the id. The
-// intent goes when an answer settles it, or when its followed receipt reaches a final outcome.
+// intent goes when an answer settles it, or when its followed receipt ends by any path (it also
+// expires after a few minutes). A resent request is named as such in the log.
 async function deviceWrite(env, { action, path, body, heading, label }) {
   const key = intentKey(env.stage.stage_id, action);
-  const requestId = idForIntent(key, body);
+  const { id: requestId, reused } = claimIntent(key, body);
+  const shown = resentHeading(heading, env.ctx.t("receipt.resent", { id: requestId }), reused);
   let record;
   try {
     record = await env.ctx.api.post(path, { ...body, request_id: requestId }, { action: label });
@@ -191,11 +193,11 @@ async function deviceWrite(env, { action, path, body, heading, label }) {
       throw error;
     }
     const pending = { request_id: requestId, created_at: Date.now() / 1000, state: "pending" };
-    env.log.track(heading, pending, { lost: true, onOutcome: (outcome) => settlesIntent(outcome) && settleIntent(key, requestId) });
+    env.log.track(shown, pending, { lost: true, onDone: () => settleIntent(key, requestId) });
     throw error;
   }
   settleIntent(key, requestId);
-  env.log.track(heading, record);
+  env.log.track(shown, record);
   await env.onChanged();
 }
 
@@ -359,18 +361,18 @@ export function activityLog(ctx, life) {
   };
   const add = (heading, lines) => push(logItem(ctx, heading, null)).show(null, lines);
   // lost: no readable answer came for this write; it is followed under its request id all the same.
-  const track = (heading, record, { lost = false, onOutcome = () => {} } = {}) => {
+  const track = (heading, record, { lost = false, onDone = () => {} } = {}) => {
     const item = push(logItem(ctx, heading, record));
     const note = lost ? ctx.t("receipt.lost") : null;
     item.show("pending", [note]);
     const onUpdate = ({ error }) => item.show("pending", [note, error ? checkLine(ctx, error) : null]);
     const fetchReceipt = () => ctx.api.get(`/receipts/${encodeURIComponent(record.request_id)}`);
-    pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
+    const followed = pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
       .then((result) => {
-        onOutcome(result.outcome);
         if (result.outcome !== "stopped") item.show(result.outcome === "timeout" ? "unsettled" : result.outcome, outcomeLines(ctx, result));
       })
       .catch((error) => item.show("unsettled", outcomeLines(ctx, { outcome: "unsettled", record, error })));
+    afterTerminal(followed, onDone);
   };
   return { element, add, track };
 }

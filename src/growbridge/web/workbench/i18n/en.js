@@ -297,6 +297,7 @@ export default {
   "receipt.unsettledNote": "No final result within {seconds} seconds. The request may still complete; the server keeps its result under the request ID below.",
   "receipt.checkFailed": "Could not check the result: {error}",
   "receipt.lost": "No answer came back, so the result is unknown; checking with the server under this request ID.",
+  "receipt.resent": "Resent earlier request {id}; showing its result",
   "receipt.noRecord": "The server has no record under this request ID yet.",
   "chart.empty": "No readings in this stage's window yet.",
   "chart.window": "Window {start} to {end}",

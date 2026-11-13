@@ -1,6 +1,7 @@
 // Console start-up: session, hash routing, language, polling and notices.
 import { ApiError, createApi, singleFlight } from "./api.js";
 import { handOver } from "./drafts.js";
+import { clearIntents } from "./intents.js";
 import { LANGS, initialLang, makeT } from "./i18n.js";
 import { inboxCounts } from "./pages/inbox.js";
 import * as loginPage from "./pages/login.js";
@@ -90,6 +91,7 @@ function navigate(href) {
 // Remembers where the operator was, so signing in again leads back there, and keeps what was typed
 // into every form on the page (never a password), whichever request found the session gone.
 function onSessionLost() {
+  clearIntents(); // a device write's request id is not carried across a session
   if (parseHash(location.hash).page === "login") return;
   saveAllDrafts();
   state.returnTo = location.hash || hrefFor("inbox");
@@ -232,6 +234,7 @@ async function loadMe(token) {
   }
   // Someone else signed in: the previous operator's drafts are gone and their page is not reopened.
   const changed = handOver(state.lastOperator, state.me.operator);
+  if (changed) clearIntents();
   state.lastOperator = state.me.operator;
   if (changed) state.returnTo = null;
   if (changed && location.hash !== hrefFor("inbox")) {
