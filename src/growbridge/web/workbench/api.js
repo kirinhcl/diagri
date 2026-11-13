@@ -28,6 +28,8 @@ async function readBody(response) {
 }
 
 function toError(status, body) {
+  // No 5xx is a definitive refusal: whatever its body says, the action may or may not have happened.
+  if (status >= 500) return new ApiError(status, "server_error", `HTTP ${status}`);
   const detail = body ? body.detail : null;
   if (status === 422 && Array.isArray(detail)) {
     const fields = detail.map((d) => ({ loc: (d.loc || []).map(String), msg: String(d.msg || "") }));
@@ -36,7 +38,6 @@ function toError(status, body) {
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
     return new ApiError(status, detail.code || null, detail.message || detail.code);
   }
-  if (status >= 500) return new ApiError(status, "server_error", `HTTP ${status}`);
   return new ApiError(status, null, `HTTP ${status}`);
 }
 

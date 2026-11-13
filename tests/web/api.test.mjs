@@ -198,15 +198,22 @@ test("a 2xx response that is not JSON is a server error", async () => {
   assert.equal(await api.get("/x"), null);
 });
 
-test("a 5xx JSON answer without a refusal is a server error; one with a refusal keeps its code", async () => {
+test("a 5xx JSON answer is a server error, with or without a refusal object", async () => {
   const f = fakeFetch([reply(500, { detail: "Internal Server Error" }), reply(503, { detail: { code: "unavailable", message: "m" } })]);
   const api = createApi({ fetchImpl: f });
   await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 500);
-  await assert.rejects(api.post("/x"), (e) => e.code === "unavailable" && e.status === 503);
+  await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 503);
 });
 
 test("a 4xx JSON answer without a refusal object keeps no code", async () => {
   const f = fakeFetch([reply(404, { detail: "Unknown request id" })]);
   const api = createApi({ fetchImpl: f });
   await assert.rejects(api.get("/receipts/x"), (e) => e.code === null && e.status === 404);
+});
+
+test("a 5xx is never reported as a definitive refusal, whatever its body says", async () => {
+  const f = fakeFetch([reply(500, { detail: { code: "state", message: "refused" } }), reply(502, { detail: { code: "locked", message: "x" } })]);
+  const api = createApi({ fetchImpl: f });
+  await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 500);
+  await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 502);
 });

@@ -8,7 +8,6 @@ import {
   newRequestId,
   pollReceipt,
   receiptOutcome,
-  requestIdKeeper,
   sleep,
 } from "../../src/growbridge/web/workbench/receipts.js";
 
@@ -37,23 +36,14 @@ function fetcher(states) {
   return calls;
 }
 
-test("an identical resubmission keeps its request id until the write is settled", () => {
-  let made = 0;
-  const keeper = requestIdKeeper(() => `wb-id-${++made}`);
-  const intent = { path: "/manual/light", body: { stage_id: "s1", level: 40, note: "" } };
-  const first = keeper.idFor(intent);
-  assert.equal(keeper.idFor({ path: "/manual/light", body: { stage_id: "s1", level: 40, note: "" } }), first);
-  assert.notEqual(keeper.idFor({ ...intent, body: { ...intent.body, level: 41 } }), first);
-  const other = keeper.idFor(intent);
-  assert.notEqual(other, first); // a different request came in between: a new id
-  keeper.settle();
-  assert.notEqual(keeper.idFor(intent), other); // answered: the next write is a new action
-});
-
-test("only a missing or unreadable answer leaves the result of a write unknown", () => {
+test("a lost answer is no answer (status 0) or a server error (5xx), whatever the code says", () => {
   assert.equal(answerLost({ code: "network", status: 0 }), true);
   assert.equal(answerLost({ code: "server_error", status: 502 }), true);
-  for (const code of ["state", "validation", "reauth_required", "session", null]) assert.equal(answerLost({ code }), false);
+  assert.equal(answerLost({ code: "state", status: 500 }), true); // a 5xx with a detail body is still unknown
+  assert.equal(answerLost({ code: null, status: 503 }), true);
+  assert.equal(answerLost({ code: "network", status: 0 }), true);
+  for (const status of [200, 400, 401, 403, 409, 422, 429]) assert.equal(answerLost({ code: "state", status }), false);
+  assert.equal(answerLost({ code: "server_error", status: 200 }), true); // an answer that cannot be read says nothing
   assert.equal(answerLost(null), false);
 });
 

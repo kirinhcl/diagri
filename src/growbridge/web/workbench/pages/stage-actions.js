@@ -1,7 +1,8 @@
 // Stage controls. Which ones show follows stage-rules.js; the server stays the judge and every
 // refusal is shown with its reason. Nothing is shown as done before the server answered.
 import { ApiError } from "../api.js";
-import { answerLost, pollReceipt, RECEIPT_LIMIT_MS, requestIdKeeper } from "../receipts.js";
+import { idForIntent, intentKey, settleIntent, settlesIntent } from "../intents.js";
+import { answerLost, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
 import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
@@ -173,23 +174,27 @@ function pauseGroup(env) {
 }
 
 // --- manual control -------------------------------------------------------------------------------
-// A device write. Its request id is made before it is sent; when no readable answer comes back the
-// write may have happened, so it is listed as "result unknown, checking" and its receipt is followed
-// under that id, and sending the identical request again reuses the id.
-async function deviceWrite(env, { keeper, path, body, heading, action }) {
-  const requestId = keeper.idFor({ path, body });
+// A device write. Its request id is made before it is sent and kept in the module-level intents
+// (stage and action, so a re-render or an interleaved submission does not lose it); when no readable
+// answer comes back the write may have happened, so it is listed as "result unknown, checking" and
+// its receipt is followed under that id, and sending the identical request again reuses the id. The
+// intent goes when an answer settles it, or when its followed receipt reaches a final outcome.
+async function deviceWrite(env, { action, path, body, heading, label }) {
+  const key = intentKey(env.stage.stage_id, action);
+  const requestId = idForIntent(key, body);
   let record;
   try {
-    record = await env.ctx.api.post(path, { ...body, request_id: requestId }, { action });
+    record = await env.ctx.api.post(path, { ...body, request_id: requestId }, { action: label });
   } catch (error) {
     if (!answerLost(error)) {
-      keeper.settle();
+      settleIntent(key, requestId);
       throw error;
     }
-    env.log.track(heading, { request_id: requestId, created_at: Date.now() / 1000, state: "pending" }, { lost: true });
+    const pending = { request_id: requestId, created_at: Date.now() / 1000, state: "pending" };
+    env.log.track(heading, pending, { lost: true, onOutcome: (outcome) => settlesIntent(outcome) && settleIntent(key, requestId) });
     throw error;
   }
-  keeper.settle();
+  settleIntent(key, requestId);
   env.log.track(heading, record);
   await env.onChanged();
 }
@@ -203,11 +208,10 @@ function manualGroup(env) {
     { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true },
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
-  const keeper = requestIdKeeper();
   const onSubmit = async ({ channel, level, note: text }) => {
     const body = { stage_id: stage.stage_id, level, note: text || "" };
     const heading = ctx.t("receipt.manual", { channel: ctx.t(`channel.${channel}`), level });
-    await deviceWrite(env, { keeper, path: `/manual/${encodeURIComponent(channel)}`, body, heading, action: title });
+    await deviceWrite(env, { action: `manual:${channel}`, path: `/manual/${encodeURIComponent(channel)}`, body, heading, label: title });
   };
   const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
   return group("manual", title, note(ctx.t("stage.manual.ranges")), form);
@@ -228,11 +232,10 @@ function irrigationGroup(env, allowed) {
     { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true },
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
-  const keeper = requestIdKeeper();
   const onSubmit = async ({ seconds, note: text }) => {
     const body = { stage_id: stage.stage_id, seconds, note: text || "" };
     const heading = ctx.t("receipt.irrigation", { seconds });
-    await deviceWrite(env, { keeper, path: "/irrigation", body, heading, action: submitLabel });
+    await deviceWrite(env, { action: "irrigation", path: "/irrigation", body, heading, label: submitLabel });
   };
   return group("irrigation", title, simpleForm({ fields, submitLabel, onSubmit, ctx }));
 }
@@ -356,7 +359,7 @@ export function activityLog(ctx, life) {
   };
   const add = (heading, lines) => push(logItem(ctx, heading, null)).show(null, lines);
   // lost: no readable answer came for this write; it is followed under its request id all the same.
-  const track = (heading, record, { lost = false } = {}) => {
+  const track = (heading, record, { lost = false, onOutcome = () => {} } = {}) => {
     const item = push(logItem(ctx, heading, record));
     const note = lost ? ctx.t("receipt.lost") : null;
     item.show("pending", [note]);
@@ -364,6 +367,7 @@ export function activityLog(ctx, life) {
     const fetchReceipt = () => ctx.api.get(`/receipts/${encodeURIComponent(record.request_id)}`);
     pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
       .then((result) => {
+        onOutcome(result.outcome);
         if (result.outcome !== "stopped") item.show(result.outcome === "timeout" ? "unsettled" : result.outcome, outcomeLines(ctx, result));
       })
       .catch((error) => item.show("unsettled", outcomeLines(ctx, { outcome: "unsettled", record, error })));
