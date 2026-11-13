@@ -81,6 +81,15 @@ def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | No
     }
 
 
+def count_rounds_awaiting_choice(store: WorkflowStore) -> int:
+    """How many rounds wait for an operator's choice."""
+    row = store.db.one(
+        "SELECT COUNT(*) AS n FROM wf_rounds"
+        " WHERE awaiting_choice IS NOT NULL AND awaiting_choice != ''"
+    )
+    return row["n"] if row else 0
+
+
 def rounds_awaiting_choice(store: WorkflowStore, limit: int = 50) -> list[dict[str, Any]]:
     """Rounds waiting for an operator's choice, oldest first."""
     rows = store.db.query(

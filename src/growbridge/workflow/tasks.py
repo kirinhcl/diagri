@@ -112,6 +112,15 @@ class TaskBoard:
         )
         return tuple(self._load(row) for row in rows)
 
+    def count_in_states(self, states: Collection[TaskState]) -> int:
+        """How many tasks of any project are in one of ``states``."""
+        wanted = [state.value for state in states]
+        if not wanted:
+            return 0
+        marks = ",".join("?" for _ in wanted)
+        row = self.db.one(f"SELECT COUNT(*) AS n FROM task_board WHERE state IN ({marks})", wanted)
+        return row["n"] if row else 0
+
     def state_since(self, task_ids: Collection[str]) -> dict[str, float]:
         """When each task last changed state (its latest event); tasks without one are absent."""
         ids = list(task_ids)

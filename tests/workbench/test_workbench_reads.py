@@ -171,3 +171,27 @@ def test_inbox_keeps_a_new_critical_alert_when_alerts_overflow(bench, operator):
 def test_inbox_reports_no_truncation_when_nothing_is_cut(bench, operator):
     bench.pending()
     assert operator.get("/wb/inbox").json()["truncated"] == {}
+
+
+def test_inbox_lists_fifty_tasks_counts_the_rest_and_dates_only_those(bench, operator, monkeypatch):
+    for number in range(60):
+        task = ResearchTask(
+            id=f"task-{number}",
+            project_id="p1",
+            question="does more light help?",
+            owner_role="researcher",
+            budget=Budget(max_calls=5, max_cost=1.0),
+            trigger_event_id=f"ev-{number}",
+            correlation_id="corr-1",
+        )
+        bench.tasks.create(task)
+        bench.tasks.transition(task.id, TaskState.NEEDS_ATTENTION, f"mv-{number}", "stuck")
+    asked: list[int] = []
+    original = bench.tasks.state_since
+    monkeypatch.setattr(
+        bench.tasks, "state_since", lambda ids: asked.append(len(list(ids))) or original(ids)
+    )
+    body = operator.get("/wb/inbox").json()
+    assert sum(i["kind"] == "task" for i in body["items"]) == 50
+    assert body["truncated"]["task"] == 10
+    assert asked and max(asked) <= 50

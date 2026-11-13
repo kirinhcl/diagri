@@ -2,8 +2,8 @@
 
 Operators only: no login is refused with ``session`` and a model role with ``model_role``. None of
 these routes writes. The inbox gathers what waits for a person, at most ``INBOX_LIMIT`` items of
-each kind, oldest first; a kind whose service is not mounted is simply empty. Tasks carry no time
-of their own, so their ``since`` is ``None`` and they sort first.
+each kind, oldest first (alerts: most urgent first); a kind whose service is not mounted is simply
+empty. Rounds and tasks are fetched with that limit and the number cut comes from a COUNT query.
 """
 
 from collections.abc import Awaitable, Callable
@@ -18,14 +18,18 @@ from growbridge.compute.service import ComputeService
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import Actor, ControlPort, Denied
 from growbridge.workbench.rounds import PathId, ProjectBudget
-from growbridge.workflow.listing import project_detail, project_summaries, rounds_awaiting_choice
+from growbridge.workflow.listing import (
+    count_rounds_awaiting_choice,
+    project_detail,
+    project_summaries,
+    rounds_awaiting_choice,
+)
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState, TaskState
 from growbridge.workflow.store import StageRow
 from growbridge.workflow.tasks import TaskBoard
 
 INBOX_LIMIT = 50
-SCAN_LIMIT = 1000  # how many rows of one kind are read so the number cut can be reported
 SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 PROJECT_LIMIT = 200
 TASK_LIMIT = 100
@@ -98,7 +102,7 @@ def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
             row["created_at"],
             {"awaiting_choice": row["awaiting_choice"]},
         )
-        for row in rounds_awaiting_choice(workflow.store, SCAN_LIMIT)
+        for row in rounds_awaiting_choice(workflow.store, INBOX_LIMIT)
     ]
 
 
@@ -138,7 +142,7 @@ def _compute_items(compute: ComputeService | None) -> list[dict[str, Any]]:
 def _task_items(tasks: TaskBoard | None) -> list[dict[str, Any]]:
     if tasks is None:
         return []
-    found = tasks.in_states(ATTENTION_TASKS, SCAN_LIMIT)
+    found = tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT)
     since = tasks.state_since([task.id for task in found])
     return [
         _item(
@@ -212,10 +216,19 @@ def _inbox_routes(router, operator, workflow, tasks, alerts, compute) -> None:
 
     @router.get("/inbox")
     async def inbox(actor: Operator):
-        items = _stage_items(workflow) + _round_items(workflow) + _alert_items(alerts)
-        items += _compute_items(compute) + _task_items(tasks)
-        kept, truncated = _cap(items)
-        return {"items": kept, "truncated": truncated}
+        kept, truncated = _cap(
+            _stage_items(workflow) + _alert_items(alerts) + _compute_items(compute)
+        )
+        fetched = {"round_choice": _round_items(workflow), "task": _task_items(tasks)}
+        counts = {
+            "round_choice": count_rounds_awaiting_choice(workflow.store),
+            "task": 0 if tasks is None else tasks.count_in_states(ATTENTION_TASKS),
+        }
+        for kind, items in fetched.items():
+            kept += items
+            if counts[kind] > INBOX_LIMIT:
+                truncated[kind] = counts[kind] - INBOX_LIMIT
+        return {"items": _by_age(kept), "truncated": truncated}
 
 
 def _project_routes(router, operator, workflow, tasks, budget) -> None:

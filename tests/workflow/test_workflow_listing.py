@@ -1,6 +1,11 @@
 from growbridge.archive.models import Budget, ResearchTask
 from growbridge.sim.fixtures import make_protocol
-from growbridge.workflow.listing import project_detail, project_summaries, rounds_awaiting_choice
+from growbridge.workflow.listing import (
+    count_rounds_awaiting_choice,
+    project_detail,
+    project_summaries,
+    rounds_awaiting_choice,
+)
 from growbridge.workflow.states import TaskState
 from growbridge.workflow.tasks import TaskBoard
 
@@ -60,3 +65,20 @@ def test_task_board_in_states_filters_across_projects(world):
         "t2",
     ]
     assert board.in_states(set()) == ()
+
+
+async def test_count_rounds_awaiting_choice_counts_only_waiting_rounds(world):
+    await world.design()
+    assert count_rounds_awaiting_choice(world.svc.store) == 0
+    world.svc.store.update_round(world.round_id, awaiting_choice="stage-1")
+    assert count_rounds_awaiting_choice(world.svc.store) == 1
+
+
+def test_task_board_count_in_states_counts_across_projects(world):
+    board = TaskBoard(world.db, world.clock)
+    board.create(build_task("t1", "p1"))
+    board.create(build_task("t2", "p2"))
+    board.transition("t2", TaskState.NEEDS_REVIEW, "ev-1", "check")
+    assert board.count_in_states({TaskState.NEEDS_REVIEW}) == 1
+    assert board.count_in_states({TaskState.IN_PROGRESS, TaskState.NEEDS_REVIEW}) == 2
+    assert board.count_in_states(set()) == 0
