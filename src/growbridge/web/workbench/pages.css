@@ -209,6 +209,7 @@ code {
 }
 .chart-hit { fill: var(--green); opacity: 0; transition: opacity var(--fast); }
 .chart-hit:hover { opacity: 1; }
+.chart-lone { fill: var(--green); stroke: var(--paper); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-flagged {
   fill: var(--paper);
   stroke: var(--amber);

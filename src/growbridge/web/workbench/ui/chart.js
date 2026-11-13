@@ -1,14 +1,18 @@
 // Environment curves of a stage: one small SVG line chart per reading that has data.
 // Downsampling and problem samples are always stated, never hidden (design §2, anti-goals).
-import { METRICS, seriesPoints } from "../chart-math.js";
+import { METRICS, gapLimit, seriesPoints, splitAtGaps } from "../chart-math.js";
 import { formatNumber, formatTime } from "../format.js";
 import { h, svg } from "./dom.js";
 
 const WIDTH = 600;
 const HEIGHT = 120;
 const PAD = 8; // room for the markers at the edges
-const HIT_RADIUS = 6; // the hover target is bigger than the mark
-const FLAG_RADIUS = 3.5;
+// layer: drawing order. The hover target is bigger than any mark and invisible until hovered.
+const MARKS = {
+  hit: { className: "chart-hit", radius: 6, layer: 0 },
+  lone: { className: "chart-lone", radius: 3, layer: 1 },
+  flagged: { className: "chart-flagged", radius: 3.5, layer: 2 },
+};
 
 function timeLabel(epoch, timeZone, lang) {
   return `${formatTime(epoch, timeZone, lang)} ${timeZone}`;
@@ -33,23 +37,30 @@ function pointTitle(t, point, metric, options) {
   return point.flagged ? `${text} · ${t("chart.flaggedPoint")}` : text;
 }
 
-// Every point gets a hover target with its value and time; problem points are hollow circles,
-// drawn last so no hover target of a neighbour covers them.
-function pointMarks(t, points, metric, options) {
-  const ordered = [...points.filter((point) => !point.flagged), ...points.filter((point) => point.flagged)];
-  return ordered.map((point) => {
-    const title = svg("title", {}, pointTitle(t, point, metric, options));
-    const attrs = { cx: point.x.toFixed(1), cy: point.y.toFixed(1) };
-    if (point.flagged) {
-      return svg("circle", { ...attrs, r: FLAG_RADIUS, class: "chart-flagged" }, title);
-    }
-    return svg("circle", { ...attrs, r: HIT_RADIUS, class: "chart-hit" }, title);
-  });
+// Every point gets a hover target with its value and time. A point with no neighbour on a line is a
+// visible dot and a problem point a hollow circle; both are drawn last so no neighbour's hover target
+// covers them.
+function pointMarks(t, segments, metric, options) {
+  const lone = new Set(segments.filter((segment) => segment.length === 1).map((segment) => segment[0]));
+  const markOf = (point) => (point.flagged ? MARKS.flagged : lone.has(point) ? MARKS.lone : MARKS.hit);
+  return segments
+    .flat()
+    .map((point) => ({ point, mark: markOf(point) }))
+    .sort((a, b) => a.mark.layer - b.mark.layer)
+    .map(({ point, mark }) => {
+      const attrs = { cx: point.x.toFixed(1), cy: point.y.toFixed(1), r: mark.radius, class: mark.className };
+      return svg("circle", attrs, svg("title", {}, pointTitle(t, point, metric, options)));
+    });
 }
 
-function plot(t, series, metric, options) {
+// One polyline per run of points; the line is never drawn across a gap in the data.
+function lines(segments) {
+  const coordinates = (segment) => segment.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
+  return segments.filter((segment) => segment.length > 1).map((segment) => svg("polyline", { class: "chart-line", points: coordinates(segment) }));
+}
+
+function plot(t, series, segments, metric, options) {
   const { points } = series;
-  const line = points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(" ");
   const summary = t("chart.summary", {
     metric: t(`metric.${metric.key}`),
     count: points.length,
@@ -64,8 +75,8 @@ function plot(t, series, metric, options) {
       { transform: `translate(${PAD} ${PAD})` },
       svg("line", { class: "chart-rule", x1: 0, y1: 0, x2: WIDTH, y2: 0 }),
       svg("line", { class: "chart-rule", x1: 0, y1: HEIGHT, x2: WIDTH, y2: HEIGHT }),
-      points.length > 1 ? svg("polyline", { class: "chart-line", points: line }) : null,
-      pointMarks(t, points, metric, options),
+      lines(segments),
+      pointMarks(t, segments, metric, options),
     ),
   );
 }
@@ -89,29 +100,37 @@ function chartHead(t, series, metric, options) {
   );
 }
 
-function notes(t, readings, samples, options) {
-  const lines = [];
+function notes(t, readings, samples, options, hasGaps) {
+  const said = [];
   const { start, end } = span(readings, samples);
-  lines.push(t("chart.window", { start: timeLabel(start, options.timeZone, options.lang), end: timeLabel(end, options.timeZone, options.lang) }));
+  said.push(t("chart.window", { start: timeLabel(start, options.timeZone, options.lang), end: timeLabel(end, options.timeZone, options.lang) }));
   if (readings.downsampled) {
-    lines.push(t("chart.downsampled", { shown: samples.length, total: readings.total_samples }));
+    said.push(t("chart.downsampled", { shown: samples.length, total: readings.total_samples }));
   }
-  if (readings.flagged_total > 0) lines.push(t("chart.flagged", { count: readings.flagged_total }));
-  return h("div", { class: "chart-notes" }, lines.map((line) => h("p", { text: line })));
+  if (readings.flagged_total > 0) said.push(t("chart.flagged", { count: readings.flagged_total }));
+  if (hasGaps) said.push(t("chart.gaps"));
+  return h("div", { class: "chart-notes" }, said.map((line) => h("p", { text: line })));
 }
 
-// readingsChart(t, readings, { timeZone, lang }) -> Element
-export function readingsChart(t, readings, { timeZone = "UTC", lang = "en" } = {}) {
+// readingsChart(t, readings, { timeZone, lang, sampleSeconds }) -> Element
+// sampleSeconds: the run sheet's sampling interval, when known; it widens the gap limit so a series
+// sampled more slowly than the bucket width is not cut into dots.
+export function readingsChart(t, readings, { timeZone = "UTC", lang = "en", sampleSeconds = null } = {}) {
   const samples = readings && Array.isArray(readings.samples) ? readings.samples : [];
   const options = { timeZone, lang };
   if (samples.length === 0) return h("p", { class: "chart-empty", text: t("chart.empty") });
   const box = { width: WIDTH, height: HEIGHT, ...span(readings, samples) };
+  const maxGap = gapLimit(readings.window, sampleSeconds);
   const figures = [];
+  let hasGaps = false;
   for (const metric of METRICS) {
     const series = seriesPoints(samples, metric.key, box);
     if (series.points.length === 0) continue;
-    figures.push(h("figure", { class: "chart" }, chartHead(t, series, metric, options), plot(t, series, metric, options)));
+    const segments = splitAtGaps(series.points, maxGap);
+    hasGaps = hasGaps || segments.length > 1;
+    const figure = h("figure", { class: "chart" }, chartHead(t, series, metric, options), plot(t, series, segments, metric, options));
+    figures.push(figure);
   }
   if (figures.length === 0) return h("p", { class: "chart-empty", text: t("chart.empty") });
-  return h("div", { class: "readings" }, notes(t, readings, samples, options), h("div", { class: "chart-grid" }, figures));
+  return h("div", { class: "readings" }, notes(t, readings, samples, options, hasGaps), h("div", { class: "chart-grid" }, figures));
 }

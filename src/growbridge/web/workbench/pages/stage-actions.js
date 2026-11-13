@@ -133,11 +133,10 @@ function draftGroup(env) {
     if (list.some((finding) => finding.blocking)) throw new Error(ctx.t("stage.draft.refused"));
     await accepted(env, submitLabel);
   };
-  const value = { round_id: env.roundId || "", run_sheet: review.run_sheet };
+  const value = { round_id: env.roundId, run_sheet: review.run_sheet };
   const label = ctx.t("stage.draft.json");
   const editor = jsonEditor({ label, value, submitLabel, onSubmit, draftKey: `run-sheet:${stage.stage_id}`, ctx });
-  const missingRound = env.roundId ? null : note(ctx.t("stage.draft.noRound"));
-  return group("draft", title, note(ctx.t("stage.draft.note")), missingRound, editor, findings);
+  return group("draft", title, note(ctx.t("stage.draft.note")), editor, findings);
 }
 
 // --- running and paused ---------------------------------------------------------------------------

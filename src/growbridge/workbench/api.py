@@ -466,7 +466,13 @@ class Workbench:
 
         @router.get("/stages/{stage_id}")
         async def stage(stage_id: str, actor: Anyone):
-            return runtime_json(self.workflow.stage(stage_id))
+            runtime = self.workflow.stage(stage_id)
+            row = self.workflow.store.find_stage(stage_id)  # the runtime does not name its round
+            return {
+                **runtime_json(runtime),
+                "round_id": row.round_id if row else None,
+                "project_id": row.project_id if row else runtime.project_id,
+            }
 
         @router.get("/receipts/{request_id}")
         async def receipt(request_id: str, actor: Anyone):

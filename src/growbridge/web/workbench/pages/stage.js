@@ -14,7 +14,6 @@ import { measurementForm, measurementTable } from "./stage-measurements.js";
 
 const POLL_SECONDS = 15;
 const READING_POINTS = 600;
-const ROUND_LOOKUP_LIMIT = 10; // the project's newest rounds searched for this stage
 const SECONDS_PER_HOUR = 3600;
 
 const enc = encodeURIComponent;
@@ -64,24 +63,6 @@ async function loadAll(ctx, stageId) {
   return { stage: stage.value, review, readings, measurements, history };
 }
 
-// The stage record does not name its round, so the project's newest rounds are searched once.
-async function findRound(ctx, stage) {
-  const project = await ctx.api.get(`/projects/${enc(stage.project_id)}`);
-  const rounds = (Array.isArray(project.rounds) ? project.rounds : []).slice(0, ROUND_LOOKUP_LIMIT);
-  const details = await Promise.all(rounds.map((row) => ctx.api.get(`/rounds/${enc(row.round_id)}`)));
-  const holds = (round) => Array.isArray(round.stages) && round.stages.some((row) => row.stage_id === stage.stage_id);
-  const match = details.find(holds);
-  return match ? match.round_id : null;
-}
-
-async function lookupRound(ctx, stage) {
-  try {
-    return { id: await findRound(ctx, stage), error: null };
-  } catch (error) {
-    return { id: null, error }; // the status says the round could not be looked up
-  }
-}
-
 // --- parts ------------------------------------------------------------------------------------------
 function region(className) {
   const element = h("div", { class: className });
@@ -107,12 +88,11 @@ function showResult(part, ctx, result, signatureOf, build) {
   part.show(signatureOf(result.value), () => build(result.value));
 }
 
-function roundCell(ctx, round) {
-  if (round.id) return h("a", { class: "text-link", attrs: { href: hrefFor("round", { roundId: round.id }) }, text: round.id });
-  return ctx.t(round.error ? "stage.roundUnread" : "stage.roundUnknown");
+function roundCell(roundId) {
+  return roundId ? h("a", { class: "text-link", attrs: { href: hrefFor("round", { roundId }) }, text: roundId }) : null;
 }
 
-function statusView(ctx, stage, round) {
+function statusView(ctx, stage) {
   const projectHref = hrefFor("project", { projectId: stage.project_id });
   const dash = (value) => (value === null || value === undefined ? "—" : String(value));
   const rights = ctx.t("stage.rightsValue", { stage: dash(stage.right_number), care: dash(stage.care_right), manual: dash(stage.manual_right) });
@@ -120,7 +100,7 @@ function statusView(ctx, stage, round) {
     [ctx.t("col.state"), statePill(ctx.t, stage.state)],
     stage.prior_state ? [ctx.t("stage.prior"), statePill(ctx.t, stage.prior_state)] : null,
     [ctx.t("stage.project"), h("a", { class: "text-link", attrs: { href: projectHref }, text: stage.project_id })],
-    [ctx.t("stage.round"), roundCell(ctx, round)],
+    [ctx.t("stage.round"), roundCell(stage.round_id)],
     [ctx.t("stage.experiment"), stage.experiment_id],
     [ctx.t("stage.started"), timeText(ctx, stage.started_at)],
     [ctx.t("stage.pausedAt"), timeText(ctx, stage.paused_at)],
@@ -160,11 +140,12 @@ function draw(page, data) {
   const review = data.review.error ? null : data.review.value;
   head.pill.replaceChildren(statePill(ctx.t, stage.state));
   head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: POLL_SECONDS });
-  parts.status.show(JSON.stringify(stage), () => statusView(ctx, stage, page.round));
+  parts.status.show(JSON.stringify(stage), () => statusView(ctx, stage));
   const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review]);
-  parts.actions.show(actionKey, () => actionsView({ ...page.env, stage, review }));
-  const chart = (readings) => readingsChart(ctx.t, readings, { timeZone: zoneOf(ctx), lang: ctx.lang });
-  showResult(parts.readings, ctx, data.readings, readingsKey, chart);
+  parts.actions.show(actionKey, () => actionsView({ ...page.env, stage, review, roundId: stage.round_id }));
+  const sampleSeconds = review && review.run_sheet && review.run_sheet.sampling ? review.run_sheet.sampling.interval_seconds : null;
+  const chart = (readings) => readingsChart(ctx.t, readings, { timeZone: zoneOf(ctx), lang: ctx.lang, sampleSeconds });
+  showResult(parts.readings, ctx, data.readings, (readings) => `${readingsKey(readings)}|${sampleSeconds}`, chart);
   showResult(parts.review, ctx, data.review, (r) => JSON.stringify([r.run_sheet_digest, r.findings]), (r) => reviewView(ctx, r));
   showResult(parts.measurements, ctx, data.measurements, (r) => JSON.stringify(r.measurements), (r) => measurementTable(ctx, r.measurements));
   showResult(parts.history, ctx, data.history, (r) => JSON.stringify(r), (r) => historyView(ctx, r));
@@ -181,8 +162,8 @@ function headView(ctx, stageId, onRefresh) {
   return { element: h("header", { class: "page-head" }, text, button), pill, updated };
 }
 
-function setCrumbs(ctx, stage, roundId) {
-  const projectId = stage.project_id;
+function setCrumbs(ctx, stage) {
+  const { project_id: projectId, round_id: roundId } = stage;
   const crumbs = [
     { label: ctx.t("nav.projects"), href: hrefFor("projects") },
     { label: ctx.t("crumb.project", { id: projectId }), href: hrefFor("project", { projectId }) },
@@ -224,13 +205,15 @@ function sections(ctx, page, stage, onRecorded) {
   ];
 }
 
-export async function render(ctx, params) {
-  const first = await loadAll(ctx, params.stageId);
-  const round = await lookupRound(ctx, first.stage);
-  setCrumbs(ctx, first.stage, round.id);
+export async function render(shellCtx, params) {
+  const first = await loadAll(shellCtx, params.stageId);
+  setCrumbs(shellCtx, first.stage);
+  // Everything on this page reads again in place: a form's state conflict (409) calls ctx.reload,
+  // and a full re-render would drop the action log and stop the receipt polls still running.
+  const ctx = { ...shellCtx, reload: () => refresh() };
   const element = h("div", { class: "page stage" });
   const problem = h("div", { class: "form-status form-status-error", attrs: { role: "status", hidden: true } });
-  const page = { ctx, round, parts: makeParts(), problem, log: activityLog(ctx, pageLife(element)) };
+  const page = { ctx, parts: makeParts(), problem, log: activityLog(ctx, pageLife(element)) };
   const refresh = coalesce(async () => {
     try {
       draw(page, await loadAll(ctx, params.stageId));
@@ -241,7 +224,7 @@ export async function render(ctx, params) {
     }
   });
   page.head = headView(ctx, params.stageId, refresh);
-  page.env = { ctx, roundId: round.id, log: page.log, onChanged: refresh };
+  page.env = { ctx, log: page.log, onChanged: refresh };
   const onRecorded = async (message) => {
     ctx.notify(message, "ok");
     await refresh();

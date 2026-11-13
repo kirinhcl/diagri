@@ -68,6 +68,15 @@ def test_stage_state_can_be_read(bench, operator):
     assert "run_sheet" not in body
 
 
+def test_stage_read_names_its_round_and_project(bench, operator):
+    bench.pending()
+
+    body = operator.get("/wb/stages/stage-1").json()
+
+    assert body["round_id"] == bench.round_id
+    assert body["project_id"] == bench.project_id
+
+
 # --- recent re-authentication ------------------------------------------------------------------
 
 
