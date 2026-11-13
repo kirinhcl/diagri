@@ -214,8 +214,8 @@ The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体
 
 ```sh
 .venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'
-.venv/bin/ruff check src tests
-.venv/bin/ruff format --check src tests
+.venv/bin/ruff check src tests scripts
+.venv/bin/ruff format --check src tests scripts
 .venv/bin/pytest -q
 .venv/bin/python -m build
 ```

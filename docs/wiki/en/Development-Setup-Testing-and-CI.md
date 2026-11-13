@@ -66,7 +66,7 @@ CI runs these steps in this order. Run them the same way before you push. CI cal
 Notes on single steps:
 
 - **Steps 3 and 4.** `.venv/bin/ruff check --fix src tests scripts` and `.venv/bin/ruff format src tests scripts` repair most findings.
-- **Step 5.** The suite collects 1452 code tests plus the wiki tests in `tests/docs/`. At the time of writing, the code tests alone give `1452 passed` in about 30 seconds on macOS with the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
+- **Step 5.** The suite collects the code tests plus the wiki tests in `tests/docs/`. On 2026-11-13 it collected 2295 tests, 2184 code tests and 111 wiki tests, and gave `2295 passed` in about 65 seconds on macOS with Python 3.14 and the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
 - **Step 6.** `build` creates an isolated environment and downloads the build backend (`setuptools`), so this step needs the network. Git ignores `dist/`.
 
 One more check is useful although CI does not run it: `.venv/bin/growbridge simulate` runs one short stage on the simulated AC5 through the assembled runtime and prints a summary. [Tutorial: a simulated research round](Tutorial-Simulated-Round.md) walks through it.
@@ -94,7 +94,7 @@ Tests live in [`tests/`](../../../tests), one folder per area. The folders are n
 | `tests/transport/` | `halt` on both BLE transports, and the pid file and folder checks of the native transport. |
 | `tests/e2e/` | The assembled runtime: a full research round, interventions, model roles, the CLI commands, and a round driven through the HTTP routes. |
 | `tests/docs/` | This wiki: every page exists in `en/` and `zh-CN/`, the page table in [the wiki README](../README.md) lists exactly the pages that exist, relative links point at existing files, and every page links to its translation. |
-| `tests/test_*.py` | The original bridge: protocol framing, device controls, the HTTP API with MCP, the dashboard. 31 tests. |
+| `tests/test_*.py` | The original bridge: protocol framing, device controls, the HTTP API with MCP, the dashboard. 32 tests. |
 
 Two things apply everywhere:
 
@@ -118,10 +118,10 @@ The `dev` extra also installs `pytest-cov`. CI does not measure coverage. If you
 
 | Tests | Skipped when | Why |
 | --- | --- | --- |
-| 13 tests in [`tests/research/test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py) and 1 in [`tests/e2e/test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py) | The platform is not macOS, or `/usr/bin/sandbox-exec` is missing. | They run real scripts inside the macOS sandbox (`SeatbeltSandbox`). On other platforms the code uses `RefusingSandbox`, which the other tests in the file cover. |
+| 14 tests in [`tests/research/test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py), 1 in [`tests/e2e/test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py) and 1 in [`tests/e2e/test_e2e_sandbox_roots.py`](../../../tests/e2e/test_e2e_sandbox_roots.py) | The platform is not macOS, or `/usr/bin/sandbox-exec` is missing. | They run real scripts inside the macOS sandbox (`SeatbeltSandbox`), or check which directories it denies. On other platforms the code uses `RefusingSandbox`, which the other tests in the first file cover. |
 | 2 tests in [`tests/agents/test_agents_llm.py`](../../../tests/agents/test_agents_llm.py) | The `anthropic` package is not installed. | They build `AnthropicClient` with a stubbed `messages.create`. No request is sent. |
 
-CI installs only the `dev` extra, so expect the two `anthropic` tests to be skipped in every CI job and the 14 sandbox tests in the Linux jobs. This follows from the workflow file and has not been checked against a CI log.
+CI installs only the `dev` extra, so the two `anthropic` tests are skipped in every CI job and the 16 sandbox tests in the Linux jobs. The CI log of 2026-11-13 agrees: 2 skipped in the macOS jobs and 18 in the Linux jobs.
 
 ## Rule: no network, no radio, no real credentials
 

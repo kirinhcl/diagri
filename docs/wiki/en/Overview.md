@@ -89,7 +89,7 @@ One thing is outside the system's reach: the AC5 panel and the vendor app can st
 ## Status
 
 - GrowBridge on its own (bridge-only mode) has read and controlled one real AC5 from a Mac ([VALIDATION.md](../../../VALIDATION.md)). It has not been verified on a Raspberry Pi.
-- DiAGRI as a whole passes its automated tests on a simulated AC5 only (1452 code tests at the last run). It has never run against a real device, real notification services or CSC.
+- DiAGRI as a whole passes its automated tests on a simulated AC5 only (2184 code tests at the last run, 2026-11-13). It has never run against a real device, real notification services or CSC.
 - Several parts are deployment items or are not implemented yet, among them a web page for the workbench and job submission to CSC.
 
 The full list is on [Status and known limitations](Status-and-Known-Limitations.md).

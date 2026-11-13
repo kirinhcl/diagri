@@ -66,7 +66,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 几点说明：
 
 - **第 3、4 步。** 大多数问题可以用 `.venv/bin/ruff check --fix src tests scripts` 和 `.venv/bin/ruff format src tests scripts` 自动修好。
-- **第 5 步。** 整套测试由 1452 个代码测试加上 `tests/docs/` 里的 Wiki 测试组成。写这一页时，单是代码测试在 macOS 上（装了 `agents`）的结果是 `1452 passed`，用时约 30 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
+- **第 5 步。** 整套测试由代码测试加上 `tests/docs/` 里的 Wiki 测试组成。2026-11-13 共收集到 2295 个测试，其中代码测试 2184 个、Wiki 测试 111 个；在 macOS 上用 Python 3.14（装了 `agents`）运行，结果是 `2295 passed`，用时约 65 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
 - **第 6 步。** `build` 会新建一个隔离环境并下载构建后端（`setuptools`），所以这一步需要联网。`dist/` 已被 Git 忽略。
 
 还有一项 CI 不跑、但很有用的检查：`.venv/bin/growbridge simulate` 会用装配好的运行时在模拟的 AC5 上跑完一个很短的阶段，并打印结果摘要。[教程：在模拟器上跑通一轮研究](Tutorial-Simulated-Round.md)里有完整的讲解。
@@ -94,7 +94,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | `tests/transport/` | 两种 BLE 传输的 `halt`，以及原生传输对 pid 文件和目录权限的检查。 |
 | `tests/e2e/` | 装配好的运行时：完整的一轮研究、人工干预、模型角色、CLI 命令，以及经 HTTP 路由走完的一轮。 |
 | `tests/docs/` | 这个 Wiki 本身：每个页面在 `en/` 和 `zh-CN/` 下都有；[Wiki 的 README](../README.md) 里的页面表和实际存在的页面完全一致；相对链接指向的文件存在；每个页面都链接到另一种语言的版本。 |
-| `tests/test_*.py` | 最初的桥接层：协议分帧、设备控制、HTTP API 与 MCP、控制台。共 31 个测试。 |
+| `tests/test_*.py` | 最初的桥接层：协议分帧、设备控制、HTTP API 与 MCP、控制台。共 32 个测试。 |
 
 有两点对所有目录都适用：
 
@@ -118,10 +118,10 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 
 | 测试 | 什么时候跳过 | 原因 |
 | --- | --- | --- |
-| [`tests/research/test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py) 里的 13 个，[`tests/e2e/test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py) 里的 1 个 | 不是 macOS，或者没有 `/usr/bin/sandbox-exec`。 | 它们在 macOS 的沙箱（`SeatbeltSandbox`）里真正运行脚本。其他平台上代码使用 `RefusingSandbox`，同一个文件里的其他测试覆盖了它。 |
+| [`tests/research/test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py) 里的 14 个，[`tests/e2e/test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py) 里的 1 个，[`tests/e2e/test_e2e_sandbox_roots.py`](../../../tests/e2e/test_e2e_sandbox_roots.py) 里的 1 个 | 不是 macOS，或者没有 `/usr/bin/sandbox-exec`。 | 它们在 macOS 的沙箱（`SeatbeltSandbox`）里真正运行脚本，或者检查沙箱禁止读取哪些目录。其他平台上代码使用 `RefusingSandbox`，第一个文件里的其他测试覆盖了它。 |
 | [`tests/agents/test_agents_llm.py`](../../../tests/agents/test_agents_llm.py) 里的 2 个 | 没有安装 `anthropic`。 | 它们构造 `AnthropicClient`，并把 `messages.create` 换成桩。不会发出任何请求。 |
 
-CI 只安装 `dev`，所以这两个 `anthropic` 测试在所有 CI 作业里都应该被跳过，14 个沙箱测试在 Linux 作业里也应该被跳过。这是从工作流文件推出来的，没有对照 CI 日志核实。
+CI 只安装 `dev`，所以这两个 `anthropic` 测试在所有 CI 作业里都会被跳过，16 个沙箱测试在 Linux 作业里也会被跳过。2026-11-13 的 CI 日志与此一致：macOS 作业跳过 2 个，Linux 作业跳过 18 个。
 
 ## 规则：不联网、不碰蓝牙、不用真实凭据
 
