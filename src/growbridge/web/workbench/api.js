@@ -11,11 +11,19 @@ export class ApiError extends Error {
   }
 }
 
+// Returns {empty, data, valid}: an empty body is fine, a non-JSON body is not.
 async function readBody(response) {
+  let text = "";
   try {
-    return await response.json();
+    text = await response.text();
   } catch {
-    return null;
+    return { empty: false, data: null, valid: false };
+  }
+  if (text.trim() === "") return { empty: true, data: null, valid: true };
+  try {
+    return { empty: false, data: JSON.parse(text), valid: true };
+  } catch {
+    return { empty: false, data: null, valid: false };
   }
 }
 
@@ -46,8 +54,10 @@ export function createApi({ fetchImpl, askReauth, onSessionLost } = {}) {
     } catch (cause) {
       throw new ApiError(0, "network", String(cause && cause.message ? cause.message : cause));
     }
-    const data = await readBody(response);
+    const { data, valid } = await readBody(response);
+    if (!valid) throw new ApiError(response.status, "network", `HTTP ${response.status}: not JSON`);
     if (response.ok) return data;
+    if (data === null) throw new ApiError(response.status, "network", `HTTP ${response.status}`);
     throw toError(response.status, data);
   }
 
@@ -60,8 +70,12 @@ export function createApi({ fetchImpl, askReauth, onSessionLost } = {}) {
       }
       const secret = await askReauth(action);
       if (secret === null || secret === undefined) throw error;
-      await send("POST", "/reauth", { secret });
-      return send("POST", path, body);
+      try {
+        await send("POST", "/reauth", { secret });
+        return await send("POST", path, body);
+      } catch (retryError) {
+        throw await sessionCheck(retryError);
+      }
     }
   }
 

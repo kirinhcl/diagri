@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { ApiError, createApi, singleFlight } from "../../src/growbridge/web/workbench/api.js";
 
 function reply(status, body) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+  const text = typeof body === "string" ? body : JSON.stringify(body);
+  return { ok: status >= 200 && status < 300, status, text: async () => text };
 }
 
 function fakeFetch(responses) {
@@ -129,4 +130,44 @@ test("singleFlight ignores calls while one is pending", async () => {
   assert.equal(n, 2);
   release(2);
   await c;
+});
+
+const lostSession = () => reply(401, { detail: { code: "session", message: "m" } });
+
+test("a session error during the retry calls onSessionLost", async () => {
+  const f = fakeFetch([denial("reauth_required"), reply(200, {}), lostSession()]);
+  let lost = 0;
+  const api = createApi({ fetchImpl: f, askReauth: async () => "s", onSessionLost: () => (lost += 1) });
+  await assert.rejects(api.post("/x"), (e) => e.code === "session");
+  assert.equal(lost, 1);
+});
+
+test("a session error from POST /reauth calls onSessionLost and does not retry", async () => {
+  const f = fakeFetch([denial("reauth_required"), lostSession()]);
+  let lost = 0;
+  const api = createApi({ fetchImpl: f, askReauth: async () => "s", onSessionLost: () => (lost += 1) });
+  await assert.rejects(api.post("/x"), (e) => e.code === "session");
+  assert.equal(lost, 1);
+  assert.equal(f.calls.length, 2);
+});
+
+test("a failed reauth (403) does not retry the original request", async () => {
+  const f = fakeFetch([denial("reauth_required"), denial("session_wrong")]);
+  const api = createApi({ fetchImpl: f, askReauth: async () => "bad" });
+  await assert.rejects(api.post("/x"), (e) => e.status === 403 && e.code === "session_wrong");
+  assert.equal(f.calls.length, 2);
+});
+
+test("an HTML error page becomes a network error with its status", async () => {
+  const f = fakeFetch([reply(502, "<html>Bad Gateway</html>"), reply(503, "")]);
+  const api = createApi({ fetchImpl: f });
+  await assert.rejects(api.get("/x"), (e) => e.code === "network" && e.status === 502);
+  await assert.rejects(api.get("/x"), (e) => e.code === "network" && e.status === 503);
+});
+
+test("a 2xx response that is not JSON is an error", async () => {
+  const f = fakeFetch([reply(200, "<html>oops</html>"), reply(204, "")]);
+  const api = createApi({ fetchImpl: f });
+  await assert.rejects(api.get("/x"), (e) => e.code === "network" && e.status === 200);
+  assert.equal(await api.get("/x"), null);
 });
