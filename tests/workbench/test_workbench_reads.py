@@ -144,3 +144,13 @@ def test_a_task_item_is_dated_by_its_last_state_change(bench, operator):
     bench.clock.wall = 900.0
     items = [i for i in operator.get("/wb/inbox").json()["items"] if i["kind"] == "task"]
     assert [(i["id"], i["since"]) for i in items] == [("task-1", 777.0)]
+
+
+def test_inbox_shows_an_alert_raised_again_after_it_was_read(bench, operator):
+    alert = bench.alerts.raise_alert("threshold", "too_hot", "warning", "31 C")
+    assert bench.post(operator, f"/wb/alerts/{alert.event_id}/read").status_code == 200
+    assert "alert" not in [i["kind"] for i in operator.get("/wb/inbox").json()["items"]]
+    bench.clock.advance(60)
+    bench.alerts.raise_alert("threshold", "too_hot", "critical", "35 C")
+    items = operator.get("/wb/inbox").json()["items"]
+    assert [i["id"] for i in items if i["kind"] == "alert"] == [alert.event_id]

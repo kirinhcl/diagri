@@ -100,7 +100,7 @@ def _alert_items(alerts: AlertBook | None) -> list[dict[str, Any]]:
             },
         )
         for alert in alerts.open()
-        if alert.read_at is None
+        if alert.read_at is None or alert.read_at < alert.last_at  # raised again after the read
     ]
     return _by_age(items)[:INBOX_LIMIT]
 
