@@ -12,6 +12,18 @@ export function takeDraft(key) {
   return values;
 }
 
+export function clearDrafts() {
+  drafts.clear();
+}
+
+// A different operator must not inherit another's half-filled forms: true (and drafts gone) when
+// someone other than the previous operator signed in. No previous operator means nothing to hand over.
+export function handOver(previousOperator, operator) {
+  const changed = Boolean(previousOperator) && previousOperator !== operator;
+  if (changed) clearDrafts();
+  return changed;
+}
+
 export function stripSecrets(values, secretNames) {
   const hidden = new Set(secretNames);
   return Object.fromEntries(Object.entries(values).filter(([name]) => !hidden.has(name)));

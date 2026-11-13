@@ -1,5 +1,6 @@
 // Console start-up: session, hash routing, language, polling and notices.
 import { ApiError, createApi, singleFlight } from "./api.js";
+import { handOver } from "./drafts.js";
 import { LANGS, initialLang, makeT } from "./i18n.js";
 import { inboxCounts } from "./pages/inbox.js";
 import * as loginPage from "./pages/login.js";
@@ -21,7 +22,18 @@ const ID_CRUMBS = new Map([
 
 const app = document.getElementById("app");
 const notices = h("div", { class: "notice-region", attrs: { "aria-live": "polite" } });
-const state = { lang: "en", t: makeT("en"), me: null, frame: null, at: null, poll: null, timer: null, token: 0, returnTo: null };
+const state = {
+  lang: "en",
+  t: makeT("en"),
+  me: null,
+  lastOperator: null, // who was signed in before; survives sign-out and a lost session
+  frame: null,
+  at: null,
+  poll: null,
+  timer: null,
+  token: 0,
+  returnTo: null,
+};
 const api = createApi({ askReauth: (action) => askSecret(state.t, action || ""), onSessionLost });
 
 // --- language: the only thing kept in localStorage ------------------------------------------------
@@ -209,13 +221,21 @@ async function showLogin(token) {
 async function loadMe(token) {
   try {
     state.me = await api.get("/me");
-    return true;
   } catch (error) {
     // A lost session has already been sent to the sign-in page by onSessionLost.
     const lost = error instanceof ApiError && error.code === "session";
     if (token === state.token && !lost) showFatal(error);
     return false;
   }
+  // Someone else signed in: the previous operator's drafts are gone and their page is not reopened.
+  const changed = handOver(state.lastOperator, state.me.operator);
+  state.lastOperator = state.me.operator;
+  if (changed) state.returnTo = null;
+  if (changed && location.hash !== hrefFor("inbox")) {
+    navigate(hrefFor("inbox"));
+    return false;
+  }
+  return true;
 }
 
 async function route() {

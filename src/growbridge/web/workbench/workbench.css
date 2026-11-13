@@ -11,7 +11,7 @@ body {
   --red-soft: color-mix(in srgb, var(--red) 10%, var(--paper));
   --muted-soft: color-mix(in srgb, var(--muted) 12%, var(--paper));
   --muted-strong: color-mix(in srgb, var(--muted) 70%, var(--ink));
-  --focus: color-mix(in srgb, var(--green) 62%, var(--paper));
+  --focus: var(--green); /* at least 3:1 against paper, bg, pale and the sidebar */
   --shadow: color-mix(in srgb, var(--ink) 22%, transparent);
   --side: color-mix(in srgb, var(--paper) 62%, var(--bg));
   --fast: 150ms ease;
