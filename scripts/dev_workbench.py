@@ -19,6 +19,7 @@ DEV_LAN_PORT = 8770
 SECRET_VARIABLE = "GROWBRIDGE_DEV_SECRET"
 OPERATOR = "dev"
 STAGE_ID = "stage-dev"
+STATUS_SECONDS = 1.0  # a real AC5 pushes telemetry; the simulator answers only when asked
 
 
 def _seed(runtime) -> None:
@@ -47,6 +48,16 @@ def _seed(runtime) -> None:
         raise RuntimeError("the dev run sheet was refused: " + "; ".join(blocking))
 
 
+async def poll_status(request, interval: float = STATUS_SECONDS, sleep=asyncio.sleep) -> None:
+    """Ask the device for its status forever so readings stay fresh; a failed ask is retried."""
+    while True:
+        try:
+            await request("getDevSta")
+        except Exception as error:  # noqa: BLE001 - a dev loop must outlive a busy device
+            print(f"status request failed: {type(error).__name__}", file=sys.stderr)
+        await sleep(interval)
+
+
 async def _run(settings, secret: str) -> None:
     from growbridge.api import create_app
     from growbridge.cli import _serve_listeners, _tick_forever
@@ -61,13 +72,16 @@ async def _run(settings, secret: str) -> None:
         router = runtime.workbench({})
         await runtime.start()
         ticker = asyncio.create_task(_tick_forever(runtime))
+        poller = asyncio.create_task(poll_status(runtime.bridge.request))
         app = create_app(settings, bridge=runtime.bridge, workbench=router)
-        print(f"Workbench: http://localhost:{DEV_LAN_PORT}/workbench  (operator: {OPERATOR})")
+        print(f"On-site entry: http://localhost:{DEV_LAN_PORT}/workbench  (operator: {OPERATOR})")
+        print(f"Overlay entry: http://127.0.0.1:{DEV_PORT}/workbench")
         try:
             await _serve_listeners(app, settings)
         finally:
             ticker.cancel()
-            await asyncio.gather(ticker, return_exceptions=True)
+            poller.cancel()
+            await asyncio.gather(ticker, poller, return_exceptions=True)
     finally:
         await runtime.stop()
 
@@ -94,6 +108,7 @@ def main() -> int:
             lan_bind="127.0.0.1",
             lan_port=DEV_LAN_PORT,
             lan_hosts=["localhost"],
+            overlay_hosts=["127.0.0.1"],
         )
         try:
             asyncio.run(_run(settings, secret))
