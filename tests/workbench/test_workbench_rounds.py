@@ -65,7 +65,7 @@ def funded(bench, client) -> tuple[str, str]:
 
 def running(bench, client) -> None:
     bench.pending()
-    assert bench.post(client, "/wb/stages/stage-1/approve").status_code == 200
+    assert bench.approve(client).status_code == 200
     assert bench.post(client, "/wb/stages/stage-1/start").status_code == 200
 
 
@@ -489,7 +489,7 @@ def test_operator_reads_the_run_sheet_and_its_findings_before_approving(bench, o
     # the validator's findings first, then the evidence hints (every set point here cites nothing)
     assert body["findings"][0] == note.model_dump(mode="json") and body["blocking"] is False
     assert {item["code"] for item in body["findings"][1:]} == {"no_evidence"}
-    approval = bench.post(operator, "/wb/stages/stage-1/approve").json()
+    approval = bench.approve(operator).json()
     assert approval["run_sheet_digest"] == body["run_sheet_digest"]
 
 
@@ -498,7 +498,7 @@ def test_run_sheet_read_says_when_a_finding_blocks_the_approval(bench, operator)
     bench.workflow.validate = lambda _sheet: [Finding(code="capability", message="no such level")]
 
     body = operator.get("/wb/stages/stage-1/run-sheet").json()
-    refused = bench.post(operator, "/wb/stages/stage-1/approve")
+    refused = bench.approve(operator)
 
     assert body["blocking"] is True and body["findings"][0]["code"] == "capability"
     assert refused.status_code == 403 and detail(refused)["code"] == "approval_invalid"
@@ -506,7 +506,7 @@ def test_run_sheet_read_says_when_a_finding_blocks_the_approval(bench, operator)
 
 def test_reading_a_run_sheet_changes_nothing(bench, operator):
     bench.pending()
-    assert bench.post(operator, "/wb/stages/stage-1/approve").status_code == 200
+    assert bench.approve(operator).status_code == 200
     bench.workflow.validate = lambda _sheet: [Finding(code="capability", message="changed")]
 
     assert operator.get("/wb/stages/stage-1/run-sheet").json()["blocking"] is True

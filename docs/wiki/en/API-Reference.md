@@ -131,7 +131,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/logout` | none | `{"operator": null}`; the cookie is deleted |
 | `POST` | `/wb/reauth` | `secret` (1 to 256) | `reauth_seconds` |
 | `GET` | `/wb/me` | none | `kind`, `id`, `operator`, `entry`, `reauth_at`, `timezone` (the setting `report_timezone`, the zone the console shows times in) |
-| `POST` | `/wb/stages/{stage_id}/approve` | optional `expected_digest` (1 to 128 characters): the digest of the run sheet that was reviewed; the route refuses with `state` when the current sheet differs. No body approves the current sheet | the `Approval` |
+| `POST` | `/wb/stages/{stage_id}/approve` | `expected_digest` (required, 1 to 128 characters; no other field): the digest of the run sheet that was reviewed. The route refuses with `state` when the current sheet differs, and with `422` when the body or the field is missing or another field is sent | the `Approval` |
 | `POST` | `/wb/stages/{stage_id}/start` | none | stage runtime |
 | `POST` | `/wb/stages/{stage_id}/pause` | optional `reason` (at most 200, default `operator request`) | stage runtime |
 | `POST` | `/wb/stages/{stage_id}/resume` | none | stage runtime |

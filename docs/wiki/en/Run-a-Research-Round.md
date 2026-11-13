@@ -25,7 +25,9 @@ BASE=http://YOUR_LAN_HOST:9443
 curl -s -c wb.cookies -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
   -H 'Content-Type: application/json' -d @login.json "$BASE/wb/login"
 curl -s -b wb.cookies "$BASE/wb/stages/STAGE_ID"
+curl -s -b wb.cookies "$BASE/wb/stages/STAGE_ID/run-sheet"   # read run_sheet_digest from the answer
 curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' -d '{"expected_digest": "DIGEST_YOU_READ"}' \
   "$BASE/wb/stages/STAGE_ID/approve"
 ```
 
@@ -192,9 +194,12 @@ A card you enter is verified by you in the same step; the answer has the new `id
 
 ```http
 POST /wb/stages/STAGE_ID/approve
+{"expected_digest": "the run_sheet_digest you read in step 2"}
 ```
 
-You should get the approval record, with `operator`, `run_sheet_version`, `run_sheet_digest` and `recovery_number`. Compare `run_sheet_digest` with the one you read in step 2: if they differ, a new version was filed in between and you approved that one. The stage stays in `pending_review`; approving does not start it.
+The body is required and holds only that field. If the run sheet changed since you read it, the answer is `409` with code `state`; read it again and decide again.
+
+You should get the approval record, with `operator`, `run_sheet_version`, `run_sheet_digest` and `recovery_number`. `run_sheet_digest` is the one you sent: the server approves only the sheet you read, never a newer version filed in between. The stage stays in `pending_review`; approving does not start it.
 
 | Refused with | What to do |
 | --- | --- |

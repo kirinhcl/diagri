@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import Field, StrictInt
+from pydantic import ConfigDict, Field, StrictInt
 
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import (
@@ -70,9 +70,12 @@ class Reauth(Body):
 
 
 class Approve(Body):
-    """The digest of the run sheet reviewed; without it the current sheet is approved."""
+    """The digest of the run sheet that was reviewed. Required, and no other field is accepted: a
+    misnamed field must not silently approve whatever sheet is current."""
 
-    expected_digest: str | None = Field(default=None, min_length=1, max_length=128)
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    expected_digest: str = Field(min_length=1, max_length=128)
 
 
 class Pause(Body):
@@ -338,9 +341,9 @@ class Workbench:
         Fresh = Annotated[Actor, Depends(self.fresh)]  # noqa: N806
 
         @router.post("/stages/{stage_id}/approve")
-        async def approve(stage_id: str, actor: Fresh, body: Approve | None = None):
-            expected = body.expected_digest if body else None
-            return workflow.approve(stage_id, actor, expected).model_dump(mode="json")
+        async def approve(stage_id: str, actor: Fresh, body: Approve):
+            approval = workflow.approve(stage_id, actor, body.expected_digest)
+            return approval.model_dump(mode="json")
 
         @router.post("/stages/{stage_id}/start")
         async def start(stage_id: str, actor: Operator):

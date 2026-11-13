@@ -16,7 +16,8 @@ def detail(response) -> dict:
 def manual_stage(bench, client) -> int:
     """A running stage taken over by the logged-in operator; returns the manual right."""
     bench.pending()
-    for action in ("approve", "start", "takeover"):
+    assert bench.approve(client).status_code == 200
+    for action in ("start", "takeover"):
         assert bench.post(client, f"/wb/stages/stage-1/{action}").status_code == 200
     number = bench.workflow.stage("stage-1").manual_right
     assert number is not None

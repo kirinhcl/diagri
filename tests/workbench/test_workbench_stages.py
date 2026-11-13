@@ -17,6 +17,9 @@ def detail(response) -> dict:
 
 
 def act(bench, client, action, stage="stage-1", body=None, **kwargs):
+    if action == "approve" and body is None:  # as the console does: for the digest it read first
+        read = client.get(f"/wb/stages/{stage}/run-sheet")
+        body = {"expected_digest": read.json().get("run_sheet_digest", "unread")}
     return bench.post(client, f"/wb/stages/{stage}/{action}", body, **kwargs)
 
 
@@ -56,8 +59,11 @@ def test_operator_drives_a_stage_through_every_transition(bench, operator):
 def test_approval_is_recorded_for_the_logged_in_operator_not_a_body_field(bench, operator):
     bench.pending()
 
-    act(bench, operator, "approve", body={"operator": "mallory", "actor": {"kind": "workflow"}})
+    forged = {"operator": "mallory", "actor": {"kind": "workflow"}}
+    refused = act(bench, operator, "approve", body={"expected_digest": "d", **forged})
+    assert refused.status_code == 422 and bench.workflow.approvals("stage-1") == ()
 
+    assert act(bench, operator, "approve").status_code == 200
     assert [item.operator for item in bench.workflow.approvals("stage-1")] == ["alice"]
 
 
@@ -265,7 +271,9 @@ def test_unexpected_service_failure_does_not_leak_internals(bench, operator, mon
     client = TestClient(bench.app, base_url=str(operator.base_url), raise_server_exceptions=False)
     client.cookies.update(operator.cookies)
 
-    response = client.post("/wb/stages/stage-1/approve", json={}, headers=Bench.ui(operator))
+    response = client.post(
+        "/wb/stages/stage-1/approve", json={"expected_digest": "d"}, headers=Bench.ui(operator)
+    )
 
     assert response.status_code == 500
     assert "secret" not in response.text and "sqlite3" not in response.text
@@ -293,19 +301,17 @@ def test_approve_goes_ahead_for_the_reviewed_digest(bench, operator):
     assert response.status_code == 200 and response.json()["run_sheet_digest"] == reviewed
 
 
-@pytest.mark.parametrize("body", [None, {}, {"expected_digest": None}])
-def test_approve_without_a_digest_is_still_accepted(bench, operator, body):
+def test_approve_requires_a_body_naming_the_digest(bench, operator):
     bench.pending()
+    path = "/wb/stages/stage-1/approve"
 
-    assert bench.post(operator, "/wb/stages/stage-1/approve", body).status_code == 200
-
-
-def test_approve_with_no_request_body_at_all_is_still_accepted(bench, operator):
-    bench.pending()
-
-    response = operator.post("/wb/stages/stage-1/approve", headers=Bench.ui(operator))
-
-    assert response.status_code == 200
+    assert operator.post(path, headers=Bench.ui(operator)).status_code == 422  # no body
+    assert bench.post(operator, path, {}).status_code == 422  # no field
+    assert bench.post(operator, path, {"expected_digest": None}).status_code == 422
+    assert bench.post(operator, path, {"digest": "0" * 64}).status_code == 422  # misnamed
+    extra = {"expected_digest": "0" * 64, "force": True}
+    assert bench.post(operator, path, extra).status_code == 422  # extra fields are refused
+    assert bench.state() == "pending_review"
 
 
 def test_approve_digest_has_a_length_bound(bench, operator):

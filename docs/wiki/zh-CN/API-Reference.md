@@ -131,7 +131,7 @@
 | `POST` | `/wb/logout` | 无 | `{"operator": null}`；Cookie 被删除 |
 | `POST` | `/wb/reauth` | `secret`（1 到 256） | `reauth_seconds` |
 | `GET` | `/wb/me` | 无 | `kind`、`id`、`operator`、`entry`、`reauth_at`、`timezone`（即设置 `report_timezone`，控制台显示时间用的时区） |
-| `POST` | `/wb/stages/{stage_id}/approve` | 可选的 `expected_digest`（1 到 128 个字符）：审阅过的运行单的摘要；当前运行单与它不同时，路由以 `state` 拒绝。不带请求体则批准当前运行单 | 这次的 `Approval` |
+| `POST` | `/wb/stages/{stage_id}/approve` | `expected_digest`（必填，1 到 128 个字符，不接受其他字段）：审阅过的运行单的摘要。当前运行单与它不同时，路由以 `state` 拒绝；缺少请求体或该字段、或带了其他字段时，以 `422` 拒绝 | 这次的 `Approval` |
 | `POST` | `/wb/stages/{stage_id}/start` | 无 | 阶段运行信息 |
 | `POST` | `/wb/stages/{stage_id}/pause` | 可选 `reason`（最长 200，默认 `operator request`） | 阶段运行信息 |
 | `POST` | `/wb/stages/{stage_id}/resume` | 无 | 阶段运行信息 |

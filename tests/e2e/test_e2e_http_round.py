@@ -54,6 +54,14 @@ async def post(client, path: str, body: dict | None = None) -> dict:
     return response.json()
 
 
+async def approve(client, stage: str) -> dict:
+    """Approve for the digest of the run sheet read just before, as the console does."""
+    sheet = await get(client, f"/wb/stages/{stage}/run-sheet")
+    return await post(
+        client, f"/wb/stages/{stage}/approve", {"expected_digest": sheet["run_sheet_digest"]}
+    )
+
+
 async def get(client, path: str) -> dict:
     response = await client.get(path)
     assert response.status_code == 200, f"{path}: {response.status_code} {response.text}"
@@ -167,7 +175,7 @@ async def test_round_from_goal_to_delivered_through_http_routes_only(world, site
     # the operator reads what is to be approved, approves exactly that, and starts the stage
     review = await get(client, f"/wb/stages/{STAGE}/run-sheet")
     assert review["run_sheet"] == sheet and review["blocking"] is False
-    approval = await post(client, f"/wb/stages/{STAGE}/approve")
+    approval = await approve(client, STAGE)
     assert approval["operator"] == OPERATOR
     assert approval["run_sheet_digest"] == review["run_sheet_digest"]
     assert (await post(client, f"/wb/stages/{STAGE}/start"))["state"] == "running"
@@ -239,7 +247,7 @@ async def test_operator_steers_a_stopped_round_through_http_routes_only(world, s
     project, protocol, round_id = await designed(client)
     draft = {"round_id": round_id, "run_sheet": sheet_json(world, project, protocol)}
     await post(client, "/wb/drafts/run-sheet", draft)
-    await post(client, f"/wb/stages/{STAGE}/approve")
+    await approve(client, STAGE)
     await post(client, f"/wb/stages/{STAGE}/start")
     await world.beat(runtime, BEAT_SECONDS)
 
@@ -258,7 +266,7 @@ async def test_operator_steers_a_stopped_round_through_http_routes_only(world, s
     chosen = await post(client, f"/wb/rounds/{round_id}/choice", {"choice": "redo"})
     assert chosen == {"round_id": round_id, "state": "stage_review"}
     await post(client, "/wb/drafts/run-sheet", {"round_id": round_id, "run_sheet": redo})
-    await post(client, "/wb/stages/stage-redo/approve")
+    await approve(client, "stage-redo")
     assert (await post(client, "/wb/stages/stage-redo/start"))["right_number"] is not None
     aborted = await post(client, f"/wb/rounds/{round_id}/abort")
     assert aborted == {"round_id": round_id, "state": "aborted"}

@@ -125,7 +125,9 @@ async def run_stage(world, runtime, client, project, protocol, round_id, number:
     draft = {"round_id": round_id, "run_sheet": sheet.model_dump(mode="json")}
     await send(client, "POST", "/wb/drafts/run-sheet", draft)
     await reauthenticate(client)
-    await send(client, "POST", f"/wb/stages/{stage}/approve")
+    sheet = await send(client, "GET", f"/wb/stages/{stage}/run-sheet")
+    digest = {"expected_digest": sheet["run_sheet_digest"]}
+    await send(client, "POST", f"/wb/stages/{stage}/approve", digest)
     await send(client, "POST", f"/wb/stages/{stage}/start")
     for _ in range(MAX_BEATS):
         await world.beat(runtime, BEAT_SECONDS)

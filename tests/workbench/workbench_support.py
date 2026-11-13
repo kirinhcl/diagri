@@ -158,6 +158,12 @@ class Bench:
         headers = {**self.ui(client), **kwargs.pop("headers", {})}
         return client.post(path, json=body or {}, headers=headers, **kwargs)
 
+    def approve(self, client: TestClient, stage_id: str = "stage-1", digest: str | None = None):
+        """Approve a stage the way the console does: for the digest of the sheet it reads first."""
+        if digest is None:
+            digest = client.get(f"/wb/stages/{stage_id}/run-sheet").json()["run_sheet_digest"]
+        return self.post(client, f"/wb/stages/{stage_id}/approve", {"expected_digest": digest})
+
     def login(self, client: TestClient, name: str = "alice", secret: str = SECRET):
         return self.post(client, "/wb/login", {"name": name, "secret": secret})
 

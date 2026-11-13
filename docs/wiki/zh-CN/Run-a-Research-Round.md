@@ -25,7 +25,9 @@ BASE=http://YOUR_LAN_HOST:9443
 curl -s -c wb.cookies -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
   -H 'Content-Type: application/json' -d @login.json "$BASE/wb/login"
 curl -s -b wb.cookies "$BASE/wb/stages/STAGE_ID"
+curl -s -b wb.cookies "$BASE/wb/stages/STAGE_ID/run-sheet"   # read run_sheet_digest from the answer
 curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
+  -H 'Content-Type: application/json' -d '{"expected_digest": "DIGEST_YOU_READ"}' \
   "$BASE/wb/stages/STAGE_ID/approve"
 ```
 
@@ -192,9 +194,12 @@ POST /wb/evidence
 
 ```http
 POST /wb/stages/STAGE_ID/approve
+{"expected_digest": "第 2 步读到的 run_sheet_digest"}
 ```
 
-应该得到审批记录，其中有 `operator`、`run_sheet_version`、`run_sheet_digest` 和 `recovery_number`。把 `run_sheet_digest` 和第 2 步读到的那个对一下：不一样的话，说明中间有人提交了新版本，你批准的是新版本。阶段仍然是 `pending_review`：批准不会启动阶段。
+请求体是必填的，只有这一个字段。如果运行单在你读过之后变了，答复是 `409`，代码为 `state`；重新读一遍再决定。
+
+应该得到审批记录，其中有 `operator`、`run_sheet_version`、`run_sheet_digest` 和 `recovery_number`。`run_sheet_digest` 就是你发送的那个：服务端只批准你读过的运行单，不会批准中间提交的新版本。阶段仍然是 `pending_review`：批准不会启动阶段。
 
 | 拒绝码 | 怎么办 |
 | --- | --- |
