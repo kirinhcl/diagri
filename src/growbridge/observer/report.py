@@ -22,6 +22,7 @@ class ReportContext(Model):
     project_name: str
     protective_actions: tuple[str, ...] = ()
     manual_interventions: tuple[str, ...] = ()
+    frozen_readings: tuple[str, ...] = ()
     observations: tuple[str, ...] = ()  # manual crop observations until cameras exist
     todos: tuple[str, ...] = ()
     treatment_deviation: float | None = None  # fraction of time the actual treatment deviated
@@ -66,6 +67,7 @@ def render_daily_report(
         lines += [f"Treatment deviation: {deviation * 100:.1f}%", ""]
     lines += _section("Protective actions", context.protective_actions) + [""]
     lines += _section("Manual interventions", context.manual_interventions) + [""]
+    lines += _section("Frozen readings", context.frozen_readings) + [""]
     lines += _section("Crop observations", context.observations) + [""]
     lines += _section("To do", context.todos)
     if narrative:

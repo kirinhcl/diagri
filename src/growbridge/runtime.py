@@ -239,6 +239,18 @@ class _GuardedBridge(Bridge):
 # --- the runtime ---------------------------------------------------------------------------------
 
 
+def _frozen_line(period: Mapping[str, Any], zone: str) -> str:
+    """One report line for a frozen-reading period, times in the report timezone."""
+
+    def clock(at: float) -> str:
+        return f"{datetime.fromtimestamp(at, ZoneInfo(zone)):%H:%M}"
+
+    line = f"{period['sensor']} stuck at {period['value']:g} from {clock(period['first_at'])}"
+    if period["last_at"] is None:
+        return line + " (still frozen)"
+    return line + f" to {clock(period['last_at'])}"
+
+
 @dataclass
 class Runtime:
     settings: Settings
@@ -516,12 +528,14 @@ class Runtime:
             for item in self.workflow.interventions(stage.experiment_id)
             if start <= item["at"] < end
         )
+        frozen = tuple(_frozen_line(p, zone) for p in self.archive.frozen_periods(start, end))
         row = self.workflow.db.one("SELECT name FROM wf_projects WHERE id = ?", (stage.project_id,))
         context = ReportContext(
             project_id=stage.project_id,
             project_name=row["name"] if row else stage.project_id,
             protective_actions=protective,
             manual_interventions=interventions,
+            frozen_readings=frozen,
         )
         return render_daily_report(metrics, context)
 

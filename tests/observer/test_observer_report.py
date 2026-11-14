@@ -56,6 +56,16 @@ def test_report_lists_context_items_and_narrative(metrics):
     assert "2.0" in text
 
 
+def test_report_lists_frozen_readings(metrics):
+    item = "temp stuck at 24 from 08:00 to 10:05"
+    listed = ReportContext(project_id="p1", project_name="Basil", frozen_readings=(item,))
+    empty = ReportContext(project_id="p1", project_name="Basil")
+
+    assert "Frozen readings:" in render_daily_report(metrics, listed)
+    assert f"- {item}" in render_daily_report(metrics, listed)
+    assert "Frozen readings: none" in render_daily_report(metrics, empty)
+
+
 def test_narrative_is_appended_and_template_numbers_stay(metrics):
     context = ReportContext(project_id="p1", project_name="Basil")
 
