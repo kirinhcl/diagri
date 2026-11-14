@@ -48,7 +48,7 @@ Spider Farmer AC5 / GGS
 
 The daemon owns the Bluetooth connection, executes commands, verifies device readback, and records history. MCP clients access it through the local API, which listens only on `127.0.0.1:8766` by default. Each installation generates a separate access token. Clients read the token from private configuration, so it stays out of MCP configuration files.
 
-On its own (bridge-only mode), GrowBridge supports on-demand control, continuous data collection, and a local web dashboard. Unattended environmental optimization, irrigation schedules, MQTT, and cloud models are outside its scope. Running an approved experiment plan automatically is what DiAGRI mode adds; see the [wiki](docs/wiki/en/Overview.md).
+On its own (bridge-only mode), GrowBridge supports on-demand control, continuous data collection, and a local web dashboard. Unattended environmental optimization, irrigation schedules, MQTT, and cloud models are outside its scope. Running an approved experiment plan automatically is what DiAGRI mode adds; see the [wiki](docs/wiki/en/Overview.md). In DiAGRI mode the operator runs the research from the web console at `/workbench` on the LAN entry; see [Enable DiAGRI](docs/wiki/en/Enable-DiAGRI.md).
 
 ## Installation
 
@@ -217,12 +217,14 @@ The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体
 .venv/bin/ruff check src tests scripts
 .venv/bin/ruff format --check src tests scripts
 .venv/bin/pytest -q
+for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done
+node --test tests/web/*.test.mjs
 .venv/bin/python -m build
 ```
 
-See [VALIDATION.md](VALIDATION.md) for the detailed validation scope.
+The two `node` lines need Node.js (CI uses version 22) and run the same checks of the dashboard and console scripts as CI. See [VALIDATION.md](VALIDATION.md) for the detailed validation scope.
 
-Automated tests use synthetic devices, with no Bluetooth connection or physical hardware operation. They cover fragmentation and CRCs, unsupported protocol rejection, control readback, parameter bounds, authentication, duplicate requests, pump timeouts, and recovery.
+Automated tests use synthetic devices, with no Bluetooth connection or physical hardware operation. They cover fragmentation and CRCs, unsupported protocol rejection, control readback, parameter bounds, authentication, duplicate requests, pump timeouts, and recovery. The operator console's unit tests run in Node without a browser, a server or a network.
 
 References:
 

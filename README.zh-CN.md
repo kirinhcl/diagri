@@ -48,7 +48,7 @@ Spider Farmer AC5 / GGS
 
 MCP 进程不直接占用蓝牙。常驻服务集中执行命令、校验回读，并维护历史。默认 API 仅监听 `127.0.0.1:8766`；每次安装生成独立访问令牌，客户端从私有配置读取，不把令牌写进 MCP 配置。
 
-单独使用时（仅桥接模式），GrowBridge 支持按需控制、持续采集和本地网页控制台，不包含无人值守环境优化、自动灌溉计划、MQTT 或云端模型。按已批准的方案自动执行实验是 DiAGRI 模式提供的能力，见 [Wiki](docs/wiki/zh-CN/Overview.md)。
+单独使用时（仅桥接模式），GrowBridge 支持按需控制、持续采集和本地网页控制台，不包含无人值守环境优化、自动灌溉计划、MQTT 或云端模型。按已批准的方案自动执行实验是 DiAGRI 模式提供的能力，见 [Wiki](docs/wiki/zh-CN/Overview.md)。DiAGRI 模式下，操作员在局域网入口的 `/workbench` 网页控制台上管理研究，见[启用 DiAGRI](docs/wiki/zh-CN/Enable-DiAGRI.md)。
 
 ## 安装
 
@@ -217,12 +217,14 @@ args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/diagri/.venv/bin/growbridge"
 .venv/bin/ruff check src tests scripts
 .venv/bin/ruff format --check src tests scripts
 .venv/bin/pytest -q
+for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done
+node --test tests/web/*.test.mjs
 .venv/bin/python -m build
 ```
 
-详细实测范围见 [VALIDATION.md](VALIDATION.md)。
+两行 `node` 命令需要 Node.js（CI 用 22 版），做的是和 CI 相同的仪表盘与控制台脚本检查。详细实测范围见 [VALIDATION.md](VALIDATION.md)。
 
-自动测试使用合成设备，不连接蓝牙、不操作实物。测试覆盖分片与 CRC、版本拒绝、写入回读、参数限制、身份验证、重复请求、水泵超时及恢复。
+自动测试使用合成设备，不连接蓝牙、不操作实物。测试覆盖分片与 CRC、版本拒绝、写入回读、参数限制、身份验证、重复请求、水泵超时及恢复。操作员控制台的单元测试在 Node 里运行，不需要浏览器、服务器或网络。
 
 参考：
 
