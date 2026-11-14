@@ -48,8 +48,9 @@ class PumpWatchdog:
         self.control = control
         self.stages = stages
         self.clock = clock
-        self.alert: Callable[[str, str, str, Severity], None] | None = None
-        self.resolve: Callable[[str, str], None] | None = None
+        # hooks report whether the alert was stored; a latch is set only after a stored write
+        self.alert: Callable[[str, str, str, Severity], bool] | None = None
+        self.resolve: Callable[[str, str], bool] | None = None
         self._acted: float | None = None  # monotonic time of its own last switch-off
         # latched alerts: (message, monotonic time raised) while active, False once resolved;
         # absent until seen
@@ -117,9 +118,9 @@ class PumpWatchdog:
         else:
             self._leave(FAILURE, "intervention")
 
-    def _raise(self, kind: str, message: str, severity: Severity, key: str = KEY) -> None:
-        if self.alert is not None:
-            self.alert(kind, key, message, severity)
+    def _raise(self, kind: str, message: str, severity: Severity, key: str = KEY) -> bool:
+        """True when the hook stored the alert."""
+        return self.alert is not None and bool(self.alert(kind, key, message, severity))
 
     def step_failed(self, error: Exception) -> None:
         """The engine's report that ``step`` itself raised."""
@@ -137,15 +138,15 @@ class PumpWatchdog:
             wait = REASSERT_SECONDS if state[0] == message else MIN_UPDATE_SECONDS
             if now - state[1] < wait:
                 return
-        self._latched[(kind, key)] = (message, now)
-        self._raise(kind, message, severity, key=key)
+        if self._raise(kind, message, severity, key=key):  # a failed write is retried next time
+            self._latched[(kind, key)] = (message, now)
 
     def _leave(self, kind: str, key: str) -> None:
         if self._latched.get((kind, key)) is False:
             return
-        self._latched[(kind, key)] = False
-        self._close(kind, key)
+        if self._close(kind, key):  # a failed resolve is retried next time
+            self._latched[(kind, key)] = False
 
-    def _close(self, kind: str, key: str = KEY) -> None:
-        if self.resolve is not None:
-            self.resolve(kind, key)
+    def _close(self, kind: str, key: str = KEY) -> bool:
+        """True when the hook resolved the alert (or found none open)."""
+        return self.resolve is not None and bool(self.resolve(kind, key))

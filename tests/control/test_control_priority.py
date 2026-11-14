@@ -66,9 +66,11 @@ async def test_protection_write_overtakes_queued_ordinary_writes(rig):
 
 async def test_irrigation_pump_off_overtakes_queued_writes(rig):
     number = rig.manual_right(ALL)
+    # a run far longer than the test: the test, not a real timer, decides when the run ends
+    rig.bridge.settings = rig.bridge.settings.model_copy(update={"max_pump_seconds": 60})
     release = hang_first_field_write(rig)
     irrigation = asyncio.create_task(
-        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.5)
+        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 60)
     )
     await wait_for(lambda: rig.sim.config["outlet"]["O4"]["mOnOff"] == 1)
     first = await hold_a(rig, number)
@@ -77,7 +79,9 @@ async def test_irrigation_pump_off_overtakes_queued_writes(rig):
         for name, channel, level in (("b", Channel.EXHAUST, 40), ("c", Channel.FAN, 5))
     ]
     await wait_for(lambda: all(rig.service.receipt(n) is not None for n in "bc"))
-    # b, c and the pump-off (once the irrigation timer ends) are all queued behind a
+    await wait_for(lambda: len(rig.service.gate._waiters) == 2)  # b and c wait behind a
+    assert rig.service.irrigating()
+    rig.service._end_cycle()  # the run ends, as its timer would: the pump-off is requested
     await wait_for(lambda: len(rig.service.gate._waiters) == 3)
     release.set()
     await asyncio.gather(irrigation, first, *queued)

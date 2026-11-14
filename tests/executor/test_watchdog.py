@@ -67,10 +67,28 @@ def make():
     def alert(kind, key, message, severity):
         alerts.append((kind, key, severity))
         texts.append(message)
+        return True  # written
+
+    def resolve(kind, key):
+        resolved.append((kind, key))
+        return True
 
     dog.alert = alert
-    dog.resolve = lambda kind, key: resolved.append((kind, key))
+    dog.resolve = resolve
     return control, stages, clock, dog, alerts, resolved, texts
+
+
+def failing_first(hook, kind):
+    """``hook``, except that its first call for ``kind`` reports a failed write."""
+    failed: list[str] = []
+
+    def wrapped(*args):
+        if args[0] == kind and not failed:
+            failed.append(kind)
+            return False  # what the runtime's hook reports after swallowing a write error
+        return hook(*args)
+
+    return wrapped
 
 
 def on(mono, at=100.0):
@@ -304,3 +322,42 @@ async def test_a_long_failure_message_is_truncated():
     _, _, _, dog, _, _, texts = make()
     dog.step_failed(RuntimeError("x" * 1000))
     assert len(texts[0]) == 200 and texts[0].startswith("The pump watchdog failed: RuntimeError")
+
+
+async def test_a_latched_alert_whose_write_failed_is_tried_again_on_the_next_step():
+    control, _, _, dog, alerts, _, _ = make()
+    dog.alert = failing_first(dog.alert, "pump_unreadable")
+    control.reading = PumpReading(on=None, at=50.0, mono=5.0)
+    await dog.step(FakeStage())
+    assert alerts == []
+
+    await dog.step(FakeStage())  # the clock has not moved: far less than 300 s later
+
+    assert alerts == [("pump_unreadable", "pump", "warning")]
+    await dog.step(FakeStage())
+    assert len(alerts) == 1  # latched once written
+
+
+async def test_a_step_failure_alert_whose_write_failed_is_tried_again_at_once():
+    _, _, _, dog, alerts, _, _ = make()
+    dog.alert = failing_first(dog.alert, "pump_watchdog")
+    dog.step_failed(RuntimeError("boom"))
+    dog.step_failed(RuntimeError("boom"))
+    dog.step_failed(RuntimeError("boom"))
+    assert alerts == [("pump_watchdog", "step", "critical")]
+
+
+async def test_a_resolve_that_failed_is_tried_again_on_the_next_good_step():
+    control, _, _, dog, _, resolved, _ = make()
+    control.reading = PumpReading(on=None, at=50.0, mono=5.0)
+    await dog.step(FakeStage())
+    dog.resolve = failing_first(dog.resolve, "pump_unreadable")
+    control.reading = PumpReading(on=False, at=60.0, mono=9.0)
+    await dog.step(FakeStage())
+    assert ("pump_unreadable", "pump") not in resolved
+
+    await dog.step(FakeStage())
+
+    assert resolved.count(("pump_unreadable", "pump")) == 1
+    await dog.step(FakeStage())
+    assert resolved.count(("pump_unreadable", "pump")) == 1

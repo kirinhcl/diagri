@@ -60,6 +60,25 @@ def test_closing_twice_is_harmless(archive):
     assert rows[1]["sample_at"] == 200.0
 
 
+def test_closing_a_period_that_was_never_opened_is_refused_and_writes_nothing(archive):
+    archive.open_frozen("temp", 24.0, 100.0)
+
+    with pytest.raises(ValueError, match="frozen-unknown"):
+        archive.close_frozen("frozen-unknown", "temp", 200.0, "value_changed")
+
+    assert len(marks(archive)) == 1
+
+
+def test_closing_with_another_sensor_is_refused_and_leaves_the_period_open(archive):
+    period = archive.open_frozen("temp", 24.0, 100.0)
+
+    with pytest.raises(ValueError, match="humi"):
+        archive.close_frozen(period, "humi", 200.0, "value_changed")
+
+    assert len(marks(archive)) == 1
+    assert [p.period_id for p in archive.open_frozen_periods()] == [period]
+
+
 def test_frozen_periods_overlap_the_window(archive):
     closed = archive.open_frozen("temp", 24.0, 100.0)
     archive.close_frozen(closed, "temp", 200.0, "value_changed")

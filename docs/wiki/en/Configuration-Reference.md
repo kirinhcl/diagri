@@ -151,7 +151,7 @@ Not part of the settings file: the thresholds are a field of the approved safety
 
 | Field | Type | Default | Validation | What it does |
 | --- | --- | --- | --- | --- |
-| `minutes` | dict of sensor name to number | `{"temp": 120, "humi": 60, "co2": 60, "tempSoil": 240}` (`DEFAULT_FROZEN_MINUTES`; every config gets its own copy) | Each value must be greater than 0 and at most 1440 (`0`, negative, NaN, infinity and anything above 1440 are refused). An empty dict is allowed and means no sensor is checked. | Minutes a sensor may keep the same value before it counts as frozen. A sensor with no entry is not checked. |
+| `minutes` | dict of sensor name to number | `{"temp": 120, "humi": 60, "co2": 60, "tempSoil": 240}` (`DEFAULT_FROZEN_MINUTES`; every config gets its own copy) | Each value must be greater than 0 and at most 1440 (`0`, negative, NaN, infinity and anything above 1440 are refused). An empty dict is allowed and means no sensor is checked. At approval, a name the device does not have is refused (`approval_invalid`); the AC5 has `temp`, `humi`, `vpd`, `co2`, `ppfd` and `tempSoil`. A misspelt name therefore cannot switch a check off unnoticed. | Minutes a sensor may keep the same value before it counts as frozen. A sensor with no entry is not checked. |
 | `max_gap_seconds` | number | `600` | Greater than 0 and at most 3600 (NaN, infinity and larger values are refused). | Longest gap between two readings that still counts as one unbroken run of the same value. |
 
 When no safety configuration has been approved, the thresholds are the defaults above. A safety configuration stored before this field existed has no `frozen` key and loads with the defaults.

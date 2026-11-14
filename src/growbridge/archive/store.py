@@ -252,14 +252,24 @@ class Archive:
         return period_id
 
     def close_frozen(self, period_id: str, sensor: str, last_at: float, reason: str) -> None:
-        """``reason``: the value changed, the sensor is no longer listed, or nothing is checked."""
+        """``reason``: the value changed, the sensor is no longer listed, or nothing is checked.
+
+        Closes only a period opened for this sensor; closing it again is a no-op. A period that
+        was never opened for ``sensor`` is refused, so no closing row is left without its opening.
+        """
         if reason not in FROZEN_CLOSE_REASONS:
             raise ValueError(f"unknown frozen close reason: {reason!r}")
+        opened = (
+            "SELECT 1 FROM frozen_marks WHERE period_id = ? AND event = 'opened' AND sensor = ?"
+        )
         with self.db.transaction():
+            if self.db.one(opened, (period_id, sensor)) is None:
+                raise ValueError(f"no frozen period {period_id!r} was opened for {sensor!r}")
             self.db.execute(
                 "INSERT OR IGNORE INTO frozen_marks(period_id, event, sensor, value, sample_at,"
-                " recorded_at, reason) VALUES(?, 'closed', ?, NULL, ?, ?, ?)",
-                (period_id, sensor, last_at, self.clock.now(), reason),
+                " recorded_at, reason) SELECT ?, 'closed', ?, NULL, ?, ?, ?"
+                f" WHERE EXISTS ({opened})",
+                (period_id, sensor, last_at, self.clock.now(), reason, period_id, sensor),
             )
             self._touch()
 

@@ -405,6 +405,113 @@ async def test_the_pause_is_reported_even_when_the_update_fails(rig):
     assert len(rig.stages.events) == 1
 
 
+def unreadable_safety():
+    raise RuntimeError("ledger is unreadable")
+
+
+async def open_while_paused(rig, **sensors):
+    """Open periods during a check that cannot pause: the stage is paused at that moment."""
+    rig.stages.state = StageState.PAUSED
+    rig.feed(121, **sensors)
+    await rig.check()
+    rig.stages.state = StageState.RUNNING
+    assert rig.stages.events == []
+
+
+async def test_the_pause_is_reported_even_when_reading_the_safety_config_fails(rig):
+    rig.stages.sensors = ("temp",)
+    await open_while_paused(rig, temp=24.0)
+    rig.watch.safety = unreadable_safety
+
+    with pytest.raises(RuntimeError):
+        await rig.check()
+
+    assert [e.detail["rule"] for e in rig.stages.events] == ["frozen:temp"]
+
+
+async def test_a_failed_config_read_still_pauses_for_the_last_known_protection_sensors(rig):
+    rig.config = make_safety(rules=(protection_rule("humi"),))
+    await open_while_paused(rig, temp=moving, humi=55.0)  # no feedback rule: protection only
+    rig.watch.safety = unreadable_safety
+
+    with pytest.raises(RuntimeError):
+        await rig.check()
+
+    assert [e.detail["rule"] for e in rig.stages.events] == ["frozen:humi"]
+
+
+def locked(kind, key):
+    raise RuntimeError("alert store is locked")
+
+
+async def closed_with_its_alert_left_behind(rig, **others):
+    rig.feed(121, temp=24.0, **others)
+    await rig.check()
+    rig.feed(3, temp=24.5, **others)
+    working = rig.book.resolve
+    rig.book.resolve = locked
+    with pytest.raises(RuntimeError):
+        await rig.check()
+    assert rig.open_for("temp") == [] and len(rig.alerts()) == 1
+    return working
+
+
+async def test_an_alert_left_by_a_failed_resolve_is_resolved_by_the_next_check(rig, caplog):
+    rig.book.resolve = await closed_with_its_alert_left_behind(rig)
+
+    await rig.check()
+
+    assert rig.alerts() == []
+    assert "no open period" in caplog.text  # the automatic resolution is on record
+
+
+async def test_a_new_freeze_after_a_lost_resolve_starts_a_new_alert(rig):
+    rig.book.resolve = await closed_with_its_alert_left_behind(rig)
+    (left,) = rig.alerts()
+    rig.feed(121, temp=25.0)  # frozen again, at another value
+
+    await rig.check()
+
+    (alert,) = rig.alerts()
+    assert alert.event_id != left.event_id and alert.count == 1  # notified anew, not merged
+
+
+async def test_a_failing_alert_cleanup_never_stops_a_new_period_from_opening(rig):
+    await closed_with_its_alert_left_behind(rig, humi=moving)
+    rig.feed(61, temp=moving, humi=55.0)  # humi now flat for an hour
+
+    with pytest.raises(RuntimeError):  # resolving the old temp alert still fails
+        await rig.check()
+
+    assert [p.value for p in rig.open_for("humi")] == [55.0]
+    assert len(rig.alerts("humi")) == 1
+
+
+async def handing_over(rig, before, after):
+    """Each pause report is followed by another stage, using ``after``, taking over."""
+    rig.stages.sensors = before
+    report = rig.stages.report
+
+    async def report_then_hand_over(event):
+        await report(event)
+        rig.stages.stage_id, rig.stages.sensors = "st2", after
+
+    rig.stages.report = report_then_hand_over
+    rig.feed(121, temp=24.0, humi=55.0)
+    await rig.check()
+    return [(e.stage_id, e.detail["rule"]) for e in rig.stages.events]
+
+
+async def test_a_stage_taking_over_mid_check_is_paused_for_its_own_sensors(rig):
+    events = await handing_over(rig, before=("temp",), after=("humi",))
+    assert events == [("st1", "frozen:temp"), ("st2", "frozen:humi")]
+
+
+async def test_a_stage_taking_over_mid_check_is_not_paused_for_the_old_stage_sensors(rig):
+    events = await handing_over(rig, before=("temp", "humi"), after=())
+    assert events == [("st1", "frozen:temp")]
+
+
 async def test_a_real_watch_resolves_the_failure_alert_only_after_a_completed_check(rig):
     observer = Observer(
         rig.stages, lambda: (), rig.book, Outbox(rig.db, rig.clock, 10, 40), (), rig.clock

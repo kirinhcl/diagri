@@ -67,3 +67,30 @@ async def test_an_unexpected_watering_reaches_the_archive_and_a_snapshot(world):
     path = runtime.archive.root / "snapshots" / snapshot.id / "interventions.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     assert [row["kind"] for row in rows] == [KIND_WATERING]
+
+
+async def test_a_watchdog_alert_whose_first_write_failed_is_written_on_the_next_tick(
+    world, monkeypatch
+):
+    runtime = await world.boot()
+
+    def unreadable():
+        raise RuntimeError("bad status")
+
+    monkeypatch.setattr(runtime.control, "pump_reading", unreadable)
+    real = runtime.book.raise_alert
+    refused: list[str] = []
+
+    def locked_once(kind, key, severity, message):
+        if kind == "pump_watchdog" and not refused:
+            refused.append(kind)
+            raise RuntimeError("database is locked")
+        return real(kind, key, severity, message)
+
+    monkeypatch.setattr(runtime.book, "raise_alert", locked_once)
+    await world.beat(runtime, 5)
+    assert refused and not [a for a in runtime.book.open() if a.kind == "pump_watchdog"]
+
+    await world.beat(runtime, 5)  # far less than the 300 s re-raise interval
+
+    assert [a.key for a in runtime.book.open() if a.kind == "pump_watchdog"] == ["step"]
