@@ -269,7 +269,7 @@ class ControlPort(Protocol):
         """Operator-triggered pump run under a manual right; the only path that starts it."""
         ...
 
-    async def pump_off(self) -> bool:
+    async def pump_off(self, trigger: PumpOffTrigger = "interlock") -> bool:
         """Dedicated interlock path: switch the pump outlet off and read back."""
         ...
 
