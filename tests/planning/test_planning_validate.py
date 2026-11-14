@@ -92,6 +92,13 @@ def test_host_owned_pump_does_not_trip_the_pump_check():
     assert "pump_device_owned" not in codes(validate_run_sheet(sheet, CAPS))
 
 
+def test_sheet_without_a_pump_plan_blocks():
+    base = make_run_sheet()
+    channels = tuple(plan for plan in base.channels if plan.channel is not Channel.PUMP)
+    sheet = base.model_copy(update={"channels": channels})
+    assert "pump_device_owned" in codes(validate_run_sheet(sheet, CAPS), blocking=True)
+
+
 def test_feedback_action_on_device_channel_blocks():
     sheet = sheet_with_plan(Channel.EXHAUST, ownership=Ownership.DEVICE).model_copy(
         update={"feedback_rules": (humidity_rule(),)}

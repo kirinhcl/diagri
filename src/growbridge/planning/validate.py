@@ -71,9 +71,15 @@ def _check_actions(
 
 def _check_pump_ownership(sheet: RunSheet) -> list[Finding]:
     plan = sheet.plan(Channel.PUMP)
-    if plan is not None and plan.ownership is Ownership.DEVICE:
-        return [_block("pump_device_owned", "the pump may not be left to the device timer")]
-    return []
+    if plan is not None and plan.ownership is Ownership.HOST:
+        return []
+    return [
+        _block(
+            "pump_device_owned",
+            "the pump must be planned as host-controlled; "
+            "it may not be left to the device timer or left out",
+        )
+    ]
 
 
 def _sensor_rules(sheet: RunSheet, safety: SafetyConfig | None):
