@@ -228,9 +228,12 @@ You should get `"state": "running"` with a `right_number` and, when the run shee
 
 The executor follows the run sheet about once a second: timed actions, feedback rules, protection rules. The observer raises alerts and makes the daily report. No model is involved, so the stage keeps running when model roles are off.
 
+The console's **Live environment** page shows the newest reading of every sensor and the recorded level of each channel, refreshed every 5 seconds. During a stage, each channel the run sheet controls also shows the level the sheet wants at this moment, and a channel at another level is marked **Differs from the run sheet**. Below are the trends of the last hour to seven days, across stages and between them. A reading that stops arriving is said, not shown as current.
+
 | To do this | Send |
 | --- | --- |
 | Read the stage | `GET /wb/stages/STAGE_ID` |
+| Watch the environment live: newest readings, channel levels against what the run sheet wants now, trends | `GET /wb/environment`, or the console's **Live environment** page |
 | Read open alerts, mark one as read | `GET /wb/alerts`, `POST /wb/alerts/EVENT_ID/read` |
 | Read the receipt of a write | `GET /wb/receipts/REQUEST_ID` |
 | Record a measurement taken by hand | `POST /wb/measurements` |

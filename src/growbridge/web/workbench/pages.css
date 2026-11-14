@@ -354,3 +354,35 @@ code {
 @media (prefers-reduced-motion: reduce) {
   .chart-hit { transition: none; }
 }
+
+/* --- live environment: newest readings, channel levels, trends --------------------------------- */
+.env-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 16px; font-size: 13px; }
+.env-stage { display: inline-flex; align-items: center; gap: 6px; }
+.env-muted { font-size: 12px; color: var(--muted-strong); }
+.env-alerts { font-weight: 600; color: var(--red); }
+.env-now, .env-trends { display: grid; gap: 12px; }
+.env-sub { margin: 4px 0 0; font-size: 13px; font-weight: 650; color: var(--muted-strong); }
+.env-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 170px), 1fr));
+  gap: 12px;
+}
+.env-tile {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+.env-tile-mismatch { border-color: var(--red); }
+.env-tile-name { font-size: 12px; font-weight: 650; color: var(--muted-strong); }
+.env-tile-value { font-size: 22px; font-weight: 650; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+.env-tile-meta { font-size: 11px; color: var(--muted); }
+.env-tile .pill { justify-self: start; }
+.env-bar { height: 6px; border-radius: 3px; background: var(--muted-soft); overflow: hidden; }
+.env-bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
+.env-windows { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.env-window[aria-pressed="true"] { background: var(--pale); color: var(--green-dark); font-weight: 650; }

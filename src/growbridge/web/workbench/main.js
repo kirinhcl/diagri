@@ -14,7 +14,7 @@ import { shell } from "./ui/layout.js";
 const LANGUAGE_KEY = "growbridge-workbench-language";
 const NOTICE_MS = 6000;
 // Each page lives in pages/<name>.js and is loaded on its first visit.
-const PAGES = new Set(["inbox", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
+const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
 const ID_CRUMBS = new Map([
   ["project", ["projectId", "crumb.project"]],
   ["round", ["roundId", "crumb.round"]],

@@ -9,8 +9,18 @@ export const METRICS = [
   { key: "tempSoil", unit: "°C", precision: 1 },
 ];
 
+// Channel levels the device reports in each sample (control/device.py MODULES); the key is the
+// channel, the path where the AC5 reports it.
+export const LEVELS = [
+  { key: "light", unit: "%", precision: 0, path: ["light", "level"] },
+  { key: "exhaust", unit: "%", precision: 0, path: ["blower", "level"] },
+  { key: "fan", unit: "", precision: 0, path: ["fan", "level"] },
+];
+const PATHS = new Map(LEVELS.map((metric) => [metric.key, metric.path]));
+
 export function metricValue(sample, key) {
-  const value = sample?.data?.sensor?.[key];
+  let value = sample?.data;
+  for (const part of PATHS.get(key) || ["sensor", key]) value = value?.[part];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 

@@ -19,7 +19,7 @@ function timeLabel(epoch, timeZone, lang) {
 }
 
 function valueLabel(value, metric, lang) {
-  return `${formatNumber(value, metric.precision, lang)} ${metric.unit}`;
+  return `${formatNumber(value, metric.precision, lang)} ${metric.unit}`.trim();
 }
 
 // The time span drawn: the stage's window, or the samples' own span when there is none.
@@ -112,18 +112,23 @@ function notes(t, readings, samples, options, hasGaps) {
   return h("div", { class: "chart-notes" }, said.map((line) => h("p", { text: line })));
 }
 
-// readingsChart(t, readings, { timeZone, lang, sampleSeconds }) -> Element
+// readingsChart(t, readings, { timeZone, lang, sampleSeconds, metrics, empty }) -> Element
 // sampleSeconds: the run sheet's sampling interval, when known; it widens the gap limit so a series
-// sampled more slowly than the bucket width is not cut into dots.
-export function readingsChart(t, readings, { timeZone = "UTC", lang = "en", sampleSeconds = null } = {}) {
+// sampled more slowly than the bucket width is not cut into dots. metrics: the readings to draw
+// (default the sensors; LEVELS draws the channel levels); empty: the text when nothing is drawn.
+export function readingsChart(
+  t,
+  readings,
+  { timeZone = "UTC", lang = "en", sampleSeconds = null, metrics = METRICS, empty = "chart.empty" } = {},
+) {
   const samples = readings && Array.isArray(readings.samples) ? readings.samples : [];
   const options = { timeZone, lang };
-  if (samples.length === 0) return h("p", { class: "chart-empty", text: t("chart.empty") });
+  if (samples.length === 0) return h("p", { class: "chart-empty", text: t(empty) });
   const box = { width: WIDTH, height: HEIGHT, ...span(readings, samples) };
   const maxGap = gapLimit(readings.window, sampleSeconds);
   const figures = [];
   let hasGaps = false;
-  for (const metric of METRICS) {
+  for (const metric of metrics) {
     const series = seriesPoints(samples, metric.key, box);
     if (series.points.length === 0) continue;
     const segments = splitAtGaps(series.points, maxGap);
@@ -131,6 +136,6 @@ export function readingsChart(t, readings, { timeZone = "UTC", lang = "en", samp
     const figure = h("figure", { class: "chart" }, chartHead(t, series, metric, options), plot(t, series, segments, metric, options));
     figures.push(figure);
   }
-  if (figures.length === 0) return h("p", { class: "chart-empty", text: t("chart.empty") });
+  if (figures.length === 0) return h("p", { class: "chart-empty", text: t(empty) });
   return h("div", { class: "readings" }, notes(t, readings, samples, options, hasGaps), h("div", { class: "chart-grid" }, figures));
 }

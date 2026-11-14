@@ -21,6 +21,7 @@ from growbridge.archive.store import Archive
 from growbridge.compute.service import ComputeService
 from growbridge.observer.alerts import AlertBook, awaits_reading
 from growbridge.ports import Actor, ControlPort, Denied
+from growbridge.workbench.environment import add_environment_routes
 from growbridge.workbench.rounds import PathId, ProjectBudget
 from growbridge.workflow.listing import (
     count_rounds_awaiting_choice,
@@ -249,6 +250,7 @@ def add_read_routes(
     _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock)
     _project_routes(router, operator, workflow, tasks, budget)
     _stage_read_routes(router, operator, workflow, archive, clock)
+    add_environment_routes(router, operator, workflow, archive, control, clock, alerts)
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 

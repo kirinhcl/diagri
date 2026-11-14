@@ -118,6 +118,7 @@
 | `GET` | `/wb/projects` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 | `GET` | `/wb/projects/{project_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/readings` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/environment` | 操作员 | 局域网、覆盖网络 | 否 | — |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/history` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/safety` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
@@ -175,6 +176,7 @@
 | `GET` | `/wb/projects` | 无 | `projects`：每个项目的摘要，最多 200 个 |
 | `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前）和 `protocols`（每个协议的最新版本）、`budget`（`calls_left` 和 `cost_left`，没有设置预算时为 `null`）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
 | `GET` | `/wb/stages/{stage_id}/readings` | 查询参数 `points`（2 到 2000，默认 600） | `samples`（由 `timestamp`、`data`、`quality`、`clock_synced`、`flagged` 组成的列表）、`window`（`start`、`end`、`bucket_seconds`，阶段尚未开始时为 `null`）、`total_samples`、`flagged_total` 和 `downsampled`。每个时间桶保留最新的一条样本；`flagged` 是该桶里质量不是 `ok` 或时钟未同步的样本数。`points` 超出范围时返回 422。 |
+| `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是运行中的阶段，包括每个通道的 `ownership` 和运行单此刻要求的档位 `expected`，没有时为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
 | `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`（含 `frozen`：每个传感器的 `minutes` 和 `max_gap_seconds`），没有批准过时为 `null` |
@@ -220,7 +222,6 @@
 | orchestrator | `get_run_status` | read | `stage_id` | 读取一个阶段的状态和近期历史。 |
 | orchestrator | `create_research_task` | write | `project_id`、`owner_role`、`question`、`trigger_event_id`、`correlation_id` | 给计划 Agent 或研究 Agent 创建一个研究任务。 |
 | orchestrator | `delegate_task` | write | `project_id`、`to_role`、`goal`、`budget`、`trigger_event_id`、`correlation_id` | 带完整交接信息，给计划 Agent 或研究 Agent 创建一个研究任务。 |
-| orchestrator | `submit_run_for_review` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。 |
 | orchestrator | `get_task_status` | read | `task_id` | 读取正在运行的任务或它下面委派出去的任务的状态，以及它的产物 ID。 |
 | orchestrator | `read_artifact` | read | `artifact_id` | 核对摘要后读取一个已登记的文本产物。 |
 | planner | `get_device_capabilities` | read | 无 | 读取设备的传感器、通道和档位范围。 |
@@ -229,10 +230,10 @@
 | planner | `search_and_verify_sources` | web | `query` | 搜索资料来源。 |
 | planner | `check_experimental_design` | read | `project_id`、`protocol_id` | 检查一份已保存的研究协议的设计。 |
 | planner | `estimate_sample_size` | read | `effect`、`sd` | 估算需要多少个区组或实验单位。 |
-| planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。 |
+| planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。带 `round_id` 时，还会像 `save_plan_draft` 一样检查运行单是否执行了本轮分配的处理。 |
 | planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
 | planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
-| planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。 |
+| planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。没有执行本轮分配处理的运行单（`treatment_not_applied`）不会保存。 |
 | researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、已有快照），不写入任何东西。留出批次的测量只给条数。 |
 | researcher | `freeze_dataset` | write | `task_id`、`stage_id` | 把一个阶段的数据冻结成经过校验的数据快照；带 `round_id` 且快照完整时，还会推进轮次。 |
 | researcher | `query_evidence` | read | 无 | 在项目档案里搜索证据卡。 |
@@ -240,7 +241,7 @@
 | researcher | `submit_compute_job` | write | `task_id`、`template_id` | 按已登记的模板提交一个计算作业。 |
 | researcher | `get_compute_job` | read | `attempt_id` | 读取计算作业的状态。 |
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | 取回并校验计算作业的输出。 |
-| researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。 |
+| researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。返回 `treatment_check`：设备记录的档位和分配处理不符的轮次（按方案偏离计算），以及样本里没有档位、无法核对的轮次。 |
 
 证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
 

@@ -118,6 +118,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `GET` | `/wb/projects` | operator | LAN, overlay | no | none |
 | `GET` | `/wb/projects/{project_id}` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/readings` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/environment` | operator | LAN, overlay | no | — |
 | `GET` | `/wb/stages/{stage_id}/measurements` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/history` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/safety` | operator | LAN, overlay | no | none |
@@ -175,6 +176,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `GET` | `/wb/projects` | none | `projects`: a summary of each project, at most 200 |
 | `GET` | `/wb/projects/{project_id}` | none | the project's `project_id`, `name`, `created_at`, `rounds` (newest first) and `protocols` (the latest version of each), `budget` (`calls_left` and `cost_left`, or `null` when no budget is set) and `tasks` (at most 100). An unknown project is refused with `state`. |
 | `GET` | `/wb/stages/{stage_id}/readings` | query `points` (2 to 2000, default 600) | `samples` (a list of `timestamp`, `data`, `quality`, `clock_synced`, `flagged`), `window` (`start`, `end`, `bucket_seconds`, or `null` before the stage started), `total_samples`, `flagged_total` and `downsampled`. The newest sample of each time bucket is kept; `flagged` counts the samples of the bucket whose quality is not `ok` or whose clock was not synchronised. A `points` outside the range is refused with 422. |
+| `GET` | `/wb/environment` | query `window` (seconds, 300 to 604800, default 21600), `points` (2 to 1000, default 360) | The live environment page's data, read from the archive, never from the device: `now`, `clock_synced`; `latest`, the newest sample (`timestamp`, `age_seconds`, `quality`, `clock_synced`, `experiment_id`, `sensors`, and `channels` with each channel's recorded `level` and `on`), or `null`; `stage`, the running stage with each channel's `ownership` and the level its run sheet `expected` now, or `null`; `sensors` and `level_ranges` from the device capabilities; `alerts`, open alerts counted by severity; `readings`, every sample of the window in or outside a stage, in the shape of a stage's readings. |
 | `GET` | `/wb/stages/{stage_id}/measurements` | none | `measurements`: the stage's experiment's measurements, corrected ones included |
 | `GET` | `/wb/stages/{stage_id}/history` | none | `history` (the stage's state changes) and `interventions` (the experiment's interventions that belong to this stage) |
 | `GET` | `/wb/safety` | none | `safety`: the approved `SafetyConfig` (with `frozen`: `minutes` per sensor and `max_gap_seconds`), or `null` when none is approved |
@@ -220,7 +222,6 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | orchestrator | `get_run_status` | read | `stage_id` | Reads the state and recent history of one stage. |
 | orchestrator | `create_research_task` | write | `project_id`, `owner_role`, `question`, `trigger_event_id`, `correlation_id` | Creates a research task for the planner or the researcher. |
 | orchestrator | `delegate_task` | write | `project_id`, `to_role`, `goal`, `budget`, `trigger_event_id`, `correlation_id` | Creates a research task for the planner or the researcher with a full handoff. |
-| orchestrator | `submit_run_for_review` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. |
 | orchestrator | `get_task_status` | read | `task_id` | Reads the state of the running task, or of a task delegated below it, and the ids of its artifacts. |
 | orchestrator | `read_artifact` | read | `artifact_id` | Reads a registered text artifact after checking its digest. |
 | planner | `get_device_capabilities` | read | none | Reads the sensors, channels and level ranges of the device. |
@@ -229,8 +230,8 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | planner | `search_and_verify_sources` | web | `query` | Searches for sources. |
 | planner | `check_experimental_design` | read | `project_id`, `protocol_id` | Checks the design of a saved research protocol. |
 | planner | `estimate_sample_size` | read | `effect`, `sd` | Estimates the number of blocks or units needed. |
-| planner | `validate_run_sheet` | read | `run_sheet` | Validates a run sheet without saving it. |
-| planner | `save_plan_draft` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. |
+| planner | `validate_run_sheet` | read | `run_sheet` | Validates a run sheet without saving it. With `round_id` it also checks that the sheet applies the round's allocated treatment, as `save_plan_draft` does. |
+| planner | `save_plan_draft` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. A sheet that does not apply the round's allocated treatment (`treatment_not_applied`) is not saved. |
 | planner | `query_evidence` | read | none | Searches the evidence cards in the archive; each card says whether an operator verified it. |
 | planner | `propose_evidence_card` | write | `task_id`, `source_class`, `citation`, `claim` | Stores a source the planner read as an unverified evidence card and returns its `card_id` to cite in a run sheet. It cannot verify a card. |
 | researcher | `inspect_stage_data` | read | `task_id`, `stage_id` | Summarises a started stage's data over the window a freeze would use (coverage, gaps, sample counts, channel ranges, measurements per metric, existing snapshots); writes nothing. Held-out measurements are only counted. |
@@ -240,7 +241,7 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | researcher | `submit_compute_job` | write | `task_id`, `template_id` | Submits a compute job from a registered template. |
 | researcher | `get_compute_job` | read | `attempt_id` | Reads the state of a compute job. |
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | Fetches and verifies the outputs of a compute job. |
-| researcher | `publish_research_report` | write | `task_id`, `protocol_id`, `treatment_id`, `snapshots` | Publishes the report of the round; with `round_id` it also delivers the round when the report is final. |
+| researcher | `publish_research_report` | write | `task_id`, `protocol_id`, `treatment_id`, `snapshots` | Publishes the report of the round; with `round_id` it also delivers the round when the report is final. Returns `treatment_check`: rounds whose recorded device levels contradict their allocated treatment (counted as protocol deviations) and rounds whose samples record no level to compare. |
 
 Evidence cards. `propose_evidence_card` needs the task the dispatcher is running, and that task must be a planner task. Whatever the input says, the card is stored unverified, with `model:planner` and the task id as its source: the input has no verification field and unknown fields are rejected. The input has no `calibrated` field either: a model cannot claim calibration, so a proposed card is stored uncalibrated and keeps the `uncalibrated` hint even after an operator verifies it, until the operator attests the calibration with `calibrated: true` when verifying (the attestation is stored with the verification record; the first verification stays). A card an operator enters keeps the `calibrated` value the operator entered. A model cannot propose a `local` card: `source_class` `local` is refused with `param`, because only an operator can record a local measurement as evidence. An unverified card of any class, `local` included, always gets the `unverified_source` hint in the review of the run sheet, until an operator verifies it. The card id is made by the server, one task may propose at most 20 cards (`quota`), and a planner that has read web content loses this write tool for the rest of the run, so it proposes before it searches. Only an operator verifies a card, through `POST /wb/evidence/{card_id}/verify`; that appends a record and the card text is never edited.
 
