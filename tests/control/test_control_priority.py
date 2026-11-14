@@ -1,8 +1,10 @@
 import asyncio
 
+import pytest
+
 from growbridge.archive.models import ActionState, Channel, RightKind, RuleAction
 from growbridge.control.priority_gate import NORMAL, URGENT
-from growbridge.ports import RightScope
+from growbridge.ports import Denied, RightScope
 from growbridge.sim.fixtures import make_safety
 
 DEVICE = "SIMULATED"
@@ -125,3 +127,57 @@ async def test_protection_and_irrigation_off_use_urgent(rig):
     number = rig.manual_right()
     await rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.02)
     assert seen == [NORMAL, URGENT]
+
+
+async def test_protection_write_voids_queued_ordinary_writes_on_its_channel(rig):
+    number = rig.stage_right()
+    rig.service.approve_safety(make_safety(), "alice")
+    protection = rig.service.protection_right()
+    release = hang_first_field_write(rig)
+    first = await hold_a(rig, number)
+    b = asyncio.create_task(rig.service.submit(rig.request(number, Channel.LIGHT, 3, "b")))
+    c = asyncio.create_task(rig.service.submit(rig.request(number, Channel.EXHAUST, 40, "c")))
+    await wait_for(lambda: all(rig.service.receipt(n) is not None for n in "bc"))
+    urgent = asyncio.create_task(rig.service.submit(rig.request(protection, Channel.LIGHT, 0, "p")))
+    await wait_for(lambda: rig.service.receipt("p") is not None)
+    release.set()
+    with pytest.raises(Denied) as error:
+        await b
+    assert error.value.code == "right_invalid"
+    await asyncio.gather(first, urgent, c)
+    assert rig.service.receipt("b").state is ActionState.VOID
+    assert "protection" in rig.service.receipt("b").error
+    assert rig.service.receipt("c").state is ActionState.CONFIRMED
+    assert sent_order(rig) == ["a", "p", "c"]
+    light = rig.sim.config["device"]["light"]
+    assert light["mOnOff"] == 0 or light["mLevel"] == 0
+
+
+async def test_protection_on_the_pump_voids_a_queued_irrigation(rig):
+    scope = RightScope(
+        device_id=DEVICE,
+        levels=(RuleAction(channel=Channel.PUMP, level=0),),
+    )
+    config = make_safety(
+        rules=(make_safety().rules[0].model_copy(update={"action": scope.levels[0]}),)
+    )
+    rig.service.approve_safety(config, "alice")
+    protection = rig.service.protection_right()
+    number = rig.manual_right(ALL)
+    release = hang_first_field_write(rig)
+    first = await hold_a(rig, number)
+    irrigation = asyncio.create_task(
+        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.05)
+    )
+    await wait_for(lambda: rig.service.receipt("pump") is not None)
+    urgent = asyncio.create_task(rig.service.submit(rig.request(protection, Channel.PUMP, 0, "p")))
+    await wait_for(lambda: rig.service.receipt("p") is not None)
+    release.set()
+    with pytest.raises(Denied):
+        await irrigation
+    await asyncio.gather(first, urgent)
+    assert rig.service.receipt("pump").state is ActionState.VOID
+    pump_writes = [
+        c["params"]["O4"]["mOnOff"] for c in rig.writes() if c["params"]["keyPath"][1] == "O4"
+    ]
+    assert 1 not in pump_writes

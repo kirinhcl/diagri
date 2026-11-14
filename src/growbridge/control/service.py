@@ -254,9 +254,20 @@ class ControlService:
         changed.extend(self._void_queued("process stopped before the action was sent"))
         return changed
 
-    def _void_queued(self, why: str, right_number: int | None = None) -> list[ActionRecord]:
+    def _void_queued(
+        self,
+        why: str,
+        right_number: int | None = None,
+        channel: Channel | None = None,
+        spare: RightKind | None = None,
+    ) -> list[ActionRecord]:
+        """Void queued actions; ``channel`` limits it to one channel, ``spare`` skips a right kind."""
         voided = []
         for record in self.ledger.actions_in(ActionState.PENDING, right_number=right_number):
+            if channel is not None and record.channel is not channel:
+                continue
+            if spare is not None and record.right_kind is spare:
+                continue
             voided.append(record.model_copy(update={"state": ActionState.VOID, "error": why}))
             self.ledger.update_action(voided[-1])
         return voided
@@ -319,12 +330,21 @@ class ControlService:
         right = self._authorize(request)
         if right.kind is RightKind.PROTECTION:
             self._end_cycle()  # a protection write must not wait for a pump run to finish
+            self._supersede_queued(request.channel)
         record = rights.intent(request, right, request.level, self.clock.now())
         self._save(record, fingerprint)
         urgent = right.kind is RightKind.PROTECTION
         async with self.gate.acquire(URGENT if urgent else NORMAL):
             self._recheck(record, request)
             return await self._send(record)
+
+    def _supersede_queued(self, channel: Channel) -> None:
+        """A protection write has the last word: ordinary writes queued ahead of it on its channel
+        would otherwise run after it and undo it. The write already on its way is left alone."""
+        why = f"superseded by a protection write on {channel.value}"
+        with self.db.transaction():
+            voided = self._void_queued(why, channel=channel, spare=RightKind.PROTECTION)
+        self._publish(voided)
 
     async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
         self._check_irrigation(request, seconds)
