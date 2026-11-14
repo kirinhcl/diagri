@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from growbridge.archive import snapshot as snap
 from growbridge.archive.models import SampleRecord
 from growbridge.sim.clock import START
@@ -26,7 +28,7 @@ def test_open_then_close_adds_two_rows_and_changes_none(archive):
     period = archive.open_frozen("temp", 24.0, 100.0)
     before = marks(archive)
 
-    archive.close_frozen(period, "temp", 200.0)
+    archive.close_frozen(period, "temp", 200.0, "value_changed")
 
     after = marks(archive)
     assert len(before) == 1 and len(after) == 2
@@ -38,7 +40,7 @@ def test_open_then_close_adds_two_rows_and_changes_none(archive):
 def test_open_periods_leave_out_closed_ones(archive):
     closed = archive.open_frozen("temp", 24.0, 100.0)
     still_open = archive.open_frozen("humi", 55.0, 120.0)
-    archive.close_frozen(closed, "temp", 200.0)
+    archive.close_frozen(closed, "temp", 200.0, "value_changed")
 
     periods = archive.open_frozen_periods()
 
@@ -49,9 +51,9 @@ def test_open_periods_leave_out_closed_ones(archive):
 
 def test_closing_twice_is_harmless(archive):
     period = archive.open_frozen("temp", 24.0, 100.0)
-    archive.close_frozen(period, "temp", 200.0)
+    archive.close_frozen(period, "temp", 200.0, "value_changed")
 
-    archive.close_frozen(period, "temp", 250.0)
+    archive.close_frozen(period, "temp", 250.0, "value_changed")
 
     rows = marks(archive)
     assert len(rows) == 2
@@ -60,7 +62,7 @@ def test_closing_twice_is_harmless(archive):
 
 def test_frozen_periods_overlap_the_window(archive):
     closed = archive.open_frozen("temp", 24.0, 100.0)
-    archive.close_frozen(closed, "temp", 200.0)
+    archive.close_frozen(closed, "temp", 200.0, "value_changed")
     opened = archive.open_frozen("humi", 55.0, 500.0)
 
     def ids(start, end):
@@ -100,7 +102,7 @@ def test_snapshot_lists_overlapping_frozen_periods(archive, clock):
     for i in range(10):
         archive.append_sample(sample(f"s{i}", START + i * 60))
     period = archive.open_frozen("temp", 24.0, START + 60)
-    archive.close_frozen(period, "temp", START + 120)
+    archive.close_frozen(period, "temp", START + 120, "no_longer_listed")
 
     frozen = snap.freeze(
         archive, "e1", clock, START, START + 600, expected_interval=60.0, max_gap=90.0
@@ -110,6 +112,7 @@ def test_snapshot_lists_overlapping_frozen_periods(archive, clock):
     path = archive.root / "snapshots" / frozen.id / "frozen_periods.jsonl"
     rows = [json.loads(line) for line in path.read_text().splitlines()]
     assert [r["period_id"] for r in rows] == [period]
+    assert rows[0]["close_reason"] == "no_longer_listed"
 
 
 def test_samples_are_untouched(archive):
@@ -117,6 +120,33 @@ def test_samples_are_untouched(archive):
     before = [dict(r) for r in archive.db.query("SELECT * FROM samples ORDER BY id")]
 
     period = archive.open_frozen("temp", 24.0, 10.0)
-    archive.close_frozen(period, "temp", 10.0)
+    archive.close_frozen(period, "temp", 10.0, "value_changed")
 
     assert [dict(r) for r in archive.db.query("SELECT * FROM samples ORDER BY id")] == before
+
+
+@pytest.mark.parametrize("reason", ["value_changed", "no_longer_listed", "nothing_checked"])
+def test_a_closed_period_carries_why_it_closed(archive, reason):
+    period = archive.open_frozen("temp", 24.0, 100.0)
+    live = archive.frozen_periods(0.0, 500.0)[0]
+    assert live["close_reason"] is None
+
+    archive.close_frozen(period, "temp", 200.0, reason)
+
+    (row,) = archive.frozen_periods(0.0, 500.0)
+    assert row["close_reason"] == reason
+    assert marks(archive)[1]["reason"] == reason
+
+
+def test_an_unknown_close_reason_is_refused_and_nothing_is_written(archive):
+    period = archive.open_frozen("temp", 24.0, 100.0)
+
+    with pytest.raises(ValueError):
+        archive.close_frozen(period, "temp", 200.0, "bored")
+
+    assert len(marks(archive)) == 1
+
+
+def test_the_reason_column_is_added_by_a_later_step_not_an_edit(archive):
+    columns = [r["name"] for r in archive.db.query("PRAGMA table_info(frozen_marks)")]
+    assert columns[-1] == "reason"

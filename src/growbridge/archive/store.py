@@ -67,7 +67,12 @@ STEPS = (
     " event TEXT NOT NULL CHECK (event IN ('opened', 'closed')), sensor TEXT NOT NULL,"
     " value REAL, sample_at REAL NOT NULL, recorded_at REAL NOT NULL,"
     " UNIQUE (period_id, event))",
+    # Why a period closed ('value_changed', 'no_longer_listed' or 'nothing_checked'); rows from
+    # before this step have none.
+    "ALTER TABLE frozen_marks ADD COLUMN reason TEXT",
 )
+
+FROZEN_CLOSE_REASONS = ("value_changed", "no_longer_listed", "nothing_checked")
 
 MODEL_SOURCE = "model:"  # cards from a model role: it may not vouch for calibration
 
@@ -246,12 +251,15 @@ class Archive:
             self._touch()
         return period_id
 
-    def close_frozen(self, period_id: str, sensor: str, last_at: float) -> None:
+    def close_frozen(self, period_id: str, sensor: str, last_at: float, reason: str) -> None:
+        """``reason``: the value changed, the sensor is no longer listed, or nothing is checked."""
+        if reason not in FROZEN_CLOSE_REASONS:
+            raise ValueError(f"unknown frozen close reason: {reason!r}")
         with self.db.transaction():
             self.db.execute(
                 "INSERT OR IGNORE INTO frozen_marks(period_id, event, sensor, value, sample_at,"
-                " recorded_at) VALUES(?, 'closed', ?, NULL, ?, ?)",
-                (period_id, sensor, last_at, self.clock.now()),
+                " recorded_at, reason) VALUES(?, 'closed', ?, NULL, ?, ?, ?)",
+                (period_id, sensor, last_at, self.clock.now(), reason),
             )
             self._touch()
 
@@ -268,7 +276,8 @@ class Archive:
         """Periods overlapping ``[start, end]``; a still-open one has ``last_at`` None."""
         rows = self.db.query(
             "SELECT o.period_id, o.sensor, o.value, o.sample_at AS first_at,"
-            " c.sample_at AS last_at, o.recorded_at AS opened_at, c.recorded_at AS closed_at"
+            " c.sample_at AS last_at, o.recorded_at AS opened_at, c.recorded_at AS closed_at,"
+            " c.reason AS close_reason"
             " FROM frozen_marks o LEFT JOIN frozen_marks c"
             " ON c.period_id = o.period_id AND c.event = 'closed'"
             " WHERE o.event = 'opened' AND o.sample_at <= ?"

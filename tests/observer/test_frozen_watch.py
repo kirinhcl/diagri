@@ -124,6 +124,7 @@ async def test_a_change_closes_the_period_and_the_alert(rig):
     assert rig.alerts() == []
     closed = rig.archive.frozen_periods(DAY_START - 1, DAY_START + 10 * 3600)
     assert len(closed) == 1
+    assert closed[0]["close_reason"] == "value_changed"
 
 
 async def test_ppfd_vpd_and_unlisted_sensors_are_not_checked(rig):
@@ -238,6 +239,8 @@ async def test_removing_a_sensor_from_the_thresholds_closes_its_period(rig):
     await rig.check()
     assert rig.open_for("temp") == []
     assert rig.alerts() == []
+    (closed,) = rig.archive.frozen_periods(DAY_START - 1, DAY_START + 10 * 3600)
+    assert closed["close_reason"] == "no_longer_listed"
 
 
 async def test_an_empty_threshold_list_checks_nothing_and_closes_everything(rig):
@@ -248,6 +251,8 @@ async def test_an_empty_threshold_list_checks_nothing_and_closes_everything(rig)
     assert rig.archive.reads == reads
     assert rig.archive.open_frozen_periods() == ()
     assert rig.alerts() == []
+    (closed,) = rig.archive.frozen_periods(DAY_START - 1, DAY_START + 10 * 3600)
+    assert closed["close_reason"] == "nothing_checked"
 
 
 async def test_closing_uses_the_last_same_value_point(rig):

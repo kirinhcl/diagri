@@ -60,7 +60,10 @@ def frozen_line(period: Mapping[str, Any], zone: str, day_start: float, day_end:
     line = f"{period['sensor']} stuck at {period['value']:g} from {clock(period['first_at'])}"
     if period["last_at"] is None:
         return line + " (still frozen)"
-    return line + f" to {clock(period['last_at'])}"
+    line += f" to {clock(period['last_at'])}"
+    if period.get("close_reason") not in (None, "value_changed"):
+        line += " (no longer checked)"  # it ended because the check stopped, not the probe
+    return line
 
 
 def _environment(metrics: DailyMetrics) -> list[str]:

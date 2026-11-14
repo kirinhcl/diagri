@@ -87,7 +87,8 @@ class FrozenWatch:
         for period in periods:
             if period.sensor not in settings.minutes:
                 if may_close:
-                    self._close(period, _series(points, period.sensor))
+                    reason = "no_longer_listed" if settings.minutes else "nothing_checked"
+                    self._close(period, _series(points, period.sensor), reason)
             else:
                 self._follow(period, _series(points, period.sensor), critical)
         have_open = {p.sensor for p in periods}
@@ -95,14 +96,15 @@ class FrozenWatch:
             if name not in have_open:
                 self._maybe_open(name, minutes, _series(points, name), settings, critical)
 
-    def _close(self, period: FrozenPeriod, series: Series) -> None:
-        self.archive.close_frozen(period.period_id, period.sensor, _last_same(series, period))
+    def _close(self, period: FrozenPeriod, series: Series, reason: str) -> None:
+        last_at = _last_same(series, period)
+        self.archive.close_frozen(period.period_id, period.sensor, last_at, reason)
         self.book.resolve(KIND, period.sensor)
 
     def _follow(self, period: FrozenPeriod, series: Series, critical: frozenset[str]) -> None:
         after = [point for point in series if point[0] > period.first_at]
         if first_change(after, period.value) is not None:
-            self._close(period, series)
+            self._close(period, series, "value_changed")
             return
         alert = self._open_alert(period.sensor)
         if alert is None or (period.sensor in critical and alert.severity != "critical"):
