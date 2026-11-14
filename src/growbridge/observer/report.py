@@ -60,7 +60,10 @@ def frozen_line(period: Mapping[str, Any], zone: str, day_start: float, day_end:
     if period["last_at"] is None:
         return line + " (still frozen)"
     line += f" to {clock(period['last_at'])}"
-    if period.get("close_reason") not in (None, "value_changed"):
+    reason = period.get("close_reason")
+    if reason is None:
+        return line + " (close reason unrecorded)"  # closed before the reason was kept
+    if reason != "value_changed":
         line += " (no longer checked)"  # it ended because the check stopped, not the probe
     return line
 

@@ -6,6 +6,7 @@ from growbridge.archive.models import (
     Condition,
     FeedbackRule,
     FrozenCheck,
+    ProtectionRule,
     RuleAction,
 )
 from growbridge.archive.store import Archive
@@ -32,6 +33,18 @@ def feedback(sensor: str) -> FeedbackRule:
         duration_seconds=30,
         action=RuleAction(channel=Channel.EXHAUST, level=80),
         release=RuleAction(channel=Channel.EXHAUST, level=30),
+    )
+
+
+def protection_rule(sensor: str) -> ProtectionRule:
+    return ProtectionRule(
+        id=f"prot-{sensor}",
+        sensor=sensor,
+        unit="%",
+        validity_seconds=20,
+        trigger=Condition(op=">", value=90),
+        duration_seconds=30,
+        action=RuleAction(channel=Channel.LIGHT, level=0),
     )
 
 
@@ -218,6 +231,21 @@ async def test_two_periods_opened_together_send_one_pause_per_check(rig):
     assert len(rig.stages.events) == 2
     assert {e.detail["rule"] for e in rig.stages.events} == {"frozen:temp", "frozen:humi"}
     assert rig.stages.events[1].detail["rule"] != first
+
+
+async def test_an_ignored_pause_event_lets_the_same_check_report_the_next_period(rig):
+    rig.stages.sensors = ("temp", "humi")  # the fake keeps the stage RUNNING: the event was a no-op
+    rig.feed(121, temp=24.0, humi=55.0)
+    await rig.check()
+    assert {e.detail["rule"] for e in rig.stages.events} == {"frozen:temp", "frozen:humi"}
+
+
+async def test_the_period_a_protection_rule_uses_is_reported_first(rig):
+    rig.config = make_safety(rules=(protection_rule("humi"),))
+    rig.stages.sensors = ("temp",)  # temp is feedback-only; humi is used by protection
+    rig.feed(121, temp=24.0, humi=55.0)
+    await rig.check()
+    assert [e.detail["rule"] for e in rig.stages.events] == ["frozen:humi", "frozen:temp"]
 
 
 async def test_a_new_stage_is_paused_for_a_period_already_open(rig):

@@ -90,6 +90,15 @@ def test_a_period_closed_for_another_reason_than_a_change_says_it_is_no_longer_c
     assert nothing == dropped
 
 
+def test_a_closed_period_without_a_recorded_reason_is_not_shown_as_a_recovery():
+    base = {"sensor": "temp", "value": 24.0, "first_at": DAY[0] + 3600, "last_at": DAY[0] + 7200}
+
+    assert frozen_line({**base, "close_reason": None}, TZ, *DAY) == (
+        "temp stuck at 24 from 01:00 to 02:00 (close reason unrecorded)"
+    )
+    assert frozen_line(base, TZ, *DAY).endswith("(close reason unrecorded)")
+
+
 def test_report_still_renders_when_one_frozen_time_is_absurd(metrics):
     bad = {"sensor": "temp", "value": 24.0, "first_at": 1e20, "last_at": 1e20}
     good = {"sensor": "humi", "value": 55.0, "first_at": DAY[0] + 3600, "last_at": None}

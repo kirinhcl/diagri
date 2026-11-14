@@ -135,29 +135,37 @@ class FrozenWatch:
         return alert.event_id if alert else None
 
     async def _pause_stage(self, protection: frozenset[str]) -> None:
-        """At most one pause event per check; other open periods pause the stage on a later
-        check, once it is running again."""
+        """Report a pause for each open period the running stage depends on, protection-used
+        sensors first. Once a report has paused the stage (or ended it) the rest wait for a
+        later check: a second pause would be dropped and spend its event id."""
         stage = self.stages.active_stage()
         if stage is None or stage.state is not StageState.RUNNING:
             return
-        rules = {rule.sensor for rule in stage.run_sheet.feedback_rules}
-        used = sensors_used(protection | rules)
-        for period in self.archive.open_frozen_periods():
+        critical = sensors_used(protection)
+        used = sensors_used(protection | {rule.sensor for rule in stage.run_sheet.feedback_rules})
+        periods = sorted(
+            self.archive.open_frozen_periods(), key=lambda p: (p.sensor not in critical, p.first_at)
+        )
+        for period in periods:
             event_id = f"frozen_pause:{period.period_id}:{stage.stage_id}"
             if period.sensor not in used or event_id in self._reported:
                 continue
-            detail: dict[str, object] = {"rule": f"frozen:{period.sensor}"}
-            alert_id = self._alert_id(period.sensor)
-            if alert_id is not None:
-                detail["alert"] = alert_id
-            detail["period"] = period.period_id
-            event = StageEvent(
-                event_id=event_id,
-                kind=StageEventKind.ALERT_PAUSE,
-                stage_id=stage.stage_id,
-                at=self.clock.now(),
-                detail=detail,
-            )
-            await self.stages.report(event)
+            await self.stages.report(self._pause_event(event_id, stage.stage_id, period))
             self._reported.add(event_id)
-            return  # the stage is paused now; a second pause would be dropped and spend its id
+            stage = self.stages.active_stage()
+            if stage is None or stage.state is not StageState.RUNNING:
+                return
+
+    def _pause_event(self, event_id: str, stage_id: str, period: FrozenPeriod) -> StageEvent:
+        detail: dict[str, object] = {"rule": f"frozen:{period.sensor}"}
+        alert_id = self._alert_id(period.sensor)
+        if alert_id is not None:
+            detail["alert"] = alert_id
+        detail["period"] = period.period_id
+        return StageEvent(
+            event_id=event_id,
+            kind=StageEventKind.ALERT_PAUSE,
+            stage_id=stage_id,
+            at=self.clock.now(),
+            detail=detail,
+        )

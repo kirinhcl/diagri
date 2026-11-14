@@ -137,7 +137,7 @@ It is still bound by the other checks: enabled controls, the registered host, th
 
 ## Frozen readings
 
-A sensor that keeps reporting exactly the same value is not a reading, it is a stuck sensor. The observer records a frozen period and raises an alert, but it pauses a stage only when that stage depends on the sensor: a feedback rule of the run sheet uses it, or a protection rule does (a rule on `vpd` counts as using `temp` and `humi`). A frozen sensor nothing depends on only produces an alert. A protection rule on the sensor raises the alert to critical. Only a `running` stage is paused, once per period and stage, and at most one pause per check: when two periods open in the same check, the second one pauses the stage on a later check, after the operator has resumed it. Raw samples are never changed; the period is a separate, append-only record.
+A sensor that keeps reporting exactly the same value is not a reading, it is a stuck sensor. The observer records a frozen period and raises an alert, but it pauses a stage only when that stage depends on the sensor: a feedback rule of the run sheet uses it, or a protection rule does (a rule on `vpd` counts as using `temp` and `humi`). A frozen sensor nothing depends on only produces an alert. A protection rule on the sensor raises the alert to critical. Only a `running` stage is paused, once per period and stage, and no second pause once the first has paused the stage: when two periods open in the same check, the second one pauses the stage on a later check, after the operator has resumed it. Periods a protection rule depends on are handled first. Raw samples are never changed; the period is a separate, append-only record.
 
 ## Recovery number
 
