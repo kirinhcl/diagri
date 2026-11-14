@@ -53,6 +53,19 @@ async def test_a_delegated_planner_that_saves_a_draft_finishes_and_wakes_the_orc
     ]
 
 
+async def test_the_follow_up_carries_a_long_summary_whole(env):
+    parent = env.task("orchestrator", "ev-goal")
+    planning = env.task("planner", "ev-plan", parent_task_id=parent.id)
+    summary = "the draft waits for review. " + "Validation notes: all clear. " * 100
+    save = call("save_plan_draft", round_id=env.round_id, run_sheet=env.sheet_json())
+    client = ScriptedClient([tool_reply(save), text_reply(summary)])
+
+    await dispatcher(env, client).run_task(planning.id)
+
+    (follow,) = follow_ups(env)
+    assert summary.strip() in follow.question
+
+
 async def test_a_delegated_task_handed_back_also_wakes_the_orchestrator_with_the_reason(env):
     parent = env.task("orchestrator", "ev-goal")
     planning = env.task("planner", "ev-plan", parent_task_id=parent.id)

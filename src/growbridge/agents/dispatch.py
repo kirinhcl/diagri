@@ -63,6 +63,7 @@ HISTORY_KINDS = ("message", "reply")
 HISTORY_ENTRIES = 12
 HISTORY_CHARS = 1500
 REASON_CHARS = 1500
+OUTCOME_CHARS = 6000  # the ended task's final text, handed to the follow-up in full
 TOOL_INPUT_CHARS = 1500
 TOOL_RESULT_CHARS = 2500
 TASK_REF = "task:"
@@ -302,7 +303,7 @@ class Dispatcher:
         self._record(task, "status", state.value, reason=reason)
         if task.owner_role == LEAD or not self._delegated_by_lead(task):
             return
-        outcome = (said or reason)[:REASON_CHARS]
+        outcome = (said or reason)[:OUTCOME_CHARS]
         try:
             created = self.tasks.create(follow_up(task, state, outcome))
         except Denied:
