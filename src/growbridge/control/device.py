@@ -194,6 +194,9 @@ def _outlet_on(outlet: object) -> bool | None:
     value = outlet.get("on")
     if isinstance(value, bool):
         return value
-    if isinstance(value, int | float) and math.isfinite(value):
-        return value != 0
-    return None
+    if not isinstance(value, int | float):
+        return None
+    try:
+        return value != 0 if math.isfinite(value) else None
+    except OverflowError:  # an int beyond float range
+        return None

@@ -33,6 +33,8 @@ async def wait_until(predicate, attempts=200):
         ({"outlet": {"O4": {"on": 0.0}}}, False),
         ({"outlet": {"O4": {"on": float("nan")}}}, None),
         ({"outlet": {"O4": {"on": float("inf")}}}, None),
+        ({"outlet": {"O4": {"on": 10**400}}}, None),
+        ({"outlet": {"O4": {"on": -(10**400)}}}, None),
         ({"outlet": {"O4": {"on": None}}}, None),
         ({"outlet": {"O4": {"on": True}}}, True),
         ({"outlet": {"O4": {"on": False}}}, False),
