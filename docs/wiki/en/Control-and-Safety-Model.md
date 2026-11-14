@@ -135,6 +135,10 @@ It is still bound by the other checks: enabled controls, the registered host, th
 
 **Limits.** After a recovery number change there is no protection until the safety configuration is approved again. Without a BLE link nothing can be written, so a risk that must be covered while offline needs the AC5's own limits or separate hardware. A protection rule on a channel that the run sheet leaves to the device is a conflict, and the stage cannot start (`safety_conflict`). The code restricts a protection right to its listed values; that those values lower the risk is what the operator confirms when approving the configuration.
 
+## Frozen readings
+
+A sensor that keeps reporting exactly the same value is not a reading, it is a stuck sensor. The observer records a frozen period and raises an alert, but it pauses a stage only when that stage depends on the sensor: a feedback rule of the run sheet uses it, or a protection rule does (a rule on `vpd` counts as using `temp` and `humi`). A frozen sensor nothing depends on only produces an alert. A protection rule on the sensor raises the alert to critical. Only a `running` stage is paused, once per period and stage. Raw samples are never changed; the period is a separate, append-only record.
+
 ## Recovery number
 
 A backup holds rights and approvals that were issued in the past, for a device that may have changed since. `growbridge recovery bump` raises the recovery number, and everything issued under the old number stops working:

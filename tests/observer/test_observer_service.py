@@ -195,3 +195,40 @@ async def test_alert_raised_without_its_notification_is_queued_once_on_the_next_
     assert rig.outbox.status(alert.event_id, "email") == "pending"
     rows = db.query("SELECT * FROM observer_outbox WHERE event_id = ?", (alert.event_id,))
     assert len(rows) == 2
+
+
+class FakeFrozen:
+    def __init__(self, fail=False):
+        self.calls = 0
+        self.fail = fail
+
+    async def tick(self):
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("boom")
+
+
+async def test_observer_tick_runs_the_frozen_watch(rig):
+    await rig.observer.tick()  # no watch: unchanged behaviour
+    frozen = FakeFrozen()
+    rig.observer.frozen = frozen
+    await rig.observer.tick()
+    assert frozen.calls == 1
+
+
+async def test_a_failing_frozen_watch_does_not_stop_the_tick(rig, clock):
+    rig.observer.frozen = FakeFrozen(fail=True)
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(60)
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(10)
+    rig.hot()
+    await rig.observer.tick()
+    open_alerts = {(a.kind, a.key): a for a in rig.book.open()}
+    watch = open_alerts[("frozen_watch", "check")]
+    assert watch.severity == "critical"
+    assert ("threshold", "too_hot") in open_alerts
+    assert rig.outbox.status(watch.event_id, "telegram") == "pending"
+    assert len(rig.stages.events) == 1

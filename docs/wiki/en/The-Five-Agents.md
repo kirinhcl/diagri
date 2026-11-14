@@ -128,6 +128,8 @@ Each tick does six things in order: pump-off interlock (followed by the pump wat
 
 **May do.** Evaluate threshold alert rules and keep the alert book (`AlertBook`). Queue each alert once per channel in the outbox and retry delivery with backoff (`Outbox`). Report an `ALERT_PAUSE` stage event for a rule marked `pause_stage`; the workflow service then pauses a `running` stage. Render the daily report from a template: every figure comes from `compute_daily_metrics`. Check run health with six probes (`RunHealthCheck`).
 
+**Frozen readings.** About every five minutes `FrozenWatch` looks at the stored samples. A sensor whose value has not changed for longer than its threshold (`frozen` in the safety configuration; defaults temp 120, humi 60, co2 60, tempSoil 240 minutes) opens a frozen period in the archive and raises a `frozen_reading` alert. If a running stage has a feedback rule on that sensor, or a protection rule uses it, the observer reports an `ALERT_PAUSE` event. A failure of this check raises a critical `frozen_watch` alert and does not stop the other alert rules.
+
 **Can never.** Write to the device. Resume, stop or approve anything. Put a number into a report that the metrics did not compute.
 
 **Why it never calls a model.** An alert that depends on a model would be silent exactly when the model is down. The daily report is template-only: `render_daily_report` accepts an optional model-written narrative, but `Runtime._report_text` never passes one.

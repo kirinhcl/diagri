@@ -44,6 +44,7 @@ from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
 from growbridge.observer.alerts import Alert, AlertBook, AlertRule
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
+from growbridge.observer.frozen_watch import FrozenWatch
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
@@ -647,7 +648,10 @@ def build_runtime(
     selected = default_channels() if channels is None else dict(channels)
     # only channels that have a sender: a notification queued for any other name is never sent
     notify = tuple(selected)
-    observer = Observer(flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify)
+    frozen = FrozenWatch(archive, book, flow, control.safety, clock)
+    observer = Observer(
+        flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify, frozen=frozen
+    )
     unreadable = [Path.home(), data_dir]  # reads are denied by default; these stay denied
     if settings.backup_dir is not None:  # even where an allowed path would cover them
         unreadable.append(settings.backup_dir)
