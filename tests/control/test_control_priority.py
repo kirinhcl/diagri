@@ -66,7 +66,7 @@ async def test_irrigation_pump_off_overtakes_queued_writes(rig):
     number = rig.manual_right(ALL)
     release = hang_first_field_write(rig)
     irrigation = asyncio.create_task(
-        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.05)
+        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.5)
     )
     await wait_for(lambda: rig.sim.config["outlet"]["O4"]["mOnOff"] == 1)
     first = await hold_a(rig, number)
@@ -75,7 +75,8 @@ async def test_irrigation_pump_off_overtakes_queued_writes(rig):
         for name, channel, level in (("b", Channel.EXHAUST, 40), ("c", Channel.FAN, 5))
     ]
     await wait_for(lambda: all(rig.service.receipt(n) is not None for n in "bc"))
-    await asyncio.sleep(0.15)  # the irrigation timer ends; its pump-off queues behind a
+    # b, c and the pump-off (once the irrigation timer ends) are all queued behind a
+    await wait_for(lambda: len(rig.service.gate._waiters) == 3)
     release.set()
     await asyncio.gather(irrigation, first, *queued)
     keys = [c["params"]["keyPath"][1] for c in rig.writes()]
