@@ -305,3 +305,42 @@ async def test_a_window_without_new_samples_keeps_the_period_open(rig):
     await rig.check()
     assert [p.period_id for p in rig.open_for("temp")] == [period.period_id]
     assert [a.count for a in rig.alerts()] == [1]
+
+
+async def test_no_config_closes_nothing(rig):
+    rig.config = make_safety(rules=(), frozen=FrozenCheck(minutes={"ppfd": 30.0}))
+    rig.feed(40, ppfd=10.0)
+    await rig.check()
+    assert len(rig.open_for("ppfd")) == 1
+    rig.config = None  # the default list has no ppfd, but a missing config closes nothing
+    await rig.check()
+    assert len(rig.open_for("ppfd")) == 1
+    assert len(rig.alerts("ppfd")) == 1
+
+
+async def test_a_new_protection_rule_raises_the_open_alert_to_critical(rig):
+    await frozen_running(rig)
+    assert [a.severity for a in rig.alerts()] == ["warning"]
+    rig.config = make_safety()  # protection rule on temp approved
+    await rig.check()
+    assert [a.severity for a in rig.alerts()] == ["critical"]
+    count = rig.alerts()[0].count
+    await rig.check()
+    assert rig.alerts()[0].count == count  # unchanged severity: no re-raise
+
+
+async def test_the_pause_is_reported_even_when_the_update_fails(rig):
+    rig.stages.sensors = ("temp",)
+    rig.feed(121, temp=24.0)
+    rig.stages.state = StageState.PAUSED  # open the period without pausing
+    await rig.check()
+    rig.stages.state = StageState.RUNNING
+    assert rig.stages.events == []
+
+    def fail(since):
+        raise RuntimeError("database is locked")
+
+    rig.archive.sensor_points = fail
+    with pytest.raises(RuntimeError):
+        await rig.check()
+    assert len(rig.stages.events) == 1

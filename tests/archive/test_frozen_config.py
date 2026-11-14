@@ -46,3 +46,15 @@ def test_default_minutes_are_not_shared_between_configs():
     first.minutes["temp"] = 1.0
     assert FrozenCheck().minutes == DEFAULTS
     assert DEFAULT_FROZEN_MINUTES == DEFAULTS
+
+
+def test_frozen_accepts_the_upper_bounds():
+    check = FrozenCheck(minutes={"temp": 1440}, max_gap_seconds=3600)
+    assert check.minutes == {"temp": 1440} and check.max_gap_seconds == 3600
+
+
+def test_frozen_rejects_values_above_the_upper_bounds():
+    with pytest.raises(ValidationError):
+        FrozenCheck(minutes={"temp": 1441})
+    with pytest.raises(ValidationError):
+        FrozenCheck(max_gap_seconds=3601)

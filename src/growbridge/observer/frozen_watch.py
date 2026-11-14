@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from growbridge.archive.clock import Clock
 from growbridge.archive.models import FrozenCheck, FrozenPeriod, SafetyConfig
 from growbridge.archive.store import Archive
-from growbridge.observer.alerts import AlertBook
+from growbridge.observer.alerts import Alert, AlertBook
 from growbridge.observer.frozen import first_change, flat_tail, sensors_used
 from growbridge.ports import StageEvent, StageEventKind, StagePort
 from growbridge.workflow.states import StageState
@@ -65,11 +65,19 @@ class FrozenWatch:
         config = self.safety()
         settings = config.frozen if config is not None else FrozenCheck()
         protection = frozenset(rule.sensor for rule in config.rules) if config else frozenset()
-        self._update_periods(settings, protection)
+        try:
+            self._update_periods(settings, protection, may_close=config is not None)
+        except Exception:
+            await self._pause_stage(protection)  # periods already open still pause the stage
+            raise
         await self._pause_stage(protection)
         return True
 
-    def _update_periods(self, settings: FrozenCheck, protection: frozenset[str]) -> None:
+    def _update_periods(
+        self, settings: FrozenCheck, protection: frozenset[str], may_close: bool
+    ) -> None:
+        """Without a configuration the defaults open periods and follow changes, but nothing is
+        closed because a sensor is missing from a list that is not there."""
         periods = self.archive.open_frozen_periods()
         points: Sequence[tuple[float, dict]] = ()
         if settings.minutes:
@@ -78,7 +86,8 @@ class FrozenWatch:
         critical = sensors_used(protection)
         for period in periods:
             if period.sensor not in settings.minutes:
-                self._close(period, _series(points, period.sensor))
+                if may_close:
+                    self._close(period, _series(points, period.sensor))
             else:
                 self._follow(period, _series(points, period.sensor), critical)
         have_open = {p.sensor for p in periods}
@@ -94,8 +103,10 @@ class FrozenWatch:
         after = [point for point in series if point[0] > period.first_at]
         if first_change(after, period.value) is not None:
             self._close(period, series)
-        elif self._alert_id(period.sensor) is None:  # the alert was lost; keep it visible
-            self._raise(period.sensor, period.value, critical)
+            return
+        alert = self._open_alert(period.sensor)
+        if alert is None or (period.sensor in critical and alert.severity != "critical"):
+            self._raise(period.sensor, period.value, critical)  # lost, or now more serious
 
     def _maybe_open(
         self, name: str, minutes: float, series: Series, settings: FrozenCheck, critical: frozenset
@@ -111,11 +122,15 @@ class FrozenWatch:
         message = f"{name} has reported exactly {value:g} without change (frozen reading)"
         self.book.raise_alert(KIND, name, severity, message)
 
-    def _alert_id(self, name: str) -> str | None:
+    def _open_alert(self, name: str) -> Alert | None:
         for alert in self.book.open():
             if alert.kind == KIND and alert.key == name:
-                return alert.event_id
+                return alert
         return None
+
+    def _alert_id(self, name: str) -> str | None:
+        alert = self._open_alert(name)
+        return alert.event_id if alert else None
 
     async def _pause_stage(self, protection: frozenset[str]) -> None:
         stage = self.stages.active_stage()

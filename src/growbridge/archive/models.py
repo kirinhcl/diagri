@@ -193,6 +193,8 @@ class ProtectionRule(Model):
     action: RuleAction
 
 
+MAX_FROZEN_MINUTES = 1440.0
+MAX_FROZEN_GAP_SECONDS = 3600.0
 DEFAULT_FROZEN_MINUTES = {"temp": 120.0, "humi": 60.0, "co2": 60.0, "tempSoil": 240.0}
 
 
@@ -205,13 +207,16 @@ class FrozenCheck(Model):
 
     @model_validator(mode="after")
     def _positive_and_finite(self) -> "FrozenCheck":
-        bad = [name for name, value in self.minutes.items() if not 0 < value < math.inf]
+        bad = [name for name, value in self.minutes.items() if not 0 < value <= MAX_FROZEN_MINUTES]
         if bad:
             raise ValueError(
-                f"frozen minutes must be finite and positive; not for {', '.join(bad)}"
+                f"frozen minutes must be above 0 and at most {MAX_FROZEN_MINUTES:g}; "
+                f"not for {', '.join(bad)}"
             )
-        if not 0 < self.max_gap_seconds < math.inf:
-            raise ValueError("frozen max_gap_seconds must be finite and positive")
+        if not 0 < self.max_gap_seconds <= MAX_FROZEN_GAP_SECONDS:
+            raise ValueError(
+                f"frozen max_gap_seconds must be above 0 and at most {MAX_FROZEN_GAP_SECONDS:g}"
+            )
         return self
 
 
