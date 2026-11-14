@@ -145,6 +145,17 @@ Credentials are read from the environment of the `growbridge serve` process. All
 
 When neither channel is configured, no notification is queued. Alerts are still recorded and shown by `GET /wb/alerts`, and the runtime raises a `notify_unconfigured` warning alert at start (`build_runtime` and `Runtime.start` in [`runtime.py`](../../../src/growbridge/runtime.py)).
 
+## Frozen-reading thresholds (`SafetyConfig.frozen`)
+
+Not part of the settings file: the thresholds are a field of the approved safety configuration, `SafetyConfig.frozen`, a `FrozenCheck` in [`archive/models.py`](../../../src/growbridge/archive/models.py). A person approves them with the rest of the safety limits (`POST /wb/safety/approve`) and the workbench safety page shows them. The observer flags a sensor whose value stays exactly the same for longer than its threshold.
+
+| Field | Type | Default | Validation | What it does |
+| --- | --- | --- | --- | --- |
+| `minutes` | dict of sensor name to number | `{"temp": 120, "humi": 60, "co2": 60, "tempSoil": 240}` (`DEFAULT_FROZEN_MINUTES`; every config gets its own copy) | Each value must be greater than 0 and at most 1440 (`0`, negative, NaN, infinity and anything above 1440 are refused). An empty dict is allowed and means no sensor is checked. | Minutes a sensor may keep the same value before it counts as frozen. A sensor with no entry is not checked. |
+| `max_gap_seconds` | number | `600` | Greater than 0 and at most 3600 (NaN, infinity and larger values are refused). | Longest gap between two readings that still counts as one unbroken run of the same value. |
+
+When no safety configuration has been approved, the thresholds are the defaults above. A safety configuration stored before this field existed has no `frozen` key and loads with the defaults.
+
 ## What has no setting
 
 | Feature | State in the code |

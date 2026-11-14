@@ -4,6 +4,7 @@ The observer never writes to the device. A rule marked ``pause_stage`` only repo
 ``ALERT_PAUSE`` event to the stage port; the workflow service decides what that means.
 """
 
+import logging
 from collections.abc import Callable, Sequence
 
 from growbridge.archive.clock import Clock
@@ -14,10 +15,12 @@ from growbridge.observer.alerts import (
     RuleState,
     evaluate_alert_rules,
 )
+from growbridge.observer.frozen_watch import FrozenWatch
 from growbridge.observer.outbox import Outbox
 from growbridge.ports import Reading, StageEvent, StageEventKind, StagePort
 
 DEFAULT_CHANNELS = ("telegram",)
+log = logging.getLogger(__name__)
 
 
 class Observer:
@@ -30,6 +33,7 @@ class Observer:
         rules: Sequence[AlertRule],
         clock: Clock,
         notify_channels: Sequence[str] = DEFAULT_CHANNELS,
+        frozen: FrozenWatch | None = None,
     ):
         self.stages = stages
         self.control_readings = control_readings
@@ -38,6 +42,7 @@ class Observer:
         self.rules = tuple(rules)
         self.clock = clock
         self.notify_channels = tuple(notify_channels)
+        self.frozen = frozen
         self.states: dict[str, RuleState] = {}
 
     def _queue_open_alerts(self) -> None:
@@ -85,4 +90,19 @@ class Observer:
             alert = self.book.raise_alert("threshold", rule.name, rule.severity, message)
             if rule.pause_stage:
                 await self._pause(rule, alert)
+        await self._watch_frozen()
         self._queue_open_alerts()
+
+    async def _watch_frozen(self) -> None:
+        if self.frozen is None:
+            return
+        try:
+            checked = await self.frozen.tick()
+        except Exception:
+            log.exception("frozen-reading check failed")
+            self.book.raise_alert(
+                "frozen_watch", "check", "critical", "The frozen-reading check is failing"
+            )
+        else:
+            if checked:  # only a completed check shows the failure is over
+                self.book.resolve("frozen_watch", "check")

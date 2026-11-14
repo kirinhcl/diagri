@@ -33,10 +33,12 @@ An example. The stage starts under stage right 7. The operator pauses it, and 7 
 
 ## One gate for hand-over and dispatch
 
-`ControlService.gate` is a single lock. Two things take it: sending a write, and finishing a hand-over.
+`ControlService.gate` is a single lock with two priority levels. Three things take it: sending a write, finishing a hand-over, and `reconcile_unsettled`.
 
 - `submit` checks the request, stores it, takes the gate, **checks everything a second time**, and sends.
 - `handover` revokes the number, voids the actions still queued under it, and then takes the gate once. Taking it means waiting until a write that is already on its way has its receipt.
+
+**Priority.** Waiters at the urgent level go before waiters at the normal level; within a level it is first come, first served. Urgent are: a write under the protection right, the pump-off that ends an irrigation, and `handover`. Normal are: every other write, the pump-on of an irrigation, and `reconcile_unsettled`. A protection write also voids the ordinary writes still queued on its own channel, so they cannot run after it and undo it (the write already on its way is left alone); the voided action reads `superseded by a protection write on <channel>`. The gate never preempts: an urgent caller waits for the one write already on its way, but not for the ordinary writes queued behind it. `pump_off()` (the interlock path) does not take the gate at all.
 
 Why the same lock: when `handover` returns, no write under the old number is queued and none is in flight. A hand-over and a write cannot interleave, so the workflow service can grant the next right safely.
 
@@ -65,7 +67,7 @@ Every write is recorded before it is sent, and the record moves through these st
 | `confirmed` | Read-back shows the planned level. |
 | `failed` | The device refused, or read-back shows another level or mode. |
 | `unknown` | The write may or may not have taken effect. |
-| `void` | Cancelled before sending: a hand-over, a failed second check, or a restart. |
+| `void` | Cancelled before sending: a hand-over, a failed second check, a protection write on the same channel, or a restart. |
 
 Why `maybe_sent` exists. Suppose the process dies after the device applied a command but before the receipt was stored. A ledger that only knew `pending` would send the command again after the restart. With `maybe_sent`, start-up marks the action `unknown` and does not replay it (`_close_unfinished`).
 
@@ -133,6 +135,10 @@ It is still bound by the other checks: enabled controls, the registered host, th
 
 **Limits.** After a recovery number change there is no protection until the safety configuration is approved again. Without a BLE link nothing can be written, so a risk that must be covered while offline needs the AC5's own limits or separate hardware. A protection rule on a channel that the run sheet leaves to the device is a conflict, and the stage cannot start (`safety_conflict`). The code restricts a protection right to its listed values; that those values lower the risk is what the operator confirms when approving the configuration.
 
+## Frozen readings
+
+A sensor that keeps reporting exactly the same value is not a reading, it is a stuck sensor. The observer records a frozen period and raises an alert, but it pauses a stage only when that stage depends on the sensor: a feedback rule of the run sheet uses it, or a protection rule does (a rule on `vpd` counts as using `temp` and `humi`). A frozen sensor nothing depends on only produces an alert. A protection rule on the sensor raises the alert to critical. Only a `running` stage is paused, once per period and stage, and no second pause once the first has paused the stage: when two periods open in the same check, the second one pauses the stage on a later check, after the operator has resumed it. Periods a protection rule depends on are handled first. Raw samples are never changed; the period is a separate, append-only record.
+
 ## Recovery number
 
 A backup holds rights and approvals that were issued in the past, for a device that may have changed since. `growbridge recovery bump` raises the recovery number, and everything issued under the old number stops working:
@@ -161,6 +167,8 @@ The listener is what decides; a `Host` header alone selects nothing. A remote cl
 ## What this model does not cover
 
 The control service owns the GrowBridge side of the BLE link. The AC5 panel and the Spider Farmer app can still change the device. DiAGRI only notices afterwards, through read-back, as `EXTERNAL_CHANGE`.
+
+The pump is the exception. Nobody switches the pump on by hand during an experiment and the pump is never left to the AC5 timer, so a pump outlet that reads back as on while DiAGRI is not irrigating is always unexpected. The executor's pump watchdog checks this on every tick: it switches the pump off through the dedicated `pump_off` path (trigger `watchdog`), raises a critical `pump_unexpected` alert and records an `unexpected_watering` intervention against the active stage (with no active stage the watchdog still runs, but then only the ledger record and the alert exist and no intervention is recorded). `pump_off` also resets the outlet mode to manual, which clears a timer set on the AC5 panel. If the outlet cannot be read it only raises a `pump_unreadable` warning and does nothing else. The watchdog acts only while connected and with no unconfirmed pump-off; an unconfirmed switch-off is handed to the pump-off interlock.
 
 ## See also
 

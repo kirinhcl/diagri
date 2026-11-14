@@ -7,6 +7,7 @@ import { errorLines, jsonEditor } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
+import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
@@ -23,6 +24,20 @@ function rulesTable(ctx, rules) {
   return table(columns, rules, { label: ctx.t("safety.rules") });
 }
 
+function frozenView(ctx, frozen) {
+  const rows = frozenRows(frozen);
+  const seconds = frozen?.max_gap_seconds;
+  const gap = keyValues([[ctx.t("safety.frozenGap"), seconds === undefined || seconds === null ? null : String(seconds)]]);
+  const columns = [
+    { label: ctx.t("safety.sensor"), cell: (row) => row[0] },
+    { label: ctx.t("safety.frozenMinutes"), cell: (row) => String(row[1]) },
+  ];
+  const list = rows.length
+    ? table(columns, rows, { label: ctx.t("safety.frozen") })
+    : note(ctx.t("safety.frozenNone"));
+  return h("div", { class: "frozen" }, h("h3", { text: ctx.t("safety.frozen") }), gap, list);
+}
+
 function currentView(ctx, config) {
   if (!config) return note(ctx.t("safety.none"));
   const facts = keyValues([
@@ -31,7 +46,8 @@ function currentView(ctx, config) {
     [ctx.t("safety.approvedAt"), timeText(ctx, config.approved_at)],
   ]);
   const rules = array(config.rules);
-  return h("div", { class: "review" }, facts, rules.length ? rulesTable(ctx, rules) : note(ctx.t("safety.noRules")));
+  const ruleList = rules.length ? rulesTable(ctx, rules) : note(ctx.t("safety.noRules"));
+  return h("div", { class: "review" }, facts, ruleList, frozenView(ctx, config.frozen));
 }
 
 // The editor's own context: a refusal (409 included) re-reads only the current limits, never the editor.

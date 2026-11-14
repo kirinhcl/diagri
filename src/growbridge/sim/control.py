@@ -16,6 +16,8 @@ from growbridge.ports import (
     Capabilities,
     DeviceState,
     Difference,
+    PumpOffTrigger,
+    PumpReading,
     Reading,
     RightScope,
 )
@@ -31,6 +33,7 @@ class FakeControl:
         self.capability_version = "caps-1"
         self.stopped = True  # transport_stopped(): old writes confirmed gone
         self.interlock = False
+        self._last_pump_off: str | None = None
         self.unsettled: tuple[ActionRecord, ...] = ()
         self.diffs: tuple[Difference, ...] = ()
         self.differences_error: Exception | None = None  # raised by differences() when set
@@ -130,7 +133,21 @@ class FakeControl:
     async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
         raise NotImplementedError("FakeControl does not simulate writes")
 
-    async def pump_off(self) -> bool:
+    def irrigating(self) -> bool:
+        return False
+
+    def pump_reading(self) -> PumpReading:
+        return PumpReading(on=None, at=0.0, mono=0.0)  # no status ever received
+
+    def last_cycle_end(self) -> float | None:
+        return None
+
+    def last_pump_off_id(self) -> str | None:
+        return self._last_pump_off
+
+    async def pump_off(self, trigger: PumpOffTrigger = "interlock") -> bool:
+        self._last_pump_off = f"pumpoff-{trigger}"
+        self.log.append(("pump_off", trigger))
         return True
 
     def receipt(self, request_id: str) -> ActionRecord | None:

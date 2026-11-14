@@ -1,6 +1,9 @@
 """Control service: the single checkpoint for every BLE write (spec 7.1-7.3, 7.5, 7.6, 7.8, 7.9).
 
-One ``asyncio.Lock`` (the gate) serialises hand-overs and every dispatch. A request is checked
+One two-level priority gate serialises hand-overs and every dispatch. Protection writes, the
+pump-off at the end of an irrigation and hand-overs go before queued ordinary writes (they never
+preempt the write already on its way). A protection write also voids the ordinary writes
+queued on its own channel. A request is checked
 when it is queued and again, inside the gate, right before it is sent. The intent is persisted
 before sending and again as "maybe sent" just before the bytes leave, so a crash in between is
 recovered as "result unknown" and never replayed.
@@ -34,12 +37,15 @@ from growbridge.control.ledger import (
     META_RECOVERY,
     Ledger,
 )
+from growbridge.control.priority_gate import NORMAL, URGENT, PriorityGate
 from growbridge.ports import (
     ActionRequest,
     Capabilities,
     Denied,
     DeviceState,
     Difference,
+    PumpOffTrigger,
+    PumpReading,
     Reading,
     RecordSink,
     RightScope,
@@ -66,13 +72,33 @@ class ControlService:
         self.sink = sink
         self.ledger = Ledger(db)
         self.device = DeviceIO(bridge)
-        self.gate = asyncio.Lock()
+        self.gate = PriorityGate()
         self._cycle: asyncio.Event | None = None  # set while an irrigation cycle is in flight
+        self._last_cycle_end: float | None = None
+        self._last_pump_off_id: str | None = None
         self.ready = False  # False until ``startup`` has finished: ordinary writes are blocked
 
     @property
     def device_id(self) -> str:
         return str(self.bridge.settings.device)
+
+    def irrigating(self) -> bool:
+        return self._cycle is not None
+
+    def pump_reading(self) -> PumpReading:
+        if not self.bridge.received_monotonic:
+            return PumpReading(on=None, at=0.0, mono=0.0)
+        return PumpReading(
+            on=self.device.pump_on(self.bridge.data),
+            at=self.bridge.received_at,
+            mono=self.bridge.received_monotonic,
+        )
+
+    def last_cycle_end(self) -> float | None:
+        return self._last_cycle_end
+
+    def last_pump_off_id(self) -> str | None:
+        return self._last_pump_off_id
 
     # --- host, recovery number, simple reads --------------------------------------------------
 
@@ -159,7 +185,8 @@ class ControlService:
             voided = self._void_queued(f"hand-over: {reason}", right_number=number)
             self.ledger.event("handover", {"right": number, "reason": reason}, now)
         self._publish(voided)
-        async with self.gate:  # waits for the receipt of an action already on its way
+        # URGENT: waits only for the receipt of the action already on its way
+        async with self.gate.acquire(URGENT):
             pass
 
     # --- safety configuration (7.5) -----------------------------------------------------------
@@ -250,9 +277,20 @@ class ControlService:
         changed.extend(self._void_queued("process stopped before the action was sent"))
         return changed
 
-    def _void_queued(self, why: str, right_number: int | None = None) -> list[ActionRecord]:
+    def _void_queued(
+        self,
+        why: str,
+        right_number: int | None = None,
+        channel: Channel | None = None,
+        spare: RightKind | None = None,
+    ) -> list[ActionRecord]:
+        """Void queued actions, optionally only on ``channel`` and sparing right kind ``spare``."""
         voided = []
         for record in self.ledger.actions_in(ActionState.PENDING, right_number=right_number):
+            if channel is not None and record.channel is not channel:
+                continue
+            if spare is not None and record.right_kind is spare:
+                continue
             voided.append(record.model_copy(update={"state": ActionState.VOID, "error": why}))
             self.ledger.update_action(voided[-1])
         return voided
@@ -315,11 +353,21 @@ class ControlService:
         right = self._authorize(request)
         if right.kind is RightKind.PROTECTION:
             self._end_cycle()  # a protection write must not wait for a pump run to finish
+            self._supersede_queued(request.channel)
         record = rights.intent(request, right, request.level, self.clock.now())
         self._save(record, fingerprint)
-        async with self.gate:
+        urgent = right.kind is RightKind.PROTECTION
+        async with self.gate.acquire(URGENT if urgent else NORMAL):
             self._recheck(record, request)
             return await self._send(record)
+
+    def _supersede_queued(self, channel: Channel) -> None:
+        """A protection write has the last word: ordinary writes queued ahead of it on its channel
+        would otherwise run after it and undo it. The write already on its way is left alone."""
+        why = f"superseded by a protection write on {channel.value}"
+        with self.db.transaction():
+            voided = self._void_queued(why, channel=channel, spare=RightKind.PROTECTION)
+        self._publish(voided)
 
     async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
         self._check_irrigation(request, seconds)
@@ -438,7 +486,7 @@ class ControlService:
         """ON under the gate, wait outside it, OFF under the gate; OFF always runs (7.6, 7.8)."""
         cycle = None
         try:
-            async with self.gate:
+            async with self.gate.acquire(NORMAL):
                 self._recheck(record, request, starts_pump=True)
                 now = self.clock.now()
                 self.ledger.set_meta(META_LAST_IRRIGATION, str(now))
@@ -453,11 +501,15 @@ class ControlService:
                     pass
         finally:
             if cycle is not None:
-                async with self.gate:
-                    off = await self._switch_pump_off()
-                self._cycle = None
-                if off.state is not ActionState.CONFIRMED:
-                    self._set_interlock(sent.request_id)
+                off = Outcome(ActionState.UNKNOWN, "pump off did not run")
+                try:
+                    async with self.gate.acquire(URGENT):
+                        off = await self._switch_pump_off()
+                        self._last_cycle_end = self.clock.monotonic()
+                finally:
+                    self._cycle = None
+                    if off.state is not ActionState.CONFIRMED:
+                        self._set_interlock(sent.request_id)
         if off.state is not ActionState.CONFIRMED:
             on = Outcome(ActionState.UNKNOWN, "pump off unconfirmed; interlock set")
         return self._settle(sent, on)
@@ -476,11 +528,11 @@ class ControlService:
                 await asyncio.sleep(self.bridge.readback_interval)
         return outcome
 
-    async def pump_off(self) -> bool:
+    async def pump_off(self, trigger: PumpOffTrigger = "interlock") -> bool:
         """Dedicated interlock path: only the pump outlet, only off, usable while paused.
 
-        It is recorded in the ledger under the system right 0 (trigger ``interlock``) and links
-        the pump action it follows through ``supersedes``."""
+        It is recorded in the ledger under the system right 0 (trigger ``interlock`` or
+        ``watchdog``) and links the pump action it follows through ``supersedes``."""
         self._require_host()
         if not self.bridge.connected:
             return False
@@ -494,16 +546,19 @@ class ControlService:
             planned_level=0,
             right_number=0,
             right_kind=RightKind.PROTECTION,
-            trigger="interlock",
+            trigger=trigger,
             created_at=now,
             sent_at=now,
             supersedes=pending[-1].request_id if pending else None,
         )
+        self._last_pump_off_id = record.request_id
         self._save(record, "system:pump_off")
         outcome = await self._switch_pump_off()
         confirmed = outcome.state is ActionState.CONFIRMED
         self._settle(record, outcome)
-        self.ledger.event("pump_off", {"confirmed": confirmed}, self.clock.now())
+        self.ledger.event(
+            "pump_off", {"confirmed": confirmed, "trigger": trigger}, self.clock.now()
+        )
         if not confirmed:
             self._set_interlock(record.request_id)
         elif self.transport_stopped():
@@ -521,7 +576,7 @@ class ControlService:
             state = await self.read_state()
         except Denied:
             return self.unsettled_actions()
-        async with self.gate:
+        async with self.gate.acquire(NORMAL):
             settled = []
             for record in self.ledger.unsettled():
                 if record.channel is Channel.PUMP:

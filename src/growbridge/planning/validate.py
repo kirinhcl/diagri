@@ -69,6 +69,19 @@ def _check_actions(
     return findings
 
 
+def _check_pump_ownership(sheet: RunSheet) -> list[Finding]:
+    plan = sheet.plan(Channel.PUMP)
+    if plan is not None and plan.ownership is Ownership.HOST:
+        return []
+    return [
+        _block(
+            "pump_device_owned",
+            "the pump must be planned as host-controlled; "
+            "it may not be left to the device timer or left out",
+        )
+    ]
+
+
 def _sensor_rules(sheet: RunSheet, safety: SafetyConfig | None):
     for rule in sheet.feedback_rules:
         yield rule.id, rule.sensor, rule.unit
@@ -223,6 +236,7 @@ def validate_run_sheet(
 ) -> tuple[Finding, ...]:
     return (
         *_check_actions(run_sheet, capabilities, safety),
+        *_check_pump_ownership(run_sheet),
         *_check_sensors(run_sheet, capabilities, safety),
         *_check_humidity(run_sheet),
         *_check_rule_conflicts(run_sheet),

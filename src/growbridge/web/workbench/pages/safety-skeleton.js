@@ -15,6 +15,7 @@ export function safetySkeleton() {
         action: { channel: null, level: null },
       },
     ],
+    frozen: { minutes: null, max_gap_seconds: null },
     approved_by: null,
     approved_at: null,
   };

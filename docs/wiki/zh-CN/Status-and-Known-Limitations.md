@@ -38,6 +38,7 @@
 | 方面 | 状态 | 说明 | 去哪里核对 |
 | --- | --- | --- | --- |
 | DiAGRI 模式连接实体 AC5 | 未验证 | 从未运行过。包括阶段执行中途蓝牙中断、主机或 AC5 断电，以及长时间无人值守运行。 | [VALIDATION.md](../../../VALIDATION.md) |
+| 水泵插座读回 | 未验证 | 看门狗依赖设备状态里水泵插座的 `on` 读回。这在模拟的 AC5 上测过，没有在真机上核对过：插座读回的格式、更新的时机，以及面板开泵后多久能读到，都没有实测。读不出来时只发警告，看门狗不会动手。 | [`executor/watchdog.py`](../../../src/growbridge/executor/watchdog.py)、[`control/device.py`](../../../src/growbridge/control/device.py) |
 | 树莓派与 Linux 蓝牙 | 未验证 | `BleakTransport`（BlueZ 上的 Bleak）只在测试里对着假客户端跑过。没有在实体树莓派上运行的记录。 | [`transport.py`](../../../src/growbridge/transport.py)、[`tests/transport/`](../../../tests/transport/) |
 | 事件通道关闭后 Swift 辅助程序退出 | 未验证 | 在 macOS 上，Python 一侧断开时，辅助程序应当丢弃排队中的写入并退出（`watchChannel`）。CI 只编译这个辅助程序。 | [`BLEHelper.swift`](../../../src/growbridge/native/BLEHelper.swift) |
 | 其他控制器、其他固件、加密协议 v2 | 未验证 | 只用过一台明文协议 v1 的 AC5。控制要求协议版本为 1，否则拒绝。 | [`service.py`](../../../src/growbridge/service.py)、[VALIDATION.md](../../../VALIDATION.md) |
@@ -63,6 +64,7 @@
 | 相机采集 | 未实现 | 没有任何相机相关的代码。长势观察靠录入人工测量。 | [`observer/report.py`](../../../src/growbridge/observer/report.py) |
 | 备份 | 只备份 SQLite 数据库 | 一次备份复制的是 DiAGRI 的六个数据库，不包括仅桥接模式的历史文件 `growbridge.sqlite3`，也不包括数据目录下 `archive/` 里的文件（例如数据快照）。目前还没有图像采集，所以也没有图像可备份。没有设置 `backup_dir` 时什么都不备份，并且会有一条常驻的警告。 | [`runtime_backup.py`](../../../src/growbridge/runtime_backup.py)、[`archive/backup.py`](../../../src/growbridge/archive/backup.py) |
 | 在事件循环里冻结快照 | 已知限制 | 冻结数据快照（`freeze_dataset`）以及本地分析前重新核验快照，都要读文件、算哈希，同时持有数据库事务，而且是在承担每秒一次执行循环的同一个事件循环里进行。阶段较长时，执行循环可能因此停顿几秒。沙箱运行本身和确认性运行前的检查已经移出事件循环。 | [`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py)、[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py) |
+| 冻结读数的门槛 | 未验证 | 默认门槛（temp 120、humi 60、co2 60、tempSoil 240 分钟）来自 64 分钟的闲置数据。在依赖冻结读数触发暂停之前，需要用真实实验数据重新调整。 | [`observer/frozen_watch.py`](../../../src/growbridge/observer/frozen_watch.py) |
 | 被跳过的测试 | 是「跳过」，不是「通过」 | 需要 `sandbox-exec` 的测试在没有它的系统上会被跳过，Linux 上的 CI 就是这种情况。需要构建 Anthropic 客户端的测试在没装 `anthropic` 包时会被跳过；CI 只安装 `dev` 这一组可选依赖，所以这些测试在两个 CI 系统上都被跳过。 | [`test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py)、[`test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py)、[`test_agents_llm.py`](../../../tests/agents/test_agents_llm.py) |
 
 ## 怎样重新核对

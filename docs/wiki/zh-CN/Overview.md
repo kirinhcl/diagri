@@ -84,7 +84,7 @@ flowchart LR
 - **水泵不会被自动启动。** 运行单里只要有会启动水泵的动作，校验就不通过（见 [`planning/validate.py`](../../../src/growbridge/planning/validate.py)），执行 Agent 也会拒绝这样的动作（见 [`executor/engine.py`](../../../src/growbridge/executor/engine.py)）。只有通过认证的操作员，从局域网入口进来，在人工接管期间调用灌溉路由，水泵才会启动（见 [`workbench/api.py`](../../../src/growbridge/workbench/api.py)）。每次运行受 `max_pump_seconds` 和 `pump_cooldown_seconds` 限制。
 - **安全不等模型。** 驱动执行 Agent、保护规则和关泵联锁的那个 tick 从不调用模型（见 [`runtime.py`](../../../src/growbridge/runtime.py)）。模型接口不可用时，已批准的阶段照常执行。
 
-有一件事系统管不到：AC5 面板和厂商 App 仍然可以直接改设备。DiAGRI 只能靠回读发现这类改动。设计理由见[控制与安全模型](Control-and-Safety-Model.md)。
+有一件事系统管不到：AC5 面板和厂商 App 仍然可以直接改设备。DiAGRI 只能靠回读发现这类改动。水泵除外：DiAGRI 没有灌溉时水泵若开着，看门狗会把它关掉、发严重告警，并在当前阶段记一条干预（没有活动阶段时只有账本记录和告警）。关泵时还会把插座模式重置为手动，面板上设的定时器因此被清掉。设计理由见[控制与安全模型](Control-and-Safety-Model.md)。
 
 ## 当前状态
 

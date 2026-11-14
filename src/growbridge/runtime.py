@@ -44,10 +44,17 @@ from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
 from growbridge.observer.alerts import Alert, AlertBook, AlertRule
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
+from growbridge.observer.frozen_watch import FrozenWatch
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
-from growbridge.observer.report import ReportContext, ReportStore, render_daily_report, reports_due
+from growbridge.observer.report import (
+    ReportContext,
+    ReportStore,
+    frozen_lines,
+    render_daily_report,
+    reports_due,
+)
 from growbridge.observer.service import Observer
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
@@ -399,6 +406,10 @@ class Runtime:
 
         self._safely(raise_it)
 
+    def resolve_alert(self, kind: str, key: str) -> None:
+        """Close an open alert (a no-op when none is open); never raises."""
+        self._safely(lambda: self.book.resolve(kind, key))
+
     def _announce(self, alert: Alert) -> None:
         if alert.count != 1:
             return
@@ -511,12 +522,14 @@ class Runtime:
             for item in self.workflow.interventions(stage.experiment_id)
             if start <= item["at"] < end
         )
+        frozen = frozen_lines(self.archive.frozen_periods(start, end), zone, start, end)
         row = self.workflow.db.one("SELECT name FROM wf_projects WHERE id = ?", (stage.project_id,))
         context = ReportContext(
             project_id=stage.project_id,
             project_name=row["name"] if row else stage.project_id,
             protective_actions=protective,
             manual_interventions=interventions,
+            frozen_readings=frozen,
         )
         return render_daily_report(metrics, context)
 
@@ -643,7 +656,10 @@ def build_runtime(
     selected = default_channels() if channels is None else dict(channels)
     # only channels that have a sender: a notification queued for any other name is never sent
     notify = tuple(selected)
-    observer = Observer(flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify)
+    frozen = FrozenWatch(archive, book, flow, control.safety, clock)
+    observer = Observer(
+        flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify, frozen=frozen
+    )
     unreadable = [Path.home(), data_dir]  # reads are denied by default; these stay denied
     if settings.backup_dir is not None:  # even where an allowed path would cover them
         unreadable.append(settings.backup_dir)
@@ -700,6 +716,8 @@ def build_runtime(
         databases=tuple(dbs.values()),
     )
     mirror.alert = runtime._alert
+    executor.watchdog.alert = runtime._alert
+    executor.watchdog.resolve = runtime.resolve_alert
     backups.alert = runtime.alert
     return runtime
 

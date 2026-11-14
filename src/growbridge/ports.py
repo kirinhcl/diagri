@@ -54,6 +54,17 @@ class Actor(Model):
     reauth_at: float | None = None  # when the operator last re-authenticated
 
 
+class PumpReading(Model):
+    """The pump outlet as last read back from the panel; ``on`` is None when unknown."""
+
+    on: bool | None
+    at: float  # wall time the status was received
+    mono: float  # monotonic time the status was received; 0.0 before the first status
+
+
+PumpOffTrigger = Literal["interlock", "watchdog"]
+
+
 class Reading(Model):
     sensor: str
     value: float | None
@@ -200,6 +211,10 @@ class StagePort(Protocol):
 
     async def report(self, event: StageEvent) -> None: ...
 
+    def record_intervention(self, stage_id: str, kind: str, detail: dict[str, Any]) -> None:
+        """Write a system intervention (no operator) against a stage and hand it on."""
+        ...
+
 
 class ControlPort(Protocol):
     """Implemented by the control service: the single checkpoint for every BLE write."""
@@ -213,6 +228,16 @@ class ControlPort(Protocol):
     def capabilities(self) -> Capabilities: ...
 
     def connected(self) -> bool: ...
+
+    def irrigating(self) -> bool: ...
+
+    def pump_reading(self) -> PumpReading: ...
+
+    def last_cycle_end(self) -> float | None:
+        """Monotonic time the last irrigation's pump-off finished, or None."""
+        ...
+
+    def last_pump_off_id(self) -> str | None: ...
 
     def readings(self) -> tuple[Reading, ...]: ...
 
@@ -244,7 +269,7 @@ class ControlPort(Protocol):
         """Operator-triggered pump run under a manual right; the only path that starts it."""
         ...
 
-    async def pump_off(self) -> bool:
+    async def pump_off(self, trigger: PumpOffTrigger = "interlock") -> bool:
         """Dedicated interlock path: switch the pump outlet off and read back."""
         ...
 

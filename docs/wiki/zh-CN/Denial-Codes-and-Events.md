@@ -77,7 +77,7 @@
 | `transport_unconfirmed` | 执行 Agent | 阶段处于 `running`、`paused` 或 `manual`，而旧传输停止还没有得到确认。 | 无 | 把阶段转入 `recovery_check` |
 | `end_condition_met` | 执行 Agent | 阶段处于 `running`，`end_pending` 为 false，并且从 `started_at` 起已经过了 `duration_seconds`。 | 无 | 保持 `running`，并设置 `end_pending` |
 | `end_actions` | 执行 Agent | `end_pending` 为 true，并且主机控制通道上的每个结束动作都已发出。水泵不在其中。 | `confirmed` | `confirmed` 为 true：结束阶段。`confirmed` 为 false：把阶段转入 `recovery_check`。 |
-| `alert_pause` | 观察与通知 Agent | 一条带 `pause_stage` 的告警规则触发，并且有活动阶段。 | `rule`、`alert` | 暂停阶段 |
+| `alert_pause` | 观察与通知 Agent | 一条带 `pause_stage` 的告警规则触发且有活动阶段；或者运行中的阶段所依赖的传感器读数冻结（这时 `rule` 是 `frozen:<传感器>`，`period` 是冻结时段）。 | `rule`、`alert`（冻结引起的暂停还有 `period`；只有存在未解决的告警时才有 `alert`） | 暂停阶段 |
 | `rule_pause` | 执行 Agent | 阶段处于 `running`，一条 `on_missing = "pause"` 的反馈规则拿不到它那个传感器的有效读数。 | `rules` | 暂停阶段 |
 | `max_wait_expired` | 执行 Agent | 阶段处于 `paused` 的时间超过了运行单的 `max_wait_seconds`。 | 无 | `on_expiry = "stop"`：停止阶段。否则保持 `paused`，并把到期这件事写入历史。 |
 
@@ -105,7 +105,7 @@
 | `confirmed` | 回读显示设备处于计划的档位，并且是手动模式。此时会记下 `confirmed_at` 和 `confirmed_level`。 | 写入之后的回读对上了。 |
 | `unknown` | 结果未知：无法确定这次写入有没有生效。在它被确定下来（`settled_at`）之前，普通写入会以 `unsettled` 被拒绝。 | 没有收到回执，发送时连接断开，无法回读，进程在动作处于 `maybe_sent` 时停止，或者灌溉后的关泵没有得到确认。 |
 | `failed` | 写入没有生效。 | 写入发不出去，设备拒绝，回读的档位不一致，或者回读的模式不是手动。 |
-| `void` | 动作排了队，但从未发送。 | 启动时，它的写入权被交接时，恢复编号变化时，或者发送前的复核拒绝了它。 |
+| `void` | 动作排了队，但从未发送。 | 启动时，它的写入权被交接时，恢复编号变化时，同一通道上的保护写入作废了它，或者发送前的复核拒绝了它。 |
 
 `unknown` 的动作通过三种方式确定下来：回读设备状态（水泵除外），关泵得到确认（针对水泵），或者现场核对。对 `failed` 或 `void` 的动作，执行 Agent 会发一个新请求来替代，并在 `supersedes` 里写上旧请求的 ID。
 

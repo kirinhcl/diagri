@@ -182,6 +182,11 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 | `runtime`，键 `write_host` | 这台机器不是登记的写入主机，BLE 不会打开。 | 见[启用 DiAGRI](Enable-DiAGRI.md)第 3 步，然后重启。 |
 | `run_health` | 消息里列出没通过的探测项：`growbridge_response`、`executor_evaluation`、`capture`、`archive_write`、`oldest_undelivered_alert`、`offsite_backup`。 | 按探测项去查：设备连接、守护进程、通知或备份。 |
 | `tick_step` | 每秒评估里的某一步报错，键就是那一步的名字。其他步骤照常执行。 | 看日志。这一步恢复正常后告警自动解除。 |
+| `pump_unexpected`（键 `pump`） | DiAGRI 没有灌溉时，水泵读回为开。正文写明关泵是否已确认。 | 严重。查水泵和面板：有人或者面板定时器把它打开了。正文若写“未确认”，联锁已设置，需要做现场检查。 |
+| `pump_unreadable`（键 `pump`） | 设备状态里读不出水泵插座，看门狗无法判断泵是否开着。警告。 | 查设备连接，以及状态里有没有插座这一块（可能是固件或格式不同）。能再读到状态时自动解决。 |
+| `pump_watchdog`（键 `step` 或 `intervention`） | `step`：看门狗自己出错。`intervention`：`unexpected_watering` 干预没能记下来（泵仍然被关掉了）。严重。 | 看日志。`step` 在一次读过水泵的步骤完成后解决；`intervention` 在之后有干预记录成功后解决。 |
+| `frozen_reading`（键为传感器名） | 某个传感器的读数在超过门槛的时间里完全不变。保护规则用到它时为严重，否则为警告。规则依赖它的阶段会被暂停（事件 `alert_pause`，`rule` 为 `frozen:<传感器>`）。 | 检查探头和线缆。读数变化或传感器移出检查后告警解决。传感器恢复或改了规则后，再恢复阶段。 |
+| `frozen_watch`（键 `check`） | 冻结读数检查本身出错。严重。 | 看日志。一次检查完整结束后解决。 |
 | `stage_waiting` | 系统暂停了某个阶段，或把它送进了恢复待核对。消息里写明事件和事件携带的内容。 | 按事件名到上面对应的小节处理。阶段离开这个状态时告警自动解除。 |
 | `backup`、`backup_unconfigured` | 备份失败，或者没有配置 `backup_dir`。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `notify_unconfigured` | 没有配置任何通知渠道。告警会记录，但不会发出。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |

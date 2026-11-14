@@ -110,13 +110,13 @@ A project without a budget is refused at the first call. `Budget.max_revisions` 
 
 **May read.** The active stage with its run sheet and write-right numbers (`StagePort.active_stage`). Sensor readings, the device state, the safety configuration and the action receipts (`ControlPort`).
 
-**May do.** Submit writes through `ControlPort.submit`, each under the right that matches its purpose: timed actions, feedback rules and end actions under the stage write right; care rules under the care write right; protection rules under the protection write right. Call `pump_off` while the pump interlock is on. Report stage events to the workflow service.
+**May do.** Submit writes through `ControlPort.submit`, each under the right that matches its purpose: timed actions, feedback rules and end actions under the stage write right; care rules under the care write right; protection rules under the protection write right. Call `pump_off` while the pump interlock is on. The pump watchdog ([`executor/watchdog.py`](../../../src/growbridge/executor/watchdog.py)) does the same, and only that, when the pump reads back as on while DiAGRI is not irrigating: it also raises an alert and records an `unexpected_watering` intervention against the active stage through `StagePort.record_intervention`. Report stage events to the workflow service.
 
 **Can never.** Call a model. Switch the pump on. Change a stage's state: it only reports, and the workflow service decides. Write a channel that the run sheet leaves to the device.
 
 **Why it never calls a model.** The engine decides from four inputs: the run sheet, the safety configuration, the readings and the clock. Given the same four, it always does the same thing, so every decision can be replayed in a test and explained afterwards from the action ledger. It also means that overheating protection and the pump interlock do not wait for a network call.
 
-Each tick does six things in order: pump-off interlock; protection rules; link outage accounting; the `running` stage (checks first, then timed actions, feedback rules, end condition and end actions); care rules when the stage is neither `running` nor `manual`; the longest wait of a `paused` stage.
+Each tick does six things in order: pump-off interlock (followed by the pump watchdog); protection rules; link outage accounting; the `running` stage (checks first, then timed actions, feedback rules, end condition and end actions); care rules when the stage is neither `running` nor `manual`; the longest wait of a `paused` stage.
 
 **Code.** [`executor/engine.py`](../../../src/growbridge/executor/engine.py), with pure rule evaluation in [`executor/rules.py`](../../../src/growbridge/executor/rules.py) and clock and outage handling in [`executor/outage.py`](../../../src/growbridge/executor/outage.py). See [Control and safety model](Control-and-Safety-Model.md).
 
@@ -127,6 +127,8 @@ Each tick does six things in order: pump-off interlock; protection rules; link o
 **May read.** Sensor readings and the active stage. For the daily report, the samples and action records in the archive and the interventions recorded by the workflow service.
 
 **May do.** Evaluate threshold alert rules and keep the alert book (`AlertBook`). Queue each alert once per channel in the outbox and retry delivery with backoff (`Outbox`). Report an `ALERT_PAUSE` stage event for a rule marked `pause_stage`; the workflow service then pauses a `running` stage. Render the daily report from a template: every figure comes from `compute_daily_metrics`. Check run health with six probes (`RunHealthCheck`).
+
+**Frozen readings.** About every five minutes `FrozenWatch` looks at the stored samples. A sensor whose value has not changed for longer than its threshold (`frozen` in the safety configuration; defaults temp 120, humi 60, co2 60, tempSoil 240 minutes) opens a frozen period in the archive and raises a `frozen_reading` alert. If a running stage has a feedback rule on that sensor, or a protection rule uses it, the observer reports an `ALERT_PAUSE` event. A failure of this check raises a critical `frozen_watch` alert and does not stop the other alert rules.
 
 **Can never.** Write to the device. Resume, stop or approve anything. Put a number into a report that the metrics did not compute.
 

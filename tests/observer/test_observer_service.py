@@ -195,3 +195,54 @@ async def test_alert_raised_without_its_notification_is_queued_once_on_the_next_
     assert rig.outbox.status(alert.event_id, "email") == "pending"
     rows = db.query("SELECT * FROM observer_outbox WHERE event_id = ?", (alert.event_id,))
     assert len(rows) == 2
+
+
+class FakeFrozen:
+    """Each tick takes the next outcome: True or False is returned, an exception is raised."""
+
+    def __init__(self, *outcomes):
+        self.calls = 0
+        self.outcomes = list(outcomes) or [True]
+
+    async def tick(self):
+        self.calls += 1
+        outcome = self.outcomes.pop(0) if len(self.outcomes) > 1 else self.outcomes[0]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+async def test_observer_tick_runs_the_frozen_watch(rig):
+    await rig.observer.tick()  # no watch: unchanged behaviour
+    frozen = FakeFrozen()
+    rig.observer.frozen = frozen
+    await rig.observer.tick()
+    assert frozen.calls == 1
+
+
+async def test_a_failing_frozen_watch_does_not_stop_the_tick(rig, clock):
+    rig.observer.frozen = FakeFrozen(RuntimeError("boom"))
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(60)
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(10)
+    rig.hot()
+    await rig.observer.tick()
+    open_alerts = {(a.kind, a.key): a for a in rig.book.open()}
+    watch = open_alerts[("frozen_watch", "check")]
+    assert watch.severity == "critical"
+    assert ("threshold", "too_hot") in open_alerts
+    assert rig.outbox.status(watch.event_id, "telegram") == "pending"
+    assert len(rig.stages.events) == 1
+
+
+async def test_the_frozen_check_alert_resolves_only_after_a_completed_check(rig):
+    rig.observer.frozen = FakeFrozen(RuntimeError("boom"), False, True)
+    await rig.observer.tick()
+    assert ("frozen_watch", "check") in {(a.kind, a.key) for a in rig.book.open()}
+    await rig.observer.tick()  # gated: no check ran, so the alert stays
+    assert ("frozen_watch", "check") in {(a.kind, a.key) for a in rig.book.open()}
+    await rig.observer.tick()  # a check completed
+    assert ("frozen_watch", "check") not in {(a.kind, a.key) for a in rig.book.open()}

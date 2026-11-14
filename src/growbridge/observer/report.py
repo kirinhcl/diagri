@@ -1,6 +1,9 @@
 """Daily growth report: template-rendered numbers, optional model narrative (section 8.1)."""
 
+import logging
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from growbridge.archive.db import Database
@@ -13,7 +16,9 @@ STEPS = (
     "project_id TEXT NOT NULL, report_date TEXT NOT NULL, text TEXT NOT NULL, "
     "PRIMARY KEY(project_id, report_date))",
 )
+log = logging.getLogger(__name__)
 GAP_LIST_LIMIT = 5
+FROZEN_LIST_LIMIT = GAP_LIST_LIMIT
 MAX_CATCH_UP_DAYS = 7
 
 
@@ -22,6 +27,7 @@ class ReportContext(Model):
     project_name: str
     protective_actions: tuple[str, ...] = ()
     manual_interventions: tuple[str, ...] = ()
+    frozen_readings: tuple[str, ...] = ()
     observations: tuple[str, ...] = ()  # manual crop observations until cameras exist
     todos: tuple[str, ...] = ()
     treatment_deviation: float | None = None  # fraction of time the actual treatment deviated
@@ -33,6 +39,47 @@ def _clock(seconds: float) -> str:
 
 def _section(title: str, items: tuple[str, ...]) -> list[str]:
     return [f"{title}:"] + [f"- {item}" for item in items] if items else [f"{title}: none"]
+
+
+def frozen_line(period: Mapping[str, Any], zone: str, day_start: float, day_end: float) -> str:
+    """One report line for a frozen period; a time outside the report day also shows its date.
+    A time that cannot be formatted reads "unknown time" for that item only."""
+    tz = ZoneInfo(zone)
+
+    def clock(at: float) -> str:
+        try:
+            moment = datetime.fromtimestamp(at, tz)
+        except (OverflowError, OSError, ValueError):
+            log.warning(
+                "frozen period %s has an unusable timestamp %r", period.get("period_id"), at
+            )
+            return "unknown time"
+        return f"{moment:%H:%M}" if day_start <= at < day_end else f"{moment:%Y-%m-%d %H:%M}"
+
+    line = f"{period['sensor']} stuck at {period['value']:g} from {clock(period['first_at'])}"
+    if period["last_at"] is None:
+        return line + " (still frozen)"
+    line += f" to {clock(period['last_at'])}"
+    reason = period.get("close_reason")
+    if reason is None:
+        return line + " (close reason unrecorded)"  # closed before the reason was kept
+    if reason != "value_changed":
+        line += " (no longer checked)"  # it ended because the check stopped, not the probe
+    return line
+
+
+def frozen_lines(
+    periods: Sequence[Mapping[str, Any]], zone: str, day_start: float, day_end: float
+) -> tuple[str, ...]:
+    """Report lines for the frozen periods: still-open ones first, then by start. Past
+    ``FROZEN_LIST_LIMIT`` a last line names the sensors of the periods left out."""
+    ordered = sorted(periods, key=lambda p: (p["last_at"] is not None, p["first_at"]))
+    lines = [frozen_line(p, zone, day_start, day_end) for p in ordered[:FROZEN_LIST_LIMIT]]
+    dropped = ordered[FROZEN_LIST_LIMIT:]
+    if dropped:
+        names = ", ".join(dict.fromkeys(p["sensor"] for p in dropped))
+        lines.append(f"and {len(dropped)} more ({names})")
+    return tuple(lines)
 
 
 def _environment(metrics: DailyMetrics) -> list[str]:
@@ -66,6 +113,7 @@ def render_daily_report(
         lines += [f"Treatment deviation: {deviation * 100:.1f}%", ""]
     lines += _section("Protective actions", context.protective_actions) + [""]
     lines += _section("Manual interventions", context.manual_interventions) + [""]
+    lines += _section("Frozen readings", context.frozen_readings) + [""]
     lines += _section("Crop observations", context.observations) + [""]
     lines += _section("To do", context.todos)
     if narrative:
