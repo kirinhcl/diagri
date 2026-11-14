@@ -118,6 +118,22 @@ GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.p
 
 The data lives in a fresh temporary directory unless you pass `--data-dir`. Stop the script with Ctrl+C.
 
+### With the model roles
+
+`--roles FILE.toml` also runs the model roles, as `serve` does when `roles` is set. The file has one `[orchestrator]`, `[planner]` or `[researcher]` table per role with the fields of `RoleModel`. The Anthropic SDK reads its endpoint and key from the environment, so a local Anthropic-compatible server is reached with `ANTHROPIC_BASE_URL`.
+
+`--claude-code` runs the roles on the local Claude Code CLI instead (`claude -p`, see [`scripts/claude_code_client.py`](../../../scripts/claude_code_client.py)): no API key, the account Claude Code is signed in with. Each model turn is one headless call with Claude Code's own tools switched off; diagri's loop still validates and runs every tool. Without `--roles`, all three roles run the default model.
+
+`--transcript FILE.jsonl` appends one line per model call. It holds prompts and tool results in clear text, so keep it for development.
+
+`--fast-forward` skips through a running stage: each step moves the clock on by one sampling interval of the run sheet, reads the simulated device and ticks, so a week-long stage ends in a minute or two with complete data. Outside a running stage time is real. The skipped time is kept in `dev_clock_offset` in the data directory, so a restart never sends the clock back. Sessions age with that clock: sign in again after a stage.
+
+```sh
+GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.py --claude-code
+```
+
+The project page then shows the project conversation: send a question there, and the orchestrator answers in about 30 seconds. Every tool call of every role is listed under its reply.
+
 ## Run part of the suite
 
 ```sh

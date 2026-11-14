@@ -118,6 +118,22 @@ GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.p
 
 数据放在新建的临时目录里，除非用 `--data-dir` 指定。按 Ctrl+C 停止脚本。
 
+### 带上模型角色
+
+`--roles FILE.toml` 会同时运行模型角色，和配置了 `roles` 的 `serve` 一样。文件里每个角色一张表（`[orchestrator]`、`[planner]` 或 `[researcher]`），字段同 `RoleModel`。Anthropic SDK 从环境变量读取地址和密钥，所以用 `ANTHROPIC_BASE_URL` 可以接到本地兼容 Anthropic 接口的模型服务。
+
+`--claude-code` 改用本机的 Claude Code 命令行（`claude -p`，见 [`scripts/claude_code_client.py`](../../../scripts/claude_code_client.py)）运行这些角色：不需要 API 密钥，用的是 Claude Code 已登录的账号。每一轮模型回复是一次无界面调用，Claude Code 自带的工具全部关闭；所有工具仍由 diagri 自己的循环校验和执行。不给 `--roles` 时，三个角色都用默认模型。
+
+`--transcript FILE.jsonl` 每次模型调用追加一行记录。里面是明文的提示词和工具结果，只在开发时使用。
+
+`--fast-forward` 让运行中的阶段快进：每一步把时钟拨快运行单的一个采样间隔，读一次模拟设备再执行一次 tick，所以一周长的阶段一两分钟就跑完，数据也是完整的。阶段不在运行时按真实时间走。拨快的时间记在数据目录的 `dev_clock_offset` 里，重启后时钟不会倒退。登录会话也按这个时钟计时，阶段跑完后要重新登录。
+
+```sh
+GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.py --claude-code
+```
+
+项目页面上会显示项目对话：在那里提问，编排 Agent 大约 30 秒内回复。每个角色调用过的工具都列在它的回复下面。
+
 ## 只跑一部分
 
 ```sh
