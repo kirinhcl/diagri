@@ -16,7 +16,7 @@
 
 | 内容 | 怎么验证的 | 去哪里核对 |
 | --- | --- | --- |
-| 测试套件 | 在 macOS 上用 Python 3.14 运行，2244 个代码测试全部通过（最近一次运行是 2026-11-13）。CI 用 Python 3.11 和 3.13 运行同一套测试。这个数字不含 `tests/docs/`，那里检查的是本 Wiki 的链接，页面越多测试越多。 | [`tests/`](../../../tests/)，用 `.venv/bin/pytest -q` 运行 |
+| 测试套件 | 在 macOS 上用 Python 3.14 运行，2274 个代码测试全部通过（最近一次运行是 2026-11-14）。CI 用 Python 3.11 和 3.13 运行同一套测试。这个数字不含 `tests/docs/`，那里检查的是本 Wiki 的链接，页面越多测试越多。 | [`tests/`](../../../tests/)，用 `.venv/bin/pytest -q` 运行 |
 | 持续集成 | 在 `ubuntu-latest` 和 `macos-latest` 上用 Python 3.11 和 3.13 通过。CI 执行 `ruff check`、`ruff format --check`、`pytest -q`、`python -m build`，以及对桥接控制台和操作员控制台脚本的语法检查，外加操作员控制台的 142 个 Node 单元测试。macOS 上还会编译 Swift 辅助程序，但不运行它。 | [`ci.yml`](../../../.github/workflows/ci.yml) |
 | 覆盖率 | `growbridge` 的语句覆盖率为 96 %（9192 条中有 396 条没有执行），2026-11-13 在 macOS 上用 Python 3.14 跑整套测试测得。CI 不测覆盖率。 | `.venv/bin/pytest -q --cov=growbridge`；仓库里没有记录 |
 | 完整的一轮研究 | 在模拟的 AC5 上，从创建项目一直到 `delivered`，中间有一次人工接管和交还。 | [`test_e2e_round.py`](../../../tests/e2e/test_e2e_round.py) |

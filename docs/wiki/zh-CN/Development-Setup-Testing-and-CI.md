@@ -56,7 +56,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | 步骤 | 命令 | 检查什么 |
 | --- | --- | --- |
 | 1 | `for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done` | 桥接控制台脚本和操作员控制台的每个脚本都没有语法错误。 |
-| 2 | `node --test tests/web/*.test.mjs` | 操作员控制台的单元测试（2026-11-13 共 111 个）：路由、格式化、拒绝提示和曲线计算等纯逻辑，以及一个守卫测试，保证控制台脚本不用 `innerHTML` 写入 HTML。它们在 Node 里运行，不需要浏览器、服务器或网络。
+| 2 | `node --test tests/web/*.test.mjs` | 操作员控制台的单元测试（2026-11-14 共 148 个）：路由、格式化、拒绝提示和曲线计算等纯逻辑，以及一个守卫测试，保证控制台脚本不用 `innerHTML` 写入 HTML。它们在 Node 里运行，不需要浏览器、服务器或网络。
 | 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | 包能按固定的版本装上。 |
 | 4 | `.venv/bin/ruff check src tests scripts` | 代码检查。规则集 `E`、`F`、`I`、`B`、`UP`，行宽 100，都在 `pyproject.toml` 里配置。 |
 | 5 | `.venv/bin/ruff format --check src tests scripts` | 代码格式。 |
@@ -67,7 +67,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 几点说明：
 
 - **第 4、5 步。** 大多数问题可以用 `.venv/bin/ruff check --fix src tests scripts` 和 `.venv/bin/ruff format src tests scripts` 自动修好。
-- **第 6 步。** 整套测试由代码测试加上 `tests/docs/` 里的 Wiki 测试组成。2026-11-13 共收集到 2355 个测试，其中代码测试 2244 个、Wiki 测试 111 个；在 macOS 上用 Python 3.14（装了 `agents`）运行，结果是 `2355 passed`，用时约 65 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
+- **第 6 步。** 整套测试由代码测试加上 `tests/docs/` 里的 Wiki 测试组成。2026-11-14 共收集到 2385 个测试，其中代码测试 2274 个、Wiki 测试 111 个；在 macOS 上用 Python 3.14（装了 `agents`）运行，结果是 `2385 passed`，用时约 65 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
 - **第 7 步。** `build` 会新建一个隔离环境并下载构建后端（`setuptools`），所以这一步需要联网。`dist/` 已被 Git 忽略。
 
 还有一项 CI 不跑、但很有用的检查：`.venv/bin/growbridge simulate` 会用装配好的运行时在模拟的 AC5 上跑完一个很短的阶段，并打印结果摘要。[教程：在模拟器上跑通一轮研究](Tutorial-Simulated-Round.md)里有完整的讲解。

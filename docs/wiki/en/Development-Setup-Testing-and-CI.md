@@ -56,7 +56,7 @@ CI runs these steps in this order. Run them the same way before you push. CI cal
 | Step | Command | What it checks |
 | --- | --- | --- |
 | 1 | `for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done` | The dashboard script and every console script parse. |
-| 2 | `node --test tests/web/*.test.mjs` | The console's unit tests (111 on 2026-11-13): the pure parts of the console, such as routing, formatting, denial messages and the chart maths, and a guard that no console script writes HTML with `innerHTML`. They run in Node without a browser, a server or a network. |
+| 2 | `node --test tests/web/*.test.mjs` | The console's unit tests (148 on 2026-11-14): the pure parts of the console, such as routing, formatting, denial messages and the chart maths, and a guard that no console script writes HTML with `innerHTML`. They run in Node without a browser, a server or a network. |
 | 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | The package installs with the pinned versions. |
 | 4 | `.venv/bin/ruff check src tests scripts` | Lint. Rule sets `E`, `F`, `I`, `B` and `UP`, line length 100, set in `pyproject.toml`. |
 | 5 | `.venv/bin/ruff format --check src tests scripts` | Formatting. |
@@ -67,7 +67,7 @@ CI runs these steps in this order. Run them the same way before you push. CI cal
 Notes on single steps:
 
 - **Steps 4 and 5.** `.venv/bin/ruff check --fix src tests scripts` and `.venv/bin/ruff format src tests scripts` repair most findings.
-- **Step 6.** The suite collects the code tests plus the wiki tests in `tests/docs/`. On 2026-11-13 it collected 2355 tests, 2244 code tests and 111 wiki tests, and gave `2355 passed` in about 65 seconds on macOS with Python 3.14 and the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
+- **Step 6.** The suite collects the code tests plus the wiki tests in `tests/docs/`. On 2026-11-14 it collected 2385 tests, 2274 code tests and 111 wiki tests, and gave `2385 passed` in about 65 seconds on macOS with Python 3.14 and the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
 - **Step 7.** `build` creates an isolated environment and downloads the build backend (`setuptools`), so this step needs the network. Git ignores `dist/`.
 
 One more check is useful although CI does not run it: `.venv/bin/growbridge simulate` runs one short stage on the simulated AC5 through the assembled runtime and prints a summary. [Tutorial: a simulated research round](Tutorial-Simulated-Round.md) walks through it.
