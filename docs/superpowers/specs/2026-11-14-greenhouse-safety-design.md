@@ -1,6 +1,6 @@
 # 三项安全补强：设计
 
-**日期：** 2026-11-14 · **状态：** 待批准 · **分支：** `feat/greenhouse-safety`
+**日期：** 2026-11-14 · **状态：** 已批准（2026-11-14） · **分支：** `feat/greenhouse-safety`
 
 思路来自 [xdianlei/agentic-greenhouse](https://github.com/xdianlei/agentic-greenhouse)（`stuckwatch.py`、`prioritylock.py`、`supervisor.py` 的 `unexpected_pump`）。只借思路，不复制代码。
 
