@@ -48,7 +48,13 @@ from growbridge.observer.frozen_watch import FrozenWatch
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
-from growbridge.observer.report import ReportContext, ReportStore, render_daily_report, reports_due
+from growbridge.observer.report import (
+    ReportContext,
+    ReportStore,
+    frozen_line,
+    render_daily_report,
+    reports_due,
+)
 from growbridge.observer.service import Observer
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
@@ -237,19 +243,6 @@ class _GuardedBridge(Bridge):
 
 
 # --- the runtime ---------------------------------------------------------------------------------
-
-
-def _frozen_line(period: Mapping[str, Any], zone: str, day_start: float, day_end: float) -> str:
-    """One report line for a frozen period; a time outside the report day also shows its date."""
-
-    def clock(at: float) -> str:
-        moment = datetime.fromtimestamp(at, ZoneInfo(zone))
-        return f"{moment:%H:%M}" if day_start <= at < day_end else f"{moment:%Y-%m-%d %H:%M}"
-
-    line = f"{period['sensor']} stuck at {period['value']:g} from {clock(period['first_at'])}"
-    if period["last_at"] is None:
-        return line + " (still frozen)"
-    return line + f" to {clock(period['last_at'])}"
 
 
 @dataclass
@@ -530,7 +523,7 @@ class Runtime:
             if start <= item["at"] < end
         )
         frozen = tuple(
-            _frozen_line(p, zone, start, end) for p in self.archive.frozen_periods(start, end)
+            frozen_line(p, zone, start, end) for p in self.archive.frozen_periods(start, end)
         )
         row = self.workflow.db.one("SELECT name FROM wf_projects WHERE id = ?", (stage.project_id,))
         context = ReportContext(

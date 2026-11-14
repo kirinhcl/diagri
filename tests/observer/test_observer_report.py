@@ -5,8 +5,10 @@ import pytest
 
 from growbridge.observer.metrics import compute_daily_metrics
 from growbridge.observer.report import (
+    FROZEN_LIST_LIMIT,
     ReportContext,
     ReportStore,
+    frozen_line,
     render_daily_report,
     report_due,
     reports_due,
@@ -64,6 +66,38 @@ def test_report_lists_frozen_readings(metrics):
     assert "Frozen readings:" in render_daily_report(metrics, listed)
     assert f"- {item}" in render_daily_report(metrics, listed)
     assert "Frozen readings: none" in render_daily_report(metrics, empty)
+
+
+DAY = (local(2026, 11, 10, 0), local(2026, 11, 11, 0))
+
+
+def test_frozen_line_with_an_unformattable_time_says_unknown_time():
+    period = {"sensor": "temp", "value": 24.0, "first_at": 1e20, "last_at": None}
+
+    assert frozen_line(period, TZ, *DAY) == "temp stuck at 24 from unknown time (still frozen)"
+
+
+def test_report_still_renders_when_one_frozen_time_is_absurd(metrics):
+    bad = {"sensor": "temp", "value": 24.0, "first_at": 1e20, "last_at": 1e20}
+    good = {"sensor": "humi", "value": 55.0, "first_at": DAY[0] + 3600, "last_at": None}
+    lines = tuple(frozen_line(p, TZ, *DAY) for p in (bad, good))
+    context = ReportContext(project_id="p1", project_name="Basil", frozen_readings=lines)
+
+    text = render_daily_report(metrics, context)
+
+    assert "- temp stuck at 24 from unknown time to unknown time" in text
+    assert "- humi stuck at 55 from 01:00 (still frozen)" in text
+
+
+def test_frozen_readings_are_capped_with_an_and_more_line(metrics):
+    items = tuple(f"s{i} stuck at 1 from 08:00 to 09:00" for i in range(FROZEN_LIST_LIMIT + 3))
+    context = ReportContext(project_id="p1", project_name="Basil", frozen_readings=items)
+
+    lines = render_daily_report(metrics, context).splitlines()
+
+    assert f"- {items[FROZEN_LIST_LIMIT - 1]}" in lines
+    assert f"- {items[FROZEN_LIST_LIMIT]}" not in lines
+    assert "- and 3 more" in lines
 
 
 def test_narrative_is_appended_and_template_numbers_stay(metrics):

@@ -1,6 +1,8 @@
 """Daily growth report: template-rendered numbers, optional model narrative (section 8.1)."""
 
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from growbridge.archive.db import Database
@@ -14,6 +16,7 @@ STEPS = (
     "PRIMARY KEY(project_id, report_date))",
 )
 GAP_LIST_LIMIT = 5
+FROZEN_LIST_LIMIT = GAP_LIST_LIMIT
 MAX_CATCH_UP_DAYS = 7
 
 
@@ -34,6 +37,30 @@ def _clock(seconds: float) -> str:
 
 def _section(title: str, items: tuple[str, ...]) -> list[str]:
     return [f"{title}:"] + [f"- {item}" for item in items] if items else [f"{title}: none"]
+
+
+def _frozen_section(items: tuple[str, ...]) -> list[str]:
+    lines = _section("Frozen readings", items[:FROZEN_LIST_LIMIT])
+    if len(items) > FROZEN_LIST_LIMIT:
+        lines.append(f"- and {len(items) - FROZEN_LIST_LIMIT} more")
+    return lines
+
+
+def frozen_line(period: Mapping[str, Any], zone: str, day_start: float, day_end: float) -> str:
+    """One report line for a frozen period; a time outside the report day also shows its date.
+    A time that cannot be formatted reads "unknown time" for that item only."""
+
+    def clock(at: float) -> str:
+        try:
+            moment = datetime.fromtimestamp(at, ZoneInfo(zone))
+        except (OverflowError, OSError, ValueError):
+            return "unknown time"
+        return f"{moment:%H:%M}" if day_start <= at < day_end else f"{moment:%Y-%m-%d %H:%M}"
+
+    line = f"{period['sensor']} stuck at {period['value']:g} from {clock(period['first_at'])}"
+    if period["last_at"] is None:
+        return line + " (still frozen)"
+    return line + f" to {clock(period['last_at'])}"
 
 
 def _environment(metrics: DailyMetrics) -> list[str]:
@@ -67,7 +94,7 @@ def render_daily_report(
         lines += [f"Treatment deviation: {deviation * 100:.1f}%", ""]
     lines += _section("Protective actions", context.protective_actions) + [""]
     lines += _section("Manual interventions", context.manual_interventions) + [""]
-    lines += _section("Frozen readings", context.frozen_readings) + [""]
+    lines += _frozen_section(context.frozen_readings) + [""]
     lines += _section("Crop observations", context.observations) + [""]
     lines += _section("To do", context.todos)
     if narrative:
