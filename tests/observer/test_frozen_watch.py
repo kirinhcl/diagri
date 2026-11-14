@@ -465,6 +465,17 @@ async def test_an_alert_left_by_a_failed_resolve_is_resolved_by_the_next_check(r
     assert "no open period" in caplog.text  # the automatic resolution is on record
 
 
+async def test_a_new_freeze_after_a_lost_resolve_starts_a_new_alert(rig):
+    rig.book.resolve = await closed_with_its_alert_left_behind(rig)
+    (left,) = rig.alerts()
+    rig.feed(121, temp=25.0)  # frozen again, at another value
+
+    await rig.check()
+
+    (alert,) = rig.alerts()
+    assert alert.event_id != left.event_id and alert.count == 1  # notified anew, not merged
+
+
 async def test_a_failing_alert_cleanup_never_stops_a_new_period_from_opening(rig):
     await closed_with_its_alert_left_behind(rig, humi=moving)
     rig.feed(61, temp=moving, humi=55.0)  # humi now flat for an hour

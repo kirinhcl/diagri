@@ -87,6 +87,7 @@ class FrozenWatch:
         """Without a configuration the defaults open periods and follow changes, but nothing is
         closed because a sensor is missing from a list that is not there."""
         periods = self.archive.open_frozen_periods()
+        failed = self._resolve_stale_alerts({period.sensor for period in periods})
         points: Sequence[tuple[float, dict]] = ()
         if settings.minutes:
             window = max(settings.minutes.values()) * 60 + settings.max_gap_seconds
@@ -103,16 +104,24 @@ class FrozenWatch:
         for name, minutes in settings.minutes.items():
             if name not in have_open:
                 self._maybe_open(name, minutes, _series(points, name), settings, critical)
-        self._resolve_stale_alerts()  # last: a failure here never holds back the detection
+        if failed is not None:
+            raise failed  # the detection ran; the check still reports the failed clean-up
 
-    def _resolve_stale_alerts(self) -> None:
+    def _resolve_stale_alerts(self, open_sensors: set[str]) -> Exception | None:
         """Alerts and periods live in separate databases: a period can close while resolving its
-        alert fails. Such an alert, with no open period behind it, is resolved here."""
-        open_sensors = {period.sensor for period in self.archive.open_frozen_periods()}
-        for alert in self.book.open():
-            if alert.kind == KIND and alert.key not in open_sensors:
-                log.warning("resolving the frozen_reading alert for %s: no open period", alert.key)
-                self.book.resolve(KIND, alert.key)
+        alert fails. Such an alert, with no open period behind it, is resolved before detection,
+        so a new period for that sensor starts a new alert (and notification) instead of merging
+        into the old one. A failure is returned, not raised, so it never holds back detection."""
+        try:
+            for alert in self.book.open():
+                if alert.kind == KIND and alert.key not in open_sensors:
+                    log.warning(
+                        "resolving the frozen_reading alert for %s: no open period", alert.key
+                    )
+                    self.book.resolve(KIND, alert.key)
+        except Exception as error:
+            return error
+        return None
 
     def _close(self, period: FrozenPeriod, series: Series, reason: str) -> None:
         last_at = _last_same(series, period)
