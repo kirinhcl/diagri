@@ -261,7 +261,7 @@ class ControlService:
         channel: Channel | None = None,
         spare: RightKind | None = None,
     ) -> list[ActionRecord]:
-        """Void queued actions; ``channel`` limits it to one channel, ``spare`` skips a right kind."""
+        """Void queued actions, optionally only on ``channel`` and sparing right kind ``spare``."""
         voided = []
         for record in self.ledger.actions_in(ActionState.PENDING, right_number=right_number):
             if channel is not None and record.channel is not channel:
