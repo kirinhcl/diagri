@@ -394,21 +394,32 @@ class Runtime:
             self._safely(lambda: self.book.resolve("tick_step", name))
 
     @staticmethod
-    def _safely(action: Callable[[], Any]) -> None:
+    def _safely(action: Callable[[], Any]) -> bool:
+        """Run ``action``; False (logged, never raised) when it failed."""
         try:
             action()
         except Exception:
             log.exception("could not record a runtime alert")
+            return False
+        return True
 
-    def _alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> None:
-        def raise_it() -> None:
-            self._announce(self.book.raise_alert(kind, key, severity, message))
+    def _alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> bool:
+        """Raise an alert and queue its notification; True when the alert was stored. Never
+        raises: a caller that latches its alert retries one that was not stored."""
+        stored: list[Alert] = []
 
-        self._safely(raise_it)
+        def store() -> None:
+            stored.append(self.book.raise_alert(kind, key, severity, message))
 
-    def resolve_alert(self, kind: str, key: str) -> None:
-        """Close an open alert (a no-op when none is open); never raises."""
-        self._safely(lambda: self.book.resolve(kind, key))
+        if not self._safely(store):
+            return False
+        self._safely(lambda: self._announce(stored[0]))  # a lost notification is logged
+        return True
+
+    def resolve_alert(self, kind: str, key: str) -> bool:
+        """Close an open alert (a no-op when none is open); False when the close could not be
+        stored. Never raises."""
+        return self._safely(lambda: self.book.resolve(kind, key))
 
     def _announce(self, alert: Alert) -> None:
         if alert.count != 1:
