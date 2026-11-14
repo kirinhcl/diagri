@@ -82,3 +82,35 @@ async def test_pump_off_records_its_trigger(rig):
     assert rig.service.receipt(rig.service.last_pump_off_id()).trigger == "watchdog"
     await rig.service.pump_off()
     assert rig.service.receipt(rig.service.last_pump_off_id()).trigger == "interlock"
+
+
+async def test_cancelled_irrigation_does_not_latch_irrigating(rig):
+    number = rig.manual_right((Channel.PUMP, Channel.LIGHT))
+    release = asyncio.Event()
+    original = rig.sim.send
+    held = {"on": False}
+
+    async def slow(command):
+        is_field = command["method"] == "setConfigField"
+        if is_field and command["params"]["keyPath"][1] != "O4" and held["on"]:
+            await release.wait()
+        await original(command)
+
+    rig.sim.send = slow
+    irrigation = asyncio.create_task(
+        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.05)
+    )
+    await wait_until(lambda: rig.service.irrigating())
+    held["on"] = True
+    blocker = asyncio.create_task(
+        rig.service.submit(rig.request(number, Channel.LIGHT, 50, "light"))
+    )
+    await wait_until(lambda: rig.service.receipt("light") is not None)
+    await asyncio.sleep(0.15)  # the timer ended; the pump-off now waits for the gate
+    irrigation.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await irrigation
+    assert rig.service.irrigating() is False
+    assert rig.service.interlocked() is True
+    release.set()
+    await asyncio.gather(blocker, return_exceptions=True)

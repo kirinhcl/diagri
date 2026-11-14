@@ -500,12 +500,15 @@ class ControlService:
                     pass
         finally:
             if cycle is not None:
-                async with self.gate.acquire(URGENT):
-                    off = await self._switch_pump_off()
-                    self._last_cycle_end = self.clock.monotonic()
-                self._cycle = None
-                if off.state is not ActionState.CONFIRMED:
-                    self._set_interlock(sent.request_id)
+                off = Outcome(ActionState.UNKNOWN, "pump off did not run")
+                try:
+                    async with self.gate.acquire(URGENT):
+                        off = await self._switch_pump_off()
+                        self._last_cycle_end = self.clock.monotonic()
+                finally:
+                    self._cycle = None
+                    if off.state is not ActionState.CONFIRMED:
+                        self._set_interlock(sent.request_id)
         if off.state is not ActionState.CONFIRMED:
             on = Outcome(ActionState.UNKNOWN, "pump off unconfirmed; interlock set")
         return self._settle(sent, on)
