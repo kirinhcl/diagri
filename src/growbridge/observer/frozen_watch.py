@@ -12,7 +12,7 @@ from growbridge.archive.models import FrozenCheck, FrozenPeriod, SafetyConfig
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import Alert, AlertBook
 from growbridge.observer.frozen import first_change, flat_tail, sensors_used
-from growbridge.ports import StageEvent, StageEventKind, StagePort
+from growbridge.ports import StageEvent, StageEventKind, StagePort, StageRuntime
 from growbridge.workflow.states import StageState
 
 CHECK_SECONDS = 300.0
@@ -24,6 +24,15 @@ Series = Sequence[tuple[float, object]]
 
 def _series(points: Sequence[tuple[float, dict]], sensor: str) -> list[tuple[float, object]]:
     return [(at, sensors.get(sensor)) for at, sensors in points]
+
+
+def _protection_sensors(config: SafetyConfig | None) -> frozenset[str]:
+    return frozenset(rule.sensor for rule in config.rules) if config else frozenset()
+
+
+def _used_by(stage: StageRuntime, protection: frozenset[str]) -> frozenset[str]:
+    """Sensors the stage depends on: those of its feedback rules and of the protection rules."""
+    return sensors_used(protection | {rule.sensor for rule in stage.run_sheet.feedback_rules})
 
 
 def _last_same(series: Series, period: FrozenPeriod) -> float:
@@ -55,6 +64,7 @@ class FrozenWatch:
         self.clock = clock
         self._checked_at: float | None = None
         self._reported: set[str] = set()
+        self._protection: frozenset[str] = frozenset()  # sensors of the last config read
 
     async def tick(self) -> bool:
         """True when a check ran to completion; False when skipped because one ran recently."""
@@ -62,15 +72,13 @@ class FrozenWatch:
         if self._checked_at is not None and mono - self._checked_at < CHECK_SECONDS:
             return False
         self._checked_at = mono
-        config = self.safety()
-        settings = config.frozen if config is not None else FrozenCheck()
-        protection = frozenset(rule.sensor for rule in config.rules) if config else frozenset()
         try:
-            self._update_periods(settings, protection, may_close=config is not None)
-        except Exception:
-            await self._pause_stage(protection)  # periods already open still pause the stage
-            raise
-        await self._pause_stage(protection)
+            config = self.safety()
+            self._protection = _protection_sensors(config)
+            settings = config.frozen if config is not None else FrozenCheck()
+            self._update_periods(settings, self._protection, may_close=config is not None)
+        finally:  # periods already open still pause the stage if the config or update fails,
+            await self._pause_stage(self._protection)  # using the last protection sensors read
         return True
 
     def _update_periods(
@@ -79,6 +87,7 @@ class FrozenWatch:
         """Without a configuration the defaults open periods and follow changes, but nothing is
         closed because a sensor is missing from a list that is not there."""
         periods = self.archive.open_frozen_periods()
+        self._resolve_stale_alerts({period.sensor for period in periods})
         points: Sequence[tuple[float, dict]] = ()
         if settings.minutes:
             window = max(settings.minutes.values()) * 60 + settings.max_gap_seconds
@@ -95,6 +104,13 @@ class FrozenWatch:
         for name, minutes in settings.minutes.items():
             if name not in have_open:
                 self._maybe_open(name, minutes, _series(points, name), settings, critical)
+
+    def _resolve_stale_alerts(self, open_sensors: set[str]) -> None:
+        """Alerts and periods live in separate databases: a period can close while resolving its
+        alert fails. Such an alert, with no open period behind it, is resolved here."""
+        for alert in self.book.open():
+            if alert.kind == KIND and alert.key not in open_sensors:
+                self.book.resolve(KIND, alert.key)
 
     def _close(self, period: FrozenPeriod, series: Series, reason: str) -> None:
         last_at = _last_same(series, period)
@@ -142,7 +158,7 @@ class FrozenWatch:
         if stage is None or stage.state is not StageState.RUNNING:
             return
         critical = sensors_used(protection)
-        used = sensors_used(protection | {rule.sensor for rule in stage.run_sheet.feedback_rules})
+        used = _used_by(stage, protection)
         periods = sorted(
             self.archive.open_frozen_periods(), key=lambda p: (p.sensor not in critical, p.first_at)
         )
@@ -155,6 +171,7 @@ class FrozenWatch:
             stage = self.stages.active_stage()
             if stage is None or stage.state is not StageState.RUNNING:
                 return
+            used = _used_by(stage, protection)  # the stage may now be another one
 
     def _pause_event(self, event_id: str, stage_id: str, period: FrozenPeriod) -> StageEvent:
         detail: dict[str, object] = {"rule": f"frozen:{period.sensor}"}

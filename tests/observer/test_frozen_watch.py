@@ -405,6 +405,86 @@ async def test_the_pause_is_reported_even_when_the_update_fails(rig):
     assert len(rig.stages.events) == 1
 
 
+def unreadable_safety():
+    raise RuntimeError("ledger is unreadable")
+
+
+async def open_while_paused(rig, **sensors):
+    """Open periods during a check that cannot pause: the stage is paused at that moment."""
+    rig.stages.state = StageState.PAUSED
+    rig.feed(121, **sensors)
+    await rig.check()
+    rig.stages.state = StageState.RUNNING
+    assert rig.stages.events == []
+
+
+async def test_the_pause_is_reported_even_when_reading_the_safety_config_fails(rig):
+    rig.stages.sensors = ("temp",)
+    await open_while_paused(rig, temp=24.0)
+    rig.watch.safety = unreadable_safety
+
+    with pytest.raises(RuntimeError):
+        await rig.check()
+
+    assert [e.detail["rule"] for e in rig.stages.events] == ["frozen:temp"]
+
+
+async def test_a_failed_config_read_still_pauses_for_the_last_known_protection_sensors(rig):
+    rig.config = make_safety(rules=(protection_rule("humi"),))
+    await open_while_paused(rig, temp=moving, humi=55.0)  # no feedback rule: protection only
+    rig.watch.safety = unreadable_safety
+
+    with pytest.raises(RuntimeError):
+        await rig.check()
+
+    assert [e.detail["rule"] for e in rig.stages.events] == ["frozen:humi"]
+
+
+async def test_an_alert_left_by_a_failed_resolve_is_resolved_by_the_next_check(rig):
+    rig.feed(121, temp=24.0)
+    await rig.check()
+    rig.feed(3, temp=24.5)
+    working = rig.book.resolve
+
+    def locked(kind, key):
+        raise RuntimeError("alert store is locked")
+
+    rig.book.resolve = locked
+    with pytest.raises(RuntimeError):
+        await rig.check()
+    assert rig.open_for("temp") == [] and len(rig.alerts()) == 1  # closed, alert left behind
+
+    rig.book.resolve = working
+    await rig.check()
+
+    assert rig.alerts() == []
+
+
+async def handing_over(rig, before, after):
+    """Each pause report is followed by another stage, using ``after``, taking over."""
+    rig.stages.sensors = before
+    report = rig.stages.report
+
+    async def report_then_hand_over(event):
+        await report(event)
+        rig.stages.stage_id, rig.stages.sensors = "st2", after
+
+    rig.stages.report = report_then_hand_over
+    rig.feed(121, temp=24.0, humi=55.0)
+    await rig.check()
+    return [(e.stage_id, e.detail["rule"]) for e in rig.stages.events]
+
+
+async def test_a_stage_taking_over_mid_check_is_paused_for_its_own_sensors(rig):
+    events = await handing_over(rig, before=("temp",), after=("humi",))
+    assert events == [("st1", "frozen:temp"), ("st2", "frozen:humi")]
+
+
+async def test_a_stage_taking_over_mid_check_is_not_paused_for_the_old_stage_sensors(rig):
+    events = await handing_over(rig, before=("temp", "humi"), after=())
+    assert events == [("st1", "frozen:temp")]
+
+
 async def test_a_real_watch_resolves_the_failure_alert_only_after_a_completed_check(rig):
     observer = Observer(
         rig.stages, lambda: (), rig.book, Outbox(rig.db, rig.clock, 10, 40), (), rig.clock
