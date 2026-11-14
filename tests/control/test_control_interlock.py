@@ -6,10 +6,12 @@ from growbridge.archive.models import (
     ActionState,
     Channel,
     ChannelPlan,
+    FrozenCheck,
     Ownership,
     RightKind,
     RuleAction,
 )
+from growbridge.control.device import SENSORS
 from growbridge.ports import Denied, RightScope
 from growbridge.sim.fixtures import make_run_sheet, make_safety
 
@@ -185,6 +187,17 @@ async def test_control_approved_safety_issues_one_protection_right(rig):
     with pytest.raises(Denied) as error:
         rig.service.approve_safety(make_safety(version=3), " ")
     assert error.value.code == "approval_invalid"
+
+
+async def test_control_safety_refuses_frozen_thresholds_for_sensors_the_device_lacks(rig):
+    misspelt = FrozenCheck(minutes={"temp": 120.0, "tmep": 60.0})
+    with pytest.raises(Denied) as error:
+        rig.service.approve_safety(make_safety(frozen=misspelt), "alice")
+    assert error.value.code == "approval_invalid" and "tmep" in str(error.value)
+    assert rig.service.safety() is None and rig.service.protection_right() is None
+    every = FrozenCheck(minutes=dict.fromkeys(SENSORS, 60.0))
+    rig.service.approve_safety(make_safety(frozen=every), "alice")
+    assert rig.service.safety().frozen == every
 
 
 async def test_control_safety_needs_reapproval_after_recovery_bump(rig):

@@ -29,7 +29,7 @@ from growbridge.archive.models import (
     WriteRight,
 )
 from growbridge.control import rights
-from growbridge.control.device import DeviceIO, Outcome
+from growbridge.control.device import SENSORS, DeviceIO, Outcome
 from growbridge.control.ledger import (
     FLAG_INTERLOCK,
     FLAG_TRANSPORT_STOPPED,
@@ -208,6 +208,12 @@ class ControlService:
     def approve_safety(self, config: SafetyConfig, operator: str) -> int:
         if not operator.strip():
             raise Denied("approval_invalid", "the safety configuration needs an approver")
+        unknown = sorted(set(config.frozen.minutes) - set(SENSORS))
+        if unknown:  # a misspelt name would silently switch that sensor's frozen check off
+            raise Denied(
+                "approval_invalid",
+                f"frozen thresholds name sensors the device does not have: {', '.join(unknown)}",
+            )
         self._require_host()
         now = self.clock.now()
         approved = config.model_copy(update={"approved_by": operator, "approved_at": now})
