@@ -1,0 +1,126 @@
+import asyncio
+
+from growbridge.archive.models import ActionState, Channel, RightKind, RuleAction
+from growbridge.control.priority_gate import NORMAL, URGENT
+from growbridge.ports import RightScope
+from growbridge.sim.fixtures import make_safety
+
+DEVICE = "SIMULATED"
+ALL = (Channel.PUMP, Channel.LIGHT, Channel.EXHAUST, Channel.FAN)
+
+
+async def wait_for(predicate, attempts=400):
+    for _ in range(attempts):
+        if predicate():
+            return
+        await asyncio.sleep(0.005)
+    raise AssertionError("condition not reached")
+
+
+def hang_first_field_write(rig):
+    """Hold the first non-pump setConfigField until the returned event is set."""
+    release = asyncio.Event()
+    original = rig.sim.send
+    state = {"hung": False}
+
+    async def slow(command):
+        is_field = command["method"] == "setConfigField"
+        if is_field and command["params"]["keyPath"][1] != "O4" and not state["hung"]:
+            state["hung"] = True
+            await release.wait()
+        await original(command)
+
+    rig.sim.send = slow
+    return release
+
+
+def sent_order(rig):
+    return [r.request_id for r in rig.sink.actions if r.state is ActionState.MAYBE_SENT]
+
+
+async def hold_a(rig, number, channel=Channel.LIGHT):
+    task = asyncio.create_task(rig.service.submit(rig.request(number, channel, 50, "a")))
+    await wait_for(lambda: "a" in sent_order(rig))
+    return task
+
+
+async def test_protection_write_overtakes_queued_ordinary_writes(rig):
+    number = rig.stage_right()
+    rig.service.approve_safety(make_safety(), "alice")
+    protection = rig.service.protection_right()
+    release = hang_first_field_write(rig)
+    first = await hold_a(rig, number)
+    queued = [
+        asyncio.create_task(rig.service.submit(rig.request(number, channel, level, name)))
+        for name, channel, level in (("b", Channel.EXHAUST, 40), ("c", Channel.FAN, 5))
+    ]
+    await wait_for(lambda: all(rig.service.receipt(n) is not None for n in "bc"))
+    urgent = asyncio.create_task(rig.service.submit(rig.request(protection, Channel.LIGHT, 0, "p")))
+    await wait_for(lambda: rig.service.receipt("p") is not None)
+    release.set()
+    await asyncio.gather(first, urgent, *queued)
+    assert sent_order(rig) == ["a", "p", "b", "c"]
+
+
+async def test_irrigation_pump_off_overtakes_queued_writes(rig):
+    number = rig.manual_right(ALL)
+    release = hang_first_field_write(rig)
+    irrigation = asyncio.create_task(
+        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.05)
+    )
+    await wait_for(lambda: rig.sim.config["outlet"]["O4"]["mOnOff"] == 1)
+    first = await hold_a(rig, number)
+    queued = [
+        asyncio.create_task(rig.service.submit(rig.request(number, channel, level, name)))
+        for name, channel, level in (("b", Channel.EXHAUST, 40), ("c", Channel.FAN, 5))
+    ]
+    await wait_for(lambda: all(rig.service.receipt(n) is not None for n in "bc"))
+    await asyncio.sleep(0.15)  # the irrigation timer ends; its pump-off queues behind a
+    release.set()
+    await asyncio.gather(irrigation, first, *queued)
+    keys = [c["params"]["keyPath"][1] for c in rig.writes()]
+    after_a = keys[keys.index("O4") + 1 :]
+    assert after_a[0] != "O4" and after_a[1] == "O4", keys
+    assert after_a.index("O4") == 1 and len(after_a) == 4, keys
+
+
+async def test_handover_waits_only_for_the_write_in_flight(rig):
+    stage = rig.stage_right()
+    scope = RightScope(
+        device_id=DEVICE,
+        channels=(Channel.EXHAUST,),
+        levels=(RuleAction(channel=Channel.EXHAUST, level=40),),
+    )
+    care = rig.service.grant(RightKind.CARE, scope)
+    release = hang_first_field_write(rig)
+    first = await hold_a(rig, stage)
+    second = asyncio.create_task(rig.service.submit(rig.request(care, Channel.EXHAUST, 40, "b")))
+    await wait_for(lambda: rig.service.receipt("b") is not None)
+
+    async def hand_over_and_look():
+        await rig.service.handover(stage, "test")
+        return sent_order(rig)  # no await in between: b has not had a turn yet
+
+    handover = asyncio.create_task(hand_over_and_look())
+    await asyncio.sleep(0.05)
+    release.set()
+    assert "b" not in await handover
+    await asyncio.gather(first, second, return_exceptions=True)
+
+
+async def test_protection_and_irrigation_off_use_urgent(rig):
+    seen = []
+    real = rig.service.gate.acquire
+
+    def recording(priority):
+        seen.append(priority)
+        return real(priority)
+
+    rig.service.gate.acquire = recording
+    protection = rig.service.approve_safety(make_safety(), "alice")
+    await rig.service.submit(rig.request(protection, Channel.LIGHT, 0, "p"))
+    assert seen == [URGENT]
+    seen.clear()
+    number = rig.manual_right()
+    await rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.02)
+    assert seen == [NORMAL, URGENT]

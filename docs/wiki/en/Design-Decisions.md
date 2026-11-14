@@ -16,7 +16,7 @@ The section numbers refer to the [architecture document](../../diagri-agent-arch
 ## 2. One checkpoint for every BLE write
 
 - **Context.** Writes come from timed actions, feedback rules, care rules, protection rules and operators. If each path did its own checks, the checks would drift apart.
-- **Decision.** The control service is the only code that writes to the device, through `submit`, `irrigate` and `pump_off`. One lock, the gate, puts hand-overs and writes in a single order. A request is checked when it is queued, and again inside the gate just before it is sent.
+- **Decision.** The control service is the only code that writes to the device, through `submit`, `irrigate` and `pump_off`. One lock, the gate, puts hand-overs and writes in a single order, with two priority levels: protection writes, the pump-off that ends an irrigation and hand-overs go before queued ordinary writes, without preempting the write already on its way; `pump_off()` stays outside the gate. A request is checked when it is queued, and again inside the gate just before it is sent.
 - **Consequence.** Every ordinary write passes the same list: controls enabled, registered write host, a valid write right, the scope of that right, pump not started, no unsettled action, a live connection with fresh readings. Care and protection writes skip a few of these on purpose, so that they still work while a stage is paused or in recovery check. The BLE connection itself opens only on the registered write host.
 - **Enforced in.** [`control/service.py`](../../../src/growbridge/control/service.py) (`_authorize`, `_recheck`), `ControlPort` in [`ports.py`](../../../src/growbridge/ports.py). Sections 7.1 and 7.3.
 

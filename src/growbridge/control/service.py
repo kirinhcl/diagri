@@ -1,6 +1,8 @@
 """Control service: the single checkpoint for every BLE write (spec 7.1-7.3, 7.5, 7.6, 7.8, 7.9).
 
-One ``asyncio.Lock`` (the gate) serialises hand-overs and every dispatch. A request is checked
+One two-level priority gate serialises hand-overs and every dispatch. Protection writes, the
+pump-off at the end of an irrigation and hand-overs go before queued ordinary writes (they never
+preempt the write already on its way). A request is checked
 when it is queued and again, inside the gate, right before it is sent. The intent is persisted
 before sending and again as "maybe sent" just before the bytes leave, so a crash in between is
 recovered as "result unknown" and never replayed.
@@ -34,6 +36,7 @@ from growbridge.control.ledger import (
     META_RECOVERY,
     Ledger,
 )
+from growbridge.control.priority_gate import NORMAL, URGENT, PriorityGate
 from growbridge.ports import (
     ActionRequest,
     Capabilities,
@@ -66,7 +69,7 @@ class ControlService:
         self.sink = sink
         self.ledger = Ledger(db)
         self.device = DeviceIO(bridge)
-        self.gate = asyncio.Lock()
+        self.gate = PriorityGate()
         self._cycle: asyncio.Event | None = None  # set while an irrigation cycle is in flight
         self.ready = False  # False until ``startup`` has finished: ordinary writes are blocked
 
@@ -159,7 +162,8 @@ class ControlService:
             voided = self._void_queued(f"hand-over: {reason}", right_number=number)
             self.ledger.event("handover", {"right": number, "reason": reason}, now)
         self._publish(voided)
-        async with self.gate:  # waits for the receipt of an action already on its way
+        # URGENT: waits only for the receipt of the action already on its way
+        async with self.gate.acquire(URGENT):
             pass
 
     # --- safety configuration (7.5) -----------------------------------------------------------
@@ -317,7 +321,8 @@ class ControlService:
             self._end_cycle()  # a protection write must not wait for a pump run to finish
         record = rights.intent(request, right, request.level, self.clock.now())
         self._save(record, fingerprint)
-        async with self.gate:
+        urgent = right.kind is RightKind.PROTECTION
+        async with self.gate.acquire(URGENT if urgent else NORMAL):
             self._recheck(record, request)
             return await self._send(record)
 
@@ -438,7 +443,7 @@ class ControlService:
         """ON under the gate, wait outside it, OFF under the gate; OFF always runs (7.6, 7.8)."""
         cycle = None
         try:
-            async with self.gate:
+            async with self.gate.acquire(NORMAL):
                 self._recheck(record, request, starts_pump=True)
                 now = self.clock.now()
                 self.ledger.set_meta(META_LAST_IRRIGATION, str(now))
@@ -453,7 +458,7 @@ class ControlService:
                     pass
         finally:
             if cycle is not None:
-                async with self.gate:
+                async with self.gate.acquire(URGENT):
                     off = await self._switch_pump_off()
                 self._cycle = None
                 if off.state is not ActionState.CONFIRMED:
@@ -521,7 +526,7 @@ class ControlService:
             state = await self.read_state()
         except Denied:
             return self.unsettled_actions()
-        async with self.gate:
+        async with self.gate.acquire(NORMAL):
             settled = []
             for record in self.ledger.unsettled():
                 if record.channel is Channel.PUMP:

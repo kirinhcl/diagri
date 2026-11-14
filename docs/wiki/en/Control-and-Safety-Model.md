@@ -33,10 +33,12 @@ An example. The stage starts under stage right 7. The operator pauses it, and 7 
 
 ## One gate for hand-over and dispatch
 
-`ControlService.gate` is a single lock. Two things take it: sending a write, and finishing a hand-over.
+`ControlService.gate` is a single lock with two priority levels. Two things take it: sending a write, and finishing a hand-over.
 
 - `submit` checks the request, stores it, takes the gate, **checks everything a second time**, and sends.
 - `handover` revokes the number, voids the actions still queued under it, and then takes the gate once. Taking it means waiting until a write that is already on its way has its receipt.
+
+**Priority.** Waiters at the urgent level go before waiters at the normal level; within a level it is first come, first served. Urgent are: a write under the protection right, the pump-off that ends an irrigation, and `handover`. Normal are: every other write, the pump-on of an irrigation, and `reconcile_unsettled`. The gate never preempts: an urgent caller waits for the one write already on its way, but not for the ordinary writes queued behind it. `pump_off()` (the interlock path) does not take the gate at all.
 
 Why the same lock: when `handover` returns, no write under the old number is queued and none is in flight. A hand-over and a write cannot interleave, so the workflow service can grant the next right safely.
 
