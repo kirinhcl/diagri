@@ -71,3 +71,28 @@ async def test_error_inside_releases_the_gate():
 def test_priority_must_be_given():
     with pytest.raises(TypeError):
         PriorityGate().acquire()  # type: ignore[call-arg]
+
+
+async def test_unknown_priority_is_refused_and_leaves_the_gate_usable():
+    gate = PriorityGate()
+    async with gate.acquire(NORMAL):
+        for bad in ("urgent", -1, True, False):
+            with pytest.raises(ValueError):
+                async with gate.acquire(bad):
+                    pass
+    assert gate.locked() is False
+    async with gate.acquire(NORMAL):
+        assert gate.locked() is True
+
+
+async def test_cancelled_waiters_leave_the_queue():
+    gate, order = PriorityGate(), []
+    async with gate.acquire(NORMAL):
+        tasks = [asyncio.create_task(take(gate, order, n, NORMAL)) for n in range(5)]
+        await asyncio.sleep(0)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        assert len(gate._waiters) == 0
+    assert gate.locked() is False
+    assert order == []

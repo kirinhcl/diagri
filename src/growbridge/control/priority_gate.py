@@ -1,4 +1,6 @@
-"""Two-level priority gate: a drop-in for a plain asyncio.Lock.
+"""Two-level priority gate: a mutual-exclusion lock whose waiters carry a priority.
+
+Use it as ``async with gate.acquire(URGENT):`` (there is no ``release()``).
 
 Not preemptive: an URGENT caller never interrupts the current holder, so it
 waits for at most that one holder. Among waiters, URGENT goes before NORMAL;
@@ -30,6 +32,8 @@ class PriorityGate:
         return self._held
 
     def acquire(self, priority: int) -> AbstractAsyncContextManager[None]:
+        if type(priority) is not int or priority not in (URGENT, NORMAL):
+            raise ValueError(f"unknown gate priority: {priority!r}")
         return self._hold(priority)
 
     @asynccontextmanager
@@ -52,6 +56,9 @@ class PriorityGate:
             if future.done() and not future.cancelled():
                 # Granted the gate in the same moment we were cancelled: pass it on.
                 self._release()
+            else:
+                self._waiters = [w for w in self._waiters if w[2] is not future]
+                heapq.heapify(self._waiters)
             raise
 
     def _release(self) -> None:
