@@ -214,3 +214,44 @@ async def test_a_failing_intervention_write_never_undoes_the_switch_off():
     assert control.off_calls == ["watchdog"]
     assert ("pump_watchdog", "intervention", "critical") in alerts
     assert ("pump_unexpected", "pump", "critical") in alerts
+
+
+async def test_many_unreadable_ticks_raise_one_alert_and_the_good_status_resolves_it():
+    control, _, _, dog, alerts, resolved, _ = make()
+    for mono in (5.0, 6.0, 7.0, 8.0):
+        control.reading = PumpReading(on=None, at=50.0, mono=mono)
+        await dog.step(FakeStage())
+    assert alerts == [("pump_unreadable", "pump", "warning")]
+    control.reading = PumpReading(on=False, at=60.0, mono=9.0)
+    await dog.step(FakeStage())
+    await dog.step(FakeStage())
+    assert resolved.count(("pump_unreadable", "pump")) == 1
+
+
+async def test_a_failing_step_alerts_once_and_a_good_step_resolves_it():
+    control, _, _, dog, alerts, resolved, _ = make()
+    dog.step_failed(RuntimeError("boom"))
+    dog.step_failed(RuntimeError("boom"))
+    assert alerts == [("pump_watchdog", "step", "critical")]
+    control.reading = PumpReading(on=False, at=60.0, mono=9.0)
+    await dog.step(FakeStage())
+    assert ("pump_watchdog", "step") in resolved
+
+
+async def test_the_intervention_alert_is_raised_once_and_resolved_by_a_later_success():
+    control, stages, _, dog, alerts, resolved, _ = make()
+    good = stages.record_intervention
+
+    def broken(*_):
+        raise RuntimeError("disk full")
+
+    stages.record_intervention = broken
+    control.reading = on(10.0)
+    await dog.step(FakeStage())
+    control.reading = on(30.0)
+    await dog.step(FakeStage())
+    assert alerts.count(("pump_watchdog", "intervention", "critical")) == 1
+    stages.record_intervention = good
+    control.reading = on(50.0)
+    await dog.step(FakeStage())
+    assert ("pump_watchdog", "intervention") in resolved
