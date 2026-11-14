@@ -145,6 +145,17 @@
 
 两个渠道都没有配置时，不会有任何通知入队。告警照常记录，`GET /wb/alerts` 可以看到，运行时启动时还会发出一条 `notify_unconfigured` 警告级告警（[`runtime.py`](../../../src/growbridge/runtime.py) 的 `build_runtime` 和 `Runtime.start`）。
 
+## 冻结读数门槛（`SafetyConfig.frozen`）
+
+它不在配置文件里：门槛是已批准安全配置的一个字段 `SafetyConfig.frozen`，类型是 [`archive/models.py`](../../../src/growbridge/archive/models.py) 里的 `FrozenCheck`。它和其余安全限值一起由人批准（`POST /wb/safety/approve`），工作台的安全页会显示。之后的观察者检查会标出读数持续完全不变、超过门槛的传感器。
+
+| 字段 | 类型 | 默认值 | 校验 | 作用 |
+| --- | --- | --- | --- | --- |
+| `minutes` | 传感器名到数字的字典 | `{"temp": 120, "humi": 60, "co2": 60, "tempSoil": 240}`（`DEFAULT_FROZEN_MINUTES`，每份配置各拿一份副本） | 每个值必须是有限的、大于 0 的数（`0`、负数、NaN、无穷大都会被拒绝）。允许空字典，意思是不检查任何传感器。 | 传感器读数保持不变多少分钟后算冻结。没有写在里面的传感器不检查。 |
+| `max_gap_seconds` | 数字 | `600` | 有限且大于 0。 | 两次读数之间最长多少秒的空档，仍算同一段不间断的相同读数。 |
+
+没有批准过安全配置时，门槛用上面的默认值。这个字段出现之前存下来的安全配置没有 `frozen`，读出来时用默认值。
+
 ## 没有对应配置项的功能
 
 | 功能 | 代码里的现状 |

@@ -193,9 +193,32 @@ class ProtectionRule(Model):
     action: RuleAction
 
 
+DEFAULT_FROZEN_MINUTES = {"temp": 120.0, "humi": 60.0, "co2": 60.0, "tempSoil": 240.0}
+
+
+class FrozenCheck(Model):
+    """How long a sensor may report exactly the same value before it is flagged as frozen.
+    A sensor missing from ``minutes`` is not checked; an empty dict checks nothing."""
+
+    minutes: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_FROZEN_MINUTES))
+    max_gap_seconds: float = 600.0
+
+    @model_validator(mode="after")
+    def _positive_and_finite(self) -> "FrozenCheck":
+        bad = [name for name, value in self.minutes.items() if not 0 < value < math.inf]
+        if bad:
+            raise ValueError(
+                f"frozen minutes must be finite and positive; not for {', '.join(bad)}"
+            )
+        if not 0 < self.max_gap_seconds < math.inf:
+            raise ValueError("frozen max_gap_seconds must be finite and positive")
+        return self
+
+
 class SafetyConfig(Model):
     version: int
     rules: tuple[ProtectionRule, ...]
+    frozen: FrozenCheck = Field(default_factory=FrozenCheck)
     approved_by: str | None = None
     approved_at: float | None = None
 

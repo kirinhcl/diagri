@@ -33,6 +33,7 @@ test("the safety skeleton has exactly the fields of SafetyConfig and what it nes
   assert.deepEqual(sorted(Object.keys(rule)), sorted(fieldsOf("ProtectionRule")));
   assert.deepEqual(sorted(Object.keys(rule.trigger)), sorted(fieldsOf("Condition")));
   assert.deepEqual(sorted(Object.keys(rule.action)), sorted(fieldsOf("RuleAction")));
+  assert.deepEqual(sorted(Object.keys(skeleton.frozen)), sorted(fieldsOf("FrozenCheck")));
 });
 
 test("every value of the skeleton is null, so submitting it unchanged cannot be approved", () => {
