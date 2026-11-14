@@ -147,7 +147,7 @@
 
 ## 冻结读数门槛（`SafetyConfig.frozen`）
 
-它不在配置文件里：门槛是已批准安全配置的一个字段 `SafetyConfig.frozen`，类型是 [`archive/models.py`](../../../src/growbridge/archive/models.py) 里的 `FrozenCheck`。它和其余安全限值一起由人批准（`POST /wb/safety/approve`），工作台的安全页会显示。之后的观察者检查会标出读数持续完全不变、超过门槛的传感器。
+它不在配置文件里：门槛是已批准安全配置的一个字段 `SafetyConfig.frozen`，类型是 [`archive/models.py`](../../../src/growbridge/archive/models.py) 里的 `FrozenCheck`。它和其余安全限值一起由人批准（`POST /wb/safety/approve`），工作台的安全页会显示。观察者会标出读数持续完全不变、超过门槛的传感器。
 
 | 字段 | 类型 | 默认值 | 校验 | 作用 |
 | --- | --- | --- | --- | --- |

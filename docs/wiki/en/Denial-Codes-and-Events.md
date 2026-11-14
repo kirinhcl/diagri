@@ -77,7 +77,7 @@ A refusal when a request is first submitted leaves no record in the action ledge
 | `transport_unconfirmed` | executor | The stage is `running`, `paused` or `manual`, and the old write path is not confirmed stopped. | none | moves the stage to `recovery_check` |
 | `end_condition_met` | executor | The stage is `running`, `end_pending` is false, and `duration_seconds` have passed since `started_at`. | none | keeps `running` and sets `end_pending` |
 | `end_actions` | executor | `end_pending` is true and every end action on a host-controlled channel was sent. The pump is left out. | `confirmed` | `confirmed` true: ends the stage. `confirmed` false: moves it to `recovery_check`. |
-| `alert_pause` | observer | An alert rule with `pause_stage` fired and a stage is active. | `rule`, `alert` | pauses the stage |
+| `alert_pause` | observer | An alert rule with `pause_stage` fired and a stage is active, or a frozen reading of a sensor the running stage depends on (`rule` is then `frozen:<sensor>`, and `period` names the frozen period). | `rule`, `alert` (frozen pause: also `period`; `alert` only when one is open) | pauses the stage |
 | `rule_pause` | executor | The stage is `running` and a feedback rule with `on_missing = "pause"` has no valid reading of its sensor. | `rules` | pauses the stage |
 | `max_wait_expired` | executor | The stage is `paused` for longer than `max_wait_seconds` of the run sheet. | none | `on_expiry = "stop"`: stops the stage. Otherwise it stays `paused` and the expiry is written to the history. |
 
@@ -105,7 +105,7 @@ An event that is applied is recorded as `applied` in the same transaction as the
 | `confirmed` | The read-back showed the planned level, in manual mode. `confirmed_at` and `confirmed_level` are set. | The read-back after the write matched. |
 | `unknown` | Result unknown: the effect of the write could not be established. Until it is settled (`settled_at`), ordinary writes are refused with `unsettled`. | No receipt came, the link broke while sending, the read-back was unavailable, the process stopped while the action was `maybe_sent`, or the pump-off after an irrigation was not confirmed. |
 | `failed` | The write was not applied. | The write could not be sent, the device rejected it, the read-back level differed, or the read-back mode was not manual. |
-| `void` | The action was queued and never sent. | At startup, when its write right was handed over, when the recovery number changed, or when the re-check just before sending refused it. |
+| `void` | The action was queued and never sent. | At startup, when its write right was handed over, when the recovery number changed, when a protection write on the same channel voided it, or when the re-check just before sending refused it. |
 
 An `unknown` action is settled by a read-back of the device (not for the pump), by a confirmed pump-off (for the pump), or by an on-site check. The executor replaces a `failed` or `void` action with a new request that names the old one in `supersedes`.
 

@@ -147,7 +147,7 @@ When neither channel is configured, no notification is queued. Alerts are still 
 
 ## Frozen-reading thresholds (`SafetyConfig.frozen`)
 
-Not part of the settings file: the thresholds are a field of the approved safety configuration, `SafetyConfig.frozen`, a `FrozenCheck` in [`archive/models.py`](../../../src/growbridge/archive/models.py). A person approves them with the rest of the safety limits (`POST /wb/safety/approve`) and the workbench safety page shows them. A later observer check flags a sensor whose value stays exactly the same for longer than its threshold.
+Not part of the settings file: the thresholds are a field of the approved safety configuration, `SafetyConfig.frozen`, a `FrozenCheck` in [`archive/models.py`](../../../src/growbridge/archive/models.py). A person approves them with the rest of the safety limits (`POST /wb/safety/approve`) and the workbench safety page shows them. The observer flags a sensor whose value stays exactly the same for longer than its threshold.
 
 | Field | Type | Default | Validation | What it does |
 | --- | --- | --- | --- | --- |

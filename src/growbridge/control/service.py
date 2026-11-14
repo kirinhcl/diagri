@@ -2,7 +2,8 @@
 
 One two-level priority gate serialises hand-overs and every dispatch. Protection writes, the
 pump-off at the end of an irrigation and hand-overs go before queued ordinary writes (they never
-preempt the write already on its way). A request is checked
+preempt the write already on its way). A protection write also voids the ordinary writes
+queued on its own channel. A request is checked
 when it is queued and again, inside the gate, right before it is sent. The intent is persisted
 before sending and again as "maybe sent" just before the bytes leave, so a crash in between is
 recovered as "result unknown" and never replayed.
