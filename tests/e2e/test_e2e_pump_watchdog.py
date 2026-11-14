@@ -1,10 +1,14 @@
 """The watchdog's alerts through the real runtime: raised, notified, closed and raised anew."""
 
-from e2e_support import RecordingChannel
+import json
 
+from e2e_support import STAGE, RecordingChannel
+
+from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import Channel
 
 KIND = "pump_unexpected"
+KIND_WATERING = "unexpected_watering"
 
 
 def pump_alerts(runtime):
@@ -42,3 +46,24 @@ async def test_an_off_status_closes_the_alert_and_a_later_pump_on_is_a_new_event
     [second] = pump_alerts(runtime)
     assert second.event_id != first.event_id
     assert runtime.outbox.status(second.event_id, "rec") is not None
+
+
+async def test_an_unexpected_watering_reaches_the_archive_and_a_snapshot(world):
+    runtime = await world.boot()
+    await world.approved_stage(runtime)
+    await world.beat(runtime, 30)
+    panel_on(world)
+    await world.beat(runtime, 5)
+
+    experiment = f"experiment-{STAGE}"
+    archived = [i for i in runtime.archive.interventions(experiment) if i["kind"] == KIND_WATERING]
+    assert len(archived) == 1
+    assert archived[0]["operator"] is None and archived[0]["stage_id"] == STAGE
+
+    started = runtime.workflow.stage(STAGE).started_at
+    snapshot = snapshots.freeze(
+        runtime.archive, experiment, world.clock, started, world.clock.now(), 60, 120
+    )
+    path = runtime.archive.root / "snapshots" / snapshot.id / "interventions.jsonl"
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [row["kind"] for row in rows] == [KIND_WATERING]
