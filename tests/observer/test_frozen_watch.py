@@ -440,24 +440,40 @@ async def test_a_failed_config_read_still_pauses_for_the_last_known_protection_s
     assert [e.detail["rule"] for e in rig.stages.events] == ["frozen:humi"]
 
 
-async def test_an_alert_left_by_a_failed_resolve_is_resolved_by_the_next_check(rig):
-    rig.feed(121, temp=24.0)
+def locked(kind, key):
+    raise RuntimeError("alert store is locked")
+
+
+async def closed_with_its_alert_left_behind(rig, **others):
+    rig.feed(121, temp=24.0, **others)
     await rig.check()
-    rig.feed(3, temp=24.5)
+    rig.feed(3, temp=24.5, **others)
     working = rig.book.resolve
-
-    def locked(kind, key):
-        raise RuntimeError("alert store is locked")
-
     rig.book.resolve = locked
     with pytest.raises(RuntimeError):
         await rig.check()
-    assert rig.open_for("temp") == [] and len(rig.alerts()) == 1  # closed, alert left behind
+    assert rig.open_for("temp") == [] and len(rig.alerts()) == 1
+    return working
 
-    rig.book.resolve = working
+
+async def test_an_alert_left_by_a_failed_resolve_is_resolved_by_the_next_check(rig, caplog):
+    rig.book.resolve = await closed_with_its_alert_left_behind(rig)
+
     await rig.check()
 
     assert rig.alerts() == []
+    assert "no open period" in caplog.text  # the automatic resolution is on record
+
+
+async def test_a_failing_alert_cleanup_never_stops_a_new_period_from_opening(rig):
+    await closed_with_its_alert_left_behind(rig, humi=moving)
+    rig.feed(61, temp=moving, humi=55.0)  # humi now flat for an hour
+
+    with pytest.raises(RuntimeError):  # resolving the old temp alert still fails
+        await rig.check()
+
+    assert [p.value for p in rig.open_for("humi")] == [55.0]
+    assert len(rig.alerts("humi")) == 1
 
 
 async def handing_over(rig, before, after):
