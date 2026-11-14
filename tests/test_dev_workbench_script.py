@@ -196,3 +196,62 @@ async def test_the_tick_loop_skips_ahead_reads_and_ticks_on_each_fast_step(monke
         pass
     assert seen == [("read", start + 300), ("tick", start + 300), ("tick", start + 300)]
     assert pauses == [script.FAST_PAUSE_SECONDS, script.TICK_SECONDS]
+
+
+def test_the_greenhouse_moves_every_reading_with_the_light_and_the_day():
+    from growbridge.sim.device import SimulatedTransport
+
+    script = _load_script()
+    sim, house = SimulatedTransport(), script.Greenhouse()
+    noon, night = 12 * 3600.0, 2 * 3600.0
+    seen = set()
+    for n in range(20):
+        house.update(sim, noon + n * 300)
+        seen.add(tuple(sim.sensors[k] for k in ("temp", "humi", "co2")))
+    assert len(seen) > 15  # no reading stays exactly the same: nothing looks frozen
+
+    def mean_temp(at: float, light: int) -> float:
+        sim.config["device"]["light"].update(mOnOff=int(light > 0), mLevel=light)
+        values = []
+        for _ in range(50):
+            house.update(sim, at)
+            values.append(sim.sensors["temp"])
+        return sum(values) / len(values)
+
+    assert mean_temp(noon, 70) > mean_temp(noon, 0) + 2  # the light warms the tent
+    assert mean_temp(noon, 0) > mean_temp(night, 0)  # and so does the day
+
+
+async def test_the_tick_loop_moves_the_readings_on_before_each_step(monkeypatch):
+    from growbridge.sim.clock import FakeClock
+
+    script = _load_script()
+    steps = iter([300.0, None])
+    monkeypatch.setattr(script, "fast_step", lambda runtime: next(steps))
+    varied, pauses = [], []
+    clock = FakeClock()
+    start = clock.now()
+
+    class Bridge:
+        async def request(self, method):
+            pass
+
+    class Runtime:
+        bridge = Bridge()
+
+        def __init__(self):
+            self.clock = clock
+
+        async def tick(self):
+            pass
+
+    async def sleep(seconds):
+        pauses.append(seconds)
+        if len(pauses) == 2:
+            raise StopAsyncIteration
+
+    try:
+        await script.tick_forever(Runtime(), clock, sleep=sleep, vary=varied.append)
+    except StopAsyncIteration:
+        pass
+    assert varied == [start + 300, start + 300]  # the reading of each step is for its own time

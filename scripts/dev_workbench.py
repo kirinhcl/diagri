@@ -18,6 +18,8 @@ by one sampling interval of its run sheet, asks the simulated device for a readi
 week-long stage takes minutes and its data stay complete. Outside a running stage time is real.
 The skipped time is kept in ``dev_clock_offset`` in the data directory, so a restart never sends
 the clock back. Sessions and re-authentication age with that clock: sign in again afterwards.
+The simulated sensors follow a small tent model (``Greenhouse``): day and night, the light and
+the exhaust move temperature, humidity and CO2, with noise, so no reading looks frozen.
 ``--transcript FILE.jsonl`` appends one line per model call: the role, the newest message, the
 reply's stop reason, text and tool calls, token counts and seconds. It is for development only:
 it holds prompts and tool results in clear text.
@@ -79,10 +81,46 @@ def fast_step(runtime) -> float | None:
     return min(sheet.sampling.interval_seconds, MAX_FAST_STEP_SECONDS)
 
 
-async def tick_forever(runtime, clock: OffsetClock | None, sleep=asyncio.sleep) -> None:
-    """Tick once a second; with a fast-forward clock, step through a running stage instead."""
+class Greenhouse:
+    """A small grow tent around the simulated AC5, so its sensors move as real ones do.
+
+    The simulator's sensors are constant, and a reading that never changes is what the
+    frozen-reading check pauses a stage for. Here the air warms by day and under the light, the
+    exhaust cools and dries it, the canopy draws CO2 down while the light is on, and every
+    reading carries a little noise. ``update(sim, now)`` sets the readings for UTC time ``now``.
+    """
+
+    def __init__(self, seed: int = 20261114):
+        import random
+
+        self.random = random.Random(seed)
+
+    @staticmethod
+    def _level(sim, module: str) -> float:
+        block = sim.config["device"][module]
+        return float(block["mLevel"]) if block["mOnOff"] else 0.0
+
+    def update(self, sim, now: float) -> None:
+        import math
+
+        day = math.sin(2 * math.pi * ((now % 86400) / 86400 - 0.375))  # warmest mid-afternoon
+        light, exhaust = self._level(sim, "light"), self._level(sim, "blower")
+        noise = self.random.gauss
+        temp = 20.5 + 1.5 * day + 0.045 * light - 0.02 * exhaust + noise(0, 0.12)
+        humi = 64 - 1.6 * (temp - 21) - 0.06 * exhaust + noise(0, 0.5)
+        co2 = 560 - 1.4 * light + 0.5 * exhaust + noise(0, 6)
+        sim.set_sensor("temp", round(temp, 1))
+        sim.set_sensor("humi", round(min(95.0, max(20.0, humi)), 1))
+        sim.set_sensor("co2", round(max(380.0, co2)))
+
+
+async def tick_forever(runtime, clock: OffsetClock | None, sleep=asyncio.sleep, vary=None) -> None:
+    """Tick once a second; with a fast-forward clock, step through a running stage instead.
+    ``vary(now)``, when given, moves the simulated readings on before each step."""
     while True:
         step = fast_step(runtime) if clock is not None else None
+        if vary is not None:
+            vary(runtime.clock.now() + (step or 0))
         if step is not None:
             clock.advance(step)
             try:
@@ -256,12 +294,15 @@ async def _run(
     if fast_forward:
         settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         clock = OffsetClock(settings.data_dir / OFFSET_FILE)
-    runtime = build_runtime(settings, lambda _: SimulatedTransport(), clock, channels={})
+    sim = SimulatedTransport()
+    greenhouse = Greenhouse()
+    runtime = build_runtime(settings, lambda _: sim, clock, channels={})
     try:
         prepare(runtime, secret, fresh)
         router = runtime.workbench({})
         await runtime.start()
-        ticker = asyncio.create_task(tick_forever(runtime, clock))
+        vary = lambda now: greenhouse.update(sim, now)  # noqa: E731
+        ticker = asyncio.create_task(tick_forever(runtime, clock, vary=vary))
         if clock is not None:
             print(f"Fast-forward: on (skipped so far: {clock.offset:.0f} s)")
         poller = asyncio.create_task(poll_status(runtime.bridge.request))
