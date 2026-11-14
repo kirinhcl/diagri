@@ -196,6 +196,30 @@ async def test_pauses_once_when_a_feedback_rule_uses_the_sensor(rig):
     assert len(rig.stages.events) == 1
 
 
+async def test_two_periods_opened_together_send_one_pause_per_check(rig):
+    rig.stages.sensors = ("temp", "humi")
+    report = rig.stages.report
+
+    async def pausing_report(event):
+        await report(event)
+        rig.stages.state = StageState.PAUSED  # what the workflow does with an alert pause
+
+    rig.stages.report = pausing_report
+    rig.feed(121, temp=24.0, humi=55.0)
+    await rig.check()
+    assert len(rig.stages.events) == 1
+    first = rig.stages.events[0].detail["rule"]
+
+    await rig.check()  # still paused: nothing more is sent, no id is spent
+    assert len(rig.stages.events) == 1
+
+    rig.stages.state = StageState.RUNNING  # the operator resumed
+    await rig.check()
+    assert len(rig.stages.events) == 2
+    assert {e.detail["rule"] for e in rig.stages.events} == {"frozen:temp", "frozen:humi"}
+    assert rig.stages.events[1].detail["rule"] != first
+
+
 async def test_a_new_stage_is_paused_for_a_period_already_open(rig):
     period = await frozen_running(rig, "temp")
     rig.stages.stage_id = "st2"

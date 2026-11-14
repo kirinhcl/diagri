@@ -135,6 +135,8 @@ class FrozenWatch:
         return alert.event_id if alert else None
 
     async def _pause_stage(self, protection: frozenset[str]) -> None:
+        """At most one pause event per check; other open periods pause the stage on a later
+        check, once it is running again."""
         stage = self.stages.active_stage()
         if stage is None or stage.state is not StageState.RUNNING:
             return
@@ -158,3 +160,4 @@ class FrozenWatch:
             )
             await self.stages.report(event)
             self._reported.add(event_id)
+            return  # the stage is paused now; a second pause would be dropped and spend its id
