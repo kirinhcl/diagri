@@ -28,8 +28,11 @@ async def wait_until(predicate, attempts=200):
         ({"outlet": None}, None),
         ({"outlet": "x"}, None),
         ({"outlet": {"O4": {"on": "0"}}}, None),
-        ({"outlet": {"O4": {"on": 2}}}, None),
-        ({"outlet": {"O4": {"on": 1.0}}}, None),
+        ({"outlet": {"O4": {"on": 2}}}, True),
+        ({"outlet": {"O4": {"on": 1.0}}}, True),
+        ({"outlet": {"O4": {"on": 0.0}}}, False),
+        ({"outlet": {"O4": {"on": float("nan")}}}, None),
+        ({"outlet": {"O4": {"on": float("inf")}}}, None),
         ({"outlet": {"O4": {"on": None}}}, None),
         ({"outlet": {"O4": {"on": True}}}, True),
         ({"outlet": {"O4": {"on": False}}}, False),
@@ -38,6 +41,22 @@ async def wait_until(predicate, attempts=200):
 def test_pump_on_reads_the_pump_outlet(data, expected):
     bridge = SimpleNamespace(settings=SimpleNamespace(pump_outlet=4))
     assert DeviceIO(bridge).pump_on(data) is expected
+
+
+@pytest.mark.parametrize(
+    "data",
+    [{"outlet": {"O4": {}}}, {"outlet": None}, {"outlet": {"O4": {"on": "x"}}}, {}],
+)
+def test_levels_from_leaves_a_malformed_pump_outlet_out(data):
+    bridge = SimpleNamespace(settings=SimpleNamespace(pump_outlet=4))
+    assert Channel.PUMP not in DeviceIO(bridge).levels_from(data)
+
+
+def test_levels_from_reads_a_well_formed_pump_outlet():
+    bridge = SimpleNamespace(settings=SimpleNamespace(pump_outlet=4))
+    device = DeviceIO(bridge)
+    assert device.levels_from({"outlet": {"O4": {"on": 1}}})[Channel.PUMP] == 1
+    assert device.levels_from({"outlet": {"O4": {"on": 0}}})[Channel.PUMP] == 0
 
 
 async def test_pump_reading_follows_the_panel(rig):

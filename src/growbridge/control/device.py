@@ -101,17 +101,12 @@ class DeviceIO:
         return f"O{self.bridge.settings.pump_outlet}"
 
     def pump_on(self, data: dict[str, Any]) -> bool | None:
-        """The pump outlet's on/off from a status; ``None`` unless it is a clear bool or 0/1."""
+        """The pump outlet's on/off from a status; ``None`` when it is missing or malformed."""
+        return _outlet_on(self._pump_outlet(data))
+
+    def _pump_outlet(self, data: dict[str, Any]) -> object:
         outlets = data.get("outlet")
-        if not isinstance(outlets, dict):
-            return None
-        outlet = outlets.get(self._pump_key())
-        value = outlet.get("on") if isinstance(outlet, dict) else None
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, int) and value in (0, 1):
-            return bool(value)
-        return None
+        return outlets.get(self._pump_key()) if isinstance(outlets, dict) else None
 
     def levels_from(self, data: dict[str, Any]) -> dict[Channel, int]:
         levels: dict[Channel, int] = {}
@@ -119,9 +114,9 @@ class DeviceIO:
             block = data.get(module)
             if isinstance(block, dict):
                 levels[channel] = int(block.get("level", 0)) if block.get("on") else 0
-        outlet = data.get("outlet", {}).get(self._pump_key())
-        if isinstance(outlet, dict):
-            levels[Channel.PUMP] = int(bool(outlet.get("on")))
+        pump = self.pump_on(data)
+        if pump is not None:  # a malformed outlet never reads as a confirmed level
+            levels[Channel.PUMP] = int(pump)
         return levels
 
     def modes_from(self, config: dict[str, Any]) -> dict[Channel, int]:
@@ -190,3 +185,15 @@ class DeviceIO:
         if mode != 0:
             return Outcome(ActionState.FAILED, f"read-back mode is {mode}, expected 0")
         return CONFIRMED
+
+
+def _outlet_on(outlet: object) -> bool | None:
+    """An outlet block's ``on``: a bool, or a finite number (non-zero is on); else ``None``."""
+    if not isinstance(outlet, dict):
+        return None
+    value = outlet.get("on")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float) and math.isfinite(value):
+        return value != 0
+    return None
