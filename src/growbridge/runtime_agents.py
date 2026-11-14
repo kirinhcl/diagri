@@ -8,6 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from growbridge.agents.context import project_context
 from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.handlers import Deps, build_role_tools
 from growbridge.agents.llm import ModelClient
@@ -39,7 +40,13 @@ def make_dispatcher(runtime: Any, client: ModelClient, work_root: Path) -> Dispa
     roles = {name: runtime.settings.roles.get(name, RoleModel()) for name in ROLE_TOOLS}
     tools = role_tools(runtime, work_root)
     args = (client, roles, tools, runtime.tasks, runtime.budget, runtime.clock)
-    return Dispatcher(*args, runtime.agents_db)
+    timezone = runtime.settings.report_timezone
+
+    def context(task):
+        return project_context(runtime.workflow, runtime.control, timezone, task)
+
+    conversation = getattr(runtime, "conversation", None)
+    return Dispatcher(*args, runtime.agents_db, context=context, conversation=conversation)
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:

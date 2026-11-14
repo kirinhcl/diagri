@@ -3,6 +3,7 @@ import json
 import pytest
 from dispatch_helpers import call, result_blocks, script_calls
 
+from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import (
     EvidenceCard,
@@ -216,6 +217,103 @@ async def test_freeze_dataset_with_an_unsynced_clock_is_an_error_result(env):
     assert outcome.is_error and "clock_unsynced" in outcome.content
 
 
+# --- inspect_stage_data ----------------------------------------------------------------------
+
+
+async def _inspect(env, deps=None, **fields):
+    fields = {"task_id": _task_id(env), "stage_id": "stage-1", **fields}
+    return await env.invoke("researcher", "inspect_stage_data", deps, **fields)
+
+
+async def test_inspect_predicts_the_freeze_and_writes_nothing(env):
+    sampling = SamplingPlan(interval_seconds=1, max_gap_seconds=2)
+    await _running_stage(env, seconds=HOLE, sampling=sampling)
+    untrusted = SampleRecord(
+        id="s-late",
+        experiment_id="experiment-stage-1",
+        stage_id="stage-1",
+        device_id="SIMULATED",
+        captured_at=START + 5,
+        received_at=START + 5,
+        clock_synced=False,
+        data={"temp": 99.0},
+    )
+    env.archive.append_sample(untrusted)
+
+    body = _payload(await _inspect(env))
+
+    assert env.archive.snapshots("experiment-stage-1") == ()
+    frozen = _payload(
+        await env.invoke("researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1")
+    )
+    assert body["coverage"] == pytest.approx(frozen["coverage"])
+    assert body["would_be_complete"] is frozen["complete"] is False
+    assert body["gap_count"] == frozen["gap_count"] == 1
+    assert body["longest_gap_seconds"] == pytest.approx(4.0)
+    samples = body["samples"]
+    assert (samples["trusted"], samples["untrusted"]) == (len(HOLE), 1)
+    assert samples["untrusted_reasons"]["clock_unsynced"] == 1
+    assert samples["channels"]["temp"] == {"n": len(HOLE), "min": 21.0, "max": 21.0, "mean": 21.0}
+    assert body["stage_state"] == "running" and body["snapshots"] == []
+
+
+def test_nested_device_readings_are_summarised_by_dotted_key():
+    reading = {"light": {"level": 70, "on": 1}, "sensor": {"temp": 22.5}, "ok": True}
+    sample = SampleRecord(
+        id="s",
+        experiment_id="e",
+        stage_id="st",
+        device_id="SIMULATED",
+        captured_at=START,
+        received_at=START,
+        clock_synced=True,
+        data=reading,
+    )
+
+    channels = snapshots._channels([sample, sample.model_copy(update={"id": "t"})])
+
+    assert set(channels) == {"light.level", "light.on", "sensor.temp"}
+    assert channels["light.level"] == {"n": 2, "min": 70.0, "max": 70.0, "mean": 70.0}
+
+
+async def test_inspect_summarises_measurements_and_only_counts_held_out_ones(env):
+    registry = _registry(env)
+    await _running_stage(env)
+    for n, value in enumerate((1.0, 3.0)):
+        env.archive.add_measurement(
+            _measurement("experiment-stage-1", value, f"m{n}", plant_id=f"p{n}")
+        )
+    env.archive.add_measurement(
+        _measurement("experiment-stage-1", 987.5, "m-hold", batch="batch-h")
+    )
+
+    outcome = await _inspect(env, env.make_deps(holdout=registry))
+
+    body = _payload(outcome)
+    growth = body["measurements"]["canopy_area_growth"]
+    assert (growth["n"], growth["min"], growth["max"], growth["mean"]) == (2, 1.0, 3.0, 2.0)
+    assert growth["plants"] == 2 and growth["units"] == ["cm2"]
+    assert body["measurements_withheld"] == 1 and "987.5" not in outcome.content
+
+
+async def test_inspect_refuses_a_stage_of_another_project_or_one_never_started(env):
+    env.other_project()
+    env.workflow.submit_run_sheet(env.round_id, env.sheet(), env.operator)
+
+    foreign = await _inspect(env, stage_id="stage-b")
+    unstarted = await _inspect(env)
+
+    assert foreign.is_error and "denied (scope)" in foreign.content
+    assert unstarted.is_error and "never started" in unstarted.content
+
+
+def test_inspect_is_a_read_only_tool_of_the_researcher(env):
+    (tool,) = [t for t in env.tools()["researcher"] if t.name == "inspect_stage_data"]
+
+    assert not tool.writes and not tool.sandbox
+    assert "inspect_stage_data" in ROLE_TOOLS["researcher"]
+
+
 # --- evidence and local analysis -------------------------------------------------------------
 
 
@@ -302,7 +400,7 @@ async def test_missing_compute_yields_error_results_and_the_loop_continues(env):
 
     assert run is not None and run.stop_reason == "end_turn"
     assert all(block["is_error"] for block in result_blocks(client))
-    assert env.tasks.get("task-ev-1").state is TaskState.DONE
+    assert env.tasks.get("task-ev-1").state is TaskState.NEEDS_ATTENTION  # nothing published
 
 
 async def test_compute_submission_for_another_roles_task_is_refused(env):

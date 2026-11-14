@@ -112,7 +112,7 @@ GET /wb/rounds/ROUND_ID
 
 响应里有 `state`、`awaiting_choice`、`stages_done`、`stage_total`、协议的 ID 和版本、`snapshot_id`、`report_artifact_id`，以及 `stages`：一组 `{"stage_id": "...", "state": "..."}`。新建的轮次处于 `designing`，还没有阶段。
 
-真实模型拿到目标后会怎么做，没有验证过。测试用的是脚本化的模型，见 [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)。
+测试用的是脚本化的模型，见 [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)。用真实模型时，这一步在模拟器上跑到了运行单待审，见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 在第一个阶段之前冻结分析脚本
 
@@ -273,7 +273,7 @@ POST /wb/rounds/ROUND_ID/abort
 
 ## 6. 数据核验
 
-研究 Agent 用 `freeze_dataset` 工具冻结这个阶段的数据快照。快照完整（覆盖率不低于 0.9）并且通过校验时，轮次进入 `analysis`；否则停在 `data_verification`。
+研究 Agent 可以先用 `inspect_stage_data` 查看这个阶段的数据（只读：覆盖率、缺口、各通道取值范围、人工测量），再用 `freeze_dataset` 工具冻结数据快照。冻结时会自己核验覆盖率和文件摘要。快照完整（覆盖率不低于 0.9）并且通过校验时，轮次进入 `analysis`；否则停在 `data_verification`。
 
 人工测量必须在快照冻结之前用 `POST /wb/measurements` 记录进去。测量属于某个已存在阶段的实验：对没有任何阶段运行的实验 ID，路由以 `scope` 拒绝，这样每条测量都能追溯到一个项目。
 

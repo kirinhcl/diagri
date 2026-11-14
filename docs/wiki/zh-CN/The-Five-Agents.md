@@ -66,12 +66,13 @@
 
 | 工具 | 作用 |
 | --- | --- |
+| `inspect_stage_data` | 只读，按冻结时间窗汇总一个已启动阶段的数据：覆盖率、缺口、可信和不可信样本、各通道取值范围、各指标的人工测量（留出批次只给条数）、已有快照。研究 Agent 用它在冻结前检查数据。 |
 | `freeze_dataset` | 把一个阶段的数据冻结成校验过的快照。快照完整时，把轮次从 `data_verification` 推进到 `analysis`。 |
 | `run_local_analysis` | 在沙箱里对快照运行脚本。结果一律标为探索性。 |
 | `submit_compute_job`、`fetch_compute_artifacts` | 按登记的模板提交作业、取回产物。没有配置计算服务时返回 `unavailable`；输入必须是任务所属项目的、已通过校验的快照。 |
 | `publish_research_report` | 写出报告。结论等级和数值都由冻结的数据算出。报告为终稿时，把轮次从 `analysis` 推进到 `delivered`。 |
 
-**只能在自己任务的范围内操作。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要带上 `task_id`，而且这个编号必须就是调度器正在运行的任务（见下面的“绑定到正在运行的任务”），该任务必须归研究 Agent 所有。同一次调用里出现的阶段、轮次、快照编号，都必须属于这个任务所在的项目，否则在写入、挂载或读取任何东西之前，就以 `Denied("scope")` 拒绝。不存在的快照和别的项目的快照，得到的答复一模一样，所以从答复里探不出任何信息。含有留出批次结局的快照同样被拒绝。原因是：编号是模型随手写的，没有这道检查，一个项目里的任务就能读到另一个项目的数据，或者推进另一个项目的轮次。检查代码是 [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 的 `own_task`，以及 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `require_round` 和 `scoped_snapshot`。
+**只能在自己任务的范围内操作。** `inspect_stage_data`、`freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要带上 `task_id`，而且这个编号必须就是调度器正在运行的任务（见下面的“绑定到正在运行的任务”），该任务必须归研究 Agent 所有。同一次调用里出现的阶段、轮次、快照编号，都必须属于这个任务所在的项目，否则在写入、挂载或读取任何东西之前，就以 `Denied("scope")` 拒绝。不存在的快照和别的项目的快照，得到的答复一模一样，所以从答复里探不出任何信息。含有留出批次结局的快照同样被拒绝。原因是：编号是模型随手写的，没有这道检查，一个项目里的任务就能读到另一个项目的数据，或者推进另一个项目的轮次。检查代码是 [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 的 `own_task`，以及 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `require_round` 和 `scoped_snapshot`。
 
 **绑定到正在运行的任务。** 工具调用里的每一个编号都是模型写的，所以一个都不能信。调度器在整次运行期间绑定它正在运行的任务，每个工具都拿输入里的编号和这个绑定比对。模型传入的 `task_id` 必须等于被绑定的任务：为一个任务工作的研究 Agent，不能指名另一个任务，不管在本项目还是别的项目；在调度运行之外发起的工具调用也一律拒绝。另外两个模型角色同样如此：它们只能指名被绑定任务所在项目的项目、轮次、阶段和实验。`get_task_status` 只回答被绑定的任务和它下面委派出去的任务，`read_artifact` 只回答本项目任务的产物，`delegate_task` 只接受被绑定的任务作为父任务。所有拒绝都是 `Denied("scope")`。绑定是 [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py) 里 `Dispatcher` 设置的一个上下文变量，由 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `bound_task`、`require_bound` 和 `require_project` 读取。用上下文变量是因为工具只建一次、被所有运行共用，而运行可能重叠：每个 asyncio 任务只看得到自己的绑定。
 

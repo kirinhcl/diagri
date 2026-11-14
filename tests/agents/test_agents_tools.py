@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from agent_helpers import EchoInput, make_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from growbridge.agents.tools import CONTROL_TOOLS, ROLE_TOOLS, Tool, build_toolset
 from growbridge.ports import Denied
@@ -80,7 +82,37 @@ def test_nested_objects_are_closed_too():
 
     tool = Tool(name="get_run_status", description="d", input_model=Outer, handler=h)
     schema = build_toolset("orchestrator", [tool]).schemas()[0]["input_schema"]
-    assert schema["$defs"]["Inner"]["additionalProperties"] is False
+    assert schema["properties"]["inner"]["additionalProperties"] is False
+
+
+def test_schemas_are_self_contained():
+    """A server that renders ``$ref`` as an untyped value must still show the nested fields."""
+
+    class Inner(BaseModel):
+        a: int
+
+    class Outer(BaseModel):
+        first: Inner
+        second: list[Inner] = Field(default_factory=list, description="more of them")
+
+    async def h(_):
+        return {}
+
+    tool = Tool(name="get_run_status", description="d", input_model=Outer, handler=h)
+    schema = build_toolset("orchestrator", [tool]).schemas()[0]["input_schema"]
+    assert "$ref" not in json.dumps(schema) and "$defs" not in schema
+    assert schema["properties"]["first"]["required"] == ["a"]
+    assert schema["properties"]["second"]["items"]["properties"]["a"]["type"] == "integer"
+    assert schema["properties"]["second"]["description"] == "more of them"
+
+
+def test_every_model_role_tool_schema_is_self_contained(tmp_path):
+    from growbridge.agents.handlers import Deps, build_role_tools
+
+    deps = Deps(*(None,) * 5, work_root=tmp_path)  # schemas only: no handler is called
+    for role, tools in build_role_tools(deps).items():
+        for schema in build_toolset(role, tools).schemas():
+            assert "$ref" not in json.dumps(schema["input_schema"]), schema["name"]
 
 
 def test_restricted_schemas_drop_sandbox_and_write_tools():

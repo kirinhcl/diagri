@@ -3,18 +3,23 @@
 Rules enforced here: every model call is reserved against the project budget first; ``refusal``
 and ``max_tokens`` never execute tools; ``pause_turn`` re-sends the paused turn; all tool results of
 one turn go back in one user message; after a web-reading tool ran, sandbox and write tools
-disappear; tool output is handed back as data, never as instructions.
+disappear (a web tool that only returned an error brings no web content and changes nothing);
+tool output is handed back as data, never as instructions.
 """
 
 from __future__ import annotations
 
 import inspect
+import logging
+from collections.abc import Callable
 from typing import Any
 
 from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, ModelReply, TokenPrice
-from growbridge.agents.tools import Toolset
+from growbridge.agents.tools import ToolOutcome, Toolset
 from growbridge.archive.models import Model
 from growbridge.config import RoleModel
+
+log = logging.getLogger(__name__)
 
 DATA_TAG = "tool_result_data"
 DATA_NOTICE = (
@@ -49,22 +54,42 @@ async def _maybe_await(value: Any) -> None:
         await value
 
 
+# Called after each model turn with the reply and the outcomes of its tool calls (none when the
+# turn ran no tools). It only watches: what it raises is logged and the run goes on.
+Observer = Callable[[ModelReply, list[ToolOutcome]], Any]
+
+
+async def _observe(
+    observe: Observer | None, reply: ModelReply, outcomes: list[ToolOutcome]
+) -> None:
+    if observe is None:
+        return
+    try:
+        await _maybe_await(observe(reply, outcomes))
+    except Exception:
+        log.exception("turn observer failed")
+
+
 async def _run_tools(
     reply: ModelReply, toolset: Toolset, restricted: bool
-) -> tuple[dict, list[ToolRecord], bool]:
-    """Run one turn's tool calls in order; returns the single user message, records, restriction."""
+) -> tuple[dict, list[ToolOutcome], bool]:
+    """Run one turn's tool calls in order; returns the user message, outcomes, restriction."""
     blocks: list[dict] = []
-    records: list[ToolRecord] = []
+    outcomes: list[ToolOutcome] = []
     for tool_call in reply.tool_calls:
         outcome = await toolset.call(tool_call.name, tool_call.input, restricted=restricted)
-        restricted = restricted or toolset.reads_web(tool_call.name)
+        # Only a web tool that returned something brings web content in. An error result is
+        # written here (no backend, refused input, a failure named by its type), so a call that
+        # failed leaves the write and sandbox tools in place.
+        fetched = toolset.reads_web(tool_call.name) and not outcome.is_error
+        restricted = restricted or fetched
         if outcome.is_error:
             block: dict[str, Any] = {"content": outcome.content, "is_error": True}
         else:
             block = {"content": wrap_as_data(tool_call.name, outcome.content)}
         blocks.append({"type": "tool_result", "tool_use_id": tool_call.id, **block})
-        records.append(ToolRecord(name=tool_call.name, is_error=outcome.is_error))
-    return {"role": "user", "content": blocks}, records, restricted
+        outcomes.append(outcome)
+    return {"role": "user", "content": blocks}, outcomes, restricted
 
 
 async def run_agent(
@@ -77,6 +102,7 @@ async def run_agent(
     project_id: str,
     max_turns: int = 20,
     price: TokenPrice = DEFAULT_PRICE,
+    observe: Observer | None = None,
 ) -> AgentRun:
     messages: list[dict] = [{"role": "user", "content": user}]
     restricted = False
@@ -106,9 +132,11 @@ async def run_agent(
             messages = [*messages, {"role": "assistant", "content": last.content}]
             continue
         if stop != "tool_use":  # end_turn, refusal, max_tokens, anything else: no tools run
+            await _observe(observe, last, [])
             return _finish(last, stop, turn, tokens_in, tokens_out, cost, records, restricted)
-        result_message, new_records, restricted = await _run_tools(last, toolset, restricted)
-        records.extend(new_records)
+        result_message, outcomes, restricted = await _run_tools(last, toolset, restricted)
+        records.extend(ToolRecord(name=o.name, is_error=o.is_error) for o in outcomes)
+        await _observe(observe, last, outcomes)
         messages = [*messages, {"role": "assistant", "content": last.content}, result_message]
     return _finish(last, "max_turns", max_turns, tokens_in, tokens_out, cost, records, restricted)
 

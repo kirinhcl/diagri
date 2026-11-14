@@ -10,9 +10,10 @@ refused with ``model_role``, reads included.
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Protocol
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
 
+from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
 from growbridge.archive.store import Archive
@@ -221,8 +222,10 @@ def _model_routes(
     workflow: WorkflowService,
     tasks: TaskBoard,
     budget: ProjectBudget,
+    conversation: ConversationLog | None = None,
 ) -> None:
-    """What lets model roles work on a project: its call budget and a goal for the orchestrator."""
+    """What lets model roles work on a project: its call budget, a goal for the orchestrator and,
+    with ``conversation``, the project conversation the goals and the role replies go into."""
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
@@ -258,7 +261,21 @@ def _model_routes(
         reused = stored.id != task.id
         if reused and not same_goal(stored, task):
             raise Denied("state", "this request id was already used for another goal")
+        if conversation is not None and not reused:
+            detail = {"operator": actor.id, "round_id": body.round_id}
+            conversation.add(body.project_id, "user", "message", body.goal, stored.id, detail)
         return {"task_id": stored.id, "state": stored.state.value, "reused": reused}
+
+    if conversation is None:
+        return
+
+    @router.get("/projects/{project_id}/conversation")
+    async def read_conversation(
+        project_id: PathId, actor: Operator, after: Annotated[int, Query(ge=0)] = 0
+    ):
+        require_project(project_id)
+        entries = conversation.entries(project_id, after)
+        return {"entries": [entry.model_dump(mode="json") for entry in entries]}
 
 
 def add_round_routes(
@@ -269,6 +286,7 @@ def add_round_routes(
     tasks: TaskBoard | None = None,
     budget: ProjectBudget | None = None,
     archive: Archive | None = None,
+    conversation: ConversationLog | None = None,
 ) -> None:
     """Mount the routes on ``router``. ``operator`` and ``fresh`` are the workbench's operator
     dependencies (session, entry and origin checks; ``fresh`` also asks for a recent
@@ -277,4 +295,4 @@ def add_round_routes(
     _design_routes(router, operator, workflow)
     _steering_routes(router, operator, workflow, archive)
     if tasks is not None and budget is not None:
-        _model_routes(router, operator, fresh, workflow, tasks, budget)
+        _model_routes(router, operator, fresh, workflow, tasks, budget, conversation)

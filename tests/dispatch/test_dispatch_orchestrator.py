@@ -72,6 +72,23 @@ async def test_delegating_the_same_trigger_twice_creates_one_task(env):
     assert len(env.delegated()) == 1
 
 
+async def test_a_trigger_already_used_by_another_task_is_refused(env):
+    """A real model copied its own task's trigger id: the tool returned the orchestrator's own task
+    as ``reused`` and the model believed it had delegated. Another task's trigger is refused."""
+    parent = env.task("orchestrator", "goal:project:dev:goal-1", question="does light help?")
+    for name, role_field in (("create_research_task", "owner_role"), ("delegate_task", "to_role")):
+        fields = {k: v for k, v in HANDOFF.items() if k not in {"to_role", "goal"}}
+        text = {"question" if name == "create_research_task" else "goal": "design it"}
+        if name == "create_research_task":
+            fields.pop("evidence_refs")
+        copied = {role_field: "planner", "trigger_event_id": parent.trigger_event_id}
+        body = {**fields, **text, **copied, "project_id": env.project_id}
+        outcome = await env.invoke_as(parent.id, "orchestrator", name, **body)
+        assert outcome.is_error and "already belongs to task" in outcome.content
+        assert parent.id in outcome.content
+    assert [t.id for t in env.delegated()] == [parent.id]
+
+
 async def test_delegation_to_a_non_model_role_is_rejected_by_the_schema(env):
     outcome = await env.invoke(
         "orchestrator",

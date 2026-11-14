@@ -101,6 +101,7 @@
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
 | `POST` | `/wb/goals` | 操作员 | 局域网、覆盖网络 | 否 | `budget`、`state` |
+| `GET` | `/wb/projects/{project_id}/conversation` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、`script_hash`、`param` |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/analysis/runs` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、`scope`、`snapshot_incomplete`、`already_run`、`sandbox_unavailable` |
@@ -156,7 +157,8 @@
 | `POST` | `/wb/rounds/{round_id}/abort` | 无 | `round_id`、`state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`message`、`blocking` 组成的列表：先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking` |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls`（整数，0 到 1000000）、`max_cost`（美元，0 到 1000000） | `project_id`、`max_calls`、`max_cost`、`remaining_calls`、`remaining_cost` |
-| `POST` | `/wb/goals` | `project_id`、`goal`（去掉首尾空白后 1 到 2000）；可选 `round_id`、`constraints`（最多 20 条，每条 1 到 500）、`request_id` | `task_id`、`state`、`reused` |
+| `POST` | `/wb/goals` | `project_id`、`goal`（去掉首尾空白后 1 到 2000）；可选 `round_id`、`constraints`（最多 20 条，每条 1 到 500）、`request_id` | `task_id`、`state`、`reused`。新目标同时写进项目对话 |
+| `GET` | `/wb/projects/{project_id}/conversation` | 查询参数 `after`（一个 `seq`，默认 0） | `entries`，从旧到新，最多 500 条：`seq`、`task_id`、`role`（`user` 或某个模型角色）、`kind`（`message`、`reply`、`tool`、`status`）、`text`、`detail`（工具调用时有 `input`、`is_error`、`result`，都会截短）、`at` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | `project_id`（1 到 100）、`script`（文本，1 到 20000 个字符，只编译、从不运行） | `protocol_id`、`version`、`script_sha256`、`frozen_at`、`note`（冻结的脚本不能更正） |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 查询参数 `project_id`（1 到 100） | `protocol_id`、`version`、`started`、`frozen`（`null`，或 `script_sha256`、`frozen_at`、`frozen_by`、`script`）、`snapshots`（一组 `snapshot_id`、`experiment_id`、`complete`、`run_status`） |
 | `POST` | `/wb/analysis/runs` | `project_id`、`protocol_id`、`snapshot_id`（各 1 到 100） | `run_id`、`status`、`exit_code`、`timed_out`、`stdout`、`stderr`（后两个截到 4000 个字符） |
@@ -231,6 +233,7 @@
 | planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
 | planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
 | planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。 |
+| researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、已有快照），不写入任何东西。留出批次的测量只给条数。 |
 | researcher | `freeze_dataset` | write | `task_id`、`stage_id` | 把一个阶段的数据冻结成经过校验的数据快照；带 `round_id` 且快照完整时，还会推进轮次。 |
 | researcher | `query_evidence` | read | 无 | 在项目档案里搜索证据卡。 |
 | researcher | `run_local_analysis` | sandbox | `task_id`、`snapshot_id`、`script` | 在沙箱里对一个数据快照运行探索性脚本。 |

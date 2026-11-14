@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from agent_helpers import EchoInput, FakeBudget, make_tool
 
@@ -129,6 +131,22 @@ async def test_reading_the_web_removes_sandbox_and_write_tools_afterwards():
     assert second == {"search_and_verify_sources", "validate_run_sheet"}
     refused = client.requests[2]["messages"][-1]["content"][0]
     assert refused["is_error"] is True
+
+
+async def test_a_web_tool_that_only_failed_leaves_the_write_tools_in_place():
+    """No search backend (or a refused input) brings no web content into the session."""
+
+    async def unavailable(_args):
+        raise Denied("unavailable", "no search backend configured")
+
+    web = make_tool("search_and_verify_sources", reads_web=True)
+    tools = [replace(web, handler=unavailable), make_tool("save_plan_draft", writes=True)]
+    toolset = build_toolset("planner", tools)
+    client = ScriptedClient([tool_reply(call("t1", "search_and_verify_sources")), text_reply("x")])
+    run_ = await run(client, toolset, FakeBudget())
+    assert client.requests[1]["messages"][-1]["content"][0]["is_error"] is True
+    assert "save_plan_draft" in {t["name"] for t in client.requests[1]["tools"]}
+    assert run_.web_restricted is False
 
 
 async def test_write_in_same_turn_after_web_read_is_refused():

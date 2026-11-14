@@ -137,6 +137,14 @@ async def test_model_driven_round_from_delegation_to_delivery(world):
     assert flow.approvals(STAGE) == () and flow.active_stage() is None
     assert device_writes(world) == []
 
+    # the ended planning task wakes the orchestrator with a follow-up naming it
+    (follow,) = [
+        t for t in runtime.tasks.list(project) if t.trigger_event_id.startswith("followup:")
+    ]
+    assert follow.owner_role == "orchestrator" and f"task:{planning.id}" in follow.input_refs
+    assert await runtime.run_agents(ScriptedClient([text_reply("please review the draft")])) == 1
+    assert runtime.tasks.get(follow.id).state is TaskState.DONE
+
     # the operator approves and starts; ticks run the stage to its end
     flow.approve(STAGE, operator)
     await flow.start_stage(STAGE, operator)

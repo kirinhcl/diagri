@@ -3,6 +3,11 @@
 Only a task that is in progress and owned by a model role is run, and each trigger event is run
 once. A model that is unavailable, errors, refuses, is truncated or runs out of budget never
 takes anything else down: the task goes to needs-attention with the reason and that is all.
+
+A planner or researcher run counts as finished only when it delivered (a saved draft, a published
+report); one that ends with only text has given up or is asking something, and the task goes to
+needs-attention with that text. When a task the orchestrator delegated ends, the orchestrator gets
+a follow-up task, so the round moves on without the orchestrator waiting inside its own run.
 """
 
 from __future__ import annotations
@@ -10,16 +15,18 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
+from growbridge.agents.conversation import ConversationLog, clip_json
 from growbridge.agents.handlers_common import bind_task
-from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, TokenPrice
+from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, ModelReply, TokenPrice
 from growbridge.agents.loop import AgentRun, run_agent
 from growbridge.agents.roles import ROLES, Handoff
-from growbridge.agents.tools import ROLE_TOOLS, Tool, Toolset, build_toolset
+from growbridge.agents.tools import ROLE_TOOLS, Tool, ToolOutcome, Toolset, build_toolset
 from growbridge.archive.db import Database
+from growbridge.archive.ids import new_id
 from growbridge.archive.models import ResearchTask
 from growbridge.config import RoleModel
 from growbridge.ports import Denied
@@ -35,6 +42,31 @@ STEPS = (
     "trigger_event_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, claimed_at REAL NOT NULL)",
 )
 INTRO = "Your task record (JSON). Do the work it describes with your tools:\n"
+LEAD = "orchestrator"
+# What a run of the role must have done to count as finished: one of these tools without error
+# and, where a field is named, with that result field true. (A frozen dataset or a compute job is
+# real progress for the researcher: the next step comes in a later task.)
+DELIVERABLES: dict[str, dict[str, str | None]] = {
+    "planner": {"save_plan_draft": "saved"},
+    "researcher": {
+        "freeze_dataset": None,
+        "submit_compute_job": None,
+        "fetch_compute_artifacts": None,
+        REPORT_TOOL: None,
+    },
+}
+UNDELIVERED = {
+    "planner": "ended without saving a run sheet draft",
+    "researcher": "ended without freezing data, computing or publishing a report",
+}
+HISTORY_KINDS = ("message", "reply")
+HISTORY_ENTRIES = 12
+HISTORY_CHARS = 1500
+REASON_CHARS = 1500
+TOOL_INPUT_CHARS = 1500
+TOOL_RESULT_CHARS = 2500
+TASK_REF = "task:"
+ContextOf = Callable[[ResearchTask], dict]
 
 
 def role_price(config: RoleModel) -> TokenPrice:
@@ -58,7 +90,23 @@ def _watching(handler: Any, reviews: list[bool]) -> Any:
     return watched
 
 
-def task_message(task: ResearchTask) -> str:
+def delivered(role: str, outcome: ToolOutcome) -> bool:
+    """Whether a tool outcome is a deliverable of ``role``'s run."""
+    wanted = DELIVERABLES.get(role, {})
+    if outcome.name not in wanted or outcome.is_error:
+        return False
+    field = wanted[outcome.name]
+    if field is None:
+        return True
+    try:
+        return json.loads(outcome.content).get(field) is True
+    except (ValueError, AttributeError):
+        return False
+
+
+def task_message(
+    task: ResearchTask, context: dict | None = None, history: Sequence[dict] = ()
+) -> str:
     handoff = Handoff(
         goal=task.question,
         budget=task.budget,
@@ -69,8 +117,35 @@ def task_message(task: ResearchTask) -> str:
         expected_artifacts=task.expected_artifacts,
         parent_task_id=task.parent_task_id,
     )
-    record = {"task_id": task.id, **handoff.model_dump(mode="json")}
+    # The project id is stated: the tools ask for it, and a model left to dig it out of the
+    # trigger id gets it wrong (seen with a local model on the simulator).
+    record = {"task_id": task.id, "project_id": task.project_id, **handoff.model_dump(mode="json")}
+    if context:  # the ids a draft must name (round, protocol version, device): never guessed
+        record["context"] = context
+    if history:  # the conversation so far, oldest first; data, like everything in the record
+        record["conversation"] = list(history)
     return INTRO + json.dumps(record, ensure_ascii=False, sort_keys=True)
+
+
+def follow_up(task: ResearchTask, state: TaskState, outcome: str) -> ResearchTask:
+    """The orchestrator task that picks up after ``task`` ended in ``state``."""
+    question = (
+        f"The {task.owner_role} task {task.id} has ended: {state.value}. Its goal was: "
+        f"{task.question}\nOutcome: {outcome}\nTell the user in a few sentences where the work "
+        "stands and what they need to do next (a saved run sheet waits for their review and "
+        "approval in the workbench). Read the task with get_task_status if you need its "
+        "artifacts. Do not redo its work; delegate again only if something is clearly missing."
+    )
+    return ResearchTask(
+        id=new_id("task"),
+        project_id=task.project_id,
+        question=question,
+        owner_role=LEAD,
+        budget=task.budget,
+        trigger_event_id=f"followup:{task.id}",
+        correlation_id=task.correlation_id,
+        input_refs=(*task.input_refs, f"{TASK_REF}{task.id}"),
+    )
 
 
 class Dispatcher:
@@ -83,6 +158,8 @@ class Dispatcher:
         budget: Any,
         clock: Any,
         db: Database,
+        context: ContextOf | None = None,
+        conversation: ConversationLog | None = None,
     ):
         self.client = client
         self.roles = roles
@@ -91,6 +168,8 @@ class Dispatcher:
         self.budget = budget
         self.clock = clock
         self.db = db
+        self.context = context
+        self.conversation = conversation
         db.migrate(NAMESPACE, STEPS)
 
     async def run_task(self, task_id: str) -> AgentRun | None:
@@ -98,19 +177,31 @@ class Dispatcher:
         if task is None:
             return None
         reviews: list[bool] = []
+        deliveries: list[str] = []
         try:
-            run = await self._run(task, reviews)
+            run = await self._run(task, reviews, deliveries)
         except Denied as exc:
-            self._hand_back(task, f"{exc.code}: {exc}")
+            self._end(task, TaskState.NEEDS_ATTENTION, f"{exc.code}: {exc}")
             return None
         except Exception as exc:  # the model or its client failed; nothing else is affected
             log.exception("model run for task %s failed", task.id)
-            self._hand_back(task, f"model unavailable: {type(exc).__name__}: {exc}")
+            self._end(
+                task, TaskState.NEEDS_ATTENTION, f"model unavailable: {type(exc).__name__}: {exc}"
+            )
             return None
+        said = run.text.strip()
         if run.stop_reason != "end_turn":
-            self._hand_back(task, f"model stopped without finishing: {run.stop_reason}")
+            self._end(
+                task,
+                TaskState.NEEDS_ATTENTION,
+                f"model stopped without finishing: {run.stop_reason}",
+            )
+        elif task.owner_role in DELIVERABLES and not deliveries:
+            reason = f"{UNDELIVERED[task.owner_role]}: {said or '(no text)'}"
+            self._end(task, TaskState.NEEDS_ATTENTION, reason[:REASON_CHARS])
         else:
-            self._move(task, TaskState.NEEDS_REVIEW if reviews else TaskState.DONE, "run finished")
+            state = TaskState.NEEDS_REVIEW if reviews else TaskState.DONE
+            self._end(task, state, "run finished", said)
         return run
 
     def _claim(self, task_id: str) -> ResearchTask | None:
@@ -132,23 +223,66 @@ class Dispatcher:
             )
             return cursor.rowcount == 1
 
-    async def _run(self, task: ResearchTask, reviews: list[bool]) -> AgentRun:
+    async def _run(
+        self, task: ResearchTask, reviews: list[bool], deliveries: list[str]
+    ) -> AgentRun:
         role = task.owner_role
         config = self.roles.get(role)
         if config is None:
             raise Denied("model_role", f"no model configured for role {role!r}")
         toolset = self._toolset(role, config, reviews)
+
+        def observe(reply: ModelReply, outcomes: list[ToolOutcome]) -> None:
+            deliveries.extend(o.name for o in outcomes if delivered(role, o))
+            self._record_turn(task, reply, outcomes)
+
         with bind_task(task.id):  # the tools learn their task here, never from model output
             return await run_agent(
                 self.client,
                 config,
                 ROLES[role].system,
-                task_message(task),
+                self._message(task),
                 toolset,
                 self.budget,
                 task.project_id,
                 max_turns=config.max_calls,
                 price=role_price(config),
+                observe=observe,
+            )
+
+    def _message(self, task: ResearchTask) -> str:
+        context = self.context(task) if self.context is not None else None
+        history: list[dict] = []
+        if self.conversation is not None and task.owner_role == LEAD:
+            entries = self.conversation.recent(task.project_id, HISTORY_KINDS, HISTORY_ENTRIES + 1)
+            history = [
+                {"role": e.role, "text": e.text[:HISTORY_CHARS]}
+                for e in entries
+                if e.task_id != task.id
+            ][-HISTORY_ENTRIES:]
+        return task_message(task, context, history)
+
+    def _record(self, task: ResearchTask, kind: Any, text: str, **detail: Any) -> None:
+        if self.conversation is None:
+            return
+        try:
+            self.conversation.add(task.project_id, task.owner_role, kind, text, task.id, detail)
+        except Exception:  # the record is for reading; it never stops a run
+            log.exception("conversation entry for task %s failed", task.id)
+
+    def _record_turn(
+        self, task: ResearchTask, reply: ModelReply, outcomes: list[ToolOutcome]
+    ) -> None:
+        if reply.text.strip():
+            self._record(task, "reply", reply.text.strip(), final=not reply.tool_calls)
+        for call, outcome in zip(reply.tool_calls, outcomes, strict=False):
+            self._record(
+                task,
+                "tool",
+                call.name,
+                input=clip_json(call.input, TOOL_INPUT_CHARS),
+                is_error=outcome.is_error,
+                result=outcome.content[:TOOL_RESULT_CHARS],
             )
 
     def _toolset(self, role: str, config: RoleModel, reviews: list[bool]) -> Toolset:
@@ -160,15 +294,38 @@ class Dispatcher:
         ]
         return build_toolset(role, tools, config.tools)
 
-    def _hand_back(self, task: ResearchTask, reason: str) -> None:
-        self._move(task, TaskState.NEEDS_ATTENTION, reason)
+    def _end(self, task: ResearchTask, state: TaskState, reason: str, said: str = "") -> None:
+        """Move the task out of in progress, say so in the conversation and, for a task the
+        orchestrator delegated, hand the next step back to it."""
+        if not self._move(task, state, reason):
+            return
+        self._record(task, "status", state.value, reason=reason)
+        if task.owner_role == LEAD or not self._delegated_by_lead(task):
+            return
+        outcome = (said or reason)[:REASON_CHARS]
+        try:
+            created = self.tasks.create(follow_up(task, state, outcome))
+        except Denied:
+            log.exception("no follow-up for task %s", task.id)
+            return
+        self._record(task, "status", "follow_up", task_id=created.id)
 
-    def _move(self, task: ResearchTask, state: TaskState, reason: str) -> None:
+    def _delegated_by_lead(self, task: ResearchTask) -> bool:
+        if task.parent_task_id is None:
+            return False
+        try:
+            return self.tasks.get(task.parent_task_id).owner_role == LEAD
+        except Denied:
+            return False
+
+    def _move(self, task: ResearchTask, state: TaskState, reason: str) -> bool:
         """Move the task from in progress; a task someone else already moved stays where it is."""
         try:
             if self.tasks.get(task.id).state is not TaskState.IN_PROGRESS:
-                return
+                return False
             event = f"dispatch:{task.trigger_event_id}:{state.value}"
             self.tasks.transition(task.id, state, event, reason)
         except Denied:
             log.exception("task %s could not move to %s", task.id, state.value)
+            return False
+        return True

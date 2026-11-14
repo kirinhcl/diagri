@@ -112,7 +112,7 @@ GET /wb/rounds/ROUND_ID
 
 The answer has `state`, `awaiting_choice`, `stages_done`, `stage_total`, the protocol id and version, `snapshot_id`, `report_artifact_id` and `stages`, a list of `{"stage_id": "...", "state": "..."}`. A new round is in `designing` and has no stage.
 
-How a real model handles a goal has not been verified. The tests use a scripted model; see [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py).
+The tests use a scripted model; see [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py). With a real model the step has run on the simulator up to a run sheet waiting for review: see [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## Freeze the analysis script before the first stage
 
@@ -273,7 +273,7 @@ Every stage of the round hands back the write rights it holds. Stages that have 
 
 ## 6. Data verification
 
-The researcher freezes a data snapshot of the stage with its `freeze_dataset` tool. When the snapshot is complete (coverage of at least 0.9) and passes verification, the round moves to `analysis`. Otherwise it stays in `data_verification`.
+The researcher can first look at the stage's data with `inspect_stage_data` (read-only: coverage, gaps, channel ranges, measurements), then freezes a data snapshot of the stage with its `freeze_dataset` tool. The freeze checks coverage and digests itself. When the snapshot is complete (coverage of at least 0.9) and passes verification, the round moves to `analysis`. Otherwise it stays in `data_verification`.
 
 Measurements taken by hand must be recorded with `POST /wb/measurements` before the snapshot is frozen. A measurement belongs to an experiment of an existing stage: for an experiment id that no stage runs, the route refuses with `scope`, so every measurement can be traced to a project.
 

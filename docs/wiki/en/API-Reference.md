@@ -101,6 +101,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | operator | LAN, overlay | yes | `reauth_required`, `state` |
 | `POST` | `/wb/goals` | operator | LAN, overlay | no | `budget`, `state` |
+| `GET` | `/wb/projects/{project_id}/conversation` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | operator | LAN, overlay | yes | `reauth_required`, `state`, `script_hash`, `param` |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/analysis/runs` | operator | LAN, overlay | yes | `reauth_required`, `state`, `scope`, `snapshot_incomplete`, `already_run`, `sandbox_unavailable` |
@@ -156,7 +157,8 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/rounds/{round_id}/abort` | none | `round_id`, `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | none | `stage_id`, `state`, `run_sheet_version`, `run_sheet_digest`, `run_sheet` (the `RunSheet`), `findings` (a list of `code`, `message`, `blocking`: the validator's findings, then the evidence hints `no_evidence`, `unverified_source` and `uncalibrated` for every set point, which never block), `blocking` |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls` (integer, 0 to 1000000), `max_cost` (US dollars, 0 to 1000000) | `project_id`, `max_calls`, `max_cost`, `remaining_calls`, `remaining_cost` |
-| `POST` | `/wb/goals` | `project_id`, `goal` (1 to 2000 after trimming); optional `round_id`, `constraints` (at most 20 texts of 1 to 500 each), `request_id` | `task_id`, `state`, `reused` |
+| `POST` | `/wb/goals` | `project_id`, `goal` (1 to 2000 after trimming); optional `round_id`, `constraints` (at most 20 texts of 1 to 500 each), `request_id` | `task_id`, `state`, `reused`. A new goal is also written into the project conversation |
+| `GET` | `/wb/projects/{project_id}/conversation` | query `after` (a `seq`, default 0) | `entries`, oldest first, at most 500: `seq`, `task_id`, `role` (`user` or a model role), `kind` (`message`, `reply`, `tool`, `status`), `text`, `detail` (for a tool: `input`, `is_error`, `result`, each cut short), `at` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | `project_id` (1 to 100), `script` (text, 1 to 20000 characters, compiled but never run) | `protocol_id`, `version`, `script_sha256`, `frozen_at`, `note` (a frozen script cannot be corrected) |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | query `project_id` (1 to 100) | `protocol_id`, `version`, `started`, `frozen` (`null`, or `script_sha256`, `frozen_at`, `frozen_by`, `script`), `snapshots` (a list of `snapshot_id`, `experiment_id`, `complete`, `run_status`) |
 | `POST` | `/wb/analysis/runs` | `project_id`, `protocol_id`, `snapshot_id` (1 to 100 each) | `run_id`, `status`, `exit_code`, `timed_out`, `stdout`, `stderr` (the last two cut at 4000 characters) |
@@ -231,6 +233,7 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | planner | `save_plan_draft` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. |
 | planner | `query_evidence` | read | none | Searches the evidence cards in the archive; each card says whether an operator verified it. |
 | planner | `propose_evidence_card` | write | `task_id`, `source_class`, `citation`, `claim` | Stores a source the planner read as an unverified evidence card and returns its `card_id` to cite in a run sheet. It cannot verify a card. |
+| researcher | `inspect_stage_data` | read | `task_id`, `stage_id` | Summarises a started stage's data over the window a freeze would use (coverage, gaps, sample counts, channel ranges, measurements per metric, existing snapshots); writes nothing. Held-out measurements are only counted. |
 | researcher | `freeze_dataset` | write | `task_id`, `stage_id` | Freezes the data of a stage into a verified data snapshot; with `round_id` it also advances the round when the snapshot is complete. |
 | researcher | `query_evidence` | read | none | Searches the evidence cards in the project archive. |
 | researcher | `run_local_analysis` | sandbox | `task_id`, `snapshot_id`, `script` | Runs an exploratory script in the sandbox on a data snapshot. |

@@ -434,6 +434,36 @@ def test_a_request_id_cannot_be_reused_for_another_goal(bench, operator):
     assert [task.question for task in bench.tasks.list(project_id)] == [GOAL]
 
 
+def test_a_goal_goes_into_the_project_conversation_once(bench, operator):
+    project_id, round_id = funded(bench, operator)
+    body = {"project_id": project_id, "round_id": round_id, "goal": GOAL, "request_id": "goal-0001"}
+    task_id = bench.post(operator, "/wb/goals", body).json()["task_id"]
+    bench.post(operator, "/wb/goals", body)  # a repeat makes no second entry
+    bench.conversation.add(project_id, "orchestrator", "reply", "on it", task_id)
+
+    read = bench.lan.get(f"/wb/projects/{project_id}/conversation", headers=bench.ui(operator))
+
+    assert read.status_code == 200
+    first, second = read.json()["entries"]
+    assert (first["role"], first["kind"], first["text"]) == ("user", "message", GOAL)
+    assert first["task_id"] == task_id
+    assert first["detail"] == {"operator": "alice", "round_id": round_id}
+    assert (second["role"], second["text"]) == ("orchestrator", "on it")
+    after = f"/wb/projects/{project_id}/conversation?after={first['seq']}"
+    assert [
+        e["text"] for e in bench.lan.get(after, headers=bench.ui(operator)).json()["entries"]
+    ] == ["on it"]
+
+
+def test_the_conversation_needs_an_operator_and_a_known_project(bench, operator):
+    project_id, _round = funded(bench, operator)
+    path = f"/wb/projects/{project_id}/conversation"
+
+    assert bench.lan.get(path, headers=bench.model()).status_code == 403
+    unknown = bench.lan.get("/wb/projects/project-none/conversation", headers=bench.ui(operator))
+    assert unknown.status_code == 409 and detail(unknown)["code"] == "state"
+
+
 @pytest.mark.parametrize("change", ["round_id", "constraints"])
 def test_a_request_id_cannot_be_reused_with_another_round_or_other_constraints(
     bench, operator, change
