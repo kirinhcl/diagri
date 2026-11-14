@@ -255,3 +255,41 @@ async def test_the_intervention_alert_is_raised_once_and_resolved_by_a_later_suc
     control.reading = on(50.0)
     await dog.step(FakeStage())
     assert ("pump_watchdog", "intervention") in resolved
+
+
+async def test_a_persisting_unreadable_outlet_is_raised_again_only_every_300_seconds():
+    control, _, clock, dog, alerts, _, _ = make()
+    control.reading = PumpReading(on=None, at=50.0, mono=5.0)
+    await dog.step(FakeStage())
+    clock.mono += 299.0
+    await dog.step(FakeStage())
+    assert len(alerts) == 1
+    clock.mono += 1.0
+    await dog.step(FakeStage())
+    assert len(alerts) == 2
+    await dog.step(FakeStage())
+    assert len(alerts) == 2
+
+
+async def test_a_step_failure_is_resolved_only_by_a_step_that_read_the_pump():
+    control, _, _, dog, _, resolved, _ = make()
+    dog.step_failed(RuntimeError("boom"))
+    control.connected_now = False
+    await dog.step(FakeStage())
+    control.connected_now, control.interlocked_now = True, True
+    await dog.step(FakeStage())
+    control.interlocked_now = False
+    await dog.step(FakeStage())  # no status received yet
+    assert ("pump_watchdog", "step") not in resolved
+    control.reading = PumpReading(on=False, at=60.0, mono=9.0)
+    await dog.step(FakeStage())
+    assert ("pump_watchdog", "step") in resolved
+
+
+async def test_a_changed_failure_message_is_raised_at_once():
+    _, _, _, dog, alerts, _, texts = make()
+    dog.step_failed(RuntimeError("one"))
+    dog.step_failed(RuntimeError("one"))
+    dog.step_failed(RuntimeError("two"))
+    assert len(alerts) == 2
+    assert "two" in texts[-1]

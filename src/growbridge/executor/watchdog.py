@@ -11,13 +11,14 @@ from typing import Any
 
 from growbridge.archive.clock import Clock
 from growbridge.observer.alerts import Severity
-from growbridge.ports import ControlPort, Denied, StagePort, StageRuntime
+from growbridge.ports import ControlPort, Denied, PumpReading, StagePort, StageRuntime
 
 UNREADABLE = "pump_unreadable"
 UNEXPECTED = "pump_unexpected"
 KEY = "pump"
 FAILURE = "pump_watchdog"
 INTERVENTION = "unexpected_watering"
+REASSERT_SECONDS = 300.0  # a latched alert is stored again this often while it persists
 
 UNREADABLE_TEXT = (
     "The pump outlet could not be read from the device status, so the pump watchdog cannot "
@@ -48,20 +49,27 @@ class PumpWatchdog:
         self.alert: Callable[[str, str, str, Severity], None] | None = None
         self.resolve: Callable[[str, str], None] | None = None
         self._acted: float | None = None  # monotonic time of its own last switch-off
-        # latched alerts: raised on entering a state, resolved on leaving it; unknown until seen
-        self._latched: dict[tuple[str, str], bool] = {}
+        # latched alerts: (message, monotonic time raised) while active, False once resolved;
+        # absent until seen
+        self._latched: dict[tuple[str, str], tuple[str, float] | bool] = {}
 
     async def step(self, stage: StageRuntime | None) -> None:
-        await self._decide(stage)
-        self._leave(FAILURE, "step")  # reached only when the step completed without raising
+        if await self._decide(stage):
+            self._leave(FAILURE, "step")  # a step that read the pump and did not raise
 
-    async def _decide(self, stage: StageRuntime | None) -> None:
+    async def _decide(self, stage: StageRuntime | None) -> bool:
+        """True when the step got far enough to evaluate a pump reading."""
         control = self.control
         if not control.connected() or control.interlocked():
-            return
+            return False
         reading = control.pump_reading()
         if reading.mono <= 0:
-            return  # no status received yet
+            return False  # no status received yet
+        await self._evaluate(stage, reading)
+        return True
+
+    async def _evaluate(self, stage: StageRuntime | None, reading: PumpReading) -> None:
+        control = self.control
         if reading.on is None:
             self._enter(UNREADABLE, KEY, UNREADABLE_TEXT, "warning")
             return
@@ -121,9 +129,11 @@ class PumpWatchdog:
         )
 
     def _enter(self, kind: str, key: str, message: str, severity: Severity) -> None:
-        if self._latched.get((kind, key)) is True:
+        now = self.clock.monotonic()
+        state = self._latched.get((kind, key))
+        if isinstance(state, tuple) and state[0] == message and now - state[1] < REASSERT_SECONDS:
             return
-        self._latched[(kind, key)] = True
+        self._latched[(kind, key)] = (message, now)
         self._raise(kind, message, severity, key=key)
 
     def _leave(self, kind: str, key: str) -> None:
