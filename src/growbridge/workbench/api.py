@@ -44,6 +44,7 @@ from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
 from growbridge.workbench.holdouts import add_holdout_routes
+from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
@@ -214,6 +215,9 @@ class Workbench:
             self.router, self.operator, self.fresh, workflow, tasks, budget, archive, conversation
         )
         add_evidence_routes(self.router, self.operator, archive)
+        add_manual_task_routes(
+            self.router, self.operator, self.on_site, workflow, archive, control, self.clock
+        )
         if runner is not None:
             args = (self.router, self.operator, self.fresh, workflow, archive, runner, holdout)
             add_analysis_routes(*args)

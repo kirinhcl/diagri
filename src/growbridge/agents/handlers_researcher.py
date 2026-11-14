@@ -26,6 +26,7 @@ from growbridge.agents.handlers_report import PublishInput, own_task, publish
 from growbridge.agents.tools import Tool
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.ids import new_id
+from growbridge.planning import manual_tasks
 from growbridge.ports import Denied
 from growbridge.workflow.states import RoundState
 
@@ -141,12 +142,34 @@ def _window(deps: Deps, stage) -> tuple:
     return args, keep
 
 
+def _schedule(stage) -> tuple[manual_tasks.Occurrence, ...]:
+    """The manual task occurrences the run sheet plans in the stage window."""
+    start = stage.started_at
+    return manual_tasks.occurrences(
+        stage.run_sheet, start, start + stage.run_sheet.duration_seconds
+    )
+
+
+def _manual_summary(deps: Deps, stage) -> dict:
+    items = _schedule(stage)
+    end = stage.started_at + stage.run_sheet.duration_seconds
+    records = deps.archive.task_records(stage.experiment_id, stage.started_at, end)
+    rows = manual_tasks.statuses(items, records, deps.clock.now(), end)
+    counts: dict[str, dict[str, int]] = {}
+    for item, _, state in rows:
+        kind = counts.setdefault(item.kind, {})
+        kind[state] = kind.get(state, 0) + 1
+    missed, total, _ = manual_tasks.missed(items, records, end)
+    return {"planned": total, "by_kind": counts, "not_done_in_time": missed}
+
+
 def _inspect(deps: Deps, data: InspectInput) -> dict:
     _, stage = _started_stage(deps, data.task_id, data.stage_id)
     (archive, experiment_id, *limits), keep = _window(deps, stage)
     summary = snapshots.preview(
         archive, experiment_id, *limits, DEFAULT_MIN_COVERAGE, measurement_filter=keep
     )
+    summary["manual_tasks"] = _manual_summary(deps, stage)
     frozen = archive.snapshots(experiment_id)
     return {
         "stage_id": stage.stage_id,
@@ -170,6 +193,7 @@ def _freeze(deps: Deps, data: FreezeInput) -> dict:
         *limits,
         DEFAULT_MIN_COVERAGE,
         measurement_filter=keep,
+        schedule=_schedule(stage),
     )
     verified = snapshots.verify(deps.archive, shot.id)
     body = {
@@ -258,6 +282,7 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
             "Read-only summary of a started stage's data over the window freeze_dataset would "
             "use: coverage and gaps, trusted and untrusted sample counts with reasons, ranges "
             "per sensor channel, manual measurements per metric, actions and interventions, "
+            "the planned manual tasks and how many were done in time, "
             "and the snapshots already frozen. Writes nothing; use it to check the data before "
             "freezing. Pass the researcher task_id you are working on.",
             InspectInput,
@@ -266,7 +291,8 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         Tool(
             "freeze_dataset",
             "Freeze a stage's data into a snapshot and verify it (window and limits come from "
-            "its run sheet). The freeze itself checks coverage, gaps and file digests and "
+            "its run sheet; the snapshot also holds the manual task records). The freeze "
+            "itself checks coverage, gaps and file digests and "
             "returns complete/verified; it never fails because the data is poor, and freezing "
             "again later writes a new version. Pass round_id to advance a round in "
             "data_verification when the snapshot is complete and verified. Pass the researcher "

@@ -7,6 +7,7 @@ from growbridge.archive.models import (
     Condition,
     EvidenceCard,
     FeedbackRule,
+    ManualTask,
     Ownership,
     RunSheet,
     SafetyConfig,
@@ -60,7 +61,14 @@ def _check_actions(
                 )
             )
         if channel is Channel.PUMP and level > 0:
-            findings.append(_block("pump_action", f"{label} would start the pump"))
+            findings.append(
+                _block(
+                    "pump_action",
+                    f"{label} would start the pump; no automatic step may. Plan watering as a "
+                    "manual irrigation task with seconds: someone on site starts that pump run "
+                    "from the stage page",
+                )
+            )
         span = caps.level_ranges.get(channel)
         if span is not None and not span[0] <= level <= span[1]:
             findings.append(
@@ -224,11 +232,15 @@ def _hints(sheet: RunSheet) -> list[Finding]:
         for plan in sheet.channels
         if plan.ownership is Ownership.HOST and plan.max_tolerance_seconds is None
     ]
-    findings += [
-        _hint("manual_task", f"manual {task.kind} {task.id} needs the user at {task.at}")
-        for task in sheet.manual_tasks
-    ]
+    findings += [_hint("manual_task", _manual_text(task)) for task in sheet.manual_tasks]
     return findings
+
+
+def _manual_text(task: ManualTask) -> str:
+    text = f"manual {task.kind} {task.id} needs the user at {task.at}"
+    if task.seconds is not None:
+        text += f": an on-site operator starts a {task.seconds:g} s pump run from the stage page"
+    return text
 
 
 def validate_run_sheet(
@@ -276,5 +288,6 @@ def check_evidence(run_sheet: RunSheet, cards: Mapping[str, EvidenceCard]) -> tu
                 _hint("unverified_source", f"{label}: card {card.id} is not verified; confirm it")
             )
         if not card.calibrated:
-            findings.append(_hint("uncalibrated", f"{label}: card {card.id} is uncalibrated (未校准)"))
+            message = f"{label}: card {card.id} is uncalibrated (未校准)"
+            findings.append(_hint("uncalibrated", message))
     return tuple(findings)

@@ -890,3 +890,85 @@ async def test_server_notes_are_stored_with_their_code_in_both_languages(env):
     assert [n["text"]["zh"] for n in reasons] == report["reasons"]
     assert report["conclusion_texts"] == {"en": "uncertain", "zh": "不确定"}
     assert _payload(outcome)["server_notes"][0].keys() == {"en", "zh"}
+
+
+def _with_tasks(env, number: int, done: int, planned: int = 4) -> dict:
+    """A frozen round whose snapshot holds ``planned`` watering occurrences, ``done`` recorded."""
+    from growbridge.archive.models import TaskRecord
+    from growbridge.planning.manual_tasks import Occurrence
+
+    name = f"e{number}"
+    env.stage_for(name)
+    _samples(env, name, light=ALLOCATED_LIGHT[number])
+    env.archive.add_measurement(_measurement(name, VALUES[number - 1], f"m{number}"))
+    items = [
+        Occurrence(task_id="water", kind="irrigation", due_at=START + 1 + i) for i in range(planned)
+    ]
+    for item in items[:done]:
+        env.archive.add_task_record(
+            TaskRecord(
+                id=f"rec-{name}-{item.due_at}",
+                experiment_id=name,
+                stage_id="stage-1",
+                task_id="water",
+                kind="irrigation",
+                due_at=item.due_at,
+                outcome="done",
+                done_at=item.due_at,
+                operator="op-1",
+                recorded_at=item.due_at,
+            )
+        )
+    shot = snapshots.freeze(env.archive, name, env.clock, START, START + 10, 1, 2, schedule=items)
+    return {"snapshot_id": shot.id, "round": number}
+
+
+async def test_manual_tasks_not_done_in_time_are_a_deviation(env, tmp_path):
+    task = env.task("researcher")
+    rounds = [_with_tasks(env, n, done=4 if n != 2 else 1) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    outcome = await _publish(env, task.id, rounds, deps)
+
+    body = _payload(outcome)
+    assert body["label"] == "exploratory"  # 1 of 4 experiments deviated, over the 0.1 limit
+    check = {d["round"]: (d["missed"], d["total"]) for d in body["manual_task_check"]}
+    assert check == {1: (0, 4), 2: (3, 4), 3: (0, 4), 4: (0, 4)}
+    (missed,) = [n for n in _report(env, outcome)["notes"] if n["code"] == "manual_tasks_missed"]
+    assert missed["text"]["en"] == (
+        "Round 2: 3 of 4 planned manual tasks were not done on time (irrigation 3)"
+    )
+
+
+async def test_manual_tasks_all_done_keep_the_result_confirmatory(env, tmp_path):
+    task = env.task("researcher")
+    rounds = [_with_tasks(env, n, done=4) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    body = _payload(await _publish(env, task.id, rounds, deps))
+
+    assert body["label"] == "confirmatory"
+    assert all(d["missed"] == 0 for d in body["manual_task_check"])
+
+
+async def test_the_freeze_tool_holds_the_planned_tasks_and_their_records(env):
+    from growbridge.archive.models import ManualTask
+
+    tasks = (ManualTask(id="water", kind="irrigation", at="10:00", seconds=5),)  # due at START
+    await _running_stage(env, manual_tasks=tasks)
+    env.clock.advance(20)
+
+    body = _payload(await _inspect(env, stage_id="stage-1"))
+    shot = _payload(
+        await env.invoke(
+            "researcher", "freeze_dataset", None, task_id=_task_id(env), stage_id="stage-1"
+        )
+    )
+
+    assert body["manual_tasks"] == {
+        "planned": 1,
+        "by_kind": {"irrigation": {"open": 1}},
+        "not_done_in_time": 1,
+    }
+    files = env.archive.snapshot(shot["snapshot_id"]).files
+    assert {"manual_tasks.jsonl", "task_records.jsonl"} <= set(files)

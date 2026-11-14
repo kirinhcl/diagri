@@ -78,6 +78,10 @@ Duties:
   The run sheet must apply the round's "treatment": each channel it names is host-controlled
   and set to that level by timed actions (0 is allowed, e.g. at night). A retained_level alone
   is only the state kept while paused; it applies nothing.
+- No timed action, care rule or feedback rule may switch the pump on. Plan watering as a manual
+  task of kind "irrigation"; give it "seconds" for a pump run, which a person on site starts
+  from the stage page while the stage keeps running. Every manual task needs someone on site
+  at its time, and each one is recorded as done or skipped.
 - Check every draft with the validation tools before saving it. Fix what they report, within the
   revision limit; beyond it, hand the draft to the user.
 - Your task is finished only when save_plan_draft returns "saved": true for the round. If you

@@ -5,13 +5,13 @@ Late additions never change a snapshot; freezing again writes a new version.
 """
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.ids import canonical_json, file_digest, new_id
-from growbridge.archive.models import ManualMeasurement, SampleRecord, Snapshot
+from growbridge.archive.models import ManualMeasurement, Model, SampleRecord, Snapshot
 from growbridge.archive.store import Archive
 from growbridge.ports import Denied
 
@@ -58,8 +58,12 @@ def _collect(
     start: float,
     end: float,
     measurement_filter: Callable[[ManualMeasurement], bool] | None,
+    schedule: Sequence[Model] | None = None,
 ) -> tuple[dict[str, list], int]:
-    """The rows of each file, and how many measurements the filter left out."""
+    """The rows of each file, and how many measurements the filter left out.
+
+    With a ``schedule`` (the manual task occurrences the run sheet plans in the window) the
+    snapshot also holds it and the task records of those occurrences."""
     samples = archive.samples(experiment_id, start, end)
     measured = [
         m
@@ -77,6 +81,9 @@ def _collect(
         ],
         "frozen_periods": list(archive.frozen_periods(start, end)),
     }
+    if schedule is not None:
+        data["manual_tasks"] = list(schedule)
+        data["task_records"] = list(archive.task_records(experiment_id, start, end))
     return data, len(measured) - len(kept)
 
 
@@ -101,6 +108,7 @@ def freeze(
     max_gap: float,
     min_coverage: float = 0.9,
     measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
+    schedule: Sequence[Model] | None = None,
 ) -> Snapshot:
     """Freeze the window. Trusted samples (synced, ok, planned) go to ``samples.jsonl``, the
     rest to ``samples_untrusted.jsonl``; ``measurement_filter`` returning False leaves a
@@ -110,7 +118,7 @@ def freeze(
     if end <= start:
         raise ValueError("snapshot window must have end > start")
     with archive.db.transaction():
-        data, excluded = _collect(archive, experiment_id, start, end, measurement_filter)
+        data, excluded = _collect(archive, experiment_id, start, end, measurement_filter, schedule)
         times = [_sample_time(s) for s in data["samples"]]
         coverage, gaps = coverage_of(times, start, end, expected_interval, max_gap)
         snapshot_id = new_id("snap")

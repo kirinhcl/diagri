@@ -1,4 +1,5 @@
-// One stage: status, controls, environment curves, run sheet review, measurements and history.
+// One stage: status, controls, environment curves, run sheet review, manual tasks, measurements
+// and history.
 // Read again every 15 s; each part is redrawn only when what it shows changed, so nothing typed
 // into a form is lost, and the results of writes stay listed while the controls change. The readings
 // of a finished stage are asked for again only every five minutes.
@@ -12,6 +13,7 @@ import { statePill } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
 import { measurementForm, measurementTable } from "./stage-measurements.js";
+import { tasksView } from "./stage-tasks.js";
 
 const POLL_SECONDS = 15;
 const READING_POINTS = 600;
@@ -73,12 +75,12 @@ export const keptIsFresh = (keptAt, nowMs) => keptAt !== null && nowMs - keptAt 
 async function loadAll(ctx, stageId, kept = null) {
   const base = `/stages/${enc(stageId)}`;
   const readingsPath = kept ? null : `${base}/readings?points=${READING_POINTS}`;
-  const paths = [base, `${base}/run-sheet`, readingsPath, `${base}/measurements`, `${base}/history`];
+  const paths = [base, `${base}/run-sheet`, readingsPath, `${base}/measurements`, `${base}/history`, `${base}/manual-tasks`];
   const ask = (path) => (path ? ctx.api.get(path) : Promise.resolve(null));
   const results = (await Promise.allSettled(paths.map(ask))).map(settle);
-  const [stage, review, readings, measurements, history] = results;
+  const [stage, review, readings, measurements, history, tasks] = results;
   if (stage.error) throw stage.error;
-  return { stage: stage.value, review, readings: kept || readings, measurements, history };
+  return { stage: stage.value, review, readings: kept || readings, measurements, history, tasks };
 }
 
 // --- parts ------------------------------------------------------------------------------------------
@@ -165,6 +167,9 @@ function draw(page, data) {
   const chart = (readings) => readingsChart(ctx.t, readings, { timeZone: zoneOf(ctx), lang: ctx.lang, sampleSeconds });
   showResult(parts.readings, ctx, data.readings, (readings) => `${readingsKey(readings)}|${sampleSeconds}`, chart);
   showResult(parts.review, ctx, data.review, (r) => JSON.stringify([r.run_sheet_digest, r.findings]), (r) => reviewView(ctx, r));
+  const tasksKey = (r) => JSON.stringify([r.stage_state, r.occurrences, Math.floor((r.now || 0) / 60)]);
+  const tasksEnv = { ctx, stage, onChanged: page.env.onChanged };
+  showResult(parts.tasks, ctx, data.tasks, tasksKey, (r) => tasksView(tasksEnv, r));
   showResult(parts.measurements, ctx, data.measurements, (r) => JSON.stringify(r.measurements), (r) => measurementTable(ctx, r.measurements));
   showResult(parts.history, ctx, data.history, (r) => JSON.stringify(r), (r) => historyView(ctx, r));
 }
@@ -204,7 +209,7 @@ function pageLife(element) {
 }
 
 function makeParts() {
-  const names = ["status", "actions", "readings", "review", "measurements", "history"];
+  const names = ["status", "actions", "readings", "review", "tasks", "measurements", "history"];
   return Object.fromEntries(names.map((name) => [name, region(`stage-part stage-part-${name}`)]));
 }
 
@@ -218,6 +223,7 @@ function sections(ctx, page, stage, onRecorded) {
     section(ctx.t("stage.controls"), parts.actions.element, page.log.element),
     section(ctx.t("stage.readings"), parts.readings.element),
     section(ctx.t("stage.runSheet"), parts.review.element),
+    section(ctx.t("stage.tasks"), parts.tasks.element),
     section(ctx.t("stage.measurements"), parts.measurements.element, newMeasurement, measurementForm(ctx, stage, onRecorded)),
     section(ctx.t("stage.history"), parts.history.element),
   ];

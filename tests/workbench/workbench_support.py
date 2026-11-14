@@ -77,8 +77,10 @@ class RecordingControl(FakeControl):
         self.submitted.append(request)
         return self._record(request)
 
-    async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
-        self.irrigated.append((request, seconds))
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
+        self.irrigated.append((request, seconds) if not planned else (request, seconds, "planned"))
         return self._record(request)
 
     def receipt(self, request_id: str) -> ActionRecord | None:

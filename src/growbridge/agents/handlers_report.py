@@ -24,7 +24,14 @@ from growbridge.agents.handlers_common import (
 )
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.ids import new_id
-from growbridge.archive.models import ManualMeasurement, ResearchProtocol, ResearchTask, Snapshot
+from growbridge.archive.models import (
+    ManualMeasurement,
+    ResearchProtocol,
+    ResearchTask,
+    Snapshot,
+    TaskRecord,
+)
+from growbridge.planning import manual_tasks
 from growbridge.planning.design import check_experimental_design
 from growbridge.planning.treatment import allocated, delivered, unread
 from growbridge.ports import Denied
@@ -215,9 +222,68 @@ def _treatment_check(deps: Deps, protocol: ResearchProtocol, frozen: Frozen) -> 
     return TreatmentCheck(frozenset(failed), tuple(details), tuple(unverified))
 
 
-def _deviation(deps: Deps, frozen: Frozen, check: TreatmentCheck) -> float:
+@dataclass(frozen=True)
+class ManualCheck:
+    """Per round: the planned manual tasks the snapshot holds and how many were not done in time."""
+
+    deviated: frozenset[str]  # experiment ids whose share not done in time is over the limit
+    details: tuple[dict, ...]
+
+    def notes(self) -> list[Note]:
+        return [
+            note(
+                "manual_tasks_missed",
+                round=d["round"],
+                missed=d["missed"],
+                total=d["total"],
+                detail=manual_tasks.by_kind_text(d["by_kind"]),
+            )
+            for d in self.details
+            if d["missed"]
+        ]
+
+
+def _rows(deps: Deps, snap: Snapshot, name: str) -> list[str]:
+    path = deps.archive.root / "snapshots" / snap.id / name
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _manual_check(deps: Deps, frozen: Frozen) -> ManualCheck:
+    """Judge each snapshot's manual tasks from its own files, at the end of its window.
+
+    A snapshot frozen before manual tasks were frozen with it has neither file and is left out.
+    """
+    deviated, details = set(), []
+    for snap in frozen.snaps:
+        if "manual_tasks.jsonl" not in snap.files:
+            continue
+        items = [
+            manual_tasks.Occurrence.model_validate_json(x)
+            for x in _rows(deps, snap, "manual_tasks.jsonl")
+        ]
+        records = [
+            TaskRecord.model_validate_json(x) for x in _rows(deps, snap, "task_records.jsonl")
+        ]
+        manifest = json.loads(_rows(deps, snap, snapshots.MANIFEST)[0])
+        missed, total, by_kind = manual_tasks.missed(items, records, manifest["window"][1])
+        if not total:
+            continue
+        number = frozen.round_of[snap.experiment_id]
+        details.append({"round": number, "missed": missed, "total": total, "by_kind": by_kind})
+        if manual_tasks.deviates(missed, total):
+            deviated.add(snap.experiment_id)
+    return ManualCheck(frozenset(deviated), tuple(details))
+
+
+def _deviation(deps: Deps, frozen: Frozen, check: TreatmentCheck, manual: ManualCheck) -> float:
+    """The share of experiments with an intervention, a treatment not applied, or too many
+    manual tasks not done in time."""
     experiments = set(frozen.round_of)
-    hit = sum(1 for e in experiments if deps.archive.interventions(e) or e in check.failed)
+    hit = sum(
+        1
+        for e in experiments
+        if deps.archive.interventions(e) or e in check.failed or e in manual.deviated
+    )
     return hit / len(experiments)
 
 
@@ -228,6 +294,7 @@ def _facts(
     frozen: Frozen,
     table: UnitTable,
     check: TreatmentCheck,
+    manual: ManualCheck,
 ) -> AnalysisFacts:
     metric = protocol.analysis.primary_endpoint
     rounds = _data_rounds(frozen, metric)
@@ -244,7 +311,7 @@ def _facts(
         confounded_with_time=_confounded(protocol, rounds),
         missing_fraction=missing,
         changed_after_outcomes=flags.changed_after_outcomes,
-        deviation_fraction=max(_deviation(deps, frozen, check), flags.deviation_fraction),
+        deviation_fraction=max(_deviation(deps, frozen, check, manual), flags.deviation_fraction),
         planned_sample_size=protocol.blocks,
         achieved_sample_size=_complete_blocks(table, control, data.treatment_id),
         early_terminated=flags.early_terminated,
@@ -354,14 +421,15 @@ def publish(deps: Deps, data: PublishInput) -> dict:
     _require_registered_runs(deps, protocol, frozen)
     table = _table(protocol, data, frozen)
     check = _treatment_check(deps, protocol, frozen)
-    facts = _facts(deps, protocol, data, frozen, table, check)
+    manual = _manual_check(deps, frozen)
+    facts = _facts(deps, protocol, data, frozen, table, check, manual)
     decision = _decide(deps, protocol, frozen, facts)
     if data.holdout_id is not None and data.model_sha is not None:
         read = deps.holdout.evaluate(data.holdout_id, ROLE, data.model_sha)
         decision = decision if read == "confirmatory" else _capped(decision, HOLDOUT_NOTE)
     estimate = paired_block_estimate(table.values, protocol.control_treatment_id, data.treatment_id)
     notes = [note("unallocated_measurements", count=len(table.dropped))] if table.dropped else []
-    notes += check.notes()
+    notes += check.notes() + manual.notes()
     weakest = min(frozen.snaps, key=lambda s: (s.complete, s.coverage))
     artifact, state = publish_research_report(
         deps.archive,
@@ -383,6 +451,7 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         "needs_review": state is TaskState.NEEDS_REVIEW,
         "task_state": state.value,
         "treatment_check": {"failed": list(check.details), "unverified": list(check.unverified)},
+        "manual_task_check": list(manual.details),
         "server_notes": [n["text"] for n in _written_notes(artifact.path)],
     }
     if data.round_id is not None:

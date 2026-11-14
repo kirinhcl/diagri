@@ -375,17 +375,23 @@ class ControlService:
             voided = self._void_queued(why, channel=channel, spare=RightKind.PROTECTION)
         self._publish(voided)
 
-    async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
+        """An operator-triggered pump run. ``planned``: a run sheet's irrigation task started by
+        the operator from the stage page, under the stage right while the stage keeps running;
+        otherwise a manual right is needed. Every other check is the same."""
         self._check_irrigation(request, seconds)
-        fingerprint = content_digest({"request": request.model_dump(mode="json"), "s": seconds})
+        content = {"request": request.model_dump(mode="json"), "s": seconds}
+        fingerprint = content_digest({**content, "planned": True} if planned else content)
         known = self._known(request.request_id, fingerprint)
         if known is not None:
             return known
-        right = self._authorize(request, starts_pump=True)
+        right = self._authorize(request, starts_pump=True, planned=planned)
         self._check_cooldown()
         record = rights.intent(request, right, 1, self.clock.now())
         self._save(record, fingerprint)
-        return await self._run_cycle(record, request, seconds)
+        return await self._run_cycle(record, request, seconds, planned)
 
     def _check_irrigation(self, request: ActionRequest, seconds: float) -> None:
         limit = self.bridge.settings.max_pump_seconds
@@ -411,7 +417,9 @@ class ControlService:
             raise Denied("request_id_reused", f"{request_id} was used for other arguments")
         return found[0]
 
-    def _authorize(self, request: ActionRequest, starts_pump: bool = False) -> WriteRight:
+    def _authorize(
+        self, request: ActionRequest, starts_pump: bool = False, planned: bool = False
+    ) -> WriteRight:
         """Every check that must hold when an action is queued and again when it is sent."""
         if not self.bridge.settings.controls_enabled:
             raise Denied("controls_disabled", "controls are disabled in the local configuration")
@@ -419,8 +427,11 @@ class ControlService:
         right = rights.check_valid(
             self.ledger.right(request.right_number), self.device_id, self.ledger.recovery()
         )
-        if starts_pump and right.kind is not RightKind.MANUAL:
-            raise Denied("right_invalid", "irrigation needs a manual write right")
+        if starts_pump and not _may_irrigate(right, request, planned):
+            raise Denied(
+                "right_invalid",
+                "irrigation needs a manual write right, or the stage right for a planned one",
+            )
         rights.check_scope(right, request)
         if not starts_pump:
             rights.check_pump_not_started(request)
@@ -449,13 +460,17 @@ class ControlService:
             raise Denied("stale", "fresh device telemetry is required before an ordinary write")
 
     def _recheck(
-        self, record: ActionRecord, request: ActionRequest, starts_pump: bool = False
+        self,
+        record: ActionRecord,
+        request: ActionRequest,
+        starts_pump: bool = False,
+        planned: bool = False,
     ) -> None:
         current = self.receipt(record.request_id)
         if current is None or current.state is not ActionState.PENDING:
             raise Denied("right_invalid", "the queued action was voided before it was sent")
         try:
-            self._authorize(request, starts_pump)
+            self._authorize(request, starts_pump, planned)
             if starts_pump:
                 self._check_cooldown()
         except Denied as error:
@@ -487,13 +502,13 @@ class ControlService:
             self._cycle.set()
 
     async def _run_cycle(
-        self, record: ActionRecord, request: ActionRequest, seconds: float
+        self, record: ActionRecord, request: ActionRequest, seconds: float, planned: bool = False
     ) -> ActionRecord:
         """ON under the gate, wait outside it, OFF under the gate; OFF always runs (7.6, 7.8)."""
         cycle = None
         try:
             async with self.gate.acquire(NORMAL):
-                self._recheck(record, request, starts_pump=True)
+                self._recheck(record, request, starts_pump=True, planned=planned)
                 now = self.clock.now()
                 self.ledger.set_meta(META_LAST_IRRIGATION, str(now))
                 cycle = self._cycle = asyncio.Event()
@@ -622,3 +637,15 @@ class ControlService:
                 self.sink.append_action(record)
             except Exception:
                 log.exception("record sink rejected action %s", record.request_id)
+
+
+def _may_irrigate(right: WriteRight, request: ActionRequest, planned: bool) -> bool:
+    """A manual right may irrigate; the stage right only for a planned irrigation of its stage."""
+    if right.kind is RightKind.MANUAL:
+        return True
+    return (
+        planned
+        and right.kind is RightKind.STAGE
+        and request.stage_id is not None
+        and request.stage_id == right.stage_id
+    )

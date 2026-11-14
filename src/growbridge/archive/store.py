@@ -23,6 +23,7 @@ from growbridge.archive.models import (
     Model,
     SampleRecord,
     Snapshot,
+    TaskRecord,
 )
 from growbridge.ports import SampleSource
 
@@ -70,6 +71,10 @@ STEPS = (
     # Why a period closed ('value_changed', 'no_longer_listed' or 'nothing_checked'); rows from
     # before this step have none.
     "ALTER TABLE frozen_marks ADD COLUMN reason TEXT",
+    # What happened to each daily occurrence of a manual task; append-only, the latest counts.
+    "CREATE TABLE task_records(id TEXT PRIMARY KEY, experiment_id TEXT NOT NULL,"
+    " stage_id TEXT NOT NULL, due_at REAL NOT NULL, seq INTEGER NOT NULL, body TEXT NOT NULL)",
+    "CREATE INDEX task_records_by_experiment ON task_records(experiment_id, due_at)",
 )
 
 FROZEN_CLOSE_REASONS = ("value_changed", "no_longer_listed", "nothing_checked")
@@ -500,6 +505,28 @@ class Archive:
         return tuple(Artifact.model_validate_json(row["body"]) for row in rows)
 
     # --- interventions -------------------------------------------------------------------------
+
+    def add_task_record(self, record: TaskRecord) -> None:
+        with self.db.transaction():
+            extra = {
+                "experiment_id": record.experiment_id,
+                "stage_id": record.stage_id,
+                "due_at": record.due_at,
+                "seq": self._next_seq("task_records"),
+            }
+            if self._insert_once("task_records", record.id, record, extra):
+                self._touch()
+
+    def task_records(
+        self, experiment_id: str, start: float | None = None, end: float | None = None
+    ) -> tuple[TaskRecord, ...]:
+        """Records of the occurrences due in ``[start, end)`` (all when not given), in order."""
+        rows = self.db.query(
+            "SELECT body FROM task_records WHERE experiment_id = ?"
+            " AND (? IS NULL OR due_at >= ?) AND (? IS NULL OR due_at < ?) ORDER BY seq",
+            (experiment_id, start, start, end, end),
+        )
+        return tuple(TaskRecord.model_validate_json(row["body"]) for row in rows)
 
     def record_intervention(
         self,

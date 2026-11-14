@@ -24,7 +24,9 @@ class ArtifactSink(Protocol):
     def add_artifact(self, artifact: Artifact) -> None: ...
 
 
-def _effective_label(decision: AnalysisDecision, snapshot: Snapshot) -> tuple[Label, tuple[Note, ...]]:
+def _effective_label(
+    decision: AnalysisDecision, snapshot: Snapshot
+) -> tuple[Label, tuple[Note, ...]]:
     """A confirmatory label needs a complete snapshot behind it."""
     if decision.label == "confirmatory" and not snapshot.complete:
         return "exploratory", (note("snapshot_incomplete", coverage=f"{snapshot.coverage:.0%}"),)
