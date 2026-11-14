@@ -183,8 +183,8 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 | `run_health` | 消息里列出没通过的探测项：`growbridge_response`、`executor_evaluation`、`capture`、`archive_write`、`oldest_undelivered_alert`、`offsite_backup`。 | 按探测项去查：设备连接、守护进程、通知或备份。 |
 | `tick_step` | 每秒评估里的某一步报错，键就是那一步的名字。其他步骤照常执行。 | 看日志。这一步恢复正常后告警自动解除。 |
 | `pump_unexpected`（键 `pump`） | DiAGRI 没有灌溉时，水泵读回为开。正文写明关泵是否已确认。 | 严重。查水泵和面板：有人或者面板定时器把它打开了。正文若写“未确认”，联锁已设置，需要做现场检查。 |
-| `pump_unreadable`（键 `pump`） | 设备状态里读不出水泵插座，看门狗无法判断泵是否开着。警告。 | 查设备连接，以及状态里有没有插座这一块（可能是固件或格式不同）。能再读到状态时自动解决。 |
-| `pump_watchdog`（键 `step` 或 `intervention`） | `step`：看门狗自己出错。`intervention`：`unexpected_watering` 干预没能记下来（泵仍然被关掉了）。严重。 | 看日志。`step` 在一次读过水泵的步骤完成后解决；`intervention` 在之后有干预记录成功后解决。 |
+| `pump_unreadable`（键 `pump`） | 设备状态里读不出水泵插座，看门狗无法判断泵是否开着。警告。 | 查设备连接，以及状态里有没有插座这一块（可能是固件或格式不同）。能再读到状态时自动解决。锁存告警，见表格下方。 |
+| `pump_watchdog`（键 `step` 或 `intervention`） | `step`：看门狗自己出错。`intervention`：`unexpected_watering` 干预没能记下来（泵仍然被关掉了）。严重。 | 看日志。`step` 在一次读过水泵的步骤完成后解决；`intervention` 在之后有干预记录成功后解决。锁存告警，见表格下方。 |
 | `frozen_reading`（键为传感器名） | 某个传感器的读数在超过门槛的时间里完全不变。保护规则用到它时为严重，否则为警告。规则依赖它的阶段会被暂停（事件 `alert_pause`，`rule` 为 `frozen:<传感器>`）。 | 检查探头和线缆。读数变化或传感器移出检查后告警解决。传感器恢复或改了规则后，再恢复阶段。 |
 | `frozen_watch`（键 `check`） | 冻结读数检查本身出错。严重。 | 看日志。一次检查完整结束后解决。 |
 | `stage_waiting` | 系统暂停了某个阶段，或把它送进了恢复待核对。消息里写明事件和事件携带的内容。 | 按事件名到上面对应的小节处理。阶段离开这个状态时告警自动解除。 |
@@ -193,6 +193,8 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 | `monitor_unconfigured` | 两个心跳 URL 都没有设，主机或运行停了也没有人会被通知。 | 设置 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL`；见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `external_monitor`（键为 `host` 或 `run`） | 心跳或失败信号没有送达。 | 检查监控 URL 和网络；见同一页。 |
 | `model_client`、`agent_task`、`task_deadline` | 模型角色没启用，或者某个模型任务失败、超期。阶段执行不受影响。 | 检查 SDK 和凭据。处理任务**无路由**。 |
+
+**锁存的看门狗告警。** 只要原因还在，`pump_unreadable` 和 `pump_watchdog` 就每 5 分钟重新写入一次。已读标记会保留；但原因还在时手动关掉（在数据库里解决）的告警，会在 5 分钟内作为一条新告警回来，并再发一次通知。应当消除原因，告警随后会自行解决。见[控制与安全模型](Control-and-Safety-Model.md)。
 
 如果工作台完全连不上，[架构设计文档](../../diagri-agent-architecture.zh-CN.md)第 10 节给出的最后手段是：停掉守护进程，然后用 AC5 面板操作，或者断电。
 
