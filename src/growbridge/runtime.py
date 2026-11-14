@@ -399,6 +399,10 @@ class Runtime:
 
         self._safely(raise_it)
 
+    def resolve_alert(self, kind: str, key: str) -> None:
+        """Close an open alert (a no-op when none is open); never raises."""
+        self._safely(lambda: self.book.resolve(kind, key))
+
     def _announce(self, alert: Alert) -> None:
         if alert.count != 1:
             return
@@ -700,6 +704,8 @@ def build_runtime(
         databases=tuple(dbs.values()),
     )
     mirror.alert = runtime._alert
+    executor.watchdog.alert = runtime._alert
+    executor.watchdog.resolve = runtime.resolve_alert
     backups.alert = runtime.alert
     return runtime
 

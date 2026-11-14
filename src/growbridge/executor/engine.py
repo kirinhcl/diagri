@@ -34,6 +34,7 @@ from growbridge.executor.rules import (
     evaluate_protection,
     resolve,
 )
+from growbridge.executor.watchdog import PumpWatchdog
 from growbridge.ports import (
     ActionRequest,
     ControlPort,
@@ -104,6 +105,7 @@ class ExecutorEngine:
         # stages the clock anomaly paused -> the stage right they were paused under
         self._clock_paused: dict[str, int | None] = {}
         self._link = LinkWatch()
+        self.watchdog = PumpWatchdog(control, stages, clock)
         self._lock = asyncio.Lock()
         self._beat: float | None = None
         self._gaps: tuple[float, ...] = ()
@@ -147,6 +149,8 @@ class ExecutorEngine:
         self._enter_phase(stage, mono)
         online = self.control.connected()
         await self._interlock(tick, stage)  # 1
+        if online:
+            await self.watchdog.step(stage)
         if online:
             await self._protect(tick, stage, mono)  # 2
         outage = self._link.observe(online, mono, now)

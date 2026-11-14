@@ -211,6 +211,10 @@ class StagePort(Protocol):
 
     async def report(self, event: StageEvent) -> None: ...
 
+    def record_intervention(self, stage_id: str, kind: str, detail: dict[str, Any]) -> None:
+        """Write a system intervention (no operator) against a stage and hand it on."""
+        ...
+
 
 class ControlPort(Protocol):
     """Implemented by the control service: the single checkpoint for every BLE write."""

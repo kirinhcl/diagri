@@ -110,13 +110,13 @@ A project without a budget is refused at the first call. `Budget.max_revisions` 
 
 **May read.** The active stage with its run sheet and write-right numbers (`StagePort.active_stage`). Sensor readings, the device state, the safety configuration and the action receipts (`ControlPort`).
 
-**May do.** Submit writes through `ControlPort.submit`, each under the right that matches its purpose: timed actions, feedback rules and end actions under the stage write right; care rules under the care write right; protection rules under the protection write right. Call `pump_off` while the pump interlock is on. Report stage events to the workflow service.
+**May do.** Submit writes through `ControlPort.submit`, each under the right that matches its purpose: timed actions, feedback rules and end actions under the stage write right; care rules under the care write right; protection rules under the protection write right. Call `pump_off` while the pump interlock is on. The pump watchdog ([`executor/watchdog.py`](../../../src/growbridge/executor/watchdog.py)) does the same, and only that, when the pump reads back as on while DiAGRI is not irrigating: it also raises an alert and records an `unexpected_watering` intervention against the active stage through `StagePort.record_intervention`. Report stage events to the workflow service.
 
 **Can never.** Call a model. Switch the pump on. Change a stage's state: it only reports, and the workflow service decides. Write a channel that the run sheet leaves to the device.
 
 **Why it never calls a model.** The engine decides from four inputs: the run sheet, the safety configuration, the readings and the clock. Given the same four, it always does the same thing, so every decision can be replayed in a test and explained afterwards from the action ledger. It also means that overheating protection and the pump interlock do not wait for a network call.
 
-Each tick does six things in order: pump-off interlock; protection rules; link outage accounting; the `running` stage (checks first, then timed actions, feedback rules, end condition and end actions); care rules when the stage is neither `running` nor `manual`; the longest wait of a `paused` stage.
+Each tick does six things in order: pump-off interlock (followed by the pump watchdog); protection rules; link outage accounting; the `running` stage (checks first, then timed actions, feedback rules, end condition and end actions); care rules when the stage is neither `running` nor `manual`; the longest wait of a `paused` stage.
 
 **Code.** [`executor/engine.py`](../../../src/growbridge/executor/engine.py), with pure rule evaluation in [`executor/rules.py`](../../../src/growbridge/executor/rules.py) and clock and outage handling in [`executor/outage.py`](../../../src/growbridge/executor/outage.py). See [Control and safety model](Control-and-Safety-Model.md).
 

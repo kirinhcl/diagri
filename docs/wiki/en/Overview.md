@@ -84,7 +84,7 @@ These limits are enforced in code. They are not conventions that a prompt asks a
 - **Nothing automatic starts the pump.** Validation blocks a run sheet whose action would start the pump ([`planning/validate.py`](../../../src/growbridge/planning/validate.py)), and the executor refuses such an action ([`executor/engine.py`](../../../src/growbridge/executor/engine.py)). The pump starts only when an authenticated operator, connected through the LAN entry, calls the irrigation route during a manual takeover ([`workbench/api.py`](../../../src/growbridge/workbench/api.py)). Each run is limited by `max_pump_seconds` and `pump_cooldown_seconds`.
 - **Safety does not wait for a model.** The tick that runs the executor, the protection rules and the pump interlock never calls a model ([`runtime.py`](../../../src/growbridge/runtime.py)). When the model API is down, an approved stage keeps running.
 
-One thing is outside the system's reach: the AC5 panel and the vendor app can still change the device directly. DiAGRI can only notice such a change by read-back. [Control and safety model](Control-and-Safety-Model.md) explains the reasoning.
+One thing is outside the system's reach: the AC5 panel and the vendor app can still change the device directly. DiAGRI can only notice such a change by read-back. The pump is the exception: if it is on while DiAGRI is not irrigating, the watchdog switches it off, raises a critical alert and records an intervention against the active stage. [Control and safety model](Control-and-Safety-Model.md) explains the reasoning.
 
 ## Status
 

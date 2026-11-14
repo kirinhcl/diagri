@@ -446,6 +446,16 @@ class WorkflowService(StageRecovery):
 
         return record
 
+    def record_intervention(self, stage_id: str, kind: str, detail: dict[str, Any]) -> None:
+        """A system intervention (no operator), e.g. the pump watchdog's; handed on after commit."""
+        with self.db.transaction():
+            stage = self.store.stage(stage_id)
+            args = (stage.experiment_id, stage_id, self.clock.now(), kind, None)
+            self.store.add_intervention(*args, detail)
+            names = ("experiment_id", "stage_id", "at", "kind", "operator")
+            self._unsent.append({**dict(zip(names, args, strict=True)), "detail": detail})
+        self._hand_on_interventions()
+
     def _hand_on_interventions(self) -> None:
         """After the commit: a failing receiver is logged and never undoes the transition."""
         sent, self._unsent = self._unsent, []

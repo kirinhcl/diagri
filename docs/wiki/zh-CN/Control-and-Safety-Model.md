@@ -164,6 +164,8 @@
 
 控制服务独占的只是 GrowBridge 这一侧的 BLE 写入。AC5 面板和 Spider Farmer App 仍然可以直接改设备。DiAGRI 只能事后通过回读发现，并上报 `EXTERNAL_CHANGE`。
 
+水泵是例外：实验期间没有人会手动开泵，水泵也从不交给 AC5 定时器，所以 DiAGRI 没有灌溉时水泵插座读回为开，一律算意外。执行 Agent 的水泵看门狗每个 tick 检查一次：发现后通过专用的 `pump_off`（触发方为 `watchdog`）关泵，发出 `pump_unexpected` 严重告警，并在当前阶段记一条 `unexpected_watering` 干预。插座读不出来时只发 `pump_unreadable` 警告，不动手。看门狗只在已连接、且没有未确认的关泵时动作；关泵没有确认就交给关泵联锁。
+
 ## 另见
 
 - [工作流与状态机](Workflow-and-State-Machines.md)

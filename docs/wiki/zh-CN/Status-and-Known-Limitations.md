@@ -38,6 +38,7 @@
 | 方面 | 状态 | 说明 | 去哪里核对 |
 | --- | --- | --- | --- |
 | DiAGRI 模式连接实体 AC5 | 未验证 | 从未运行过。包括阶段执行中途蓝牙中断、主机或 AC5 断电，以及长时间无人值守运行。 | [VALIDATION.md](../../../VALIDATION.md) |
+| 水泵插座读回 | 未验证 | 看门狗依赖设备状态里水泵插座的 `on` 读回。这在模拟的 AC5 上测过，没有在真机上核对过：插座读回的格式、更新的时机，以及面板开泵后多久能读到，都没有实测。读不出来时只发警告，看门狗不会动手。 | [`executor/watchdog.py`](../../../src/growbridge/executor/watchdog.py)、[`control/device.py`](../../../src/growbridge/control/device.py) |
 | 树莓派与 Linux 蓝牙 | 未验证 | `BleakTransport`（BlueZ 上的 Bleak）只在测试里对着假客户端跑过。没有在实体树莓派上运行的记录。 | [`transport.py`](../../../src/growbridge/transport.py)、[`tests/transport/`](../../../tests/transport/) |
 | 事件通道关闭后 Swift 辅助程序退出 | 未验证 | 在 macOS 上，Python 一侧断开时，辅助程序应当丢弃排队中的写入并退出（`watchChannel`）。CI 只编译这个辅助程序。 | [`BLEHelper.swift`](../../../src/growbridge/native/BLEHelper.swift) |
 | 其他控制器、其他固件、加密协议 v2 | 未验证 | 只用过一台明文协议 v1 的 AC5。控制要求协议版本为 1，否则拒绝。 | [`service.py`](../../../src/growbridge/service.py)、[VALIDATION.md](../../../VALIDATION.md) |

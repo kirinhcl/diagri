@@ -110,13 +110,13 @@
 
 **能读。** 当前阶段及其运行单、各写入权的编号（`StagePort.active_stage`）；传感器读数、设备状态、安全配置和动作回执（`ControlPort`）。
 
-**能做。** 经 `ControlPort.submit` 提交写入，每次写入都使用和用途对应的写入权：定时动作、反馈规则和结束动作用阶段写入权；养护规则用养护写入权；保护规则用保护规则的写入权。关泵联锁生效期间调用 `pump_off`。向工作流服务上报阶段事件。
+**能做。** 经 `ControlPort.submit` 提交写入，每次写入都使用和用途对应的写入权：定时动作、反馈规则和结束动作用阶段写入权；养护规则用养护写入权；保护规则用保护规则的写入权。关泵联锁生效期间调用 `pump_off`。水泵看门狗（[`executor/watchdog.py`](../../../src/growbridge/executor/watchdog.py)）在 DiAGRI 没有灌溉而水泵读回为开时，同样只通过 `pump_off` 关泵，发出告警，并经 `StagePort.record_intervention` 在当前阶段记一条 `unexpected_watering` 干预。向工作流服务上报阶段事件。
 
 **绝对做不了。** 调用模型。开启水泵。改变阶段状态：它只负责上报，怎么处理由工作流服务决定。写入运行单里交给设备自管的通道。
 
 **为什么从不调用模型。** 引擎的判定只看四样输入：运行单、安全配置、读数和时钟。四样相同，动作就一定相同，所以每个判定都能在测试里重放，事后也能凭动作账本讲清楚。过热保护和关泵联锁也因此不必等一次网络调用。
 
-每次 tick 按顺序做六件事：关泵联锁；保护规则；掉线记账；处理 `running` 的阶段（先做各项检查，再做定时动作、反馈规则、结束条件和结束动作）；阶段既不是 `running` 也不是 `manual` 时执行养护规则；检查 `paused` 阶段的最长等待时间。
+每次 tick 按顺序做六件事：关泵联锁（紧接着是水泵看门狗）；保护规则；掉线记账；处理 `running` 的阶段（先做各项检查，再做定时动作、反馈规则、结束条件和结束动作）；阶段既不是 `running` 也不是 `manual` 时执行养护规则；检查 `paused` 阶段的最长等待时间。
 
 **代码。** [`executor/engine.py`](../../../src/growbridge/executor/engine.py)；规则的纯判定在 [`executor/rules.py`](../../../src/growbridge/executor/rules.py)，时钟和掉线处理在 [`executor/outage.py`](../../../src/growbridge/executor/outage.py)。另见[控制与安全模型](Control-and-Safety-Model.md)。
 

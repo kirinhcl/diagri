@@ -164,6 +164,8 @@ The listener is what decides; a `Host` header alone selects nothing. A remote cl
 
 The control service owns the GrowBridge side of the BLE link. The AC5 panel and the Spider Farmer app can still change the device. DiAGRI only notices afterwards, through read-back, as `EXTERNAL_CHANGE`.
 
+The pump is the exception. Nobody switches the pump on by hand during an experiment and the pump is never left to the AC5 timer, so a pump outlet that reads back as on while DiAGRI is not irrigating is always unexpected. The executor's pump watchdog checks this on every tick: it switches the pump off through the dedicated `pump_off` path (trigger `watchdog`), raises a critical `pump_unexpected` alert and records an `unexpected_watering` intervention against the active stage. If the outlet cannot be read it only raises a `pump_unreadable` warning and does nothing else. The watchdog acts only while connected and with no unconfirmed pump-off; an unconfirmed switch-off is handed to the pump-off interlock.
+
 ## See also
 
 - [Workflow and state machines](Workflow-and-State-Machines.md)
