@@ -51,7 +51,7 @@ from growbridge.observer.outbox import Outbox
 from growbridge.observer.report import (
     ReportContext,
     ReportStore,
-    frozen_line,
+    frozen_lines,
     render_daily_report,
     reports_due,
 )
@@ -522,9 +522,7 @@ class Runtime:
             for item in self.workflow.interventions(stage.experiment_id)
             if start <= item["at"] < end
         )
-        frozen = tuple(
-            frozen_line(p, zone, start, end) for p in self.archive.frozen_periods(start, end)
-        )
+        frozen = frozen_lines(self.archive.frozen_periods(start, end), zone, start, end)
         row = self.workflow.db.one("SELECT name FROM wf_projects WHERE id = ?", (stage.project_id,))
         context = ReportContext(
             project_id=stage.project_id,

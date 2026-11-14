@@ -9,6 +9,7 @@ from growbridge.observer.report import (
     ReportContext,
     ReportStore,
     frozen_line,
+    frozen_lines,
     render_daily_report,
     report_due,
     reports_due,
@@ -101,15 +102,35 @@ def test_report_still_renders_when_one_frozen_time_is_absurd(metrics):
     assert "- humi stuck at 55 from 01:00 (still frozen)" in text
 
 
-def test_frozen_readings_are_capped_with_an_and_more_line(metrics):
-    items = tuple(f"s{i} stuck at 1 from 08:00 to 09:00" for i in range(FROZEN_LIST_LIMIT + 3))
-    context = ReportContext(project_id="p1", project_name="Basil", frozen_readings=items)
+def test_the_cap_keeps_open_periods_first_and_names_the_dropped_sensors(metrics):
+    closed = [
+        {"sensor": n, "value": 1.0, "first_at": DAY[0] + 600 * i, "last_at": DAY[0] + 600 * i + 60}
+        for i, n in enumerate(["temp", "co2", "temp", "humi", "tempSoil", "co2", "temp"])
+    ]
+    open_late = {"sensor": "vent", "value": 2.0, "first_at": DAY[0] + 9000, "last_at": None}
+    lines = frozen_lines([*closed, open_late], TZ, *DAY)
 
-    lines = render_daily_report(metrics, context).splitlines()
+    assert len(lines) == FROZEN_LIST_LIMIT + 1
+    assert lines[0].startswith("vent stuck at 2") and "(still frozen)" in lines[0]
+    assert lines[1].startswith("temp stuck at 1 from 00:00")
+    assert lines[-1] == "and 3 more (tempSoil, co2, temp)"
+    context = ReportContext(project_id="p1", project_name="Basil", frozen_readings=lines)
+    assert f"- {lines[-1]}" in render_daily_report(metrics, context).splitlines()
 
-    assert f"- {items[FROZEN_LIST_LIMIT - 1]}" in lines
-    assert f"- {items[FROZEN_LIST_LIMIT]}" not in lines
-    assert "- and 3 more" in lines
+
+def test_an_unusable_timestamp_is_logged(caplog):
+    period = {
+        "period_id": "frozen-1",
+        "sensor": "t",
+        "value": 1.0,
+        "first_at": 1e20,
+        "last_at": None,
+    }
+
+    with caplog.at_level("WARNING"):
+        frozen_line(period, TZ, *DAY)
+
+    assert "frozen period frozen-1 has an unusable timestamp" in caplog.text
 
 
 def test_narrative_is_appended_and_template_numbers_stay(metrics):
