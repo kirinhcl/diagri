@@ -206,6 +206,17 @@ class WorkflowStore:
         )
         return int(found["n"])
 
+    def started_round_numbers(self, project_id: str, protocol_id: str) -> frozenset[int]:
+        """The ``round_number`` of each of the project's rounds of this protocol that has a stage
+        that has started: the rounds whose data should exist, whether or not a report cites it."""
+        rows = self.db.query(
+            "SELECT EXISTS(SELECT 1 FROM wf_stages s WHERE s.round_id = r.id"
+            " AND s.started_at IS NOT NULL) AS started FROM wf_rounds r"
+            " WHERE r.project_id = ? AND r.protocol_id = ? ORDER BY r.rowid",
+            (project_id, protocol_id),
+        )
+        return frozenset(number for number, row in enumerate(rows, 1) if row["started"])
+
     def update_round(self, round_id: str, **changes: Any) -> RoundRow:
         sets, values = _assignments(changes, set(RoundRow.model_fields) - {"id"})
         self.db.execute(f"UPDATE wf_rounds SET {sets} WHERE id = ?", (*values, round_id))

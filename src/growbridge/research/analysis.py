@@ -20,6 +20,7 @@ from growbridge.archive.db import Database
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Label, Model, ResearchProtocol, Snapshot
 from growbridge.ports import Denied
+from growbridge.research.notes import Note, note
 from growbridge.research.sandbox import Sandbox, SandboxResult
 from growbridge.research.stats import BlockEstimate
 
@@ -59,8 +60,15 @@ class AnalysisFacts(Model):
 
 
 class AnalysisDecision(Model):
+    """The label and why it was lowered: ``notes`` in both languages, ``reasons`` their text."""
+
     label: Label
     reasons: tuple[str, ...] = ()
+    notes: tuple[Note, ...] = ()
+
+
+def decided(label: Label, notes: tuple[Note, ...] = ()) -> AnalysisDecision:
+    return AnalysisDecision(label=label, reasons=tuple(n.text() for n in notes), notes=notes)
 
 
 class AnalysisRun(Model):
@@ -83,24 +91,24 @@ class AnalysisRun(Model):
 def classify(protocol: ResearchProtocol, facts: AnalysisFacts) -> AnalysisDecision:
     """§9.3: the label a result may carry, and why it was lowered."""
     plan = protocol.analysis
-    descriptive: list[str] = []
-    exploratory: list[str] = []
+    descriptive: list[Note] = []
+    exploratory: list[Note] = []
     if facts.independent_replicates < MIN_REPLICATES:
-        descriptive.append("缺少独立的处理重复：只能描述已观察到的差异，不能推断处理效应")
+        descriptive.append(note("no_replicates"))
     if facts.confounded_with_time:
-        descriptive.append("处理与时间或生长期无法区分：只能描述随时间的变化")
+        descriptive.append(note("confounded_with_time"))
     if facts.missing_fraction > plan.max_missing_fraction:
-        exploratory.append("缺失超过预定标准：结果只能作为探索性线索")
+        exploratory.append(note("missing_over_limit"))
     if facts.changed_after_outcomes:
-        exploratory.append("看到结局数据后变更了终点、排除规则或分析方法：结果只能作为探索")
+        exploratory.append(note("changed_after_outcomes"))
     if facts.deviation_fraction > plan.max_deviation_fraction:
-        exploratory.append("实际处理偏离批准范围，超过协议预定的比例：结果只能作为探索")
-    reasons = tuple(descriptive + exploratory)
+        exploratory.append(note("deviation_over_limit"))
+    notes = tuple(descriptive + exploratory)
     if descriptive:
-        return AnalysisDecision(label="descriptive", reasons=reasons)
+        return decided("descriptive", notes)
     if exploratory:
-        return AnalysisDecision(label="exploratory", reasons=reasons)
-    return AnalysisDecision(label="confirmatory", reasons=())
+        return decided("exploratory", notes)
+    return decided("confirmatory")
 
 
 def conclusion(estimate: BlockEstimate, facts: AnalysisFacts, alpha: float = 0.05) -> Conclusion:

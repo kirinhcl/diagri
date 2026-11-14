@@ -28,14 +28,21 @@ from growbridge.archive.models import ManualMeasurement, ResearchProtocol, Resea
 from growbridge.planning.design import check_experimental_design
 from growbridge.planning.treatment import allocated, delivered, unread
 from growbridge.ports import Denied
-from growbridge.research.analysis import AnalysisDecision, AnalysisFacts, classify, conclusion
+from growbridge.research.analysis import (
+    AnalysisDecision,
+    AnalysisFacts,
+    classify,
+    conclusion,
+    decided,
+)
+from growbridge.research.notes import Note, note
 from growbridge.research.report import publish_research_report
 from growbridge.research.stats import UnitTable, paired_block_estimate, unit_table
 from growbridge.workflow.states import RoundState, TaskState
 
 ROLE = "researcher"
-NO_RUN_NOTE = "没有该数据快照上已冻结的确认性分析记录：不能作为确认性结果"
-HOLDOUT_NOTE = "留出集已被读取过：本次读取只能作为探索性结果"
+NO_RUN_NOTE = note("no_confirmatory_run")
+HOLDOUT_NOTE = note("holdout_read")
 
 
 class SnapshotRound(ToolInput):
@@ -132,12 +139,22 @@ def _confounded(protocol: ResearchProtocol, rounds: set[int]) -> bool:
     return any(f.code == "confounded_with_time" for f in check_experimental_design(restricted))
 
 
-def _missing_fraction(protocol: ResearchProtocol, frozen: Frozen, metric: str) -> float:
+def _missing_fraction(
+    protocol: ResearchProtocol, frozen: Frozen, metric: str, started: frozenset[int]
+) -> float:
+    """The share of planned units without an endpoint value, among the rounds that ran.
+
+    A round counts when a cited snapshot belongs to it or when one of its stages has started:
+    a protocol round nobody has run yet is not missing data (too few rounds lowers the label
+    through the replicate and sample-size rules instead), while a round that ran and is left
+    out of the report still counts as missing.
+    """
     positions: dict[int, set[str]] = {}
     for m in frozen.rows:
         if m.metric == metric:
             positions.setdefault(frozen.round_of[m.experiment_id], set()).add(m.position)
-    planned = {(a.round, a.unit) for a in protocol.allocations}
+    ran = set(frozen.round_of.values()) | started
+    planned = {(a.round, a.unit) for a in protocol.allocations if a.round in ran}
     per_round = {r: sum(1 for a in protocol.allocations if a.round == r) for r, _ in planned}
     present = {
         (r, u) for r, u in planned if r in positions and (per_round[r] == 1 or u in positions[r])
@@ -158,15 +175,15 @@ class TreatmentCheck:
     details: tuple[dict, ...]
     unverified: tuple[dict, ...] = ()  # rounds whose samples record no level to compare
 
-    def notes(self) -> list[str]:
-        failed = [
-            f"第 {d['round']} 轮没有按分配的处理 {d['treatment_id']} 运行："
-            + "; ".join(d["problems"])
-            for d in self.details
-        ]
+    def notes(self) -> list[Note]:
+        failed = [note("treatment_not_applied", **d) for d in self.details]
         unread = [
-            f"第 {d['round']} 轮的样本没有记录 {', '.join(d['channels'])} 的档位，"
-            f"无法核对处理 {d['treatment_id']} 是否执行"
+            note(
+                "treatment_unverified",
+                round=d["round"],
+                treatment_id=d["treatment_id"],
+                channels=", ".join(d["channels"]),
+            )
             for d in self.unverified
         ]
         return failed + unread
@@ -219,7 +236,8 @@ def _facts(
         _unit_count(protocol, control, rounds), _unit_count(protocol, data.treatment_id, rounds)
     )
     worst_coverage = min(s.coverage for s in frozen.snaps)
-    missing = max(_missing_fraction(protocol, frozen, metric), 1 - worst_coverage)
+    started = deps.workflow.store.started_round_numbers(protocol.project_id, protocol.id)
+    missing = max(_missing_fraction(protocol, frozen, metric, started), 1 - worst_coverage)
     flags = data.flags
     return AnalysisFacts(
         independent_replicates=replicates,
@@ -233,10 +251,10 @@ def _facts(
     )
 
 
-def _capped(decision: AnalysisDecision, note: str) -> AnalysisDecision:
+def _capped(decision: AnalysisDecision, why: Note) -> AnalysisDecision:
     if decision.label != "confirmatory":
         return decision
-    return AnalysisDecision(label="exploratory", reasons=(*decision.reasons, note))
+    return decided("exploratory", (*decision.notes, why))
 
 
 def _decide(
@@ -264,8 +282,8 @@ def _require_registered_runs(deps: Deps, protocol: ResearchProtocol, frozen: Fro
         if runner.status(snap.id, protocol) in ("none", "running"):
             raise Denied(
                 "state",
-                f"快照 {snap.id} 的预注册确认性运行还没有完成；"
-                "由操作员通过 POST /wb/analysis/runs 启动",
+                f"the pre-registered confirmatory run of snapshot {snap.id} has not finished;"
+                " the operator starts it with POST /wb/analysis/runs",
             )
 
 
@@ -324,6 +342,11 @@ def _data_protocol(
     return protocol
 
 
+def _written_notes(path: str) -> list[dict]:
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)["notes"]
+
+
 def publish(deps: Deps, data: PublishInput) -> dict:
     task = _precheck(deps, data)
     frozen = _freeze_inputs(deps, task, data)
@@ -337,7 +360,7 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         read = deps.holdout.evaluate(data.holdout_id, ROLE, data.model_sha)
         decision = decision if read == "confirmatory" else _capped(decision, HOLDOUT_NOTE)
     estimate = paired_block_estimate(table.values, protocol.control_treatment_id, data.treatment_id)
-    notes = [f"{len(table.dropped)} 条测量没有对应的分配，未计入"] if table.dropped else []
+    notes = [note("unallocated_measurements", count=len(table.dropped))] if table.dropped else []
     notes += check.notes()
     weakest = min(frozen.snaps, key=lambda s: (s.complete, s.coverage))
     artifact, state = publish_research_report(
@@ -348,10 +371,11 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         estimate,
         conclusion(estimate, facts),
         (*data.evidence_chain, *(f"snapshot:{s.id}" for s in frozen.snaps)),
-        (*data.limitations, *notes),
+        data.limitations,
         data.next_round,
         data.unresolved,
         deps.work_root / "reports" / task.id / new_id("report"),
+        notes,
     )
     body = {
         "artifact_id": artifact.id,
@@ -359,6 +383,7 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         "needs_review": state is TaskState.NEEDS_REVIEW,
         "task_state": state.value,
         "treatment_check": {"failed": list(check.details), "unverified": list(check.unverified)},
+        "server_notes": [n["text"] for n in _written_notes(artifact.path)],
     }
     if data.round_id is not None:
         body["round_state"] = _deliver(deps, data.round_id, artifact.id, state)

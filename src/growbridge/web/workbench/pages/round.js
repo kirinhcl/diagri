@@ -80,8 +80,20 @@ function listOrNone(ctx, items) {
   return h("ul", { class: "report-list" }, rows.map((item) => h("li", { text: String(item) })));
 }
 
+// A report written with coded notes shows each server note in the console's language; an older
+// report has only the plain-text fields, which are shown as they are.
+export function reportLists(report, lang) {
+  if (!Array.isArray(report.notes)) {
+    return { reasons: report.reasons || [], limitations: report.limitations || [] };
+  }
+  const text = (entry) => (entry.text && (entry.text[lang] || entry.text.en)) || entry.code;
+  const of = (kind) => report.notes.filter((entry) => entry.kind === kind).map(text);
+  return { reasons: of("reason"), limitations: [...(report.model_limitations || []), ...of("limitation")] };
+}
+
 function reportView(ctx, data) {
   const report = data.report || {};
+  const lists = reportLists(report, ctx.lang);
   const label = report.label || data.label;
   const conclusion = report.conclusion || "uncertain";
   return h(
@@ -95,9 +107,9 @@ function reportView(ctx, data) {
       [ctx.t("report.digest"), h("code", { text: data.sha256 })],
     ]),
     h("h3", { class: "report-sub", text: ctx.t("report.reasons") }),
-    listOrNone(ctx, report.reasons),
+    listOrNone(ctx, lists.reasons),
     h("h3", { class: "report-sub", text: ctx.t("report.limitations") }),
-    listOrNone(ctx, report.limitations),
+    listOrNone(ctx, lists.limitations),
     h("h3", { class: "report-sub", text: ctx.t("report.unresolved") }),
     listOrNone(ctx, report.unresolved),
     h("h3", { class: "report-sub", text: ctx.t("report.nextRound") }),

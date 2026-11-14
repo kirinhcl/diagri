@@ -276,5 +276,5 @@ def check_evidence(run_sheet: RunSheet, cards: Mapping[str, EvidenceCard]) -> tu
                 _hint("unverified_source", f"{label}: card {card.id} is not verified; confirm it")
             )
         if not card.calibrated:
-            findings.append(_hint("uncalibrated", f"{label}: card {card.id} is 未校准"))
+            findings.append(_hint("uncalibrated", f"{label}: card {card.id} is uncalibrated (未校准)"))
     return tuple(findings)

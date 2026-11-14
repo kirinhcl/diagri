@@ -839,3 +839,54 @@ async def test_a_holdout_evaluation_without_a_registry_is_an_error(env):
     outcome = await _publish(env, task.id, rounds, holdout_id="hold-1", model_sha="m")
 
     assert outcome.is_error and env.archive.artifacts(task.id) == ()
+
+
+async def test_protocol_rounds_nobody_has_run_are_not_missing_data(env):
+    """Round 1 of a four-round protocol: rounds 2 to 4 are still to come, nothing is missing."""
+    task = env.task("researcher")
+    rounds = _rounds(env, (5.0, None, None, None))
+
+    outcome = await _publish(env, task.id, rounds)
+
+    reasons = _report(env, outcome)["reasons"]
+    assert not any("缺失" in reason for reason in reasons), reasons
+
+
+def test_a_started_round_left_out_of_the_report_still_counts_as_missing(env):
+    from growbridge.agents.handlers_report import Frozen, _missing_fraction
+
+    rows = (_measurement("e1", 5.0, "m1"), _measurement("e2", 4.0, "m2"))
+    frozen = Frozen((), {"e1": 1, "e2": 2}, rows)
+    metric = env.protocol.analysis.primary_endpoint
+
+    assert _missing_fraction(env.protocol, frozen, metric, frozenset()) == 0
+    assert _missing_fraction(env.protocol, frozen, metric, frozenset({3})) == pytest.approx(1 / 3)
+
+
+async def test_started_round_numbers_lists_the_rounds_with_a_started_stage(env):
+    store = env.workflow.store
+    assert store.started_round_numbers(env.project_id, env.protocol.id) == frozenset()
+
+    await _running_stage(env)  # stage-1 belongs to env.round_id, the project's first round
+    env.workflow.create_round(env.project_id, env.protocol.id, env.operator)
+
+    assert store.started_round_numbers(env.project_id, env.protocol.id) == {1}
+    assert store.started_round_numbers(env.project_id, "another-protocol") == frozenset()
+
+
+async def test_server_notes_are_stored_with_their_code_in_both_languages(env):
+    task = env.task("researcher")
+
+    outcome = await _publish(env, task.id, _rounds(env))
+
+    report = _report(env, outcome)
+    assert report["model_limitations"] == ["one cultivar"]
+    unverified = [n for n in report["notes"] if n["code"] == "treatment_unverified"]
+    assert [n["params"]["round"] for n in unverified] == [1, 2, 3, 4]
+    assert unverified[0]["kind"] == "limitation"
+    assert unverified[0]["text"]["en"].startswith("The samples of round 1 record no level")
+    assert unverified[0]["text"]["zh"] in report["limitations"]  # the plain text is unchanged
+    reasons = [n for n in report["notes"] if n["kind"] == "reason"]
+    assert [n["text"]["zh"] for n in reasons] == report["reasons"]
+    assert report["conclusion_texts"] == {"en": "uncertain", "zh": "不确定"}
+    assert _payload(outcome)["server_notes"][0].keys() == {"en", "zh"}
