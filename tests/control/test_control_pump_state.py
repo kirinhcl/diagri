@@ -25,6 +25,14 @@ async def wait_until(predicate, attempts=200):
         ({"outlet": {}}, None),
         ({"outlet": {"O4": "x"}}, None),
         ({}, None),
+        ({"outlet": None}, None),
+        ({"outlet": "x"}, None),
+        ({"outlet": {"O4": {"on": "0"}}}, None),
+        ({"outlet": {"O4": {"on": 2}}}, None),
+        ({"outlet": {"O4": {"on": 1.0}}}, None),
+        ({"outlet": {"O4": {"on": None}}}, None),
+        ({"outlet": {"O4": {"on": True}}}, True),
+        ({"outlet": {"O4": {"on": False}}}, False),
     ],
 )
 def test_pump_on_reads_the_pump_outlet(data, expected):

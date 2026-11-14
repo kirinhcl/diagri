@@ -101,9 +101,16 @@ class DeviceIO:
         return f"O{self.bridge.settings.pump_outlet}"
 
     def pump_on(self, data: dict[str, Any]) -> bool | None:
-        outlet = data.get("outlet", {}).get(self._pump_key())
-        if isinstance(outlet, dict) and "on" in outlet:
-            return bool(outlet["on"])
+        """The pump outlet's on/off from a status; ``None`` unless it is a clear bool or 0/1."""
+        outlets = data.get("outlet")
+        if not isinstance(outlets, dict):
+            return None
+        outlet = outlets.get(self._pump_key())
+        value = outlet.get("on") if isinstance(outlet, dict) else None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int) and value in (0, 1):
+            return bool(value)
         return None
 
     def levels_from(self, data: dict[str, Any]) -> dict[Channel, int]:
