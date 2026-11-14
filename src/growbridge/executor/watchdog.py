@@ -5,6 +5,7 @@ timer, so any pump-on that DiAGRI did not start is unexpected. The watchdog only
 read-back and acts through the dedicated ``pump_off`` path; it has no way to switch the pump on.
 """
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -15,6 +16,7 @@ from growbridge.ports import ControlPort, Denied, StagePort, StageRuntime
 UNREADABLE = "pump_unreadable"
 UNEXPECTED = "pump_unexpected"
 KEY = "pump"
+FAILURE = "pump_watchdog"
 INTERVENTION = "unexpected_watering"
 
 UNREADABLE_TEXT = (
@@ -29,6 +31,13 @@ UNCONFIRMED_TEXT = (
     "The pump was on while DiAGRI was not irrigating. The switch-off is unconfirmed; the "
     "interlock is set and keeps retrying."
 )
+FAILED_TEXT = (
+    "The pump was on while DiAGRI was not irrigating. The switch-off failed (unconfirmed) and "
+    "no interlock is set; the watchdog tries again on the next status."
+)
+RECORD_FAILED_TEXT = "The pump watchdog could not record the unexpected_watering intervention."
+
+log = logging.getLogger(__name__)
 
 
 class PumpWatchdog:
@@ -65,24 +74,43 @@ class PumpWatchdog:
 
     async def _switch_off(self, stage: StageRuntime | None, status_at: float) -> None:
         self._acted = self.clock.monotonic()
+        before = self.control.last_pump_off_id()
         try:
             confirmed = await self.control.pump_off(trigger="watchdog")
         except Denied:
             confirmed = False
-        self._raise(UNEXPECTED, OFF_TEXT if confirmed else UNCONFIRMED_TEXT, "critical")
+        if confirmed:
+            text = OFF_TEXT
+        else:
+            text = UNCONFIRMED_TEXT if self.control.interlocked() else FAILED_TEXT
+        self._raise(UNEXPECTED, text, "critical")
         if stage is None:
             return
+        after = self.control.last_pump_off_id()
         detail: dict[str, Any] = {
             "status_at": status_at,
             "off_confirmed": confirmed,
             "off_confirmed_at": self.clock.now() if confirmed else None,
-            "request_id": self.control.last_pump_off_id(),
+            "request_id": after if after != before else None,
         }
-        self.stages.record_intervention(stage.stage_id, INTERVENTION, detail)
+        try:
+            self.stages.record_intervention(stage.stage_id, INTERVENTION, detail)
+        except Exception:
+            log.exception("could not record the unexpected_watering intervention")
+            self._raise(FAILURE, RECORD_FAILED_TEXT, "critical", key="intervention")
 
-    def _raise(self, kind: str, message: str, severity: Severity) -> None:
+    def _raise(self, kind: str, message: str, severity: Severity, key: str = KEY) -> None:
         if self.alert is not None:
-            self.alert(kind, KEY, message, severity)
+            self.alert(kind, key, message, severity)
+
+    def step_failed(self, error: Exception) -> None:
+        """The engine's report that ``step`` itself raised."""
+        self._raise(
+            FAILURE,
+            f"The pump watchdog failed: {type(error).__name__}: {error}",
+            "critical",
+            key="step",
+        )
 
     def _close(self, kind: str) -> None:
         if self.resolve is not None:

@@ -11,6 +11,7 @@ of a paused stage. A stage that changes state during a tick is acted on at the n
 """
 
 import asyncio
+import logging
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
 from typing import Literal
@@ -84,6 +85,9 @@ def due_action(
     return (due[-1], 0) if due else (ordered[-1], 1)
 
 
+log = logging.getLogger(__name__)
+
+
 def slot_day(sheet: RunSheet, at: float, days_back: int) -> str:
     local = datetime.fromtimestamp(at, ZoneInfo(sheet.timezone))
     return (local.date() - timedelta(days=days_back)).isoformat()
@@ -150,7 +154,11 @@ class ExecutorEngine:
         online = self.control.connected()
         await self._interlock(tick, stage)  # 1
         if online:
-            await self.watchdog.step(stage)
+            try:
+                await self.watchdog.step(stage)
+            except Exception as error:  # the watchdog never blocks protection
+                log.exception("pump watchdog step failed")
+                self.watchdog.step_failed(error)
         if online:
             await self._protect(tick, stage, mono)  # 2
         outage = self._link.observe(online, mono, now)

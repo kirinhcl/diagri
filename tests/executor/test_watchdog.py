@@ -14,6 +14,8 @@ class FakeControl:
         self.cycle_end: float | None = None
         self.result: bool | Exception = True
         self.off_calls: list[str] = []
+        self.off_id: str | None = None
+        self.interlock_after = False
 
     def connected(self):
         return self.connected_now
@@ -34,10 +36,12 @@ class FakeControl:
         self.off_calls.append(trigger)
         if isinstance(self.result, Exception):
             raise self.result
+        self.off_id = "pumpoff-1"
+        self.interlocked_now = self.interlock_after
         return self.result
 
     def last_pump_off_id(self):
-        return "pumpoff-1"
+        return self.off_id
 
 
 class FakeStages:
@@ -169,9 +173,10 @@ async def test_unconfirmed_switch_off_is_reported():
     control, stages, _, dog, alerts, _, texts = make()
     control.reading = on(10.0)
     control.result = False
+    control.interlock_after = True
     await dog.step(FakeStage())
     assert alerts == [("pump_unexpected", "pump", "critical")]
-    assert "unconfirmed" in texts[0]
+    assert "unconfirmed" in texts[0] and "interlock is set" in texts[0]
     detail = stages.interventions[0][2]
     assert detail["off_confirmed"] is False and detail["off_confirmed_at"] is None
 
@@ -180,9 +185,12 @@ async def test_a_denied_switch_off_counts_as_unconfirmed():
     control, stages, _, dog, _, _, texts = make()
     control.reading = on(10.0)
     control.result = Denied("interlock", "no")
+    control.off_id = "pumpoff-old"  # an unrelated earlier pump-off
     await dog.step(FakeStage())
-    assert "unconfirmed" in texts[0]
-    assert stages.interventions[0][2]["off_confirmed"] is False
+    assert "unconfirmed" in texts[0] and "no interlock is set" in texts[0]
+    detail = stages.interventions[0][2]
+    assert detail["off_confirmed"] is False
+    assert detail["request_id"] is None
 
 
 async def test_runs_without_alert_hooks():
@@ -192,3 +200,17 @@ async def test_runs_without_alert_hooks():
     control.reading = on(10.0)
     await dog.step(None)
     assert control.off_calls == ["watchdog"]
+
+
+async def test_a_failing_intervention_write_never_undoes_the_switch_off():
+    control, stages, _, dog, alerts, _, _ = make()
+
+    def broken(*_):
+        raise RuntimeError("disk full")
+
+    stages.record_intervention = broken
+    control.reading = on(10.0)
+    await dog.step(FakeStage())
+    assert control.off_calls == ["watchdog"]
+    assert ("pump_watchdog", "intervention", "critical") in alerts
+    assert ("pump_unexpected", "pump", "critical") in alerts
