@@ -33,8 +33,9 @@ def _is_valid(value: object) -> bool:
 def flat_tail(points: Sequence[tuple[float, object]], max_gap_seconds: float) -> FlatRun | None:
     """Longest unchanged run ending at the last point, or None if that point is invalid.
 
-    The run breaks at an invalid point, a different value, a gap above ``max_gap_seconds`` or time
-    going backwards.
+    Invalid points inside the run are skipped. The run breaks at a valid point with a different
+    value, at time going backwards, or at a gap above ``max_gap_seconds`` measured between
+    consecutive valid points.
     """
     if not points:
         return None
@@ -43,8 +44,10 @@ def flat_tail(points: Sequence[tuple[float, object]], max_gap_seconds: float) ->
         return None
     first_at = last_at
     for at, value in reversed(points[:-1]):
+        if not _is_valid(value):
+            continue  # an invalid sample carries no information; the gap is between valid ones
         gap = first_at - at
-        if not _is_valid(value) or value != last_value or gap < 0 or gap > max_gap_seconds:
+        if value != last_value or gap < 0 or gap > max_gap_seconds:
             break
         first_at = at
     return FlatRun(float(last_value), first_at, last_at)
