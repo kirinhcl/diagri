@@ -37,7 +37,7 @@ Everything is under `data_dir`. Each SQLite file has one owner, and other servic
 | `growbridge.sqlite3` | The base daemon, `Store` in [`store.py`](../../../src/growbridge/store.py) | Legacy `samples` (receive time and reading) and `operations` |
 | `control.sqlite3` | Control service | Write host, write rights, action ledger, safety configuration, control events |
 | `workflow.sqlite3` | Workflow service, `TaskBoard`, `Operators` | Projects, research protocols, rounds, run sheets, stages, approvals, research tasks, operator accounts and sessions |
-| `archive.sqlite3` | Project archive | Samples, actions, measurements, evidence, artifacts, interventions, the snapshot index and invalidations |
+| `archive.sqlite3` | Project archive | Samples, actions, measurements, evidence, artifacts, interventions, frozen-reading periods, the snapshot index and invalidations |
 | `observer.sqlite3` | Observer and notifier | Alerts, the notification outbox, daily reports |
 | `compute.sqlite3` | Compute service | Job attempts, budgets and balances |
 | `agents.sqlite3` | Support for the model roles | Call budget, dispatch claims, frozen analysis scripts and confirmatory runs, the holdout registry |
@@ -70,6 +70,10 @@ The base daemon writes every reading to its own table, as it did before the rest
 - **Protected history.** Once the runtime has started, `Store.prune` deletes a legacy row only if it is older than `retention_days` and already archived. It deletes nothing while the clock is unsynced, and never the newest row.
 - **`SourceRewound`.** The legacy table does not use `AUTOINCREMENT`. If it were emptied, SQLite would hand out row ids below the cursor again, and new rows could not be told from archived ones. When the newest `rowid` is below the cursor, the source raises `SourceRewound`. The runtime turns it into the alert `source_rewound` and the rest of the tick goes on. Keeping the newest row when pruning is what prevents this in normal operation.
 
+## Frozen-reading periods
+
+When a sensor's reading stops changing, the archive records it in the `frozen_marks` table. A period is two rows that are only ever added: an `opened` row (sensor, value, time of the first sample at that value) and, when the sensor recovers, a `closed` row (time of the last frozen sample). Neither row is edited, and closing the same period twice adds nothing. Raw samples are not touched. `open_frozen_periods()` returns the periods not yet closed, and `frozen_periods(start, end)` returns those overlapping a window. An open period overlaps every window that ends at or after its first sample. `sensor_points(since)` returns the sensor values of all samples since a time, across experiments, for the check that finds frozen readings. A time index on `samples` keeps that query fast.
+
 ## How a data snapshot is frozen and verified
 
 An analysis must run on data that cannot move under it. `freeze()` in [`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py) writes the inputs of one analysis into a folder and records a fingerprint of every file.
@@ -77,7 +81,7 @@ An analysis must run on data that cannot move under it. `freeze()` in [`archive/
 1. **Refuse an untrusted clock.** While the clock is unsynced, `freeze()` raises `Denied("clock_unsynced")`.
 2. **Take the window from the run sheet.** When the researcher calls `freeze_dataset`, the window runs from the stage's start to start plus `duration_seconds`, and the sampling interval and the largest allowed gap come from the run sheet. The model cannot supply them ([`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)).
 3. **Split the samples.** A sample is trusted when it is `clock_synced`, its quality is `ok` and its source is `planned`. Trusted samples go to `samples.jsonl`. All others go to `samples_untrusted.jsonl`: they are kept for inspection and count for nothing.
-4. **Write the other files.** `actions.jsonl`, `measurements.jsonl` and `interventions.jsonl` hold the records of the window. Every line is one JSON object with sorted keys.
+4. **Write the other files.** `actions.jsonl`, `measurements.jsonl` and `interventions.jsonl` hold the records of the window. `frozen_periods.jsonl` lists the periods in which a sensor kept reporting exactly the same value that overlap the window (one that has not recovered yet has `last_at` and `closed_at` empty). Every line is one JSON object with sorted keys.
 5. **Measure coverage by time, not by rows.** Two neighbouring trusted samples no further apart than the allowed gap cover the time between them. After a longer silence the earlier sample is credited one sampling interval and the rest is listed as a gap. A snapshot is `complete` when coverage is at least 0.9 (`DEFAULT_MIN_COVERAGE`).
 6. **Write the manifest.** `manifest.json` holds the id, experiment, version, window, coverage, `complete`, the gaps, `min_coverage`, `measurements_excluded`, and `files`: the SHA-256 of each file, computed by `file_digest`. The archive stores a `Snapshot` row with the same list and with `manifest_sha256`, the digest of the manifest file itself.
 

@@ -215,6 +215,16 @@ class FrozenCheck(Model):
         return self
 
 
+class FrozenPeriod(Model):
+    """A sensor that has reported exactly ``value`` since ``first_at`` and has not yet recovered."""
+
+    period_id: str
+    sensor: str
+    value: float
+    first_at: float
+    opened_at: float
+
+
 class SafetyConfig(Model):
     version: int
     rules: tuple[ProtectionRule, ...]

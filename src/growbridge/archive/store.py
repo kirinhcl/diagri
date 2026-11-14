@@ -18,6 +18,7 @@ from growbridge.archive.models import (
     ActionRecord,
     Artifact,
     EvidenceCard,
+    FrozenPeriod,
     ManualMeasurement,
     Model,
     SampleRecord,
@@ -60,6 +61,12 @@ STEPS = (
     # The operator's attestation that the card's value was calibrated against a local
     # measurement, stored with the verification record. Cards from before it count as not attested.
     "ALTER TABLE evidence_verifications ADD COLUMN calibrated INTEGER NOT NULL DEFAULT 0",
+    "CREATE INDEX samples_by_time ON samples(at)",
+    # A sensor's frozen period is two insert-only rows: when it opened and, later, when it closed.
+    "CREATE TABLE frozen_marks(seq INTEGER PRIMARY KEY AUTOINCREMENT, period_id TEXT NOT NULL,"
+    " event TEXT NOT NULL CHECK (event IN ('opened', 'closed')), sensor TEXT NOT NULL,"
+    " value REAL, sample_at REAL NOT NULL, recorded_at REAL NOT NULL,"
+    " UNIQUE (period_id, event))",
 )
 
 MODEL_SOURCE = "model:"  # cards from a model role: it may not vouch for calibration
@@ -211,6 +218,64 @@ class Archive:
             ),
         )
         return tuple(SampleRecord.model_validate_json(row["body"]) for row in rows)
+
+    def sensor_points(self, since: float) -> tuple[tuple[float, dict[str, Any]], ...]:
+        """Sensor values of every sample at or after ``since``, across experiments, oldest first."""
+        rows = self.db.query(
+            "SELECT at, CASE WHEN json_type(body, '$.data.sensor') = 'object'"
+            " THEN json_extract(body, '$.data.sensor') END AS sensor FROM samples"
+            " WHERE at >= ? ORDER BY at, id",
+            (since,),
+        )
+        points = []
+        for row in rows:
+            sensor = json.loads(row["sensor"]) if row["sensor"] is not None else None
+            points.append((float(row["at"]), sensor if isinstance(sensor, dict) else {}))
+        return tuple(points)
+
+    # --- frozen readings -----------------------------------------------------------------------
+
+    def open_frozen(self, sensor: str, value: float, first_at: float) -> str:
+        period_id = new_id("frozen")
+        with self.db.transaction():
+            self.db.execute(
+                "INSERT INTO frozen_marks(period_id, event, sensor, value, sample_at, recorded_at)"
+                " VALUES(?, 'opened', ?, ?, ?, ?)",
+                (period_id, sensor, value, first_at, self.clock.now()),
+            )
+            self._touch()
+        return period_id
+
+    def close_frozen(self, period_id: str, sensor: str, last_at: float) -> None:
+        with self.db.transaction():
+            self.db.execute(
+                "INSERT OR IGNORE INTO frozen_marks(period_id, event, sensor, value, sample_at,"
+                " recorded_at) VALUES(?, 'closed', ?, NULL, ?, ?)",
+                (period_id, sensor, last_at, self.clock.now()),
+            )
+            self._touch()
+
+    def open_frozen_periods(self) -> tuple[FrozenPeriod, ...]:
+        rows = self.db.query(
+            "SELECT o.period_id, o.sensor, o.value, o.sample_at AS first_at,"
+            " o.recorded_at AS opened_at FROM frozen_marks o WHERE o.event = 'opened'"
+            " AND NOT EXISTS (SELECT 1 FROM frozen_marks c"
+            " WHERE c.period_id = o.period_id AND c.event = 'closed') ORDER BY o.seq"
+        )
+        return tuple(FrozenPeriod(**dict(row)) for row in rows)
+
+    def frozen_periods(self, start: float, end: float) -> tuple[dict[str, Any], ...]:
+        """Periods overlapping ``[start, end]``; a still-open one has ``last_at`` None."""
+        rows = self.db.query(
+            "SELECT o.period_id, o.sensor, o.value, o.sample_at AS first_at,"
+            " c.sample_at AS last_at, o.recorded_at AS opened_at, c.recorded_at AS closed_at"
+            " FROM frozen_marks o LEFT JOIN frozen_marks c"
+            " ON c.period_id = o.period_id AND c.event = 'closed'"
+            " WHERE o.event = 'opened' AND o.sample_at <= ?"
+            " AND (c.sample_at IS NULL OR c.sample_at >= ?) ORDER BY o.seq",
+            (end, start),
+        )
+        return tuple(dict(row) for row in rows)
 
     # --- actions -------------------------------------------------------------------------------
 

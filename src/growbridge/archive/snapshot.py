@@ -75,6 +75,7 @@ def _collect(
         "interventions": [
             i for i in archive.interventions(experiment_id) if start <= i["at"] <= end
         ],
+        "frozen_periods": list(archive.frozen_periods(start, end)),
     }
     return data, len(measured) - len(kept)
 

@@ -37,7 +37,7 @@
 | `growbridge.sqlite3` | 基础守护进程，[`store.py`](../../../src/growbridge/store.py) 的 `Store` | 旧的 `samples` 表（接收时间和读数）和 `operations` 表 |
 | `control.sqlite3` | 控制服务 | 写入主机、写入权、动作账本、安全配置、控制事件 |
 | `workflow.sqlite3` | 工作流服务、`TaskBoard`、`Operators` | 项目、研究协议、轮次、运行单、阶段、审批、研究任务、操作员账号和会话 |
-| `archive.sqlite3` | 项目档案 | 样本、动作、测量、证据、产物、干预、快照索引和失效标记 |
+| `archive.sqlite3` | 项目档案 | 样本、动作、测量、证据、产物、干预、读数冻结时段、快照索引和失效标记 |
 | `observer.sqlite3` | 观察与通知 Agent | 告警、通知发件箱、日报 |
 | `compute.sqlite3` | 计算服务 | 作业尝试、预算和额度 |
 | `agents.sqlite3` | 模型角色的支撑数据 | 调用预算、派发登记、冻结的分析脚本和确认性运行、留出数据登记 |
@@ -70,6 +70,10 @@
 - **保护尚未归档的历史。** 运行时启动之后，`Store.prune` 只删除同时满足两个条件的旧行：早于 `retention_days`，并且已经归档。时钟未同步时什么都不删，最新的一行永远不删。
 - **`SourceRewound`。** 旧表没有使用 `AUTOINCREMENT`。表一旦被清空，SQLite 会重新发放比游标小的行号，新行和已归档的行就分不清了。发现最新的 `rowid` 小于游标时，数据源抛出 `SourceRewound`。运行时把它变成告警 `source_rewound`，这个 tick 里的其余步骤照常执行。清理时保留最新一行，正是为了让正常运行中不出现这种情况。
 
+## 读数冻结时段
+
+传感器的读数不再变化时，档案把它记在 `frozen_marks` 表里。一个时段是两行只增不改的记录：`opened` 行（传感器、读数值、第一条该读数样本的时间），传感器恢复后再加一条 `closed` 行（最后一条冻结样本的时间）。这两行都不会被修改，同一个时段重复关闭也不会多出一行。原始样本不受影响。`open_frozen_periods()` 返回还没关闭的时段，`frozen_periods(start, end)` 返回与某个时间窗重叠的时段；还开着的时段与所有结束时间不早于它第一条样本的时间窗都重叠。`sensor_points(since)` 返回某个时间以来所有样本的传感器读数（不分实验），供查找冻结读数的检查使用；`samples` 表上加了时间索引，让这个查询保持够快。
+
 ## 数据快照怎样冻结和校验
 
 分析必须跑在不会再变的数据上。[`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py) 的 `freeze()` 把一次分析的输入写进一个目录，并记下每个文件的指纹。
@@ -77,7 +81,7 @@
 1. **时钟不可信就拒绝。** 时钟未同步时，`freeze()` 抛出 `Denied("clock_unsynced")`。
 2. **时间窗取自运行单。** 研究 Agent 调用 `freeze_dataset` 时，时间窗从阶段启动时刻算起，长度是 `duration_seconds`；采样间隔和允许的最大缺口也取自运行单。模型不能自己指定这些值（[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)）。
 3. **样本分成两份。** 同时满足 `clock_synced`、质量为 `ok`、来源为 `planned` 的样本是可信样本，写入 `samples.jsonl`。其余样本写入 `samples_untrusted.jsonl`：留着备查，不参与任何计算。
-4. **写入其他文件。** `actions.jsonl`、`measurements.jsonl` 和 `interventions.jsonl` 保存时间窗内的相应记录。每行是一个键已排序的 JSON 对象。
+4. **写入其他文件。** `actions.jsonl`、`measurements.jsonl` 和 `interventions.jsonl` 保存时间窗内的相应记录。`frozen_periods.jsonl` 列出与时间窗有重叠的、传感器读数一直不变的时段（还没恢复的时段，`last_at` 和 `closed_at` 为空）。每行是一个键已排序的 JSON 对象。
 5. **覆盖率按时长算，不按条数算。** 相邻两条可信样本的间隔不超过允许的缺口时，中间这段时间算作已覆盖。间隔更长时，前一条样本只记一个采样间隔，其余部分列为缺口。覆盖率不低于 0.9（`DEFAULT_MIN_COVERAGE`）的快照才标为 `complete`。
 6. **写清单。** `manifest.json` 包含 ID、实验、版本、时间窗、覆盖率、`complete`、缺口、`min_coverage`、`measurements_excluded`，以及 `files`：每个文件由 `file_digest` 算出的 SHA-256。档案里保存一条 `Snapshot` 记录，带同样的文件列表，另有 `manifest_sha256`，也就是清单文件本身的摘要。
 
