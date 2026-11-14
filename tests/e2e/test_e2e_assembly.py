@@ -114,8 +114,24 @@ async def test_daily_report_lists_frozen_readings_overlapping_the_day(world, set
 
     text = runtime.reports.get(project, "2027-01-14")
     assert text is not None
-    assert "temp stuck at 24 from" in text and " to " in text.split("temp stuck")[1].split("\n")[0]
-    assert "humi stuck at 55 from" in text and "(still frozen)" in text
+    lines = text.splitlines()
+    assert "- temp stuck at 24 from 01:00 to 02:00" in lines
+    assert "- humi stuck at 55 from 03:00 (still frozen)" in lines
+
+
+async def test_daily_report_shows_the_date_of_a_frozen_time_outside_the_day(world, settings):
+    runtime = await world.boot(channels={})
+    project, _round = await world.approved_stage(runtime)
+    start, _end = day_bounds(date(2027, 1, 14), settings.report_timezone)
+    period = runtime.archive.open_frozen("temp", 24.0, start - 7200)
+    runtime.archive.close_frozen(period, "temp", start + 3600)
+    runtime.archive.open_frozen("humi", 55.0, start - 3600)
+
+    await world.beat(runtime, 30)
+
+    lines = (runtime.reports.get(project, "2027-01-14") or "").splitlines()
+    assert "- temp stuck at 24 from 2027-01-13 22:00 to 01:00" in lines
+    assert "- humi stuck at 55 from 2027-01-13 23:00 (still frozen)" in lines
 
 
 async def test_daily_report_without_a_channel_is_saved_and_nothing_is_queued(world):
