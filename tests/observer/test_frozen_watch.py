@@ -11,6 +11,8 @@ from growbridge.archive.models import (
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
 from growbridge.observer.frozen_watch import CHECK_SECONDS, FrozenWatch
+from growbridge.observer.outbox import Outbox
+from growbridge.observer.service import Observer
 from growbridge.ports import StageEventKind, StageRuntime
 from growbridge.sim.fixtures import make_run_sheet, make_safety
 from growbridge.workflow.states import StageState
@@ -163,13 +165,13 @@ async def test_a_new_watch_finds_open_periods_after_a_restart(rig):
 
 async def test_checks_at_most_every_five_minutes(rig):
     rig.feed(10, temp=moving)
-    await rig.watch.tick()
+    assert await rig.watch.tick() is True
     assert rig.archive.reads == 1
     rig.clock.mono += CHECK_SECONDS - 1
-    await rig.watch.tick()
+    assert await rig.watch.tick() is False
     assert rig.archive.reads == 1
     rig.clock.mono += 1
-    await rig.watch.tick()
+    assert await rig.watch.tick() is True
     assert rig.archive.reads == 2
 
 
@@ -344,3 +346,32 @@ async def test_the_pause_is_reported_even_when_the_update_fails(rig):
     with pytest.raises(RuntimeError):
         await rig.check()
     assert len(rig.stages.events) == 1
+
+
+async def test_a_real_watch_resolves_the_failure_alert_only_after_a_completed_check(rig):
+    observer = Observer(
+        rig.stages, lambda: (), rig.book, Outbox(rig.db, rig.clock, 10, 40), (), rig.clock
+    )
+    observer.frozen = rig.watch
+    working = rig.archive.sensor_points
+    calls = []
+
+    def fail_once(since):
+        calls.append(since)
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+        return working(since)
+
+    rig.archive.sensor_points = fail_once
+
+    def failure_open():
+        return any((a.kind, a.key) == ("frozen_watch", "check") for a in rig.book.open())
+
+    await observer.tick()
+    assert failure_open()
+    rig.clock.mono += CHECK_SECONDS - 1
+    await observer.tick()  # gated: no check ran
+    assert failure_open() and len(calls) == 1
+    rig.clock.mono += 1
+    await observer.tick()  # a check completed
+    assert not failure_open() and len(calls) == 2

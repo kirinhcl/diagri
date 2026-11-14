@@ -206,7 +206,7 @@ class FrozenCheck(Model):
     max_gap_seconds: float = 600.0
 
     @model_validator(mode="after")
-    def _positive_and_finite(self) -> "FrozenCheck":
+    def _within_bounds(self) -> "FrozenCheck":
         bad = [name for name, value in self.minutes.items() if not 0 < value <= MAX_FROZEN_MINUTES]
         if bad:
             raise ValueError(
