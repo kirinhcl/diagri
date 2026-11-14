@@ -286,10 +286,21 @@ async def test_a_step_failure_is_resolved_only_by_a_step_that_read_the_pump():
     assert ("pump_watchdog", "step") in resolved
 
 
-async def test_a_changed_failure_message_is_raised_at_once():
-    _, _, _, dog, alerts, _, texts = make()
+async def test_a_message_that_changes_every_tick_is_raised_at_most_once_a_minute():
+    _, _, clock, dog, alerts, _, texts = make()
     dog.step_failed(RuntimeError("one"))
-    dog.step_failed(RuntimeError("one"))
+    clock.mono += 59.0
     dog.step_failed(RuntimeError("two"))
+    assert len(alerts) == 1
+    clock.mono += 1.0
+    dog.step_failed(RuntimeError("three"))
+    assert len(alerts) == 2 and "three" in texts[-1]
+    clock.mono += 1.0
+    dog.step_failed(RuntimeError("four"))
     assert len(alerts) == 2
-    assert "two" in texts[-1]
+
+
+async def test_a_long_failure_message_is_truncated():
+    _, _, _, dog, _, _, texts = make()
+    dog.step_failed(RuntimeError("x" * 1000))
+    assert len(texts[0]) == 200 and texts[0].startswith("The pump watchdog failed: RuntimeError")

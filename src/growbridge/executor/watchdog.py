@@ -19,6 +19,8 @@ KEY = "pump"
 FAILURE = "pump_watchdog"
 INTERVENTION = "unexpected_watering"
 REASSERT_SECONDS = 300.0  # a latched alert is stored again this often while it persists
+MIN_UPDATE_SECONDS = 60.0  # a changed message is stored at most this often
+MAX_MESSAGE = 200
 
 UNREADABLE_TEXT = (
     "The pump outlet could not be read from the device status, so the pump watchdog cannot "
@@ -124,15 +126,17 @@ class PumpWatchdog:
         self._enter(
             FAILURE,
             "step",
-            f"The pump watchdog failed: {type(error).__name__}: {error}",
+            f"The pump watchdog failed: {type(error).__name__}: {error}"[:MAX_MESSAGE],
             "critical",
         )
 
     def _enter(self, kind: str, key: str, message: str, severity: Severity) -> None:
         now = self.clock.monotonic()
         state = self._latched.get((kind, key))
-        if isinstance(state, tuple) and state[0] == message and now - state[1] < REASSERT_SECONDS:
-            return
+        if isinstance(state, tuple):
+            wait = REASSERT_SECONDS if state[0] == message else MIN_UPDATE_SECONDS
+            if now - state[1] < wait:
+                return
         self._latched[(kind, key)] = (message, now)
         self._raise(kind, message, severity, key=key)
 
