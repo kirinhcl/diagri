@@ -21,11 +21,12 @@ class FlatRun:
 
 
 def _is_valid(value: object) -> bool:
-    """True for a finite int or float (not bool). Never raises."""
+    """True for a finite int or float (not bool) that a float holds exactly. Never raises."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return False
     try:
-        return math.isfinite(value)
+        # float(value) != value catches ints a float cannot hold exactly (and raises for huge ones)
+        return math.isfinite(value) and float(value) == value
     except OverflowError:  # an int too large to convert to float
         return False
 

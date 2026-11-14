@@ -28,7 +28,7 @@ def test_time_going_backwards_breaks_the_run():
 
 
 def test_invalid_last_point_gives_none():
-    for bad in (None, NAN, float("inf"), "x", True, False, 10**400):
+    for bad in (None, NAN, float("inf"), "x", True, False, 10**400, 2**53 + 1):
         assert flat_tail([(0, 24.0), (60, bad)], 600) is None
 
 
