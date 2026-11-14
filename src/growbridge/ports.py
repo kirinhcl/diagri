@@ -54,6 +54,17 @@ class Actor(Model):
     reauth_at: float | None = None  # when the operator last re-authenticated
 
 
+class PumpReading(Model):
+    """The pump outlet as last read back from the panel; ``on`` is None when unknown."""
+
+    on: bool | None
+    at: float  # wall time the status was received
+    mono: float  # monotonic time the status was received; 0.0 before the first status
+
+
+PumpOffTrigger = Literal["interlock", "watchdog"]
+
+
 class Reading(Model):
     sensor: str
     value: float | None
@@ -213,6 +224,16 @@ class ControlPort(Protocol):
     def capabilities(self) -> Capabilities: ...
 
     def connected(self) -> bool: ...
+
+    def irrigating(self) -> bool: ...
+
+    def pump_reading(self) -> PumpReading: ...
+
+    def last_cycle_end(self) -> float | None:
+        """Monotonic time the last irrigation's pump-off finished, or None."""
+        ...
+
+    def last_pump_off_id(self) -> str | None: ...
 
     def readings(self) -> tuple[Reading, ...]: ...
 

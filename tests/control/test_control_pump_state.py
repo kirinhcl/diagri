@@ -1,0 +1,76 @@
+"""The control service's read-only pump accessors: read-back, irrigation state, pump-off trigger."""
+
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+
+from growbridge.archive.models import Channel
+from growbridge.control.device import DeviceIO
+
+
+async def wait_until(predicate, attempts=200):
+    for _ in range(attempts):
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("condition not reached")
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"outlet": {"O4": {"on": 1}}}, True),
+        ({"outlet": {"O4": {"on": 0}}}, False),
+        ({"outlet": {}}, None),
+        ({"outlet": {"O4": "x"}}, None),
+        ({}, None),
+    ],
+)
+def test_pump_on_reads_the_pump_outlet(data, expected):
+    bridge = SimpleNamespace(settings=SimpleNamespace(pump_outlet=4))
+    assert DeviceIO(bridge).pump_on(data) is expected
+
+
+async def test_pump_reading_follows_the_panel(rig):
+    rig.sim.external_change("outlet", "O4", mOnOff=1)
+    await rig.refresh()
+    reading = rig.service.pump_reading()
+    assert reading.on is True
+    assert reading.mono == rig.bridge.received_monotonic
+    assert reading.at == rig.bridge.received_at
+
+
+async def test_pump_reading_is_unknown_before_the_first_status(rig):
+    rig.bridge.received_monotonic = 0.0
+    reading = rig.service.pump_reading()
+    assert (reading.on, reading.at, reading.mono) == (None, 0.0, 0.0)
+
+
+async def test_irrigating_is_true_only_during_a_cycle(rig):
+    number = rig.manual_right()
+    assert rig.service.irrigating() is False
+    task = asyncio.create_task(
+        rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.3)
+    )
+    await wait_until(lambda: rig.service.irrigating())
+    assert rig.service.irrigating() is True
+    await task
+    assert rig.service.irrigating() is False
+
+
+async def test_last_cycle_end_is_set_once_the_pump_is_off(rig):
+    number = rig.manual_right()
+    assert rig.service.last_cycle_end() is None
+    await rig.service.irrigate(rig.request(number, Channel.PUMP, 1, "pump"), 0.02)
+    end = rig.service.last_cycle_end()
+    assert end is not None
+    assert end <= rig.clock.monotonic()
+
+
+async def test_pump_off_records_its_trigger(rig):
+    assert rig.service.last_pump_off_id() is None
+    await rig.service.pump_off(trigger="watchdog")
+    assert rig.service.receipt(rig.service.last_pump_off_id()).trigger == "watchdog"
+    await rig.service.pump_off()
+    assert rig.service.receipt(rig.service.last_pump_off_id()).trigger == "interlock"

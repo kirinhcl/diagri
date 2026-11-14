@@ -43,6 +43,8 @@ from growbridge.ports import (
     Denied,
     DeviceState,
     Difference,
+    PumpOffTrigger,
+    PumpReading,
     Reading,
     RecordSink,
     RightScope,
@@ -71,11 +73,31 @@ class ControlService:
         self.device = DeviceIO(bridge)
         self.gate = PriorityGate()
         self._cycle: asyncio.Event | None = None  # set while an irrigation cycle is in flight
+        self._last_cycle_end: float | None = None
+        self._last_pump_off_id: str | None = None
         self.ready = False  # False until ``startup`` has finished: ordinary writes are blocked
 
     @property
     def device_id(self) -> str:
         return str(self.bridge.settings.device)
+
+    def irrigating(self) -> bool:
+        return self._cycle is not None
+
+    def pump_reading(self) -> PumpReading:
+        if not self.bridge.received_monotonic:
+            return PumpReading(on=None, at=0.0, mono=0.0)
+        return PumpReading(
+            on=self.device.pump_on(self.bridge.data),
+            at=self.bridge.received_at,
+            mono=self.bridge.received_monotonic,
+        )
+
+    def last_cycle_end(self) -> float | None:
+        return self._last_cycle_end
+
+    def last_pump_off_id(self) -> str | None:
+        return self._last_pump_off_id
 
     # --- host, recovery number, simple reads --------------------------------------------------
 
@@ -480,6 +502,7 @@ class ControlService:
             if cycle is not None:
                 async with self.gate.acquire(URGENT):
                     off = await self._switch_pump_off()
+                    self._last_cycle_end = self.clock.monotonic()
                 self._cycle = None
                 if off.state is not ActionState.CONFIRMED:
                     self._set_interlock(sent.request_id)
@@ -501,11 +524,11 @@ class ControlService:
                 await asyncio.sleep(self.bridge.readback_interval)
         return outcome
 
-    async def pump_off(self) -> bool:
+    async def pump_off(self, trigger: PumpOffTrigger = "interlock") -> bool:
         """Dedicated interlock path: only the pump outlet, only off, usable while paused.
 
-        It is recorded in the ledger under the system right 0 (trigger ``interlock``) and links
-        the pump action it follows through ``supersedes``."""
+        It is recorded in the ledger under the system right 0 (trigger ``interlock`` or
+        ``watchdog``) and links the pump action it follows through ``supersedes``."""
         self._require_host()
         if not self.bridge.connected:
             return False
@@ -519,16 +542,19 @@ class ControlService:
             planned_level=0,
             right_number=0,
             right_kind=RightKind.PROTECTION,
-            trigger="interlock",
+            trigger=trigger,
             created_at=now,
             sent_at=now,
             supersedes=pending[-1].request_id if pending else None,
         )
+        self._last_pump_off_id = record.request_id
         self._save(record, "system:pump_off")
         outcome = await self._switch_pump_off()
         confirmed = outcome.state is ActionState.CONFIRMED
         self._settle(record, outcome)
-        self.ledger.event("pump_off", {"confirmed": confirmed}, self.clock.now())
+        self.ledger.event(
+            "pump_off", {"confirmed": confirmed, "trigger": trigger}, self.clock.now()
+        )
         if not confirmed:
             self._set_interlock(record.request_id)
         elif self.transport_stopped():

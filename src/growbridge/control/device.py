@@ -100,6 +100,12 @@ class DeviceIO:
     def _pump_key(self) -> str:
         return f"O{self.bridge.settings.pump_outlet}"
 
+    def pump_on(self, data: dict[str, Any]) -> bool | None:
+        outlet = data.get("outlet", {}).get(self._pump_key())
+        if isinstance(outlet, dict) and "on" in outlet:
+            return bool(outlet["on"])
+        return None
+
     def levels_from(self, data: dict[str, Any]) -> dict[Channel, int]:
         levels: dict[Channel, int] = {}
         for channel, module in MODULES.items():
