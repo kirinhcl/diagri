@@ -2,6 +2,7 @@ import json
 
 from dispatch_helpers import call, script_calls
 
+from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive.ids import file_digest
 from growbridge.archive.models import Artifact
 from growbridge.sim.llm import ScriptedClient
@@ -127,25 +128,16 @@ async def test_create_research_task_makes_a_top_level_task(env):
     assert task.owner_role == "researcher" and task.parent_task_id is None
 
 
-async def test_submit_run_for_review_only_files_a_draft(env):
-    body = _payload(
-        await env.invoke(
-            "orchestrator",
-            "submit_run_for_review",
-            round_id=env.round_id,
-            run_sheet=env.sheet_json(),
-        )
-    )
+async def test_the_orchestrator_cannot_write_a_run_sheet(env):
+    """Run sheets come from the planner, whose checks and design work the orchestrator skips."""
+    names = {t.name for t in env.tools()["orchestrator"]}
 
-    assert body["saved"] is True
-    assert env.workflow.stage("stage-1").state is StageState.PENDING_REVIEW
-    assert env.workflow.approvals("stage-1") == ()
+    assert not names & {"submit_run_for_review", "save_plan_draft", "validate_run_sheet"}
+    assert not ROLE_TOOLS["orchestrator"] & {"submit_run_for_review", "save_plan_draft"}
 
 
 async def test_get_run_status_and_project_state_are_read_only(env):
-    await env.invoke(
-        "orchestrator", "submit_run_for_review", round_id=env.round_id, run_sheet=env.sheet_json()
-    )
+    env.workflow.submit_run_sheet(env.round_id, env.sheet(), env.operator)
     env.task("planner")
 
     status = _payload(await env.invoke("orchestrator", "get_run_status", stage_id="stage-1"))

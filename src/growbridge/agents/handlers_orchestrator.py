@@ -8,7 +8,6 @@ from typing import Literal
 from growbridge.agents.handlers_common import (
     MAX_ITEMS,
     Deps,
-    DraftInput,
     ToolInput,
     bound_task,
     clip,
@@ -16,7 +15,6 @@ from growbridge.agents.handlers_common import (
     require_project,
     require_round_project,
     require_stage_project,
-    submit_draft,
 )
 from growbridge.agents.tools import Tool
 from growbridge.archive.ids import file_digest, new_id
@@ -191,9 +189,6 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
     def read_artifact(data: ArtifactInput) -> dict:
         return _read(deps, data.artifact_id)
 
-    def submit_for_review(data: DraftInput) -> dict:
-        return submit_draft(deps, ROLE, data)
-
     return [
         Tool(
             "get_project_state",
@@ -225,13 +220,6 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             "id for this task, never the id of your own task.",
             DelegateInput,
             delegate,
-            writes=True,
-        ),
-        Tool(
-            "submit_run_for_review",
-            "File a validated run sheet draft for operator review.",
-            DraftInput,
-            submit_for_review,
             writes=True,
         ),
         Tool(

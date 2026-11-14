@@ -119,6 +119,8 @@ async def test_the_orchestrator_is_told_the_context_and_what_was_said_before(env
     protocol = data["context"]["protocols"][f"{env.protocol.id} v1"]
     assert protocol["treatments"] == [t.model_dump(mode="json") for t in env.protocol.treatments]
     assert data["context"]["timezone"] == "Europe/Helsinki"
+    assert listed["protocol_round"] == 1 and listed["treatment"]["id"] == "high"
+    assert listed["treatment"]["factors"] == {"light": 70}
     assert listed["new_stage"] == {
         "stage_name": env.protocol.stages[0],
         "run_sheet_id": f"sheet-{env.round_id}-1",

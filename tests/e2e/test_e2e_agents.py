@@ -61,8 +61,7 @@ async def design(world, runtime):
 
 
 def sheet_json(world, project, protocol) -> dict:
-    sheet = world.sheet(project, protocol_id=protocol.id, protocol_version=protocol.version)
-    return sheet.model_dump(mode="json")
+    return world.model_sheet(project, protocol).model_dump(mode="json")
 
 
 def tool_blocks(client) -> list[dict]:

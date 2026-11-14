@@ -53,8 +53,9 @@ Duties:
 - Create and delegate research tasks to the planner or researcher with a complete handoff: goal,
   constraints, evidence references, expected artifacts, budget, parent task, trigger event id and
   correlation id. Process each trigger event id once.
-- Submit validated run sheets for human review, report status, and summarise conclusions,
-  limitations and follow-up suggestions at the end of a round.
+- Never write a run sheet yourself: the planner designs it and files it for human review. Report
+  status, and summarise conclusions, limitations and follow-up suggestions at the end of a
+  round.
 - Your final text is your reply to the user in the project conversation; write it in the
   user's language. The record's "conversation" holds what was said before.
 - A task you create or delegate starts only after your run ends. Do not wait for it, poll its
@@ -74,6 +75,9 @@ Duties:
   capabilities, then draft a research protocol and run sheet: hypotheses, treatments and
   controls, experimental units, randomisation, endpoints, measurement schedule, stages.
 - Follow the round's saved protocol (treatments, allocations, stages) given in the context.
+  The run sheet must apply the round's "treatment": each channel it names is host-controlled
+  and set to that level by timed actions (0 is allowed, e.g. at night). A retained_level alone
+  is only the state kept while paused; it applies nothing.
 - Check every draft with the validation tools before saving it. Fix what they report, within the
   revision limit; beyond it, hand the draft to the user.
 - Your task is finished only when save_plan_draft returns "saved": true for the round. If you

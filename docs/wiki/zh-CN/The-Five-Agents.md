@@ -36,7 +36,7 @@
 
 **能读。** 只限正在运行的任务所在的项目：任务、轮次状态和各阶段状态（`get_project_state`）；某个阶段的状态和最近的历史（`get_run_status`）；正在运行的任务和它下面委派出去的任务的状态和产物编号（`get_task_status`）；已登记的文本产物，读取时核对登记的摘要（`read_artifact`）。
 
-**能做。** 给计划 Agent 或研究 Agent 创建任务（`create_research_task`、`delegate_task`）；把运行单草稿提交给操作员审阅（`submit_run_for_review`）。
+**能做。** 给计划 Agent 或研究 Agent 创建任务（`create_research_task`、`delegate_task`）。它不能编写或提交运行单：运行单只来自计划 Agent，这样设计检查和处理检查都不会被跳过。
 
 **绝对做不了。** 批准运行单、控制阶段、写设备。创建项目、研究协议或轮次也不行，这些方法只接受操作员或工作流身份。
 
@@ -50,7 +50,7 @@
 
 **能读。** 传感器、通道和档位范围（`get_device_capabilities`）；本项目以往实验的快照和测量条数（`find_prior_runs`）；联网搜索结果（`lookup_crop_conditions`、`search_and_verify_sources`）。运行时没有接入搜索后端，所以这两个工具目前都返回 `unavailable`。
 
-**能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。这个工具能保存的只有运行单。搜索证据卡（`query_evidence`，每张卡都标明是否已核实），并提议新卡（`propose_evidence_card`）以便在运行单里引用。不管输入怎么写，提议都存成**未核实**，来源记为 `model:planner` 和正在运行的任务；卡 ID 由服务器生成，一个任务最多提议 20 张。读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。
+**能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。草稿必须执行协议分配给本轮的处理：处理里给出档位的每个通道都要由主机控制，并用定时动作设到这个档位（允许设为 0，比如夜间）。只写 `retained_level` 不算执行，它只是阶段暂停时保持的状态。上下文会告诉计划 Agent 每一轮的 `protocol_round` 和 `treatment`（[`planning/treatment.py`](../../../src/growbridge/planning/treatment.py)）。这个工具能保存的只有运行单。搜索证据卡（`query_evidence`，每张卡都标明是否已核实），并提议新卡（`propose_evidence_card`）以便在运行单里引用。不管输入怎么写，提议都存成**未核实**，来源记为 `model:planner` 和正在运行的任务；卡 ID 由服务器生成，一个任务最多提议 20 张。读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。
 
 **绝对做不了。** 核实证据卡：那是操作员的事，是一条独立的记录，在核实之前，运行单的审阅会一直显示 `unverified_source` 提示。批准自己的草稿。保存或修改研究协议：它没有这样的工具，`save_protocol` 也拒绝模型身份。提交带阻断性问题的草稿：同样的校验在工作流服务里还会再做一遍。
 
@@ -70,7 +70,7 @@
 | `freeze_dataset` | 把一个阶段的数据冻结成校验过的快照。快照完整时，把轮次从 `data_verification` 推进到 `analysis`。 |
 | `run_local_analysis` | 在沙箱里对快照运行脚本。结果一律标为探索性。 |
 | `submit_compute_job`、`fetch_compute_artifacts` | 按登记的模板提交作业、取回产物。没有配置计算服务时返回 `unavailable`；输入必须是任务所属项目的、已通过校验的快照。 |
-| `publish_research_report` | 写出报告。结论等级和数值都由冻结的数据算出。报告为终稿时，把轮次从 `analysis` 推进到 `delivered`。 |
+| `publish_research_report` | 写出报告。结论等级和数值都由冻结的数据算出。它会把每个快照里设备记录的档位和本轮分配的处理比对：从没达到分配档位的轮次按方案偏离计算，并写进报告的局限。报告为终稿时，把轮次从 `analysis` 推进到 `delivered`。 |
 
 **只能在自己任务的范围内操作。** `inspect_stage_data`、`freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要带上 `task_id`，而且这个编号必须就是调度器正在运行的任务（见下面的“绑定到正在运行的任务”），该任务必须归研究 Agent 所有。同一次调用里出现的阶段、轮次、快照编号，都必须属于这个任务所在的项目，否则在写入、挂载或读取任何东西之前，就以 `Denied("scope")` 拒绝。不存在的快照和别的项目的快照，得到的答复一模一样，所以从答复里探不出任何信息。含有留出批次结局的快照同样被拒绝。原因是：编号是模型随手写的，没有这道检查，一个项目里的任务就能读到另一个项目的数据，或者推进另一个项目的轮次。检查代码是 [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 的 `own_task`，以及 [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 的 `require_round` 和 `scoped_snapshot`。
 

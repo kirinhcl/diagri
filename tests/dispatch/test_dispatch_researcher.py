@@ -64,7 +64,7 @@ class FakeCompute:
 HOLE = (0, 1, 2, 3, 8, 9, 10)  # a 5 s silence: coverage 0.6 when the gap limit is 2 s
 
 
-def _samples(env, experiment_id: str, seconds=range(11)) -> None:
+def _samples(env, experiment_id: str, seconds=range(11), light: int | None = None) -> None:
     for second in seconds:
         env.archive.append_sample(
             SampleRecord(
@@ -75,7 +75,7 @@ def _samples(env, experiment_id: str, seconds=range(11)) -> None:
                 captured_at=START + second,
                 received_at=START + second,
                 clock_synced=True,
-                data={"temp": 21.0},
+                data={"temp": 21.0} if light is None else {"light": {"level": light, "on": 1}},
             )
         )
 
@@ -100,12 +100,19 @@ def _measurement(experiment_id: str, value: float, ident: str, batch="batch-1", 
 
 
 def _experiment(
-    env, number: int, value: float | None, batch="batch-1", holdout=None, seconds=range(11)
+    env,
+    number: int,
+    value: float | None,
+    batch="batch-1",
+    holdout=None,
+    seconds=range(11),
+    lights: dict[int, int] | None = None,
 ) -> str:
-    """Samples and one measurement for experiment e<number>, frozen; returns the snapshot id."""
+    """Samples and one measurement for experiment e<number>, frozen; returns the snapshot id.
+    ``lights`` gives the light level the device recorded in each round (default: none)."""
     name = f"e{number}"
     env.stage_for(name)  # a snapshot is only usable when its experiment has a stage of the project
-    _samples(env, name, seconds)
+    _samples(env, name, seconds, None if lights is None else lights[number])
     if value is not None:
         env.archive.add_measurement(_measurement(name, value, f"m{number}", batch))
     keep = None if holdout is None else holdout.development_filter(env.project_id)
@@ -483,6 +490,49 @@ async def test_confirmatory_report_with_open_questions_needs_review(env, tmp_pat
 
     body = _payload(outcome)
     assert body["label"] == "confirmatory" and body["needs_review"] is True
+
+
+ALLOCATED_LIGHT = {1: 70, 2: 40, 3: 40, 4: 70}  # make_protocol: high, control, control, high
+
+
+async def test_rounds_that_ran_their_treatment_stay_confirmatory(env, tmp_path):
+    task = env.task("researcher")
+    rounds = _rounds(env, lights=ALLOCATED_LIGHT)
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    body = _payload(await _publish(env, task.id, rounds, deps))
+
+    assert body["label"] == "confirmatory"
+    assert body["treatment_check"] == {"failed": [], "unverified": []}
+
+
+async def test_a_round_the_device_never_ran_at_its_level_is_a_deviation(env, tmp_path):
+    """qwen3.6's round: the light stayed at 20 % while the report called it the 70 % round."""
+    task = env.task("researcher")
+    rounds = _rounds(env, lights={**ALLOCATED_LIGHT, 1: 20})
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    outcome = await _publish(env, task.id, rounds, deps)
+
+    body = _payload(outcome)
+    assert body["label"] != "confirmatory"
+    (failed,) = body["treatment_check"]["failed"]
+    assert failed == {
+        "round": 1,
+        "treatment_id": "high",
+        "problems": ["light was never at 70 (recorded [20])"],
+    }
+    assert any("第 1 轮没有按分配的处理 high" in x for x in _report(env, outcome)["limitations"])
+
+
+async def test_rounds_without_recorded_levels_are_reported_as_unverified(env):
+    task = env.task("researcher")
+
+    outcome = await _publish(env, task.id, _rounds(env))
+
+    unverified = _payload(outcome)["treatment_check"]["unverified"]
+    assert [u["round"] for u in unverified] == [1, 2, 3, 4]
+    assert any("无法核对处理" in x for x in _report(env, outcome)["limitations"])
 
 
 async def test_the_report_carries_the_computed_conclusion(env):

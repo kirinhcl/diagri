@@ -16,7 +16,7 @@ the treatments, so the comparison has two independent replicates of each):
 import httpx
 import pytest
 import pytest_asyncio
-from e2e_support import World
+from e2e_support import ROUND_LIGHT, World, light_schedule
 
 from growbridge.agents.llm import ToolCall
 from growbridge.api import create_app
@@ -121,6 +121,7 @@ async def run_stage(world, runtime, client, project, protocol, round_id, number:
         experiment_id=experiment,
         protocol_id=protocol.id,
         protocol_version=protocol.version,
+        timed_actions=light_schedule(ROUND_LIGHT[number]),  # the round's allocated treatment
     )
     draft = {"round_id": round_id, "run_sheet": sheet.model_dump(mode="json")}
     await send(client, "POST", "/wb/drafts/run-sheet", draft)

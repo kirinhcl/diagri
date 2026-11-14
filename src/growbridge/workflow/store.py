@@ -194,6 +194,18 @@ class WorkflowStore:
             raise Denied("state", f"unknown round {round_id}")
         return RoundRow(**{key: row[key] for key in RoundRow.model_fields})
 
+    def round_number(self, round_id: str) -> int:
+        """The round's place among its project's rounds of the same protocol, from 1, in the
+        order they were created: the protocol's allocation round it runs. Aborted rounds keep
+        their number (a make-up round gets a new one)."""
+        row = self.round(round_id)
+        found = self.db.one(
+            "SELECT COUNT(*) AS n FROM wf_rounds WHERE project_id = ? AND protocol_id = ?"
+            " AND rowid <= (SELECT rowid FROM wf_rounds WHERE id = ?)",
+            (row.project_id, row.protocol_id, round_id),
+        )
+        return int(found["n"])
+
     def update_round(self, round_id: str, **changes: Any) -> RoundRow:
         sets, values = _assignments(changes, set(RoundRow.model_fields) - {"id"})
         self.db.execute(f"UPDATE wf_rounds SET {sets} WHERE id = ?", (*values, round_id))

@@ -133,8 +133,7 @@ async def designed(client) -> tuple[str, object, str]:
 
 
 def sheet_json(world, project: str, protocol, **fields) -> dict:
-    owner = {"protocol_id": protocol.id, "protocol_version": protocol.version}
-    return world.sheet(project, **owner, **fields).model_dump(mode="json")
+    return world.model_sheet(project, protocol, **fields).model_dump(mode="json")
 
 
 async def run_stage_to_its_end(world, runtime, client) -> dict:

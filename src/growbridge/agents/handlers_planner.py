@@ -18,6 +18,7 @@ from growbridge.agents.handlers_common import (
     findings_json,
     require_experiment_project,
     require_project,
+    require_round_project,
     resolve,
     submit_draft,
     unavailable,
@@ -67,6 +68,7 @@ class SampleSizeInput(ToolInput):
 
 class ValidateInput(ToolInput):
     run_sheet: RunSheet
+    round_id: str | None = None  # check the treatment of this round, as save_plan_draft will
 
 
 async def _search(deps: Deps, query: str, limit: int) -> dict:
@@ -120,7 +122,10 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
 
     def validate(data: ValidateInput) -> dict:
         cards = {card.id: card for card in deps.archive.evidence()}
-        findings = [*check_sheet(deps, data.run_sheet), *check_evidence(data.run_sheet, cards)]
+        if data.round_id is not None:
+            require_round_project(deps, data.round_id)
+        sheet = data.run_sheet
+        findings = [*check_sheet(deps, sheet, data.round_id), *check_evidence(sheet, cards)]
         return {"findings": findings_json(findings)}
 
     def save_draft(data: DraftInput) -> dict:
@@ -161,7 +166,12 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
             sample_size,
         ),
         Tool(
-            "validate_run_sheet", "Validate a run sheet without saving it.", ValidateInput, validate
+            "validate_run_sheet",
+            "Validate a run sheet without saving it. Pass round_id to also check that it applies "
+            "the round's allocated treatment (timed actions on a host-controlled channel), as "
+            "save_plan_draft does.",
+            ValidateInput,
+            validate,
         ),
         Tool(
             "save_plan_draft",

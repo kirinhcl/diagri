@@ -31,7 +31,6 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
             "get_run_status",
             "create_research_task",
             "delegate_task",
-            "submit_run_for_review",
             "get_task_status",
             "read_artifact",
         }

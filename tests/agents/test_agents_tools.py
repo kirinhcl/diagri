@@ -22,7 +22,7 @@ def test_no_role_can_ever_hold_a_control_tool():
 
 def test_role_sets_match_spec():
     assert "freeze_dataset" in ROLE_TOOLS["researcher"]
-    assert "submit_run_for_review" in ROLE_TOOLS["orchestrator"]
+    assert "submit_run_for_review" not in ROLE_TOOLS["orchestrator"]
     assert "validate_run_sheet" in ROLE_TOOLS["planner"]
 
 

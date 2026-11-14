@@ -3,7 +3,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from growbridge.archive.models import Channel, RuleAction, RunSheet, SamplingPlan
+from growbridge.archive.models import Channel, RuleAction, RunSheet, SamplingPlan, TimedAction
 from growbridge.ports import Actor
 from growbridge.runtime import Runtime, build_runtime
 from growbridge.sim.clock import FakeClock
@@ -12,6 +12,20 @@ from growbridge.sim.fixtures import TIMEZONE, make_protocol, make_run_sheet, mak
 
 DAY = "2027-01-15"
 STAGE = "stage-e2e"
+
+
+def light_schedule(level: int) -> tuple[TimedAction, ...]:
+    """Light at ``level`` from 06:00 to 22:00, exhaust 30 % all day."""
+    return (
+        TimedAction(id="light-on", channel=Channel.LIGHT, at="06:00", level=level),
+        TimedAction(id="light-off", channel=Channel.LIGHT, at="22:00", level=0),
+        TimedAction(id="exhaust-base", channel=Channel.EXHAUST, at="00:00", level=30),
+    )
+
+
+# make_protocol's rounds 1-4: high, control, control, high
+ROUND_LIGHT = {1: 70, 2: 40, 3: 40, 4: 70}
+HIGH_LIGHT = light_schedule(ROUND_LIGHT[1])
 STAGE_SECONDS = 600
 OPERATOR = "op-1"
 
@@ -80,6 +94,12 @@ class World:
             "end_actions": (RuleAction(channel=Channel.LIGHT, level=0),),
         }
         return make_run_sheet(**{**defaults, **fields})
+
+    def model_sheet(self, project_id: str, protocol, **fields) -> RunSheet:
+        """The sheet a model files for protocol round 1: it applies the round's treatment
+        ("high", light 70 %), which the agent checks require."""
+        owner = {"protocol_id": protocol.id, "protocol_version": protocol.version}
+        return self.sheet(project_id, **{"timed_actions": HIGH_LIGHT, **owner, **fields})
 
     def designed_stage(self, runtime: Runtime) -> tuple[str, str]:
         """Design the stage and leave it waiting for review; returns (project_id, round_id)."""

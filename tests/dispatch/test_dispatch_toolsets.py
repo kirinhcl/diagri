@@ -38,7 +38,6 @@ def test_write_and_web_flags_follow_the_rules(env):
         assert by_name[name].reads_web
     for name in (
         "save_plan_draft",
-        "submit_run_for_review",
         "create_research_task",
         "delegate_task",
         "freeze_dataset",

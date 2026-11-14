@@ -1,5 +1,6 @@
 """What a model role is told about its project when a task starts (architecture doc §5.2,
-"对话上下文"): the open rounds with their protocol and stages, and the controlled device.
+"对话上下文"): the open rounds with their protocol, allocated treatment and stages, and the
+controlled device.
 
 Run sheets must name the round's own project, protocol version and device; a model that is not
 told those ids invents them, and the draft is refused only at submission. A round that takes
@@ -12,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from growbridge.archive.models import ResearchTask
+from growbridge.planning.treatment import allocated
 from growbridge.workflow.listing import project_detail
 from growbridge.workflow.states import RoundState
 
@@ -39,11 +41,15 @@ def _new_stage(row: dict[str, Any], stages: Any, protocol: Any) -> dict[str, Any
 def _round(workflow: Any, row: dict[str, Any]) -> dict[str, Any]:
     stages = workflow.store.stages_of_round(row["round_id"])
     protocol = workflow.store.protocol(row["protocol_id"], row["protocol_version"])
+    number = workflow.store.round_number(row["round_id"])
+    treatment = None if protocol is None else allocated(protocol, number)
     out = {
         "round_id": row["round_id"],
         "state": row["state"],
         "protocol_id": row["protocol_id"],
         "protocol_version": row["protocol_version"],
+        "protocol_round": number,  # the protocol's allocation round this round runs
+        "treatment": None if treatment is None else treatment.model_dump(mode="json"),
         "awaiting_choice": row["awaiting_choice"],
         "stages": [
             {

@@ -17,6 +17,7 @@ from typing import Any, NoReturn
 from pydantic import BaseModel, ConfigDict
 
 from growbridge.archive.models import ResearchTask, RunSheet, Snapshot
+from growbridge.planning.treatment import check_treatment
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, Finding
 from growbridge.research.holdout import refuse_holdout_rows
@@ -79,15 +80,23 @@ def findings_json(findings: Iterable[Finding]) -> list[dict]:
     return out
 
 
-def check_sheet(deps: Deps, sheet: RunSheet) -> tuple[Finding, ...]:
-    return validate_run_sheet(sheet, deps.control.capabilities(), deps.control.safety())
+def check_sheet(deps: Deps, sheet: RunSheet, round_id: str | None = None) -> tuple[Finding, ...]:
+    """The program checks, and whether the sheet applies its round's treatment (a model's sheet
+    must; without ``round_id`` it must apply one of the protocol's treatments)."""
+    own = validate_run_sheet(sheet, deps.control.capabilities(), deps.control.safety())
+    store = deps.workflow.store
+    protocol = store.protocol(sheet.protocol_id, sheet.protocol_version)
+    if protocol is None:
+        return own  # the workflow refuses an unknown protocol on submission
+    number = None if round_id is None else store.round_number(round_id)
+    return (*own, *check_treatment(sheet, protocol, number))
 
 
 def submit_draft(deps: Deps, role: str, data: DraftInput) -> dict:
     """File a run-sheet draft for operator review; approval is never part of this."""
     require_round_project(deps, data.round_id)  # a draft goes only into the run's own project
     sheet = data.run_sheet
-    own = check_sheet(deps, sheet)
+    own = check_sheet(deps, sheet, data.round_id)
     if any(finding.blocking for finding in own):
         return {"saved": False, "stage_id": sheet.stage_id, "findings": findings_json(own)}
     returned = deps.workflow.submit_run_sheet(data.round_id, sheet, actor_for(role))

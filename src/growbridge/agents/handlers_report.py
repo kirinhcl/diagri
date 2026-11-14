@@ -9,6 +9,7 @@ change under the same snapshot id.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from pydantic import Field, model_validator
@@ -25,6 +26,7 @@ from growbridge.archive import snapshot as snapshots
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import ManualMeasurement, ResearchProtocol, ResearchTask, Snapshot
 from growbridge.planning.design import check_experimental_design
+from growbridge.planning.treatment import allocated, delivered, unread
 from growbridge.ports import Denied
 from growbridge.research.analysis import AnalysisDecision, AnalysisFacts, classify, conclusion
 from growbridge.research.report import publish_research_report
@@ -148,14 +150,67 @@ def _complete_blocks(table: UnitTable, control: str, treatment: str) -> int:
     return len({b for b in blocks if (b, treatment) in table.values})
 
 
-def _deviation(deps: Deps, frozen: Frozen) -> float:
+@dataclass(frozen=True)
+class TreatmentCheck:
+    """Rounds whose recorded device levels do not show their allocated treatment."""
+
+    failed: frozenset[str]  # experiment ids
+    details: tuple[dict, ...]
+    unverified: tuple[dict, ...] = ()  # rounds whose samples record no level to compare
+
+    def notes(self) -> list[str]:
+        failed = [
+            f"第 {d['round']} 轮没有按分配的处理 {d['treatment_id']} 运行："
+            + "; ".join(d["problems"])
+            for d in self.details
+        ]
+        unread = [
+            f"第 {d['round']} 轮的样本没有记录 {', '.join(d['channels'])} 的档位，"
+            f"无法核对处理 {d['treatment_id']} 是否执行"
+            for d in self.unverified
+        ]
+        return failed + unread
+
+
+def _samples(deps: Deps, snap: Snapshot) -> list[dict]:
+    path = deps.archive.root / "snapshots" / snap.id / "samples.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line).get("data", {}) for line in lines if line]
+
+
+def _treatment_check(deps: Deps, protocol: ResearchProtocol, frozen: Frozen) -> TreatmentCheck:
+    """Compare each snapshot's recorded levels with its round's allocated treatment; a round
+    that never ran its treatment counts as a protocol deviation, whatever the model says."""
+    failed, details, unverified = set(), [], []
+    for snap in frozen.snaps:
+        number = frozen.round_of[snap.experiment_id]
+        treatment = allocated(protocol, number)
+        if treatment is None:
+            continue
+        rows = _samples(deps, snap)
+        problems = delivered(rows, treatment)
+        if problems:
+            failed.add(snap.experiment_id)
+            details.append({"round": number, "treatment_id": treatment.id, "problems": problems})
+        channels = unread(rows, treatment)
+        if channels:
+            unverified.append({"round": number, "treatment_id": treatment.id, "channels": channels})
+    return TreatmentCheck(frozenset(failed), tuple(details), tuple(unverified))
+
+
+def _deviation(deps: Deps, frozen: Frozen, check: TreatmentCheck) -> float:
     experiments = set(frozen.round_of)
-    hit = sum(1 for e in experiments if deps.archive.interventions(e))
+    hit = sum(1 for e in experiments if deps.archive.interventions(e) or e in check.failed)
     return hit / len(experiments)
 
 
 def _facts(
-    deps: Deps, protocol: ResearchProtocol, data: PublishInput, frozen: Frozen, table: UnitTable
+    deps: Deps,
+    protocol: ResearchProtocol,
+    data: PublishInput,
+    frozen: Frozen,
+    table: UnitTable,
+    check: TreatmentCheck,
 ) -> AnalysisFacts:
     metric = protocol.analysis.primary_endpoint
     rounds = _data_rounds(frozen, metric)
@@ -171,7 +226,7 @@ def _facts(
         confounded_with_time=_confounded(protocol, rounds),
         missing_fraction=missing,
         changed_after_outcomes=flags.changed_after_outcomes,
-        deviation_fraction=max(_deviation(deps, frozen), flags.deviation_fraction),
+        deviation_fraction=max(_deviation(deps, frozen, check), flags.deviation_fraction),
         planned_sample_size=protocol.blocks,
         achieved_sample_size=_complete_blocks(table, control, data.treatment_id),
         early_terminated=flags.early_terminated,
@@ -275,13 +330,15 @@ def publish(deps: Deps, data: PublishInput) -> dict:
     protocol = _data_protocol(deps, task, data, frozen)
     _require_registered_runs(deps, protocol, frozen)
     table = _table(protocol, data, frozen)
-    facts = _facts(deps, protocol, data, frozen, table)
+    check = _treatment_check(deps, protocol, frozen)
+    facts = _facts(deps, protocol, data, frozen, table, check)
     decision = _decide(deps, protocol, frozen, facts)
     if data.holdout_id is not None and data.model_sha is not None:
         read = deps.holdout.evaluate(data.holdout_id, ROLE, data.model_sha)
         decision = decision if read == "confirmatory" else _capped(decision, HOLDOUT_NOTE)
     estimate = paired_block_estimate(table.values, protocol.control_treatment_id, data.treatment_id)
     notes = [f"{len(table.dropped)} 条测量没有对应的分配，未计入"] if table.dropped else []
+    notes += check.notes()
     weakest = min(frozen.snaps, key=lambda s: (s.complete, s.coverage))
     artifact, state = publish_research_report(
         deps.archive,
@@ -301,6 +358,7 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         "label": artifact.label,
         "needs_review": state is TaskState.NEEDS_REVIEW,
         "task_state": state.value,
+        "treatment_check": {"failed": list(check.details), "unverified": list(check.unverified)},
     }
     if data.round_id is not None:
         body["round_state"] = _deliver(deps, data.round_id, artifact.id, state)
