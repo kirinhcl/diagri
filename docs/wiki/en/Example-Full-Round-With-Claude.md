@@ -132,14 +132,16 @@ The round page shows the published report, read from its file after the file's d
 - **Honest limits.** Both the orchestrator and the researcher said that one round cannot answer the question, and named what they could not verify.
 - **A first attempt stopped correctly.** In an earlier attempt the simulator's readings never changed; the frozen-reading check paused the stage two simulated hours in, the driver asked for the analysis anyway, and the orchestrator refused: "the workflow's records show the vegetative stage hasn't ended". The simulator now varies its readings.
 
-## Open points this run found
+## Open points this run found, and how they were fixed
 
-| Point | What happens | Where |
+The run was recorded before these fixes; a run today would differ in these places.
+
+| Point | What happened | The fix |
 | --- | --- | --- |
-| Missing data counts rounds not run yet | The server's reason "缺失超过预定标准" (missing data over the limit) appears although no data is missing: rounds 2 to 4 of the protocol count as missing. | [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) `_missing_fraction` |
-| Manual tasks leave no record | Nothing records when the daily watering, photo and measurement were done, so the deviation fraction cannot cover them. Both model roles pointed this out. | run sheet `manual_tasks` |
-| No scheduled watering | The pump must be host-controlled, and no scheduled step may switch it on, so a run sheet cannot water automatically; watering becomes a manual task. | [`planning/validate.py`](../../../src/growbridge/planning/validate.py) |
-| Server notes only in Chinese | The reasons the server adds to a report are written in Chinese whatever the operator's language. | [`research/analysis.py`](../../../src/growbridge/research/analysis.py) |
+| Missing data counted rounds not run yet | The server's reason "缺失超过预定标准" (missing data over the limit) appeared although no data was missing: rounds 2 to 4 of the protocol counted as missing. | Only rounds that ran count: rounds the report cites and rounds with a started stage ([Research methodology](Research-Methodology.md#honest-downgrade)). |
+| Manual tasks left no record | Nothing recorded when the daily watering, photo and measurement were done, so the deviation fraction could not cover them. Both model roles pointed this out. | The stage page lists each occurrence and records it as done or skipped; the snapshot freezes the records, and a round with more than 10 % of its tasks not done in time counts as deviated ([Run a research round](Run-a-Research-Round.md#manual-tasks)). |
+| No scheduled watering | The pump must be host-controlled, and no scheduled step may switch it on, so the planner had to turn watering into a manual task that only a takeover could carry out, and a takeover is an intervention. | An irrigation task with `seconds` is a planned pump run: someone on site starts it from the stage page while the stage keeps running, with all the irrigation checks ([The pump](Control-and-Safety-Model.md#the-pump)). Still no automatic path starts the pump. |
+| Server notes only in Chinese | The reasons the server added to a report were written in Chinese whatever the operator's language. | Every server note has a code and an English and a Chinese text; the round page shows the console's language ([Research methodology](Research-Methodology.md#honest-downgrade)). |
 
 ## See also
 
