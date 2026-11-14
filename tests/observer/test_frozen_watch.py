@@ -188,6 +188,7 @@ async def test_pauses_once_when_a_feedback_rule_uses_the_sensor(rig):
     assert event.event_id == f"frozen_pause:{period.period_id}:st1"
     assert event.detail["rule"] == "frozen:temp"
     assert event.detail["alert"] == rig.alerts()[0].event_id
+    assert [a.severity for a in rig.alerts()] == ["warning"]
     await rig.check()
     assert len(rig.stages.events) == 1
 
@@ -276,3 +277,31 @@ async def test_raw_samples_are_unchanged(rig):
     kept = {r["id"]: r["body"] for r in after}
     assert all(kept[r["id"]] == r["body"] for r in before)
     assert len(after) == len(before) + 2
+
+
+async def test_critical_when_a_vpd_protection_rule_depends_on_the_frozen_temp(rig):
+    base = make_safety()
+    rule = base.rules[0].model_copy(update={"sensor": "vpd"})
+    rig.config = base.model_copy(update={"rules": (rule,)})
+    await frozen_running(rig)
+    assert [a.severity for a in rig.alerts()] == ["critical"]
+
+
+async def test_an_earlier_different_value_does_not_close_the_period(rig):
+    rig.feed(30, temp=moving)
+    rig.feed(121, temp=24.0)
+    await rig.check()
+    (period,) = rig.open_for("temp")
+    rig.feed(1, temp=24.0)
+    await rig.check()
+    assert [p.period_id for p in rig.open_for("temp")] == [period.period_id]
+    assert [a.count for a in rig.alerts()] == [1]
+
+
+async def test_a_window_without_new_samples_keeps_the_period_open(rig):
+    await frozen_running(rig)
+    (period,) = rig.open_for("temp")
+    rig.clock.wall += 6 * 3600  # past the scan window, with no new samples
+    await rig.check()
+    assert [p.period_id for p in rig.open_for("temp")] == [period.period_id]
+    assert [a.count for a in rig.alerts()] == [1]

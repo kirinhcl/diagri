@@ -198,14 +198,18 @@ async def test_alert_raised_without_its_notification_is_queued_once_on_the_next_
 
 
 class FakeFrozen:
-    def __init__(self, fail=False):
+    """Each tick takes the next outcome: True or False is returned, an exception is raised."""
+
+    def __init__(self, *outcomes):
         self.calls = 0
-        self.fail = fail
+        self.outcomes = list(outcomes) or [True]
 
     async def tick(self):
         self.calls += 1
-        if self.fail:
-            raise RuntimeError("boom")
+        outcome = self.outcomes.pop(0) if len(self.outcomes) > 1 else self.outcomes[0]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
 
 
 async def test_observer_tick_runs_the_frozen_watch(rig):
@@ -217,7 +221,7 @@ async def test_observer_tick_runs_the_frozen_watch(rig):
 
 
 async def test_a_failing_frozen_watch_does_not_stop_the_tick(rig, clock):
-    rig.observer.frozen = FakeFrozen(fail=True)
+    rig.observer.frozen = FakeFrozen(RuntimeError("boom"))
     rig.hot()
     await rig.observer.tick()
     clock.advance(60)
@@ -232,3 +236,13 @@ async def test_a_failing_frozen_watch_does_not_stop_the_tick(rig, clock):
     assert ("threshold", "too_hot") in open_alerts
     assert rig.outbox.status(watch.event_id, "telegram") == "pending"
     assert len(rig.stages.events) == 1
+
+
+async def test_the_frozen_check_alert_resolves_only_after_a_completed_check(rig):
+    rig.observer.frozen = FakeFrozen(RuntimeError("boom"), False, True)
+    await rig.observer.tick()
+    assert ("frozen_watch", "check") in {(a.kind, a.key) for a in rig.book.open()}
+    await rig.observer.tick()  # gated: no check ran, so the alert stays
+    assert ("frozen_watch", "check") in {(a.kind, a.key) for a in rig.book.open()}
+    await rig.observer.tick()  # a check completed
+    assert ("frozen_watch", "check") not in {(a.kind, a.key) for a in rig.book.open()}

@@ -56,16 +56,18 @@ class FrozenWatch:
         self._checked_at: float | None = None
         self._reported: set[str] = set()
 
-    async def tick(self) -> None:
+    async def tick(self) -> bool:
+        """True when a check ran to completion; False when skipped because one ran recently."""
         mono = self.clock.monotonic()
         if self._checked_at is not None and mono - self._checked_at < CHECK_SECONDS:
-            return
+            return False
         self._checked_at = mono
         config = self.safety()
         settings = config.frozen if config is not None else FrozenCheck()
         protection = frozenset(rule.sensor for rule in config.rules) if config else frozenset()
         self._update_periods(settings, protection)
         await self._pause_stage(protection)
+        return True
 
     def _update_periods(self, settings: FrozenCheck, protection: frozenset[str]) -> None:
         periods = self.archive.open_frozen_periods()

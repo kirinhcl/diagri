@@ -97,9 +97,12 @@ class Observer:
         if self.frozen is None:
             return
         try:
-            await self.frozen.tick()
+            checked = await self.frozen.tick()
         except Exception:
             log.exception("frozen-reading check failed")
             self.book.raise_alert(
                 "frozen_watch", "check", "critical", "The frozen-reading check is failing"
             )
+        else:
+            if checked:  # only a completed check shows the failure is over
+                self.book.resolve("frozen_watch", "check")
