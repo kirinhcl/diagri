@@ -77,6 +77,21 @@ def test_device_owned_channel_without_actions_is_fine():
     assert "device_owned_write" not in codes(validate_run_sheet(sheet, CAPS))
 
 
+def test_pump_owned_by_device_blocks():
+    sheet = sheet_with_plan(Channel.PUMP, ownership=Ownership.DEVICE)
+    assert "pump_device_owned" in codes(validate_run_sheet(sheet, CAPS), blocking=True)
+
+
+def test_other_device_owned_channels_do_not_trip_the_pump_check():
+    sheet = sheet_with_plan(Channel.FAN, ownership=Ownership.DEVICE)
+    assert "pump_device_owned" not in codes(validate_run_sheet(sheet, CAPS))
+
+
+def test_host_owned_pump_does_not_trip_the_pump_check():
+    sheet = sheet_with_plan(Channel.PUMP, ownership=Ownership.HOST)
+    assert "pump_device_owned" not in codes(validate_run_sheet(sheet, CAPS))
+
+
 def test_feedback_action_on_device_channel_blocks():
     sheet = sheet_with_plan(Channel.EXHAUST, ownership=Ownership.DEVICE).model_copy(
         update={"feedback_rules": (humidity_rule(),)}

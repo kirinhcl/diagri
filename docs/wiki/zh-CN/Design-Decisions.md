@@ -86,7 +86,7 @@
 ## 12. 水泵只能由操作员在局域网入口启动
 
 - **背景。** 水泵运行时 BLE 连接如果断开，程序没有把握把它关上。
-- **决定。** 运行单校验会拦下任何将要启动水泵的动作（`pump_action`）。`submit` 从不开泵（`pump_on_forbidden`）。唯一能开泵的路径是 `irrigate`：需要人工写入权，时长不超过 `max_pump_seconds`，并遵守冷却时间 `pump_cooldown_seconds`。工作台只对局域网入口上的操作员开放这个功能。关泵另有专用路径；关泵没有得到确认期间，关泵联锁会阻止普通写入。
+- **决定。** 运行单校验会拦下任何将要启动水泵的动作（`pump_action`）。运行单若把水泵交给 AC5 自带的定时器（归属 `device`），同样会被拦下（`pump_device_owned`）：水泵永远不交给设备定时器，因为 DiAGRI 从不让水泵自行启动，而水泵看门狗会关掉任何在 DiAGRI 未灌溉时仍开着的水泵。`submit` 从不开泵（`pump_on_forbidden`）。唯一能开泵的路径是 `irrigate`：需要人工写入权，时长不超过 `max_pump_seconds`，并遵守冷却时间 `pump_cooldown_seconds`。工作台只对局域网入口上的操作员开放这个功能。关泵另有专用路径；关泵没有得到确认期间，关泵联锁会阻止普通写入。
 - **后果。** 这一版没有自动灌溉。浇水要么由人在现场触发，要么作为人工作业手工完成。
 - **落实在。** [`planning/validate.py`](../../../src/growbridge/planning/validate.py)、[`control/rights.py`](../../../src/growbridge/control/rights.py)、[`control/service.py`](../../../src/growbridge/control/service.py)、[`workbench/api.py`](../../../src/growbridge/workbench/api.py)。架构文档 4.5、7.6、7.8 节。操作步骤见[人工接管、灌溉与交还](Manual-Takeover-and-Irrigation.md)。
 
