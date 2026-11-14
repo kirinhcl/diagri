@@ -291,6 +291,58 @@ code {
 .inline-control .input { flex: 1 1 160px; min-width: 0; }
 .safety-current { display: grid; gap: 14px; }
 
+/* --- the project conversation ----------------------------------------------------------------- */
+.chat { display: grid; gap: 12px; }
+.chat-log {
+  display: grid;
+  gap: 10px;
+  max-height: 560px;
+  margin: 0;
+  padding: 4px 2px;
+  overflow-y: auto;
+  list-style: none;
+}
+.chat-log:empty { display: none; }
+.chat-entry { display: grid; gap: 4px; min-width: 0; }
+.chat-meta { margin: 0; font-size: 12px; color: var(--muted-strong); }
+.chat-bubble {
+  max-width: min(760px, 92%);
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-bubble-aside { background: var(--bg); color: var(--muted-strong); font-size: 13px; }
+.chat-user { justify-items: end; }
+.chat-user .chat-bubble { background: var(--pale); border-color: color-mix(in srgb, var(--green) 25%, var(--line)); }
+.chat-role { font-weight: 650; color: var(--green-dark); }
+.chat-role-planner { color: var(--amber); }
+.chat-role-researcher { color: var(--ink); }
+.chat-tool details { font-size: 13px; }
+.chat-tool summary { cursor: pointer; color: var(--muted-strong); }
+.chat-tool summary code { font-size: 12px; }
+.chat-tool-failed { color: var(--red); }
+.chat-tool-part { margin-top: 6px; }
+.chat-tool-label { margin: 0 0 2px; font-size: 12px; color: var(--muted-strong); }
+.chat-tool .code-block { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-status p {
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--muted-soft);
+  font-size: 12px;
+  color: var(--muted-strong);
+  overflow-wrap: anywhere;
+}
+.chat-status-warn p { background: var(--amber-soft); color: var(--amber); }
+.chat-form { display: grid; gap: 8px; max-width: 760px; }
+.chat-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.chat-round { flex: 1 1 220px; min-width: 0; max-width: 420px; }
+
 @media (max-width: 600px) {
   .block { padding: 16px; }
   .data-table th,

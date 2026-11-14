@@ -1,4 +1,4 @@
-// One project: its rounds, protocols, call budget, goals, tasks and holdouts.
+// One project: its conversation, rounds, protocols, call budget, goals, tasks and holdouts.
 import { ApiError } from "../api.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
@@ -6,9 +6,11 @@ import { errorLines } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
+import { conversationSection } from "./conversation.js";
 import { budgetForm, goalEditor, holdoutEditor, protocolEditor, startRoundForm } from "./project-forms.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
+const POLL_SECONDS = 4;
 
 function roundsTable(ctx, project) {
   const rounds = array(project.rounds);
@@ -96,15 +98,18 @@ export async function render(ctx, params) {
   ]);
   ctx.setBreadcrumbs([{ label: ctx.t("nav.projects"), href: hrefFor("projects") }, { label: project.name }]);
   const lead = ctx.t("project.lead", { id: project.project_id, time: timeText(ctx, project.created_at) });
+  const chat = conversationSection(ctx, project);
+  await chat.refresh();
   const element = h(
     "div",
     { class: "page project" },
     pageHead(project.name, lead),
+    section(ctx.t("chat.title"), chat.element),
     section(ctx.t("project.rounds.title"), roundsTable(ctx, project), startRoundForm(ctx, project)),
     section(ctx.t("project.protocols.title"), protocolsTable(ctx, project), protocolEditor(ctx, project)),
     section(ctx.t("project.budget.title"), budgetView(ctx, project), budgetForm(ctx, project)),
     section(ctx.t("project.goals.title"), tasksTable(ctx, project), goalEditor(ctx, project)),
     holdoutsBlock(ctx, project, read),
   );
-  return { element };
+  return { element, refresh: chat.refresh, pollSeconds: POLL_SECONDS };
 }
