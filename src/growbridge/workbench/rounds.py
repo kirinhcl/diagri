@@ -7,6 +7,7 @@ stopped stage; and aborts a round. Every route here needs an operator session: a
 refused with ``model_role``, reads included.
 """
 
+import json
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Protocol
 
@@ -14,7 +15,7 @@ from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
 
 from growbridge.agents.conversation import ConversationLog
-from growbridge.archive.ids import new_id
+from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
 from growbridge.archive.store import Archive
 from growbridge.planning.validate import check_evidence
@@ -97,6 +98,31 @@ def round_json(workflow: WorkflowService, round_id: str) -> dict:
         **rnd.model_dump(mode="json", exclude={"id"}),
         "stage_total": store.stage_total(rnd),
         "stages": [{"stage_id": row.stage_id, "state": row.state.value} for row in stages],
+    }
+
+
+MAX_REPORT_BYTES = 1_000_000
+
+
+def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> dict:
+    """The round's published report, read from its file once the file matches the digest the
+    archive recorded for it; a round without a report is refused with ``state``."""
+    rnd = workflow.store.round(round_id)
+    artifact = None if rnd.report_artifact_id is None else archive.artifact(rnd.report_artifact_id)
+    if artifact is None or artifact.kind != "research_report":
+        raise Denied("state", f"round {round_id} has no published report")
+    path = archive.root.joinpath(artifact.path).resolve()
+    data_dir = archive.root.resolve().parent
+    if not path.is_relative_to(data_dir) or not path.is_file():
+        raise Denied("state", f"the report file of round {round_id} is missing")
+    if path.stat().st_size > MAX_REPORT_BYTES or file_digest(path) != artifact.sha256:
+        raise Denied("state", f"the report of round {round_id} no longer matches its digest")
+    return {
+        "round_id": round_id,
+        "artifact_id": artifact.id,
+        "label": artifact.label,
+        "sha256": artifact.sha256,
+        "report": json.loads(path.read_text(encoding="utf-8")),
     }
 
 
@@ -199,6 +225,12 @@ def _steering_routes(
     @router.get("/rounds/{round_id}")
     async def read_round(round_id: PathId, actor: Operator):
         return round_json(workflow, round_id)
+
+    @router.get("/rounds/{round_id}/report")
+    async def read_report(round_id: PathId, actor: Operator):
+        if archive is None:
+            raise Denied("state", "no archive is mounted: reports cannot be read")
+        return report_json(workflow, archive, round_id)
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):

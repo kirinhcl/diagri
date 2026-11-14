@@ -96,6 +96,7 @@
 | `POST` | `/wb/protocols` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/rounds/{round_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/rounds/{round_id}/report` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds/{round_id}/choice` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
@@ -154,6 +155,7 @@
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |
 | `POST` | `/wb/rounds` | `project_id`、`protocol_id`（各 1 到 100） | `round_id`、`state` |
 | `GET` | `/wb/rounds/{round_id}` | 无 | `round_id`、`project_id`、`protocol_id`、`protocol_version`、`state`、`stages_done`、`stage_total`、`awaiting_choice`、`snapshot_id`、`report_artifact_id`，以及 `stages`（由 `stage_id`、`state` 组成的列表） |
+| `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。 |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`：`redo`、`next`、`verify` 或 `abort` | `round_id`、`state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 无 | `round_id`、`state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`message`、`blocking` 组成的列表：先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking` |

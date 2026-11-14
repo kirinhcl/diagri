@@ -135,7 +135,7 @@ The label of a report is computed by the server from the protocol and the frozen
 | Treatment cannot be told from time | `confounded_with_time` | descriptive | The design check, applied to the rounds that have data |
 | Too much is missing | Above `max_missing_fraction` in the protocol, 0.2 by default | exploratory | The larger of two numbers: the share of planned units with no measurement of the primary endpoint, and 1 minus the lowest snapshot coverage |
 | The plan changed after outcomes were seen | The flag `changed_after_outcomes` | exploratory | Declared by the researcher; the server cannot see it |
-| The treatment deviated from the approved plan | Above `max_deviation_fraction`, 0.1 by default | exploratory | The larger of two numbers: the share of experiments with a recorded intervention, and the fraction the researcher declares |
+| The treatment deviated from the approved plan | Above `max_deviation_fraction`, 0.1 by default | exploratory | The larger of two numbers: the share of experiments with a recorded intervention or whose recorded device levels never show the round's allocated treatment, and the fraction the researcher declares |
 
 Descriptive outranks exploratory, and every reason is written into the report. Three more caps lower a confirmatory label to exploratory on the way out ([`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py), [`research/report.py`](../../../src/growbridge/research/report.py)): no successful confirmatory run for every snapshot, an incomplete snapshot, and a holdout that was already read once.
 

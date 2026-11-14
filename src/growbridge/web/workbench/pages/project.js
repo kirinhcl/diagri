@@ -48,11 +48,25 @@ function budgetView(ctx, project) {
   ]);
 }
 
+const QUESTION_CHARS = 240; // a follow-up task carries the whole summary of the task before it
+
+// A long question shows its start; the rest opens on request.
+export function questionCell(ctx, question) {
+  const text = String(question || "");
+  if (text.length <= QUESTION_CHARS) return text;
+  return h(
+    "details",
+    { class: "task-question" },
+    h("summary", { text: `${text.slice(0, QUESTION_CHARS).trimEnd()}… ${ctx.t("project.tasks.more")}` }),
+    h("p", { class: "task-question-full", text }),
+  );
+}
+
 function tasksTable(ctx, project) {
   const tasks = array(project.tasks);
   if (!tasks.length) return note(ctx.t("project.tasks.empty"));
   const columns = [
-    { label: ctx.t("project.tasks.question"), cell: (row) => row.question },
+    { label: ctx.t("project.tasks.question"), cell: (row) => questionCell(ctx, row.question) },
     { label: ctx.t("project.tasks.owner"), cell: (row) => row.owner_role },
     { label: ctx.t("col.state"), cell: (row) => statePill(ctx.t, row.state) },
   ];

@@ -96,6 +96,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/protocols` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/rounds` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/rounds/{round_id}` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/rounds/{round_id}/report` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/rounds/{round_id}/choice` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | operator | LAN, overlay | no | `state` |
@@ -154,6 +155,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/protocols` | `protocol` (a `ResearchProtocol`; `id` and `project_id` 1 to 100, `version` 1 to 1000000, no NaN or infinity) | `protocol_id`, `version`, `digest` |
 | `POST` | `/wb/rounds` | `project_id`, `protocol_id` (1 to 100 each) | `round_id`, `state` |
 | `GET` | `/wb/rounds/{round_id}` | none | `round_id`, `project_id`, `protocol_id`, `protocol_version`, `state`, `stages_done`, `stage_total`, `awaiting_choice`, `snapshot_id`, `report_artifact_id`, and `stages` (a list of `stage_id`, `state`) |
+| `GET` | `/wb/rounds/{round_id}/report` | none | The round's published report: `round_id`, `artifact_id`, `label`, `sha256`, and `report` (the report file: `label`, `reasons`, `conclusion`, `estimate`, `limitations`, `unresolved`, `next_round`, `evidence_chain`, `snapshot_id`). The file is read only when it matches the digest the archive recorded; otherwise, or when the round has no report, the answer is `state`. |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`: `redo`, `next`, `verify` or `abort` | `round_id`, `state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | none | `round_id`, `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | none | `stage_id`, `state`, `run_sheet_version`, `run_sheet_digest`, `run_sheet` (the `RunSheet`), `findings` (a list of `code`, `message`, `blocking`: the validator's findings, then the evidence hints `no_evidence`, `unverified_source` and `uncalibrated` for every set point, which never block), `blocking` |

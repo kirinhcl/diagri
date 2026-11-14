@@ -4,6 +4,7 @@
 import { newRequestId } from "../receipts.js";
 import { clear, h } from "../ui/dom.js";
 import { errorLines } from "../ui/forms.js";
+import { richText } from "../ui/rich-text.js";
 import { timeText } from "../ui/section.js";
 
 const ROLES = new Set(["user", "orchestrator", "planner", "researcher"]);
@@ -27,7 +28,7 @@ function messageView(ctx, entry) {
 function replyView(ctx, entry) {
   const head = h("p", { class: "chat-meta" }, h("span", { class: `chat-role chat-role-${entry.role}`, text: roleLabel(ctx, entry.role) }), ` · ${timeText(ctx, entry.at)}`);
   const kind = entry.detail.final ? "chat-bubble" : "chat-bubble chat-bubble-aside";
-  return h("li", { class: "chat-entry chat-agent" }, head, h("div", { class: kind, text: entry.text }));
+  return h("li", { class: "chat-entry chat-agent" }, head, richText(entry.text, `${kind} rich-text`));
 }
 
 function toolView(ctx, entry) {
@@ -97,17 +98,26 @@ export function conversationSection(ctx, project) {
     problem.hidden = false;
   };
 
+  // The newest entry is shown on opening and after sending; a reader who scrolled up to read is
+  // left where they are when new entries arrive. The first batch comes before the page is on
+  // screen, where scrolling does nothing, so it is repeated once the log is laid out.
+  let shown = false;
+  const scrollToEnd = () => {
+    log.scrollTop = log.scrollHeight;
+    if (!log.isConnected) requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
+  };
   const refresh = async () => {
     const data = await ctx.api.get(`/projects/${encodeURIComponent(project.project_id)}/conversation?after=${last}`);
     const entries = Array.isArray(data && data.entries) ? data.entries : [];
     if (!entries.length) return;
-    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < NEAR_BOTTOM_PX;
+    const follow = !shown || log.scrollHeight - log.scrollTop - log.clientHeight < NEAR_BOTTOM_PX;
     for (const entry of entries) {
       log.append(entryView(ctx, entry));
       last = Math.max(last, entry.seq);
     }
     empty.hidden = true;
-    if (atBottom || last === entries[entries.length - 1].seq) log.scrollTop = log.scrollHeight;
+    shown = true;
+    if (follow) scrollToEnd();
   };
 
   form.addEventListener("submit", async (event) => {
@@ -122,6 +132,7 @@ export function conversationSection(ctx, project) {
       await ctx.api.post("/goals", body, { action: ctx.t("chat.send") });
       input.value = "";
       await refresh();
+      scrollToEnd();
     } catch (error) {
       showProblem(error);
     } finally {

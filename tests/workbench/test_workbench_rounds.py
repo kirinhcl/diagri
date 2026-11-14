@@ -743,3 +743,54 @@ def test_goal_and_budget_routes_are_absent_without_a_task_board_and_a_budget(ben
         bench.post(bare, "/wb/goals", {"project_id": project_id, "goal": GOAL}).status_code == 404
     )
     assert set_budget(bench, bare, project_id).status_code == 404
+
+
+# --- the round's report --------------------------------------------------------------------------
+
+
+def _published(bench, body: dict, kind: str = "research_report"):
+    from growbridge.archive.ids import file_digest
+    from growbridge.archive.models import Artifact
+
+    round_id = bench.seed_round()
+    path = bench.archive.root.parent / "agent_work" / "reports" / "report.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(body), encoding="utf-8")
+    artifact = Artifact(
+        id="artifact-1",
+        task_id="task-1",
+        kind=kind,
+        path=str(path),
+        sha256=file_digest(path),
+        label="descriptive",
+    )
+    bench.archive.add_artifact(artifact)
+    bench.workflow.store.update_round(round_id, report_artifact_id=artifact.id)
+    return round_id, path
+
+
+def test_the_report_of_a_round_is_read_from_its_verified_file(bench, operator):
+    report = {"label": "descriptive", "conclusion": "uncertain", "limitations": ["one round"]}
+    round_id, _ = _published(bench, report)
+
+    body = operator.get(f"/wb/rounds/{round_id}/report").json()
+
+    assert body["artifact_id"] == "artifact-1" and body["label"] == "descriptive"
+    assert body["report"] == report
+
+
+def test_a_report_file_changed_after_publishing_is_refused(bench, operator):
+    round_id, path = _published(bench, {"conclusion": "uncertain"})
+    path.write_text(json.dumps({"conclusion": "supported"}), encoding="utf-8")
+
+    response = operator.get(f"/wb/rounds/{round_id}/report")
+
+    assert response.status_code == 409 and "digest" in response.text
+
+
+def test_a_round_without_a_report_has_none_to_read(bench, operator):
+    round_id = bench.seed_round()
+
+    response = operator.get(f"/wb/rounds/{round_id}/report")
+
+    assert response.status_code == 409 and "no published report" in response.text
