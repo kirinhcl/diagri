@@ -5,6 +5,7 @@
 - [项目概览](Overview.md)
 - [安装与快速开始](Installation-and-Quick-Start.md)
 - [教程：模拟器上跑一轮](Tutorial-Simulated-Round.md)
+- [示例：模型角色跑完整一轮](Example-Full-Round-With-Claude.md)
 
 **操作指南**
 

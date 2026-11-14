@@ -128,6 +128,8 @@ The data lives in a fresh temporary directory unless you pass `--data-dir`. Stop
 
 `--fast-forward` skips through a running stage: each step moves the clock on by one sampling interval of the run sheet, reads the simulated device and ticks, so a week-long stage ends in a minute or two with complete data. Outside a running stage time is real. The skipped time is kept in `dev_clock_offset` in the data directory, so a restart never sends the clock back. Sessions age with that clock: sign in again after a stage.
 
+The dev workbench moves the simulated readings like a small tent: temperature and humidity follow day and night, the light warms the air, the exhaust cools and dries it, the canopy draws CO2 down under the light, with a little noise. Constant readings would trip the frozen-reading check and pause a long stage. [Example: a complete round](Example-Full-Round-With-Claude.md) is one recorded run with all of this.
+
 ```sh
 GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.py --claude-code
 ```

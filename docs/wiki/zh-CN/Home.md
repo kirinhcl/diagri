@@ -30,6 +30,7 @@ GrowBridge 是 DiAGRI 的设备桥接部分：通过蓝牙读取并控制 Spider
 - [项目概览](Overview.md)：DiAGRI 是什么，GrowBridge 在其中的位置，两种模式，以及系统绝不会做的事。
 - [安装与快速开始](Installation-and-Quick-Start.md)：安装并读到帐篷的数据。
 - [教程：在模拟器上跑通一轮研究](Tutorial-Simulated-Round.md)：不接硬件跑一轮。
+- [示例：模型角色跑完整一轮](Example-Full-Round-With-Claude.md)：一轮真实记录，从提问到报告，附截图。
 
 **操作指南**
 

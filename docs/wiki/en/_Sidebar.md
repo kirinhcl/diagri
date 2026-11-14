@@ -5,6 +5,7 @@
 - [Overview](Overview.md)
 - [Installation and quick start](Installation-and-Quick-Start.md)
 - [Tutorial: a simulated round](Tutorial-Simulated-Round.md)
+- [Example: a complete round with the model roles](Example-Full-Round-With-Claude.md)
 
 **How-to guides**
 

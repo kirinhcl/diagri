@@ -128,6 +128,8 @@ GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.p
 
 `--fast-forward` 让运行中的阶段快进：每一步把时钟拨快运行单的一个采样间隔，读一次模拟设备再执行一次 tick，所以一周长的阶段一两分钟就跑完，数据也是完整的。阶段不在运行时按真实时间走。拨快的时间记在数据目录的 `dev_clock_offset` 里，重启后时钟不会倒退。登录会话也按这个时钟计时，阶段跑完后要重新登录。
 
+开发工作台会像一个小帐篷那样改变模拟读数：温度和湿度随昼夜变化，灯光让空气升温，排风让空气降温变干，开灯时冠层会消耗 CO₂，另外加一点噪声。读数如果一直不变，会触发冻结读数检查，长阶段会被暂停。[示例：模型角色跑完整一轮](Example-Full-Round-With-Claude.md)记录了这样完整跑一轮的过程。
+
 ```sh
 GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.py --claude-code
 ```
