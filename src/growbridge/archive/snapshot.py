@@ -59,16 +59,19 @@ def _collect(
     end: float,
     measurement_filter: Callable[[ManualMeasurement], bool] | None,
     schedule: Sequence[Model] | None = None,
+    measurement_grace: float = 0.0,
 ) -> tuple[dict[str, list], int]:
     """The rows of each file, and how many measurements the filter left out.
 
-    With a ``schedule`` (the manual task occurrences the run sheet plans in the window) the
-    snapshot also holds it and the task records of those occurrences."""
+    Manual measurements count up to ``measurement_grace`` seconds after ``end`` (one taken when
+    the stage ends, a harvest weight say, is recorded a little later). With a ``schedule`` (the
+    manual task occurrences the run sheet plans in the window) the snapshot also holds it and
+    the task records of those occurrences."""
     samples = archive.samples(experiment_id, start, end)
     measured = [
         m
         for m in archive.measurements(experiment_id, include_corrected=True)
-        if start <= m.measured_at <= end
+        if start <= m.measured_at <= end + measurement_grace
     ]
     kept = [m for m in measured if measurement_filter is None or measurement_filter(m)]
     data = {
@@ -109,6 +112,7 @@ def freeze(
     min_coverage: float = 0.9,
     measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
     schedule: Sequence[Model] | None = None,
+    measurement_grace: float = 0.0,
 ) -> Snapshot:
     """Freeze the window. Trusted samples (synced, ok, planned) go to ``samples.jsonl``, the
     rest to ``samples_untrusted.jsonl``; ``measurement_filter`` returning False leaves a
@@ -118,7 +122,9 @@ def freeze(
     if end <= start:
         raise ValueError("snapshot window must have end > start")
     with archive.db.transaction():
-        data, excluded = _collect(archive, experiment_id, start, end, measurement_filter, schedule)
+        data, excluded = _collect(
+            archive, experiment_id, start, end, measurement_filter, schedule, measurement_grace
+        )
         times = [_sample_time(s) for s in data["samples"]]
         coverage, gaps = coverage_of(times, start, end, expected_interval, max_gap)
         snapshot_id = new_id("snap")
@@ -136,6 +142,7 @@ def freeze(
         manifest = directory / MANIFEST
         extra = {
             "window": [start, end],
+            "measurement_grace_seconds": measurement_grace,
             "min_coverage": min_coverage,
             "measurements_excluded": excluded,
         }
@@ -147,6 +154,28 @@ def freeze(
         record_ids = [r.id for name in kept for r in data[name]]
         archive.save_snapshot(snapshot, record_ids)
     return snapshot
+
+
+def outside_window(
+    archive: Archive,
+    experiment_id: str,
+    start: float,
+    end: float,
+    measurement_grace: float = 0.0,
+    measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
+) -> list[dict[str, Any]]:
+    """The experiment's measurements a freeze of this window leaves out by their time, oldest
+    first. Ones the filter leaves out (held-out outcomes) are not described at all."""
+    last = end + measurement_grace
+    return [
+        {"id": m.id, "metric": m.metric, "measured_at": m.measured_at}
+        for m in sorted(
+            archive.measurements(experiment_id, include_corrected=True),
+            key=lambda m: m.measured_at,
+        )
+        if not start <= m.measured_at <= last
+        and (measurement_filter is None or measurement_filter(m))
+    ]
 
 
 MAX_CHANNELS = 30
@@ -199,6 +228,7 @@ def preview(
     max_gap: float,
     min_coverage: float = 0.9,
     measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
+    measurement_grace: float = 0.0,
 ) -> dict[str, Any]:
     """What ``freeze`` would see in the window, summarised; writes nothing.
 
@@ -206,7 +236,9 @@ def preview(
     """
     if end <= start:
         raise ValueError("snapshot window must have end > start")
-    data, excluded = _collect(archive, experiment_id, start, end, measurement_filter)
+    data, excluded = _collect(
+        archive, experiment_id, start, end, measurement_filter, None, measurement_grace
+    )
     trusted, untrusted = data["samples"], data["samples_untrusted"]
     coverage, gaps = coverage_of(
         [_sample_time(s) for s in trusted], start, end, expected_interval, max_gap

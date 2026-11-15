@@ -32,6 +32,10 @@ from growbridge.workflow.states import RoundState
 
 ROLE = "researcher"
 DEFAULT_MIN_COVERAGE = 0.9  # the server's threshold for a complete snapshot
+# a manual measurement taken up to two hours after the stage ended (a harvest weight) belongs
+# to it, as a manual task done up to two hours late does
+MEASUREMENT_GRACE_SECONDS = manual_tasks.ON_TIME_SECONDS
+MAX_LISTED_OUTSIDE = 20  # measurements left outside the window that inspect_stage_data names
 MAX_SCRIPT_CHARS = 20_000
 MAX_TIMEOUT_SECONDS = 600.0
 MAX_OUTPUT = 2000
@@ -127,15 +131,23 @@ def _started_stage(deps: Deps, task_id: str, stage_id: str):
     return task, stage
 
 
+def _end(stage) -> float:
+    """Where the stage's data window ends: when the stage actually ended or was stopped (the
+    executor ends it on the tick after its planned end), or its planned end while it runs."""
+    if stage.ended_at is not None:
+        return stage.ended_at
+    return stage.started_at + stage.run_sheet.duration_seconds
+
+
 def _window(deps: Deps, stage) -> tuple:
-    """The arguments ``freeze`` and ``preview`` share: all from the run sheet, none from input."""
+    """The arguments ``freeze`` and ``preview`` share: all from the stage, none from input."""
     sheet = stage.run_sheet
     keep = None if deps.holdout is None else deps.holdout.development_filter(stage.project_id)
     args = (
         deps.archive,
         stage.experiment_id,
         stage.started_at,
-        stage.started_at + sheet.duration_seconds,
+        _end(stage),
         sheet.sampling.interval_seconds,
         sheet.sampling.max_gap_seconds,
     )
@@ -144,15 +156,12 @@ def _window(deps: Deps, stage) -> tuple:
 
 def _schedule(stage) -> tuple[manual_tasks.Occurrence, ...]:
     """The manual task occurrences the run sheet plans in the stage window."""
-    start = stage.started_at
-    return manual_tasks.occurrences(
-        stage.run_sheet, start, start + stage.run_sheet.duration_seconds
-    )
+    return manual_tasks.occurrences(stage.run_sheet, stage.started_at, _end(stage))
 
 
 def _manual_summary(deps: Deps, stage) -> dict:
     items = _schedule(stage)
-    end = stage.started_at + stage.run_sheet.duration_seconds
+    end = _end(stage)
     records = deps.archive.task_records(stage.experiment_id, stage.started_at, end)
     rows = manual_tasks.statuses(items, records, deps.clock.now(), end)
     counts: dict[str, dict[str, int]] = {}
@@ -168,8 +177,19 @@ def _inspect(deps: Deps, data: InspectInput) -> dict:
     _, stage = _started_stage(deps, data.task_id, data.stage_id)
     (archive, experiment_id, *limits), keep = _window(deps, stage)
     summary = snapshots.preview(
-        archive, experiment_id, *limits, DEFAULT_MIN_COVERAGE, measurement_filter=keep
+        archive,
+        experiment_id,
+        *limits,
+        DEFAULT_MIN_COVERAGE,
+        measurement_filter=keep,
+        measurement_grace=MEASUREMENT_GRACE_SECONDS,
     )
+    start, end = limits[0], limits[1]
+    outside = snapshots.outside_window(
+        archive, experiment_id, start, end, MEASUREMENT_GRACE_SECONDS, keep
+    )
+    summary["measurements_outside_window"] = outside[:MAX_LISTED_OUTSIDE]
+    summary["measurements_outside_count"] = len(outside)
     summary["manual_tasks"] = _manual_summary(deps, stage)
     frozen = archive.snapshots(experiment_id)
     return {
@@ -195,6 +215,7 @@ def _freeze(deps: Deps, data: FreezeInput) -> dict:
         DEFAULT_MIN_COVERAGE,
         measurement_filter=keep,
         schedule=_schedule(stage),
+        measurement_grace=MEASUREMENT_GRACE_SECONDS,
     )
     verified = snapshots.verify(deps.archive, shot.id)
     body = {
@@ -282,7 +303,8 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
             "inspect_stage_data",
             "Read-only summary of a started stage's data over the window freeze_dataset would "
             "use: coverage and gaps, trusted and untrusted sample counts with reasons, ranges "
-            "per sensor channel, manual measurements per metric, actions and interventions, "
+            "per sensor channel, manual measurements per metric (and the measurements left "
+            "outside the window by their time), actions and interventions, "
             "the planned manual tasks and how many were done in time, "
             "and the snapshots already frozen. Writes nothing; use it to check the data before "
             "freezing. Pass the researcher task_id you are working on.",
@@ -291,8 +313,9 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "freeze_dataset",
-            "Freeze a stage's data into a snapshot and verify it (window and limits come from "
-            "its run sheet; the snapshot also holds the manual task records). The freeze "
+            "Freeze a stage's data into a snapshot and verify it (the window runs from the "
+            "stage's start to its actual end, measurements up to two hours later; limits come "
+            "from its run sheet; the snapshot also holds the manual task records). The freeze "
             "itself checks coverage, gaps and file digests and "
             "returns complete/verified; it never fails because the data is poor, and freezing "
             "again later writes a new version. Pass round_id to advance a round in "

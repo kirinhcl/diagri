@@ -146,6 +146,7 @@ class StageRuntime(Model):
     started_at: float | None = None
     paused_at: float | None = None
     end_pending: bool = False  # end condition met; end actions not yet confirmed
+    ended_at: float | None = None  # when it actually ended or was stopped; None until then
 
 
 class StageEventKind(StrEnum):

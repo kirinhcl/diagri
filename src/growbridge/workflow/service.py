@@ -675,6 +675,8 @@ class WorkflowService(StageRecovery):
             started_at=stage.started_at,
             paused_at=stage.paused_at,
             end_pending=stage.end_pending,
+            # a terminal state never changes, so its state_at is when the stage ended
+            ended_at=stage.state_at if stage.state in STAGE_TERMINAL else None,
         )
 
     # --- applying a plan -----------------------------------------------------------------------
