@@ -60,6 +60,8 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             runtime.alert("agent_task", task.id, f"{task.id}: {type(error).__name__}: {error}")
             continue
         finished += run is not None
-        if run is None and runtime.tasks.get(task.id).state is TaskState.NEEDS_ATTENTION:
+        # whether the run raised, was refused or ended without delivering: a top-level task gets
+        # no follow-up, so the alert is what keeps the round from stalling silently
+        if runtime.tasks.get(task.id).state is TaskState.NEEDS_ATTENTION:
             runtime.alert("agent_task", task.id, f"model task {task.id} needs attention")
     return finished

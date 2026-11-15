@@ -239,6 +239,18 @@ async def test_tick_never_calls_a_model(world):
     assert runtime.tasks.get("task-ev-orch").state is TaskState.IN_PROGRESS
 
 
+async def test_a_top_level_task_that_ends_needing_attention_raises_an_alert(world):
+    runtime = await world.boot()
+    project, _protocol, _round = await design(world, runtime)
+    runtime.tasks.create(task(project, "planner", "ev-plan"))  # no parent: no follow-up
+    client = ScriptedClient([text_reply("I would light it at 70 %.")])  # saves no draft
+
+    assert await runtime.run_agents(client) == 1
+
+    assert runtime.tasks.get("task-ev-plan").state is TaskState.NEEDS_ATTENTION
+    assert [a.key for a in runtime.book.open() if a.kind == "agent_task"] == ["task-ev-plan"]
+
+
 async def test_one_failing_task_does_not_stop_the_others(world, monkeypatch):
     runtime = await world.boot()
     project, _protocol, _round = await design(world, runtime)

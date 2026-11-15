@@ -111,6 +111,21 @@ async def test_handoff_without_trigger_or_correlation_ids_is_rejected(env):
     assert outcome.is_error and not env.delegated()
 
 
+async def test_a_delegated_task_hangs_under_the_running_task_when_no_parent_is_named(env):
+    """The tool promises a follow-up when the task ends; only a child of the orchestrator's
+    task gets one."""
+    parent = env.task("orchestrator", "ev-parent")
+    client = ScriptedClient(
+        script_calls(call("delegate_task", project_id=env.project_id, **HANDOFF))
+    )
+
+    run = await env.dispatcher(client).run_task(parent.id)
+
+    assert run is not None and not run.tool_calls[0].is_error
+    child = env.tasks.list(env.project_id)[-1]
+    assert child.owner_role == "planner" and child.parent_task_id == parent.id
+
+
 async def test_create_research_task_makes_a_top_level_task(env):
     body = _payload(
         await env.invoke(
@@ -126,6 +141,7 @@ async def test_create_research_task_makes_a_top_level_task(env):
 
     task = env.tasks.get(body["task_id"])
     assert task.owner_role == "researcher" and task.parent_task_id is None
+    assert "follow-up" not in body["next"]  # a top-level task is never reported back
 
 
 async def test_the_orchestrator_cannot_write_a_run_sheet(env):
