@@ -101,14 +101,21 @@ def statuses(
     return rows
 
 
-def missed(
-    items: Iterable[Occurrence], records: Iterable[TaskRecord], end: float
-) -> tuple[int, int, dict[str, int]]:
-    """(not done in time, all occurrences, not done in time by kind), judged at ``end``.
+UNSETTLED: frozenset[Status] = frozenset({"upcoming", "open"})
 
-    Anything but "done" counts: late, skipped, never recorded.
+
+def missed(
+    items: Iterable[Occurrence], records: Iterable[TaskRecord], end: float, judged_at: float
+) -> tuple[int, int, dict[str, int]]:
+    """(not done in time, occurrences judged, not done in time by kind) at ``judged_at``, the
+    time the records were taken (a snapshot's freeze time).
+
+    Only an occurrence whose state is settled then is judged: done, late, skipped, or past its
+    deadline with no record. One not yet due or still within its time is left out, so a snapshot
+    frozen at the stage end or mid-stage shows no deviation that has not happened.
+    Anything judged but "done" counts as not done: late, skipped, never recorded.
     """
-    rows = statuses(items, records, end + ON_TIME_SECONDS, end)
+    rows = [row for row in statuses(items, records, judged_at, end) if row[2] not in UNSETTLED]
     not_done = Counter(item.kind for item, _, state in rows if state != "done")
     return sum(not_done.values()), len(rows), dict(sorted(not_done.items()))
 

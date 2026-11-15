@@ -139,6 +139,8 @@ def freeze(
             "min_coverage": min_coverage,
             "measurements_excluded": excluded,
         }
+        if schedule is not None:  # the manual tasks are judged with the records present now
+            extra["manual_tasks_judged_at"] = fields["created_at"]
         manifest.write_text(canonical_json({**fields, **extra}), encoding="utf-8")
         snapshot = Snapshot(**fields, manifest_sha256=file_digest(manifest))
         kept = ("samples", "samples_untrusted", "measurements")

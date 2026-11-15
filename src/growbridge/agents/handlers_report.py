@@ -249,7 +249,8 @@ def _rows(deps: Deps, snap: Snapshot, name: str) -> list[str]:
 
 
 def _manual_check(deps: Deps, frozen: Frozen) -> ManualCheck:
-    """Judge each snapshot's manual tasks from its own files, at the end of its window.
+    """Judge each snapshot's manual tasks from its own files, at the time it was frozen (its
+    records are the ones present then); occurrences not yet settled then are left out.
 
     A snapshot frozen before manual tasks were frozen with it has neither file and is left out.
     """
@@ -265,7 +266,10 @@ def _manual_check(deps: Deps, frozen: Frozen) -> ManualCheck:
             TaskRecord.model_validate_json(x) for x in _rows(deps, snap, "task_records.jsonl")
         ]
         manifest = json.loads(_rows(deps, snap, snapshots.MANIFEST)[0])
-        missed, total, by_kind = manual_tasks.missed(items, records, manifest["window"][1])
+        judged_at = manifest.get("manual_tasks_judged_at", manifest["created_at"])
+        missed, total, by_kind = manual_tasks.missed(
+            items, records, manifest["window"][1], judged_at
+        )
         if not total:
             continue
         number = frozen.round_of[snap.experiment_id]

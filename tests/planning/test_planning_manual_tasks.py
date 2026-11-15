@@ -102,12 +102,48 @@ def test_missed_counts_everything_not_done_in_time_and_the_limit():
     records = [record(i) for i in items if i.task_id == "photo"]
     records += [record(i) for i in items if i.task_id == "water"][:9]  # one watering missing
 
-    missed, total, by_kind = mt.missed(items, records, end)
+    missed, total, by_kind = mt.missed(items, records, end, judged_at=end + mt.ON_TIME_SECONDS)
 
     assert (missed, total, by_kind) == (1, 20, {"irrigation": 1})
     assert not mt.deviates(missed, total)  # 5 % is within the limit
     assert mt.deviates(3, 20) and not mt.deviates(0, 0)
     assert mt.by_kind_text({"irrigation": 2, "photo": 1}) == "irrigation 2, photo 1"
+
+
+def _daily_photo_week():
+    """A 7-day stage from 08:00 with a photo at 07:30: the last one is due 30 min before the end."""
+    photo = (ManualTask(id="photo", kind="photo", at="07:30"),)
+    items = mt.occurrences(
+        make_run_sheet(timezone="Europe/Helsinki", manual_tasks=photo), START, START + 7 * DAY
+    )
+    return items, START + 7 * DAY
+
+
+def test_a_task_still_in_its_window_when_frozen_at_the_stage_end_is_not_counted():
+    items, end = _daily_photo_week()
+    records = [record(i) for i in items[:-1]]  # the last photo is still within its two hours
+
+    assert len(items) == 7
+    assert mt.missed(items, records, end, judged_at=end)[:2] == (0, 6)
+    # judged after its deadline without a record, it is missed
+    assert mt.missed(items, records, end, judged_at=end + mt.ON_TIME_SECONDS)[:2] == (1, 7)
+
+
+def test_a_snapshot_frozen_mid_stage_counts_only_the_tasks_already_due():
+    items, end = _daily_photo_week()
+    day_three = START + 2 * DAY + 4 * 3600  # two photos are past their deadline, one done
+    records = [record(items[0])]
+
+    missed, total, by_kind = mt.missed(items, records, end, judged_at=day_three)
+
+    assert (missed, total, by_kind) == (1, 2, {"photo": 1})
+
+
+def test_a_task_done_before_its_deadline_counts_even_when_frozen_in_its_window():
+    items, end = _daily_photo_week()
+    records = [record(i) for i in items]
+
+    assert mt.missed(items, records, end, judged_at=end)[:2] == (0, 7)
 
 
 def test_only_an_irrigation_has_a_pump_time_and_it_is_bounded():

@@ -159,8 +159,9 @@ def _manual_summary(deps: Deps, stage) -> dict:
     for item, _, state in rows:
         kind = counts.setdefault(item.kind, {})
         kind[state] = kind.get(state, 0) + 1
-    missed, total, _ = manual_tasks.missed(items, records, end)
-    return {"planned": total, "by_kind": counts, "not_done_in_time": missed}
+    missed, judged, _ = manual_tasks.missed(items, records, end, deps.clock.now())
+    # judged: occurrences settled now (done, late, skipped or past their deadline)
+    return {"planned": len(items), "by_kind": counts, "judged": judged, "not_done_in_time": missed}
 
 
 def _inspect(deps: Deps, data: InspectInput) -> dict:
