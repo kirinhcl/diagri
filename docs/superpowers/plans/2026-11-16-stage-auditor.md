@@ -37,19 +37,20 @@
 **Files:**
 - Create: `src/growbridge/planning/window.py`
 - Create: `src/growbridge/observer/stage_checks.py`
-- Modify: `src/growbridge/agents/handlers_researcher.py:130-142` (`_window` uses `data_window`)
 - Test: `tests/observer/test_stage_checks.py`, `tests/planning/test_planning_window.py`
 
+**Base:** this branch sits on `fix/pr4-review-findings` (commit `cd24786`), which ends a stage's data window at its actual end (`StageRuntime.ended_at`, set when it ended or was stopped) and admits measurements up to `MEASUREMENT_GRACE_SECONDS` (2 h, `agents/handlers_researcher.py:37`) after it. Do not modify `handlers_researcher.py` in this task.
+
 **Interfaces:**
-- Consumes: `planning.manual_tasks.occurrences(sheet, start, end)`, `statuses(items, records, now, end)`, `ON_TIME_SECONDS`, `EARLY_SECONDS`; `Archive.task_records(experiment_id, start, end)`, `Archive.measurements(experiment_id)` (`ManualMeasurement.id`, `.measured_at`); `AlertBook.raise_alert(kind, key, severity, message)`, `AlertBook.resolve(kind, key)`, `AlertBook.open()`; `StagePort.active_stage() -> StageRuntime | None`.
+- Consumes: `planning.manual_tasks.occurrences(sheet, start, end)`, `statuses(items, records, now, end)`, `deadline(item, end)`, `EARLY_SECONDS`; `Archive.task_records(experiment_id, start, end)`, `Archive.measurements(experiment_id)` (current measurements only; `ManualMeasurement.id`, `.measured_at`); `archive.snapshot.outside_window(archive, experiment_id, start, end, measurement_grace)` (lists corrected ones too); `handlers_researcher._end(stage)` and `MEASUREMENT_GRACE_SECONDS` (read only, for the consistency test and the grace); `AlertBook.raise_alert(kind, key, severity, message)`, `AlertBook.resolve(kind, key)`, `AlertBook.open()`; `StagePort.active_stage() -> StageRuntime | None`.
 - Produces:
-  - `data_window(stage: StageRuntime) -> tuple[float, float]` in `planning/window.py`: `(started_at, started_at + run_sheet.duration_seconds)`; raises `ValueError` when `started_at is None`.
+  - `data_window(stage: StageRuntime) -> tuple[float, float]` in `planning/window.py`: `(started_at, ended_at)` once the stage has ended, else `(started_at, started_at + run_sheet.duration_seconds)`; raises `ValueError` when `started_at is None`. It must agree with `handlers_researcher._end`, the end the freeze uses.
   - `class StageChecks` in `observer/stage_checks.py`: `__init__(self, archive: Archive, book: AlertBook, stages: StagePort, clock: Clock)`, `async def tick(self) -> bool` (True when a check ran).
   - Constants `CHECK_SECONDS = 300.0`, `MEASUREMENT_GRACE_SECONDS = 2 * 3600.0`; alert kinds `TASK_MISSED = "task_missed"`, `MEASUREMENT_MISSING = "measurement_missing"`, `OUTSIDE_WINDOW = "measurement_outside_window"`.
 
 - [ ] **Step 1: Write the failing tests**
 
-`tests/planning/test_planning_window.py`: `test_window_runs_from_start_for_the_planned_duration` (stage with `started_at=1000.0`, duration 3600 → `(1000.0, 4600.0)`), `test_window_of_a_stage_not_started_is_refused` (`pytest.raises(ValueError)`).
+`tests/planning/test_planning_window.py`: `test_a_running_stage_window_runs_for_the_planned_duration` (stage with `started_at=1000.0`, duration 3600, `ended_at=None` → `(1000.0, 4600.0)`), `test_an_ended_stage_window_ends_when_it_ended` (`ended_at=4728.0` → `(1000.0, 4728.0)`), `test_the_window_agrees_with_the_freeze` (for both stages, `data_window(stage)[1] == handlers_researcher._end(stage)`), `test_window_of_a_stage_not_started_is_refused` (`pytest.raises(ValueError)`).
 
 `tests/observer/test_stage_checks.py`, with a `FakeStages` returning a `StageRuntime` built from `make_run_sheet(manual_tasks=...)` (a daily `measurement` task at 10:00 and a daily `irrigation` task at 09:00), a real `Archive` and `AlertBook`, the `clock` fixture:
 
@@ -83,9 +84,7 @@ Expected: FAIL with `ModuleNotFoundError` for `growbridge.observer.stage_checks`
 
 - [ ] **Step 3: Implement `data_window` and `StageChecks`**
 
-`StageChecks.tick` throttles on `clock.monotonic()` like `FrozenWatch.tick`; it checks the active stage whatever its state once `started_at` is set. Window from `data_window`; occurrences due before `now`; status via `statuses(..., now, end)`. `measurement_missing`: a `done` record of kind `measurement`, `now >= record.recorded_at + MEASUREMENT_GRACE_SECONDS`, and no measurement of the experiment with `due_at - EARLY_SECONDS <= measured_at <= deadline` (deadline as in `planning/manual_tasks.status`). `measurement_outside_window`: each current measurement with `measured_at` outside `[start, end)`; resolve open keys of this kind for the stage whose measurement is no longer current. Keys: `f"{stage_id}:{task_id}:{int(due_at)}"` and `f"{stage_id}:{measurement_id}"`. Messages name the task or measurement and say what to do (record the task, enter the measurement with the time it was taken, record a correction).
-
-`handlers_researcher._window` builds its start and end from `data_window(stage)`.
+`StageChecks.tick` throttles on `clock.monotonic()` like `FrozenWatch.tick`; it checks the active stage whatever its state once `started_at` is set. Window from `data_window`; occurrences due before `now`; status via `statuses(..., now, end)`. `measurement_missing` (its own `MEASUREMENT_GRACE_SECONDS = 2 * 3600.0` in `stage_checks.py`, after the record): a `done` record of kind `measurement`, `now >= record.recorded_at + MEASUREMENT_GRACE_SECONDS`, and no current measurement of the experiment with `due_at - EARLY_SECONDS <= measured_at <= deadline(item, end)`. `measurement_outside_window`: the ids `outside_window(archive, experiment, start, end, handlers_researcher.MEASUREMENT_GRACE_SECONDS)` returns that are still current (in `archive.measurements(experiment)`); resolve open keys of this kind for the stage whose measurement is no longer listed. Keys: `f"{stage_id}:{task_id}:{int(due_at)}"` and `f"{stage_id}:{measurement_id}"`. Messages name the task or measurement and say what to do (record the task, enter the measurement with the time it was taken, record a correction).
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -95,7 +94,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/growbridge/planning/window.py src/growbridge/observer/stage_checks.py src/growbridge/agents/handlers_researcher.py tests/observer/test_stage_checks.py tests/planning/test_planning_window.py
+git add src/growbridge/planning/window.py src/growbridge/observer/stage_checks.py tests/observer/test_stage_checks.py tests/planning/test_planning_window.py
 git commit -m "feat: check a running stage's manual tasks and measurements against its records"
 ```
 
