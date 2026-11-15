@@ -200,5 +200,6 @@ async def build_rig(settings, tmp_path, allow=None, register=True) -> Rig:
     if register:
         control.register_host()
     await control.startup()
-    workflow = WorkflowService(workflow_db, clock, control)
+    # fixture sheets run light 60, not the fixture protocol's 40/70 treatments
+    workflow = WorkflowService(workflow_db, clock, control, check_treatments=False)
     return Rig(clock, sim, bridge, control, workflow, (control_db, workflow_db), allow)

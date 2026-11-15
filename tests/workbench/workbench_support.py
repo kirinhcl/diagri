@@ -102,11 +102,20 @@ class ScriptedSandbox:
 class Bench:
     """One database, one clock, the services and an app with the workbench mounted."""
 
-    def __init__(self, tmp_path, lan_port: int | None = LAN_PORT, compute_factory=None):
+    def __init__(
+        self,
+        tmp_path,
+        lan_port: int | None = LAN_PORT,
+        compute_factory=None,
+        check_treatments: bool = False,
+    ):
         self.clock = FakeClock()
         self.db = Database(tmp_path / "workbench.db")
         self.control = RecordingControl(self.clock)
-        self.workflow = WorkflowService(self.db, self.clock, self.control)
+        # fixture sheets run light 60, not the fixture protocol's 40/70 treatments
+        self.workflow = WorkflowService(
+            self.db, self.clock, self.control, check_treatments=check_treatments
+        )
         self.archive = Archive(self.db, tmp_path / "archive", self.clock)
         self.alerts = AlertBook(self.db, self.clock)
         self.tasks = TaskBoard(self.db, self.clock)

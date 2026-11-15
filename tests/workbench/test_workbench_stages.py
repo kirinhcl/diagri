@@ -194,6 +194,37 @@ def test_model_token_may_submit_a_draft_and_read_stage_state(bench):
     assert state.status_code == 200 and state.json()["state"] == "pending_review"
 
 
+@pytest.fixture
+def checked_bench(tmp_path):
+    """A bench whose workflow checks the round's treatment, as the runtime's does."""
+    instance = Bench(tmp_path, check_treatments=True)
+    yield instance
+    instance.db.close()
+
+
+def test_a_draft_that_skips_the_rounds_treatment_is_not_saved(checked_bench):
+    round_id = checked_bench.seed_round()  # round 1 is allocated light 70; the sheet runs 60
+    body = {"round_id": round_id, "run_sheet": checked_bench.sheet().model_dump(mode="json")}
+
+    response = checked_bench.post(
+        checked_bench.lan, "/wb/drafts/run-sheet", body, headers=checked_bench.model()
+    )
+
+    found = [(item["code"], item["blocking"]) for item in response.json()["findings"]]
+    assert response.status_code == 200 and ("treatment_not_applied", True) in found
+    assert checked_bench.workflow.store.find_stage("stage-1") is None
+
+
+def test_a_model_role_other_than_the_planner_may_not_file_a_draft(bench):
+    round_id = bench.seed_round()
+    body = {"round_id": round_id, "run_sheet": bench.sheet().model_dump(mode="json")}
+
+    response = bench.post(bench.lan, "/wb/drafts/run-sheet", body, headers=bench.model("analyst"))
+
+    assert response.status_code == 403 and detail(response)["code"] == "model_role"
+    assert bench.workflow.store.find_stage("stage-1") is None
+
+
 def test_draft_is_rejected_when_the_run_sheet_is_malformed(bench):
     round_id = bench.seed_round()
     sheet = {**bench.sheet().model_dump(mode="json"), "approved_by": "alice"}

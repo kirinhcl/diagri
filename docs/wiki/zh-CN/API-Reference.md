@@ -83,7 +83,7 @@
 | `POST` | `/wb/stages/{stage_id}/takeover` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、授予类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/handback` | 操作员 | 局域网、覆盖网络 | 否 | `state`、`not_connected`、授予类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/onsite-check` | 操作员 | 局域网、覆盖网络 | 否 | `state`、授予类拒绝码 |
-| `POST` | `/wb/drafts/run-sheet` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
+| `POST` | `/wb/drafts/run-sheet` | 操作员、planner 的角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state`，其他角色的令牌得到 `model_role` |
 | `POST` | `/wb/manual/{channel}` | 操作员 | 局域网、覆盖网络 | 否 | `pump_on_forbidden`、`state`、写入类拒绝码 |
 | `POST` | `/wb/irrigation` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`state`、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `scope`（没有这次任务）、`state`（阶段未开始，或离到期还有一小时以上）、`param`（`done_at`） |

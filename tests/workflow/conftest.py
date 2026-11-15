@@ -31,7 +31,8 @@ class World:
         self.db = db
         self.clock = clock
         self.control = control
-        self.svc = WorkflowService(db, clock, control)
+        # fixture sheets run light 60, not the fixture protocol's 40/70 treatments
+        self.svc = WorkflowService(db, clock, control, check_treatments=False)
         self.project_id = ""
         self.round_id = ""
         self.events = 0

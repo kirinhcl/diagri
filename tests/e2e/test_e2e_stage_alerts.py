@@ -1,6 +1,6 @@
 """A stage that stops by itself tells the operator why: an alert, and a notification."""
 
-from e2e_support import STAGE, RecordingChannel
+from e2e_support import ROUND_LIGHT, STAGE, RecordingChannel
 
 from growbridge.workflow.states import StageState
 
@@ -44,7 +44,7 @@ async def test_stage_alert_is_resolved_when_the_operator_resumes_the_stage(world
     await world.beat(runtime, 1)
     assert len(stage_alerts(runtime)) == 1
 
-    world.sim.external_change("device", "light", mLevel=60)  # set back at the panel
+    world.sim.external_change("device", "light", mLevel=ROUND_LIGHT[1])  # set back
     await world.beat(runtime, 1)
     await runtime.workflow.resume_stage(STAGE, world.operator)
     await world.beat(runtime, 1)

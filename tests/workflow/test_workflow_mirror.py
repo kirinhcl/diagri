@@ -4,7 +4,9 @@ from growbridge.workflow.service import WorkflowService
 
 
 def with_hook(world, hook):
-    world.svc = WorkflowService(world.db, world.clock, world.control, on_intervention=hook)
+    world.svc = WorkflowService(
+        world.db, world.clock, world.control, on_intervention=hook, check_treatments=False
+    )
 
 
 async def test_takeover_hands_the_intervention_on_after_the_transaction(world):

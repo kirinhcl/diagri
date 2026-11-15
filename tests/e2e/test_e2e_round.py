@@ -1,6 +1,6 @@
 """One open question through a whole round on the simulated device (appendix C, end to end)."""
 
-from e2e_support import OPERATOR, STAGE, STAGE_SECONDS
+from e2e_support import OPERATOR, ROUND_LIGHT, STAGE, STAGE_SECONDS
 
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import Channel, ManualMeasurement
@@ -65,7 +65,7 @@ async def run_stage_with_takeover(world, runtime, project, round_id, protocol):
     assert flow.round_state(round_id) is RoundState.STAGE_RUNNING
 
     await world.beat(runtime, 30)  # the executor aligns the light (60 % from 06:00)
-    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == 60
+    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == ROUND_LIGHT[1]
 
     taken = await flow.takeover(STAGE, operator)
     assert taken.state is StageState.MANUAL

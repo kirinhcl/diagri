@@ -68,7 +68,7 @@ from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
 from growbridge.service import Bridge
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
-from growbridge.sim.fixtures import TIMEZONE, make_protocol, make_run_sheet, make_safety
+from growbridge.sim.fixtures import TIMEZONE, make_protocol, make_safety, treated_run_sheet
 from growbridge.transport import make_transport
 from growbridge.workbench.api import create_workbench
 from growbridge.workbench.auth import Operators
@@ -742,7 +742,7 @@ async def _design_and_start(runtime: Runtime, clock: FakeClock) -> str:
     protocol = make_protocol(project_id=project)
     flow.save_protocol(protocol, operator)
     round_id = flow.create_round(project, protocol.id, operator)
-    sheet = make_run_sheet(
+    sheet = treated_run_sheet(  # the workflow requires round 1's treatment
         id="sheet-sim",
         project_id=project,
         experiment_id="experiment-sim",

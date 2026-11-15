@@ -134,7 +134,7 @@ async def tick_forever(runtime, clock: OffsetClock | None, sleep=asyncio.sleep, 
 def _seed(runtime) -> None:
     """Approve the safety limits and leave one run sheet in ``pending_review``."""
     from growbridge.ports import Actor
-    from growbridge.sim.fixtures import make_protocol, make_run_sheet, make_safety
+    from growbridge.sim.fixtures import make_protocol, make_safety, treated_run_sheet
 
     flow = runtime.workflow
     operator = Actor(kind="operator", id=OPERATOR, reauth_at=runtime.clock.now())
@@ -143,7 +143,7 @@ def _seed(runtime) -> None:
     protocol = make_protocol(project_id=project)
     flow.save_protocol(protocol, operator)
     round_id = flow.create_round(project, protocol.id, operator)
-    sheet = make_run_sheet(
+    sheet = treated_run_sheet(  # the workflow requires round 1's treatment
         id="sheet-dev",
         project_id=project,
         experiment_id="experiment-dev",

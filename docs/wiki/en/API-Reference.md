@@ -83,7 +83,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/stages/{stage_id}/takeover` | operator | LAN, overlay | yes | `reauth_required`, `state`, grant codes |
 | `POST` | `/wb/stages/{stage_id}/handback` | operator | LAN, overlay | no | `state`, `not_connected`, grant codes |
 | `POST` | `/wb/stages/{stage_id}/onsite-check` | operator | LAN, overlay | no | `state`, grant codes |
-| `POST` | `/wb/drafts/run-sheet` | operator, role token | LAN, overlay | no | only `session`, `entry`, `state` |
+| `POST` | `/wb/drafts/run-sheet` | operator, the planner's role token | LAN, overlay | no | only `session`, `entry`, `state`, and `model_role` for another role's token |
 | `POST` | `/wb/manual/{channel}` | operator | LAN, overlay | no | `pump_on_forbidden`, `state`, write codes |
 | `POST` | `/wb/irrigation` | operator | LAN only | no | `entry` (not on the LAN entry), `state`, `cooldown`, write codes |
 | `POST` | `/wb/measurements` | operator | LAN, overlay | no | `scope` |

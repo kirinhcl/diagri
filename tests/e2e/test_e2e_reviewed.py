@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from e2e_support import OPERATOR, STAGE
+from e2e_support import OPERATOR, ROUND_LIGHT, STAGE
 
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import Channel, Entry
@@ -182,7 +182,8 @@ async def test_a_rewound_sample_source_raises_an_alert_and_the_tick_goes_on(worl
 
     assert "source_rewound" in kinds(runtime)
     assert "tick_step" not in kinds(runtime)
-    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == 60  # executor still ran
+    light = (await runtime.control.read_state()).levels[Channel.LIGHT]
+    assert light == ROUND_LIGHT[1]  # the executor still ran
 
 
 async def test_every_missed_daily_report_is_made_oldest_first(world):
@@ -272,7 +273,7 @@ async def test_restart_after_a_takeover_rewrites_the_scheduled_level(world):
     first = await world.boot()
     await world.approved_stage(first)
     await world.beat(first, 30)
-    assert (await first.control.read_state()).levels[Channel.LIGHT] == 60
+    assert (await first.control.read_state()).levels[Channel.LIGHT] == ROUND_LIGHT[1]
     taken = await first.workflow.takeover(STAGE, world.operator)
     manual = ActionRequest(
         request_id="manual-light",
@@ -297,5 +298,5 @@ async def test_restart_after_a_takeover_rewrites_the_scheduled_level(world):
 
     await world.beat(second, 5)
 
-    assert (await second.control.read_state()).levels[Channel.LIGHT] == 60
+    assert (await second.control.read_state()).levels[Channel.LIGHT] == ROUND_LIGHT[1]
     assert len(world.sim.commands) > before  # a new write, not the old receipt
