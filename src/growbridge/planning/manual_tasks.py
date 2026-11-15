@@ -120,6 +120,14 @@ def missed(
     return sum(not_done.values()), len(rows), dict(sorted(not_done.items()))
 
 
+def unsettled(
+    items: Iterable[Occurrence], records: Iterable[TaskRecord], end: float, judged_at: float
+) -> int:
+    """How many occurrences ``missed`` leaves out at ``judged_at``: not yet due or still within
+    their time, so not checked."""
+    return sum(1 for *_, state in statuses(items, records, judged_at, end) if state in UNSETTLED)
+
+
 def deviates(missed_count: int, total: int) -> bool:
     return total > 0 and missed_count / total > MAX_MISSED_SHARE
 

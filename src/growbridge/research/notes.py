@@ -71,6 +71,17 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "({detail})",
         "zh": "第 {round} 轮：计划的 {total} 次人工任务中有 {missed} 次没有按时完成（{detail}）",
     },
+    "manual_tasks_unsettled": {
+        "en": "Round {round}: {open} of {planned} planned manual tasks were not yet due or still "
+        "within their time when the data was frozen, so they were not checked",
+        "zh": "第 {round} 轮：冻结数据时，计划的 {planned} 次人工任务中有 {open} 次还没到期或仍在"
+        "时限内，未参与核对",
+    },
+    "manual_tasks_unchecked": {
+        "en": "Not every manual task could be checked (data frozen before their deadline): the "
+        "result can only be exploratory",
+        "zh": "人工任务没有全部核对（数据在截止前冻结）：结果只能是探索性的",
+    },
 }
 
 

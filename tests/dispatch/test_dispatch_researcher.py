@@ -942,20 +942,39 @@ async def test_manual_tasks_not_done_in_time_are_a_deviation(env, tmp_path):
     )
 
 
-async def test_tasks_still_in_their_window_when_frozen_are_no_deviation(env, tmp_path):
-    """Frozen at the window end, round 2's three unrecorded tasks may still be done on time."""
+async def test_tasks_still_in_their_window_when_frozen_are_unchecked_not_missed(env, tmp_path):
+    """Frozen at the window end, round 2's three unrecorded tasks may still be done on time: no
+    deviation, but the check is incomplete, so the result cannot be confirmatory."""
     task = env.task("researcher")
     end = START + 10
     rounds = [_with_tasks(env, n, done=4 if n != 2 else 1, frozen_at=end) for n in (1, 2, 3, 4)]
     deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
 
+    outcome = await _publish(env, task.id, rounds, deps)
+
+    body = _payload(outcome)
+    check = {
+        d["round"]: (d["missed"], d["total"], d["unsettled"]) for d in body["manual_task_check"]
+    }
+    assert check == {1: (0, 4, 0), 2: (0, 1, 3), 3: (0, 4, 0), 4: (0, 4, 0)}
+    assert body["label"] == "exploratory"
+    notes = {n["code"]: n for n in _report(env, outcome)["notes"]}
+    assert notes["manual_tasks_unsettled"]["kind"] == "limitation"
+    assert notes["manual_tasks_unsettled"]["params"] == {"round": 2, "open": 3, "planned": 4}
+    assert notes["manual_tasks_unchecked"]["kind"] == "reason"
+    manifest = env.archive.root / "snapshots" / rounds[1]["snapshot_id"] / snapshots.MANIFEST
+    assert json.loads(manifest.read_text())["manual_tasks_judged_at"] == end
+
+
+async def test_tasks_all_done_before_a_freeze_at_the_window_end_are_fully_checked(env, tmp_path):
+    task = env.task("researcher")
+    rounds = [_with_tasks(env, n, done=4, frozen_at=START + 10) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
     body = _payload(await _publish(env, task.id, rounds, deps))
 
     assert body["label"] == "confirmatory"
-    check = {d["round"]: (d["missed"], d["total"]) for d in body["manual_task_check"]}
-    assert check == {1: (0, 4), 2: (0, 1), 3: (0, 4), 4: (0, 4)}
-    manifest = env.archive.root / "snapshots" / rounds[1]["snapshot_id"] / snapshots.MANIFEST
-    assert json.loads(manifest.read_text())["manual_tasks_judged_at"] == end
+    assert all(d["unsettled"] == 0 for d in body["manual_task_check"])
 
 
 async def test_manual_tasks_all_done_keep_the_result_confirmatory(env, tmp_path):
