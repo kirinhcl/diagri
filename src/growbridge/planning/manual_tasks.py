@@ -65,16 +65,21 @@ def latest(records: Iterable[TaskRecord]) -> dict[tuple[str, int], TaskRecord]:
     return found
 
 
+def deadline(item: Occurrence, end: float) -> float:
+    """The last moment the occurrence counts as done in time. ``end`` is the end of the stage:
+    a task that may be made up counts until then."""
+    return (end if item.make_up_allowed else item.due_at) + ON_TIME_SECONDS
+
+
 def status(item: Occurrence, record: TaskRecord | None, now: float, end: float) -> Status:
-    """``end`` is the end of the stage: a task that may be made up counts until then."""
-    deadline = (end if item.make_up_allowed else item.due_at) + ON_TIME_SECONDS
+    last = deadline(item, end)
     if record is not None:
         if record.outcome == "skipped":
             return "skipped"
-        return "done" if record.done_at is not None and record.done_at <= deadline else "late"
+        return "done" if record.done_at is not None and record.done_at <= last else "late"
     if now < item.due_at:
         return "upcoming"
-    return "open" if now <= deadline else "missed"
+    return "open" if now <= last else "missed"
 
 
 def statuses(

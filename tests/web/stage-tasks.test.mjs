@@ -20,6 +20,14 @@ test("a planned irrigation can be started only while the stage runs and it is no
   assert.deepEqual(rowActions(row({ kind: "photo", seconds: null }), body()), { record: true, irrigate: false });
 });
 
+test("a planned irrigation is offered only while it is upcoming or open", () => {
+  // the server runs the pump once per occurrence and never after its deadline ("missed")
+  for (const status of ["missed", "skipped", "late"]) {
+    assert.equal(rowActions(row({ status }), body()).irrigate, false, status);
+  }
+  assert.equal(rowActions(row({ status: "upcoming", due_at: NOW + 60 }), body()).irrigate, true);
+});
+
 test("a task more than an hour away cannot be recorded yet", () => {
   assert.deepEqual(rowActions(row({ due_at: NOW + 3601 }), body()), { record: false, irrigate: false });
   assert.deepEqual(rowActions(row({ due_at: NOW + 3600 }), body()).record, true);

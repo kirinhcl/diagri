@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from growbridge.archive.models import Channel, ManualTask, RuleAction
+from growbridge.planning.manual_tasks import ON_TIME_SECONDS
 from growbridge.sim.fixtures import make_run_sheet
 from growbridge.workflow.states import StageState
 
@@ -183,3 +184,37 @@ def test_only_a_planned_irrigation_of_a_running_stage_can_be_started(bench, oper
     assert detail(photo)["code"] == "scope"
     assert detail(paused)["code"] == "state"
     assert bench.control.irrigated == []
+
+
+def test_a_planned_irrigation_runs_the_pump_once_per_occurrence_even_after_a_skip(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    assert irrigate(bench, operator).status_code == 200
+    skipped = {"task_id": "water", "due_at": WATER_DUE, "outcome": "skipped"}
+    assert bench.post(operator, PATH, skipped).status_code == 200  # the latest record counts
+
+    again = irrigate(bench, operator, request_id="planned-0002")
+
+    assert detail(again)["code"] == "state"
+    assert len(bench.control.irrigated) == 1
+
+
+@pytest.mark.parametrize("late", [ON_TIME_SECONDS + 1, 30 * 3600])
+def test_a_planned_irrigation_past_its_deadline_does_not_run(bench, operator, late):
+    running(bench)
+    bench.clock.wall = WATER_DUE + late
+
+    response = irrigate(bench, operator)
+
+    assert detail(response)["code"] == "state"
+    assert bench.control.irrigated == []
+
+
+def test_a_planned_irrigation_runs_up_to_its_deadline(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + ON_TIME_SECONDS
+
+    response = irrigate(bench, operator)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["task"]["status"] == "done"

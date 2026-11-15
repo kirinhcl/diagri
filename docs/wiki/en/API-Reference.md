@@ -88,7 +88,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/irrigation` | operator | LAN only | no | `entry` (not on the LAN entry), `state`, `cooldown`, write codes |
 | `POST` | `/wb/measurements` | operator | LAN, overlay | no | `scope` |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | operator | LAN, overlay | no | `scope` (no such occurrence), `state` (not started, or not due within the hour), `param` (`done_at`) |
-| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | operator | LAN only | no | `entry` (not on the LAN entry), `scope` (not a planned irrigation), `state` (stage not `running`, not due, already done), `cooldown`, write codes |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | operator | LAN only | no | `entry` (not on the LAN entry), `scope` (not a planned irrigation), `state` (stage not `running`, not due, past its deadline, already done, or the pump already ran for this occurrence), `cooldown`, write codes |
 | `POST` | `/wb/safety/approve` | operator | LAN, overlay | yes | `reauth_required`, `host_unregistered` |
 | `GET` | `/wb/stages/{stage_id}` | operator, role token | LAN, overlay | no | only `session`, `entry`, `state` |
 | `GET` | `/wb/receipts/{request_id}` | operator, role token | LAN, overlay | no | only `session`, `entry` |

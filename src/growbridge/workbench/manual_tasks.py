@@ -65,6 +65,21 @@ def _due(item: manual_tasks.Occurrence, now: float) -> None:
         raise Denied("state", "this task is not due yet")
 
 
+def _check_irrigation(archive: Archive, stage: StageRuntime, item, now: float) -> None:
+    """The pump runs at most once per occurrence (a later "skipped" record does not undo a run),
+    never after the occurrence's deadline, and not for an occurrence already done."""
+    start, end = _window(stage)
+    if now > manual_tasks.deadline(item, end):
+        raise Denied("state", "this irrigation is past its deadline")
+    wanted = manual_tasks.key(item.task_id, item.due_at)
+    records = archive.task_records(stage.experiment_id, start, end)
+    mine = [r for r in records if manual_tasks.key(r.task_id, r.due_at) == wanted]
+    if any(record.irrigation_request_id is not None for record in mine):
+        raise Denied("state", "the pump already ran for this irrigation")
+    if _current(archive, stage, item, now)["status"] in ("done", "late"):
+        raise Denied("state", "this irrigation is already recorded as done")
+
+
 def _row(item, record: TaskRecord | None, state: str) -> dict:
     return {
         **item.model_dump(mode="json"),
@@ -166,8 +181,7 @@ def add_manual_task_routes(
             raise Denied("state", "a planned irrigation runs only while the stage is running")
         now = clock.now()
         _due(item, now)
-        if _current(archive, stage, item, now)["status"] in ("done", "late"):
-            raise Denied("state", "this irrigation is already recorded as done")
+        _check_irrigation(archive, stage, item, now)
         note = body.note.strip()
         request = ActionRequest(
             request_id=body.request_id,

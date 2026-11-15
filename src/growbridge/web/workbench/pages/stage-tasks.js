@@ -10,6 +10,8 @@ import { table } from "../ui/table.js";
 export const AHEAD_SECONDS = 86400; // upcoming occurrences are listed one day ahead
 export const SHOWN_ROWS = 9; // three days of a typical sheet; older occurrences fold away
 const DONE = new Set(["done", "late"]);
+// a planned irrigation runs once per occurrence and never after its deadline (then "missed")
+const RUNNABLE = new Set(["upcoming", "open"]);
 const PILL = { done: "pill-active", late: "pill-waiting", open: "pill-waiting", missed: "pill-onsite", skipped: "pill-onsite", upcoming: "" };
 
 // Newest first, without what is more than a day away.
@@ -24,7 +26,7 @@ export function rowActions(row, body) {
   const due = (body.now || 0) >= row.due_at - (body.early_seconds || 0);
   const started = body.stage_state !== "pending_review";
   const record = due && started;
-  const irrigate = record && row.kind === "irrigation" && Boolean(row.seconds) && body.stage_state === "running" && !DONE.has(row.status);
+  const irrigate = record && row.kind === "irrigation" && Boolean(row.seconds) && body.stage_state === "running" && RUNNABLE.has(row.status);
   return { record, irrigate };
 }
 

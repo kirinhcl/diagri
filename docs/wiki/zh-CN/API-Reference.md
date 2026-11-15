@@ -87,7 +87,7 @@
 | `POST` | `/wb/manual/{channel}` | 操作员 | 局域网、覆盖网络 | 否 | `pump_on_forbidden`、`state`、写入类拒绝码 |
 | `POST` | `/wb/irrigation` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`state`、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `scope`（没有这次任务）、`state`（阶段未开始，或离到期还有一小时以上）、`param`（`done_at`） |
-| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`scope`（不是计划内浇水）、`state`（阶段不在 `running`、未到期、已完成）、`cooldown`、写入类拒绝码 |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`scope`（不是计划内浇水）、`state`（阶段不在 `running`、未到期、已过截止时间、已完成，或这次任务已经开过泵）、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `scope` |
 | `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
