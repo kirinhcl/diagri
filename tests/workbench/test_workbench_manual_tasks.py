@@ -326,3 +326,15 @@ def test_a_run_whose_read_back_failed_may_have_watered_and_is_partial(bench, ope
     assert record["outcome"] == "partial"
     assert detail(irrigate(bench, operator))["code"] == "state"
     assert len(bench.control.irrigated) == 1
+
+
+def test_a_stage_stopped_early_lists_no_task_due_after_the_stop(bench, operator):
+    """The list uses the stage's actual window, as a snapshot of it does."""
+    running(bench, state=StageState.STOPPED, right_number=None)
+    store = bench.workflow.store
+    store.update_stage(store.find_stage("stage-1"), state_at=WATER_DUE + 3600)  # stopped 10:00
+    bench.clock.wall = WATER_DUE + 4 * 3600
+
+    rows = operator.get(PATH).json()["occurrences"]
+
+    assert [(row["task_id"], row["due_at"]) for row in rows] == [("water", WATER_DUE)]

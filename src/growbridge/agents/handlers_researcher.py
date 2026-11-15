@@ -132,11 +132,11 @@ def _started_stage(deps: Deps, task_id: str, stage_id: str):
 
 
 def _end(stage) -> float:
-    """Where the stage's data window ends: when the stage actually ended or was stopped (the
-    executor ends it on the tick after its planned end), or its planned end while it runs."""
-    if stage.ended_at is not None:
-        return stage.ended_at
-    return stage.started_at + stage.run_sheet.duration_seconds
+    """Where a started stage's data window ends (``StageRuntime.window_end``)."""
+    end = stage.window_end()
+    if end is None:  # _started_stage refuses a stage that never started
+        raise Denied("state", f"stage {stage.stage_id} never started; there is no data yet")
+    return end
 
 
 def _window(deps: Deps, stage) -> tuple:

@@ -148,6 +148,16 @@ class StageRuntime(Model):
     end_pending: bool = False  # end condition met; end actions not yet confirmed
     ended_at: float | None = None  # when it actually ended or was stopped; None until then
 
+    def window_end(self) -> float | None:
+        """Where the stage's data window ends: when it actually ended or was stopped (the
+        executor ends it on the tick after its planned end), else its planned end; None before
+        it started."""
+        if self.ended_at is not None:
+            return self.ended_at
+        if self.started_at is None:
+            return None
+        return self.started_at + self.run_sheet.duration_seconds
+
 
 class StageEventKind(StrEnum):
     DISCONNECT_AFFECTS = "disconnect_affects"

@@ -83,9 +83,11 @@ def _ran(action: ActionRecord) -> dict | None:
 
 
 def _window(stage: StageRuntime) -> tuple[float, float]:
-    if stage.started_at is None:
+    """The stage's actual window, as its snapshot uses it (``StageRuntime.window_end``)."""
+    end = stage.window_end()
+    if stage.started_at is None or end is None:
         raise Denied("state", "the stage has not started; no manual task is due yet")
-    return stage.started_at, stage.started_at + stage.run_sheet.duration_seconds
+    return stage.started_at, end
 
 
 def _occurrence(
