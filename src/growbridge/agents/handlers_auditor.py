@@ -115,7 +115,7 @@ def _open_alerts(deps: Deps, stage_id: str) -> list[dict]:
     return [
         {"kind": a.kind, "key": a.key, "severity": a.severity, "message": clip(a.message, 600)}
         for a in deps.alerts.open()
-        if a.key.startswith(stage_id)
+        if a.key == stage_id or a.key.startswith(f"{stage_id}:")
     ]
 
 

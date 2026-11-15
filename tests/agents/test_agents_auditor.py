@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
-import sys
-from pathlib import Path
 
 import pytest
+from dispatch_env import Env
 from pydantic import ValidationError
 
 from growbridge.agents.handlers_auditor import FindingInput
@@ -20,26 +18,12 @@ from growbridge.observer.alerts import AlertBook
 from growbridge.sim.clock import START, FakeClock
 from growbridge.sim.control import FakeControl
 
-_DISPATCH = Path(__file__).resolve().parents[1] / "dispatch"
-
-
-def _load_env_class():
-    """The dispatch tests' ``Env`` (real workflow, archive and task board), loaded by path."""
-    sys.path.insert(0, str(_DISPATCH))
-    try:
-        spec = importlib.util.spec_from_file_location("dispatch_env", _DISPATCH / "conftest.py")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(str(_DISPATCH))
-    return module.Env
-
 
 @pytest.fixture
 def env(tmp_path):
     clock = FakeClock()
     db = Database(tmp_path / "auditor.db")
-    env = _load_env_class()(db, clock, FakeControl(clock), tmp_path / "work", tmp_path / "archive")
+    env = Env(db, clock, FakeControl(clock), tmp_path / "work", tmp_path / "archive")
     env.book = AlertBook(db, clock)
     env.audit_deps = env.make_deps(alerts=env.book)
     yield env
@@ -87,6 +71,9 @@ async def test_get_stage_records_lists_tasks_measurements_and_open_alerts(env):
     )
     env.book.raise_alert("stage_gap", "stage-1:x", "warning", "gap")
     env.book.raise_alert("stage_gap", "stage-2:x", "warning", "other stage")
+    env.book.raise_alert("stage_gap", "stage-10:x", "warning", "a stage that shares the prefix")
+    env.book.raise_alert("stage_gap", "stage-1b:x", "warning", "another one")
+    env.book.raise_alert("stage_gap", "stage-b:x", "warning", "a stage of another project")
     env.clock.advance(5)
 
     body = _body(await _call(env, "get_stage_records", stage_id="stage-1"))
