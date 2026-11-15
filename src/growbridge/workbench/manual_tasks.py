@@ -5,10 +5,13 @@
 - ``POST /wb/stages/{stage_id}/manual-tasks`` records that an occurrence was done (at a stated
   time, never in the future) or skipped. Records are appended; the latest one counts.
 - ``POST /wb/stages/{stage_id}/manual-tasks/irrigate`` runs a planned irrigation (an irrigation
-  task with ``seconds``) and records it as done. It is started by a person on the LAN entry,
-  like every irrigation, but under the stage right: the stage keeps running and no takeover
-  (an intervention) is needed. The control service applies all the irrigation checks: the pump
-  time limit, the cooldown, the interlock, and the switch-off that always runs.
+  task with ``seconds``) and records it: done for a full confirmed run, partial (with the
+  seconds it ran and why) for one cut short or not confirmed. It is started by a person on the
+  LAN entry, like every irrigation, but under the stage right: the stage keeps running and no
+  takeover (an intervention) is needed. The control service applies all the irrigation checks:
+  the pump time limit, the cooldown, the interlock, and the switch-off that always runs. The
+  pump runs at most once per occurrence: the request id is derived from the occurrence, so a
+  retry after a lost answer gets the first run back instead of starting the pump again.
 """
 
 from typing import Annotated, Literal
@@ -17,12 +20,12 @@ from fastapi import APIRouter, Depends
 from pydantic import Field
 
 from growbridge.archive.clock import Clock
-from growbridge.archive.ids import new_id
-from growbridge.archive.models import ActionState, Channel, TaskRecord
+from growbridge.archive.ids import content_digest, new_id
+from growbridge.archive.models import ActionRecord, ActionState, Channel, TaskRecord
 from growbridge.archive.store import Archive
 from growbridge.planning import manual_tasks
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
-from growbridge.workbench.common import REQUEST_ID, Body
+from growbridge.workbench.common import Body
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
 
@@ -38,8 +41,45 @@ class TaskOutcome(Body):
 class PlannedIrrigation(Body):
     task_id: str = Field(min_length=1, max_length=100)
     due_at: float
-    request_id: str = Field(pattern=REQUEST_ID)
     note: str = Field(default="", max_length=200)
+
+
+NEVER_SENT = frozenset({ActionState.PENDING, ActionState.VOID})  # nothing reached the device
+MAX_ATTEMPTS = 5  # attempts of one occurrence that never reached the device
+
+
+def planned_request_id(stage_id: str, task_id: str, due_at: float, attempt: int) -> str:
+    """The request id of one attempt of a planned irrigation, the same on every retry."""
+    key = content_digest({"stage": stage_id, "task": task_id, "due": round(due_at)})
+    return f"planned-{key[:32]}-{attempt}"
+
+
+async def _run_once(control: ControlPort, request: ActionRequest, item) -> ActionRecord:
+    """Run the occurrence's pump cycle at most once. An attempt whose request never reached the
+    device (refused before sending, voided) makes way for the next; any other is the
+    occurrence's run, returned instead of starting the pump again."""
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        request_id = planned_request_id(request.stage_id or "", item.task_id, item.due_at, attempt)
+        earlier = control.receipt(request_id)
+        if earlier is None:
+            attempt_request = request.model_copy(update={"request_id": request_id})
+            return await control.irrigate(attempt_request, item.seconds, planned=True)
+        if earlier.state not in NEVER_SENT:
+            return earlier
+    raise Denied("state", f"{MAX_ATTEMPTS} attempts of this irrigation never reached the device")
+
+
+def _ran(action: ActionRecord) -> dict | None:
+    """The task record a planned run leaves: done for a full confirmed run, partial for one cut
+    short or not confirmed, nothing when it never reached the device."""
+    if action.state in NEVER_SENT:
+        return None
+    if action.state is ActionState.CONFIRMED and action.ended_early is None:
+        return {"outcome": "done", "ran_seconds": action.ran_seconds}
+    why = action.ended_early or (
+        f"the run was not confirmed ({action.state.value}): {action.error or 'no detail'}"
+    )
+    return {"outcome": "partial", "ran_seconds": action.ran_seconds, "ended_early": why}
 
 
 def _window(stage: StageRuntime) -> tuple[float, float]:
@@ -184,7 +224,7 @@ def add_manual_task_routes(
         _check_irrigation(archive, stage, item, now)
         note = body.note.strip()
         request = ActionRequest(
-            request_id=body.request_id,
+            request_id=planned_request_id(stage.stage_id, item.task_id, item.due_at, 1),
             right_number=stage.right_number,
             channel=Channel.PUMP,
             level=1,
@@ -193,20 +233,12 @@ def add_manual_task_routes(
             stage_id=stage.stage_id,
             operator=actor.id,
         )
-        action = await control.irrigate(request, item.seconds, planned=True)
-        task = None
-        if action.state is ActionState.CONFIRMED:
+        action = await _run_once(control, request, item)
+        fields, task = _ran(action), None
+        if fields is not None:
             now = clock.now()
-            _record(
-                archive,
-                stage,
-                item,
-                actor,
-                now,
-                outcome="done",
-                done_at=now,
-                note=note,
-                irrigation_request_id=action.request_id,
-            )
+            ran_at = min(now, action.sent_at or now)  # a retry records the earlier run's time
+            link = {"note": note, "irrigation_request_id": action.request_id}
+            _record(archive, stage, item, actor, now, done_at=ran_at, **link, **fields)
             task = _current(archive, stage, item, now)
         return {"action": action.model_dump(mode="json"), "task": task}

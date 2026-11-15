@@ -172,3 +172,15 @@ def test_a_task_record_needs_a_time_only_when_done():
         record(water, "skipped", done_at=water.due_at)
     with pytest.raises(ValidationError):
         TaskRecord(**{**record(water).model_dump(), "done_at": None})
+
+
+def test_a_partial_run_says_why_and_is_never_done_in_time():
+    (water, _) = mt.occurrences(sheet(), START, START + DAY)
+    cut = record(water, "partial", done_at=water.due_at, ran_seconds=2.0, ended_early="hand-over")
+
+    assert mt.status(water, cut, START + DAY, START + DAY) == "partial"
+    assert mt.missed([water], [cut], START + DAY, judged_at=START + DAY)[:2] == (1, 1)
+    with pytest.raises(ValidationError):  # a partial record says why it ended early
+        record(water, "partial", done_at=water.due_at, ran_seconds=2.0)
+    with pytest.raises(ValidationError):  # and only a partial one does
+        record(water, ended_early="hand-over")

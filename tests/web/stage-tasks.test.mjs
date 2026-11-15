@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AHEAD_SECONDS, rowActions, visibleRows } from "../../src/growbridge/web/workbench/pages/stage-tasks.js";
+import { AHEAD_SECONDS, irrigationNotice, rowActions, visibleRows } from "../../src/growbridge/web/workbench/pages/stage-tasks.js";
 
 const NOW = 100_000;
 const row = (fields) => ({ task_id: "water", kind: "irrigation", seconds: 5, status: "open", record: null, due_at: NOW, ...fields });
@@ -31,4 +31,12 @@ test("a planned irrigation is offered only while it is upcoming or open", () => 
 test("a task more than an hour away cannot be recorded yet", () => {
   assert.deepEqual(rowActions(row({ due_at: NOW + 3601 }), body()), { record: false, irrigate: false });
   assert.deepEqual(rowActions(row({ due_at: NOW + 3600 }), body()).record, true);
+});
+
+test("the notice after a planned run says whether it was done, partial or not recorded", () => {
+  const action = { request_id: "planned-x-1" };
+  const answer = (task) => ({ action, task });
+  assert.deepEqual(irrigationNotice(answer({ status: "done" })), { key: "tasks.irrigated", tone: "ok", id: "planned-x-1" });
+  assert.deepEqual(irrigationNotice(answer({ status: "partial" })), { key: "tasks.irrigatePartial", tone: "error", id: "planned-x-1" });
+  assert.deepEqual(irrigationNotice(answer(null)), { key: "tasks.irrigateUnconfirmed", tone: "error", id: "planned-x-1" });
 });

@@ -1,6 +1,8 @@
 """A planned irrigation: a run sheet's irrigation task, started by the operator under the stage
 right while the stage keeps running. Every other irrigation check still applies."""
 
+import asyncio
+
 import pytest
 from test_control_interlock import PUMP_SECONDS
 
@@ -67,3 +69,41 @@ async def test_a_planned_request_id_cannot_be_replayed_as_another_kind_of_run(ri
         await rig.service.irrigate(request, PUMP_SECONDS)
 
     assert error.value.code == "request_id_reused"
+
+
+async def test_a_full_run_records_the_seconds_it_ran(rig):
+    stage = rig.stage_right(channels=HOSTED)
+
+    record = await rig.service.irrigate(planned(rig, stage), PUMP_SECONDS, planned=True)
+
+    assert record.ran_seconds == PUMP_SECONDS and record.ended_early is None
+
+
+async def _cut_short(rig, stage, end):
+    """Start a 2 s planned run, end it once the pump is on, and return the settled record."""
+    run = asyncio.create_task(rig.service.irrigate(planned(rig, stage), 2.0, planned=True))
+    for _ in range(400):
+        await asyncio.sleep(0.005)
+        if rig.service.irrigating() and rig.writes():
+            break
+    await end()
+    return await asyncio.wait_for(run, 5)
+
+
+async def test_a_run_cut_short_by_a_hand_over_says_so_and_how_long_it_ran(rig):
+    stage = rig.stage_right(channels=HOSTED)
+
+    record = await _cut_short(rig, stage, lambda: rig.service.handover(stage, "stage paused"))
+
+    assert record.state is ActionState.CONFIRMED  # both writes were confirmed
+    assert record.ended_early == "hand-over: stage paused"
+    assert 0 <= record.ran_seconds < 2.0
+
+
+async def test_a_run_cut_short_by_the_pump_off_path_says_so(rig):
+    stage = rig.stage_right(channels=HOSTED)
+
+    record = await _cut_short(rig, stage, lambda: rig.service.pump_off(trigger="watchdog"))
+
+    assert record.ended_early == "pump switched off (watchdog)"
+    assert 0 <= record.ran_seconds < 2.0

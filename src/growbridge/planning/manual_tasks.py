@@ -19,7 +19,7 @@ MAX_MISSED_SHARE = 0.1  # above this share of occurrences not done in time: a de
 # a record entered more than a day after the deadline counts as late, whatever done time it states
 LATE_ENTRY_SECONDS = 24 * 3600.0
 
-Status = Literal["upcoming", "open", "done", "late", "skipped", "missed"]
+Status = Literal["upcoming", "open", "done", "late", "skipped", "partial", "missed"]
 
 
 class Occurrence(Model):
@@ -82,8 +82,8 @@ def on_time(record: TaskRecord, last: float) -> bool:
 def status(item: Occurrence, record: TaskRecord | None, now: float, end: float) -> Status:
     last = deadline(item, end)
     if record is not None:
-        if record.outcome == "skipped":
-            return "skipped"
+        if record.outcome in ("skipped", "partial"):  # partial: a pump run cut short
+            return record.outcome
         return "done" if on_time(record, last) else "late"
     if now < item.due_at:
         return "upcoming"

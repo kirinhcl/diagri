@@ -290,7 +290,8 @@ class TaskRecord(Model):
 
     ``due_at`` names the occurrence (UTC); ``done_at`` is when it was done, as the operator
     states it, never later than when it was recorded. A planned irrigation run from the stage
-    page records the action request in ``irrigation_request_id``.
+    page records the action request in ``irrigation_request_id`` and the seconds the pump ran;
+    a run cut short or not confirmed is ``partial``, with why in ``ended_early``.
     """
 
     id: str
@@ -299,17 +300,21 @@ class TaskRecord(Model):
     task_id: str
     kind: TaskKind
     due_at: float
-    outcome: Literal["done", "skipped"]
+    outcome: Literal["done", "skipped", "partial"]
     done_at: float | None = None
     operator: str
     recorded_at: float
     note: str = ""
     irrigation_request_id: str | None = None
+    ran_seconds: float | None = None
+    ended_early: str | None = None
 
     @model_validator(mode="after")
     def _done_has_a_time(self) -> "TaskRecord":
-        if (self.outcome == "done") != (self.done_at is not None):
-            raise ValueError("a done task has a done_at time, a skipped one has none")
+        if (self.outcome != "skipped") != (self.done_at is not None):
+            raise ValueError("a done or partial task has a done_at time, a skipped one has none")
+        if (self.outcome == "partial") != (self.ended_early is not None):
+            raise ValueError("a partial task says why it ended early, and only a partial one")
         require_finite(self, "Task record")
         return self
 
@@ -464,6 +469,8 @@ class ActionRecord(Model):
     error: str | None = None
     supersedes: str | None = None  # the unknown or failed request this one redoes
     settled_at: float | None = None  # when an operator recorded an on-site check
+    ran_seconds: float | None = None  # an irrigation: how long the pump was held on
+    ended_early: str | None = None  # an irrigation ended before its time: why
 
 
 class ManualMeasurement(Model):

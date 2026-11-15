@@ -55,6 +55,7 @@ class RecordingControl(FakeControl):
         self.submitted: list[ActionRequest] = []
         self.irrigated: list[tuple[ActionRequest, float]] = []
         self.receipts: dict[str, ActionRecord] = {}
+        self.irrigation_update: dict = {}  # how the next pump run settles (e.g. cut short)
 
     def _record(self, request: ActionRequest) -> ActionRecord:
         record = ActionRecord(
@@ -81,7 +82,10 @@ class RecordingControl(FakeControl):
         self, request: ActionRequest, seconds: float, planned: bool = False
     ) -> ActionRecord:
         self.irrigated.append((request, seconds) if not planned else (request, seconds, "planned"))
-        return self._record(request)
+        settled = {"ran_seconds": seconds, **self.irrigation_update}
+        record = self._record(request).model_copy(update=settled)
+        self.receipts[request.request_id] = record
+        return record
 
     def receipt(self, request_id: str) -> ActionRecord | None:
         return self.receipts.get(request_id)
