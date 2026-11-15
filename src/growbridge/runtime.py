@@ -43,9 +43,8 @@ from growbridge.config import Settings
 from growbridge.control.ledger import Ledger
 from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
-from growbridge.observer.alerts import Alert, AlertBook, AlertRule
+from growbridge.observer.alerts import Alert, AlertBook
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
-from growbridge.observer.frozen_watch import FrozenWatch
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
@@ -56,7 +55,7 @@ from growbridge.observer.report import (
     render_daily_report,
     reports_due,
 )
-from growbridge.observer.service import Observer
+from growbridge.observer.service import Observer, build_observer
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -104,7 +103,6 @@ TELEGRAM_TOKEN_ENV = "GROWBRIDGE_TELEGRAM_TOKEN"
 TELEGRAM_CHATS_ENV = "GROWBRIDGE_TELEGRAM_CHAT_IDS"
 EMAIL_TO_ENV = "GROWBRIDGE_EMAIL_TO"
 SMTP_HOST_ENV = "GROWBRIDGE_SMTP_HOST"
-DEFAULT_ALERT_RULES: tuple[AlertRule, ...] = ()
 SIM_STAGE = "stage-sim"
 SIM_STAGE_SECONDS = 600
 SIM_STEP_SECONDS = 60.0
@@ -664,10 +662,7 @@ def build_runtime(
     selected = default_channels() if channels is None else dict(channels)
     # only channels that have a sender: a notification queued for any other name is never sent
     notify = tuple(selected)
-    frozen = FrozenWatch(archive, book, flow, control.safety, clock)
-    observer = Observer(
-        flow, control.readings, book, outbox, DEFAULT_ALERT_RULES, clock, notify, frozen=frozen
-    )
+    observer = build_observer(flow, control, archive, book, outbox, clock, notify)
     unreadable = [Path.home(), data_dir]  # reads are denied by default; these stay denied
     if settings.backup_dir is not None:  # even where an allowed path would cover them
         unreadable.append(settings.backup_dir)
