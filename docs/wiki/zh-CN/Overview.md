@@ -59,7 +59,7 @@ flowchart LR
     O -.->|"请求暂停"| W
 ```
 
-代码目前做到的是这样。从运行单往后的每一步都有对应的服务，也都在模拟的 AC5 上跑过端到端测试：起草和校验运行单、审批、执行、告警和日报、数据快照、分析和报告。开头这一段走工作台路由：操作员创建项目、研究协议和轮次，设置模型调用预算，然后提出问题，问题成为编排 Agent 的一个任务。`/workbench` 的控制台有对应的表单；没有命令。还没有真实模型把一个问题带完一整轮：测试用的是脚本化的模型。详见[状态与已知限制](Status-and-Known-Limitations.md)。
+代码目前做到的是这样。从运行单往后的每一步都有对应的服务，也都在模拟的 AC5 上跑过端到端测试：起草和校验运行单、审批、执行、告警和日报、数据快照、分析和报告。开头这一段走工作台路由：操作员创建项目、研究协议和轮次，设置模型调用预算，然后提出问题，问题成为编排 Agent 的一个任务。`/workbench` 的控制台有对应的表单；没有命令。测试用的是脚本化的模型。真实模型也已经把问题带完过整轮：在开发用工作台上，三个角色都由 Claude 担任，见[示例：模型角色跑完整一轮](Example-Full-Round-With-Claude.md)和[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 五个 Agent
 
@@ -81,7 +81,7 @@ flowchart LR
 
 - **模型角色不控制设备，也不控制阶段。** 阶段控制和设备控制的工具名都列在 `CONTROL_TOOLS` 里，不管配置怎么写，这些工具都会从每个角色的工具集里剔除（见 [`agents/tools.py`](../../../src/growbridge/agents/tools.py)）。模型只交草稿、任务和报告。对话里说的任何话都不算审批。
 - **没有操作员的批准，阶段不会启动。** 批准针对的是运行单的某一个版本（见 [`workflow/service.py`](../../../src/growbridge/workflow/service.py)）。
-- **水泵不会被自动启动。** 运行单里只要有会启动水泵的动作，校验就不通过（见 [`planning/validate.py`](../../../src/growbridge/planning/validate.py)），执行 Agent 也会拒绝这样的动作（见 [`executor/engine.py`](../../../src/growbridge/executor/engine.py)）。只有通过认证的操作员，从局域网入口进来，在人工接管期间调用灌溉路由，水泵才会启动（见 [`workbench/api.py`](../../../src/growbridge/workbench/api.py)）。每次运行受 `max_pump_seconds` 和 `pump_cooldown_seconds` 限制。
+- **水泵不会被自动启动。** 运行单里只要有会启动水泵的动作，校验就不通过（见 [`planning/validate.py`](../../../src/growbridge/planning/validate.py)），执行 Agent 也会拒绝这样的动作（见 [`executor/engine.py`](../../../src/growbridge/executor/engine.py)）。只有通过认证的操作员从局域网入口进来亲自启动，水泵才会运行：在人工接管期间调用灌溉路由（见 [`workbench/api.py`](../../../src/growbridge/workbench/api.py)），或者在阶段页启动计划内灌溉，且只能在该阶段自己的权限下运行（见 [`workbench/manual_tasks.py`](../../../src/growbridge/workbench/manual_tasks.py)）。每次运行受 `max_pump_seconds` 和 `pump_cooldown_seconds` 限制。
 - **安全不等模型。** 驱动执行 Agent、保护规则和关泵联锁的那个 tick 从不调用模型（见 [`runtime.py`](../../../src/growbridge/runtime.py)）。模型接口不可用时，已批准的阶段照常执行。
 
 有一件事系统管不到：AC5 面板和厂商 App 仍然可以直接改设备。DiAGRI 只能靠回读发现这类改动。水泵除外：DiAGRI 没有灌溉时水泵若开着，看门狗会把它关掉、发严重告警，并在当前阶段记一条干预（没有活动阶段时只有账本记录和告警）。关泵时还会把插座模式重置为手动，面板上设的定时器因此被清掉。设计理由见[控制与安全模型](Control-and-Safety-Model.md)。

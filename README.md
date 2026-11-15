@@ -2,36 +2,124 @@
 
 English | [简体中文](README.zh-CN.md)
 
-DiAGRI is an AI agent platform for plant-growth research. It takes a research question through a complete experiment: it designs the experiment, runs the approved plan on growing hardware, records every reading and every write, analyzes the result and delivers a report. The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) describes the whole platform. DiAGRI mode has been tested on a simulated AC5 only.
+**DiAGRI is an agentic research system for plant-growth experiments.** Give it a research question and it takes the question through a whole experiment. Three language-model agents design the study and analyse the result. Deterministic programs run the approved plan on a grow tent and watch over it. Every reading, write, approval and report is kept, so the study can be traced and repeated. A person approves each run sheet before anything touches the plants, and no safety check depends on a model.
 
-This README covers **GrowBridge**, DiAGRI's device bridge, which can also be used on its own.
+> **Status.** DiAGRI as a whole has run only on a simulated AC5 controller, including complete research rounds with Claude in the model roles. Its device bridge, GrowBridge, has read and controlled a real Spider Farmer AC5 over Bluetooth. See [Status and known limitations](docs/wiki/en/Status-and-Known-Limitations.md).
 
-GrowBridge connects to Spider Farmer GGS controllers over local Bluetooth and gives LLMs tools for environmental monitoring, historical data, outlet switching, light and fan control, and timed pump operation.
+The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) describes the whole platform.
 
-This is an independent, early-stage project with no affiliation with Spider Farmer. Protocol reads, outlet switching, dimming, and speed control have been verified on **macOS with an AC5 advertising as SF-GGS-PS5, firmware 3.2, using plaintext protocol v1**. A Linux/Raspberry Pi backend and installation scripts are included; Bluetooth operation on a physical Raspberry Pi has not yet been verified. Encrypted v2 firmware is detected and control is rejected.
+## A research round, start to finish
 
-## Preview
+On 15 November 2026 one round ran with Claude Opus 5.5 in all three model roles, on the simulated AC5. Every step is recorded, with the requests, the model replies and the screenshots, in [Example: a complete round with the model roles](docs/wiki/en/Example-Full-Round-With-Claude.md).
 
-Screenshots captured from a real AC5 connected over local Bluetooth on macOS. Readings, history, and device states reflect the time of capture.
+| Step | Who | What happened |
+| --- | --- | --- |
+| Question | operator | Asked in the project conversation: "Does raising the grow light from 40 % to 70 % speed up lettuce canopy growth?" |
+| Design | orchestrator, planner | The orchestrator handed round 1 (block 1, light 70 %) to the planner and said at once that one tent cannot separate time from the treatment. The planner drafted a 21-day run sheet: light 70 % from 06:00 to 22:00, and daily watering, measurement and photo by hand. It passed the validator and the treatment check the first time. |
+| Approval | operator | The operator read the run sheet, signed in again and approved its digest, then started the stage. No model can approve or start anything. |
+| Execution | executor (a program) | The 21 days ran fast-forwarded in 129 seconds: 12,264 trusted samples, 43 confirmed writes, 63 manual tasks recorded on time. |
+| Analysis | orchestrator, researcher | The researcher inspected the data, froze a snapshot and published the report. |
+| Report | server, researcher | Descriptive, uncertain. The canopy measurements were missing from the data, so the researcher and the server said so and filled nothing in. |
 
-**Desktop overview** — environment readings, historical trends, controls, and recent actions.
+The missing measurements were the scripted operator's mistake: it recorded six values at the stage's end instead of one a day, with a time outside the data window. The researcher saw the conflict with the task records before freezing ("I won't impute or backfill anything"), and the orchestrator told the operator what to fix. That is the point of the design: a wrong input does not become a result.
 
-![GrowBridge desktop dashboard with real AC5 environmental readings and recorded history](docs/images/dashboard-overview.jpg)
+![The report on the round page: label, conclusion, why, limitations, open questions and the next round](docs/images/example-round/report-en.jpg)
 
 <details>
-<summary>Device controls and mobile layout</summary>
+<summary>More from this round: the orchestrator's follow-up, the run sheet under review, the live environment, the manual tasks</summary>
 
-**Device controls** — light brightness, fan speeds, timed pump operation, and power outlets.
+![The orchestrator's follow-up after planning](docs/images/example-round/planning-en.jpg)
 
-![GrowBridge device controls and power outlets showing real AC5 device states](docs/images/dashboard-controls.jpg)
+![The run sheet waiting for review, with its digest and findings](docs/images/example-round/review-en.jpg)
 
-**Mobile layout** — the same controls on a narrow screen.
+![The live environment page during the stage](docs/images/example-round/environment-en.jpg)
 
-<img src="docs/images/dashboard-mobile.jpg" alt="GrowBridge mobile device controls showing real AC5 device states" width="375">
+![The manual tasks of the stage](docs/images/example-round/tasks-en.jpg)
 
 </details>
 
 ## How it works
+
+```mermaid
+flowchart LR
+    U(["Operator"])
+    M["Model roles<br/>orchestrator, planner, researcher"]
+    W["Workflow service<br/>validation, approval, states"]
+    E["Executor<br/>(program)"]
+    O["Observer and notifier<br/>(program)"]
+    C["Control service<br/>safety limits, ledger"]
+    D[("AC5 grow tent")]
+
+    M -->|"drafts, tasks, reports"| W
+    U ==>|"approve, start, take over"| W
+    W -->|"approved run sheet"| E
+    E -->|"writes"| C
+    U ==>|"manual writes, irrigation"| C
+    C <-->|"Bluetooth"| D
+    O -->|"alerts, daily report"| U
+    O -.->|"pause request"| W
+```
+
+DiAGRI splits the work in two. **Model roles reason:** they read data and hand in drafts, tasks and reports through a fixed list of tools. **Programs execute:** they validate, run, record and protect, the same input always gives the same action, and they never call a model.
+
+| Agent | Kind | What it does |
+| --- | --- | --- |
+| Orchestrator | model role | Takes the operator's goal, delegates to the planner or the researcher, and reports back in the project conversation |
+| Planner | model role | Designs the experiment and drafts the run sheets, checking them with the validation tools |
+| Researcher | model role | Inspects the data, freezes it into a snapshot, runs the analysis and publishes the report |
+| Executor | program | Carries out the approved run sheet: timed actions, feedback rules, protection rules, end actions |
+| Observer and notifier | program | Evaluates alert rules, notices frozen readings, queues notifications and the daily report |
+
+A round moves through fixed states: designing, stage review, stage running, data verification, analysis, delivered. The operator works from the web console at `/workbench`: projects and conversations, run sheets to review, the live environment, manual tasks, alerts and reports. See [The five agents](docs/wiki/en/The-Five-Agents.md) and [Run a research round](docs/wiki/en/Run-a-Research-Round.md).
+
+## What DiAGRI never does
+
+These limits are enforced in code. They are not instructions a model is asked to follow.
+
+- **A model never controls the device or a stage.** The stage and device control tools are removed from every model role's tool set, whatever the configuration says. Nothing said in a conversation counts as an approval.
+- **A stage never starts without an operator's approval** of that exact version of the run sheet, bound to its digest and given after signing in again.
+- **Nothing automatic starts the pump.** Validation blocks a run sheet whose scheduled step would start it, and the executor refuses one. The pump runs only when an operator on the lab network starts it: a planned irrigation from the stage page, or a manual takeover. Each run has a time limit, a cooldown and a guaranteed switch-off; a pump found on while DiAGRI is not irrigating is switched off by a watchdog.
+- **Safety does not wait for a model.** The executor's tick, the protection rules and the pump interlock never call a model. An approved stage keeps running when the model API is down.
+- **Recorded data is not rewritten.** Raw samples are append-only. A snapshot is frozen once; a correction becomes a new version.
+
+## Records a study can rely on
+
+- **Who, what, when, why.** Every approval names the run sheet's digest; every device write is in an action ledger with its read-back; every model call and every conversation message is kept per project.
+- **Frozen data.** The researcher analyses a snapshot with a manifest of what it holds, never the live archive.
+- **Honest labels.** The server, not the model, computes a report's label from the frozen data and downgrades it for missing data, deviations from the run sheet, a treatment that was never applied, or too few replicates. The reasons are kept in English and Chinese.
+- **Manual work counts.** Watering, measuring and photographing are scheduled tasks with records; a round with more than 10 % of them not done in time counts as deviating.
+
+See [Data archive and traceability](docs/wiki/en/Data-Archive-and-Traceability.md) and [Research methodology](docs/wiki/en/Research-Methodology.md).
+
+## Try it
+
+Requires Python 3.11 or newer. Install for development:
+
+```sh
+git clone https://github.com/kirinhcl/diagri.git
+cd diagri
+python3 -m venv .venv
+.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'
+```
+
+**A round with Claude**, on the simulated AC5 and the development workbench. The model roles run through your local Claude Code CLI (version 2.1.280 or newer, signed in with `claude auth login`), so no API key is needed:
+
+```sh
+export GROWBRIDGE_DEV_SECRET='at least twelve characters'
+.venv/bin/python scripts/dev_workbench.py --claude-code --fast-forward
+```
+
+Open `http://localhost:8770/workbench`, sign in as `dev` with that secret, create a project, a protocol and a round, and ask your question in the conversation. Read [the example](docs/wiki/en/Example-Full-Round-With-Claude.md#reproduce-it) first: it lists what to expect under `--fast-forward`.
+
+**A round without a model**, scripted from start to end: see [Tutorial: a simulated round](docs/wiki/en/Tutorial-Simulated-Round.md).
+
+To run DiAGRI against real hardware, install GrowBridge (below) and then [enable DiAGRI](docs/wiki/en/Enable-DiAGRI.md).
+
+## GrowBridge, the device bridge
+
+GrowBridge is the part of DiAGRI that talks to the hardware, and it can also be used on its own. It connects to Spider Farmer GGS controllers over local Bluetooth and gives LLMs tools for environmental monitoring, historical data, outlet switching, light and fan control, and timed pump operation. On its own (bridge-only mode, the default) it supports on-demand control, continuous data collection and a local web dashboard. Running an approved experiment plan is what DiAGRI mode adds.
+
+This is an independent, early-stage project with no affiliation with Spider Farmer. Protocol reads, outlet switching, dimming and speed control have been verified on **macOS with an AC5 advertising as SF-GGS-PS5, firmware 3.2, using plaintext protocol v1**. A Linux/Raspberry Pi backend and installation scripts are included; Bluetooth operation on a physical Raspberry Pi has not yet been verified. Encrypted v2 firmware is detected and control is rejected.
 
 ```text
 LLM / Codex
@@ -46,38 +134,32 @@ GrowBridge daemon ─── SQLite history and operation records
 Spider Farmer AC5 / GGS
 ```
 
-The daemon owns the Bluetooth connection, executes commands, verifies device readback, and records history. MCP clients access it through the local API, which listens only on `127.0.0.1:8766` by default. Each installation generates a separate access token. Clients read the token from private configuration, so it stays out of MCP configuration files.
+The daemon owns the Bluetooth connection, executes commands, verifies device readback and records history. MCP clients reach it through the local API, which listens only on `127.0.0.1:8766` by default. Each installation generates its own access token, which clients read from private configuration.
 
-On its own (bridge-only mode), GrowBridge supports on-demand control, continuous data collection, and a local web dashboard. Unattended environmental optimization, irrigation schedules, MQTT, and cloud models are outside its scope. Running an approved experiment plan automatically is what DiAGRI mode adds; see the [wiki](docs/wiki/en/Overview.md). In DiAGRI mode the operator runs the research from the web console at `/workbench` on the LAN entry; see [Enable DiAGRI](docs/wiki/en/Enable-DiAGRI.md).
+<details>
+<summary>Dashboard screenshots from a real AC5</summary>
 
-## Installation
+![GrowBridge desktop dashboard with real AC5 environmental readings and recorded history](docs/images/dashboard-overview.jpg)
 
-Requires Python 3.11+. macOS also requires Xcode Command Line Tools; Linux requires BlueZ and the system D-Bus.
+![GrowBridge device controls and power outlets showing real AC5 device states](docs/images/dashboard-controls.jpg)
+
+<img src="docs/images/dashboard-mobile.jpg" alt="GrowBridge mobile device controls showing real AC5 device states" width="375">
+
+</details>
+
+### Install and connect
+
+macOS also requires Xcode Command Line Tools; Linux requires BlueZ and the system D-Bus.
 
 ```sh
-git clone https://github.com/kirinhcl/diagri.git
-cd diagri
-python3 -m venv .venv
 .venv/bin/python -m pip install -c constraints-tested.txt .
 .venv/bin/growbridge scan
-```
-
-On first use, macOS compiles and launches the native `GrowBridge BLE` helper. Allow it to use Bluetooth when prompted. The scan lists device addresses usable on that machine. Use the scanned address in the following command:
-
-```sh
 .venv/bin/growbridge init --device YOUR_SCANNED_ADDRESS
 .venv/bin/growbridge serve
+.venv/bin/growbridge status   # in another terminal
 ```
 
-Open another terminal to check the current state:
-
-```sh
-.venv/bin/growbridge status
-```
-
-Control is disabled by default. After checking your wiring, set `controls_enabled = true` in the private configuration at `~/.config/spiderfarmer-growbridge/config.toml`, then restart the service. You can also enable control explicitly during initial setup with `init --device YOUR_SCANNED_ADDRESS --enable-controls`.
-
-The default outlet mapping is shown below. Update the configuration first if your wiring differs.
+On first use, macOS compiles and launches the native `GrowBridge BLE` helper; allow it to use Bluetooth. Control is disabled by default. After checking your wiring, set `controls_enabled = true` in `~/.config/spiderfarmer-growbridge/config.toml` and restart the service, or pass `--enable-controls` to `init`. The default outlet mapping:
 
 | Device | Outlet | Control range |
 | --- | --- | --- |
@@ -86,47 +168,19 @@ The default outlet mapping is shown below. Update the configuration first if you
 | Circulation fan | 3 | Gears 0–10; 0 turns it off |
 | Water pump | 4 | Finite pulses; default maximum 5 seconds, with a 60-second cooldown |
 
-Dimming and speed commands do not automatically switch on the corresponding power outlet. Turn on the correctly wired outlet before adjusting a device. Outlet 5 has no default assignment; writes to outlets absent from the live configuration are rejected.
+Dimming and speed commands do not switch on the corresponding outlet; turn on the correctly wired outlet first. Writes to outlets absent from the live configuration are rejected.
 
-## Local dashboard
+### Dashboard and MCP
 
-With the daemon running, open the dashboard from the same installation:
+`.venv/bin/growbridge dashboard` opens the local dashboard through a single-use link: live readings, device readbacks, controls, finite pump pulses, history charts and CSV export, in English or Simplified Chinese. It runs from local assets and listens only on loopback; on a Raspberry Pi, forward the port with `ssh -L 8766:127.0.0.1:8766 YOUR_PI_HOST` and request the link with `growbridge dashboard --no-open` over SSH.
 
-```sh
-.venv/bin/growbridge dashboard
-```
-
-The browser shows live temperature, humidity, VPD, CO₂, PPFD and soil temperature; device readbacks; light and fan controls; power outlets; and finite pump pulses. Historical charts cover 1 hour, 6 hours, 24 hours or 7 days. Choose a measurement, inspect individual recorded points, or export all raw samples in the chosen period as CSV. Recent actions include both dashboard and MCP requests. The responsive interface defaults to English and supports Simplified Chinese.
-
-Opening the dashboard uses a single-use link that expires after 60 seconds. The browser receives an HttpOnly session cookie valid for 12 hours; the installation's API token is never sent to browser JavaScript. Use `Disconnect dashboard` to revoke that session. After the daemon restarts or the browser session expires, run the command again. Manual controls use the same validation and readback checks as MCP. Stale data or a read-only installation disables controls.
-
-Charts select actual snapshots across the full requested window when there are many samples. They show gaps in collection and do not invent missing readings. CSV exports include every recorded sample in the window, with UTC timestamps; charts use the browser's local timezone. A missing reading is shown as a dash, while a reported zero remains zero.
-
-The dashboard runs entirely from local assets and requires no frontend build or CDN. The service still listens only on loopback. On a Raspberry Pi, forward the port over SSH before opening it on your Mac:
-
-```sh
-ssh -L 8766:127.0.0.1:8766 YOUR_PI_HOST
-```
-
-In another terminal, request a short-lived connection link from the Pi:
-
-```sh
-ssh -T YOUR_PI_HOST /absolute/path/on/pi/diagri/.venv/bin/growbridge dashboard --no-open
-```
-
-Open the returned link on the Mac within 60 seconds. Keep the SSH forwarding session running. This does not make the control interface public.
-
-## Connect Codex or another MCP client
-
-Keep the daemon running. Add a stdio server to your MCP client. For Codex, use:
+To connect Codex or another MCP client, add a stdio server:
 
 ```toml
 [mcp_servers.growbridge]
 command = "/absolute/path/diagri/.venv/bin/growbridge"
 args = ["mcp"]
 ```
-
-Replace `/absolute/path` with your actual installation path. Available tools:
 
 | Tool | Purpose |
 | --- | --- |
@@ -139,76 +193,25 @@ Replace `/absolute/path` with your actual installation path. Available tools:
 | `set_outlet` | Switch a power outlet; direct pump outlet activation is blocked |
 | `run_pump` | Run a finite pump pulse and confirm OFF through device readback before returning |
 
-Every control tool requires a `request_id`: 8–100 letters, digits, underscores, or hyphens. Use a new ID for each intended action and reuse that ID when retrying the same action to prevent duplicate execution. An ID cannot be reused with different arguments. After an operation fails, inspect the current state before deciding whether to submit a new action.
+Every control tool requires a `request_id` of 8–100 letters, digits, underscores or hyphens. Reuse it only when retrying the same action; it prevents duplicate execution. In DiAGRI mode only the three read tools remain.
 
-Example requests: “Check the current environment and tell me how old the readings are,” “Set the light to 25% and confirm the readback,” or “Retry the previous action with the same request ID; its outcome is unclear.”
+### Run in the background
 
-## Run in the background on macOS
+- **macOS:** `.venv/bin/python scripts/install_macos.py` installs a LaunchAgent that starts at login (`--uninstall` removes it). Collection stops while the Mac sleeps.
+- **Raspberry Pi** (the intended target for continuous operation): on Raspberry Pi OS Lite 64-bit, install `python3-venv bluez dbus git`, install as above, scan again on the Pi, then `.venv/bin/python scripts/install_linux.py` and `sudo loginctl enable-linger "$USER"`. A Mac can use the Pi's MCP server over SSH with `command = "ssh"` and `args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/diagri/.venv/bin/growbridge", "mcp"]`.
 
-From the project directory, run:
+See [Installation and quick start](docs/wiki/en/Installation-and-Quick-Start.md) for the details.
 
-```sh
-.venv/bin/python scripts/install_macos.py
-```
+### Data and control boundaries
 
-The installer creates a LaunchAgent for the current user and starts the service without changing device settings. It starts automatically at login. Data collection cannot continue while the Mac is asleep or the user is logged out. A Raspberry Pi is the intended deployment target for continuous operation. Logs are stored in the private data directory.
-
-To stop the service and remove automatic startup:
-
-```sh
-.venv/bin/python scripts/install_macos.py --uninstall
-```
-
-## Deploy on Raspberry Pi
-
-Enable SSH and connect to the network on Raspberry Pi OS Lite 64-bit, then run:
-
-```sh
-sudo apt update
-sudo apt install -y python3-venv bluez dbus git
-git clone https://github.com/kirinhcl/diagri.git
-cd diagri
-python3 -m venv .venv
-.venv/bin/python -m pip install -c constraints-tested.txt .
-.venv/bin/growbridge scan
-.venv/bin/growbridge init --device YOUR_PI_SCANNED_ADDRESS
-.venv/bin/growbridge serve
-```
-
-Verify read access before explicitly enabling control. A macOS device UUID cannot be used on Linux; scan again on the Raspberry Pi and save the address returned there.
-
-To install the background service:
-
-```sh
-.venv/bin/python scripts/install_linux.py
-systemctl --user status growbridge
-```
-
-To keep the user service running after SSH logout and start it at boot, an administrator must also enable linger for the target account: `sudo loginctl enable-linger "$USER"`. BlueZ/D-Bus permissions depend on the distribution and may require authorization for that account. The application does not require running as root.
-
-To use the Raspberry Pi's MCP server from a Mac over SSH:
-
-```toml
-[mcp_servers.growbridge]
-command = "ssh"
-args = ["-T", "YOUR_PI_HOST", "/absolute/path/on/pi/diagri/.venv/bin/growbridge", "mcp"]
-```
-
-Configure SSH keys and verify the host's identity first. Closing an MCP connection leaves the Raspberry Pi daemon running. The API continues to listen only on the Pi's loopback address; no public HTTP port is needed.
-
-## Data and control boundaries
-
-- Sensor samples are retained for 30 days by default, configurable through `retention_days`. History starts when the installed service begins collecting data.
-- Configuration, SQLite data, and logs are stored in private user directories. The repository contains no actual device addresses, account identifiers, raw protocol captures, or device configuration backups.
-- The service reads the target module's complete configuration before changing its fields. A successful acknowledgement is followed by a device-state readback to confirm the change.
-- Ordinary controls are rejected when data is stale, Bluetooth is disconnected, or the protocol is unsupported. Reconnection does not replay historical commands.
-- The daemon owns pump timing. A client disconnect does not cancel the OFF action. Operations are persisted before execution; after an interrupted pump operation, reconnection prioritizes turning the pump off rather than replaying ON.
-- If pump shutdown cannot be confirmed, the service reports the fault, blocks further ordinary controls, and attempts to turn it off after restoring the connection. Software timing cannot guarantee shutdown during host power loss, forced process termination, or complete Bluetooth failure. Unattended irrigation needs device-side timing or independent hardware protection.
-- Validation covers the specified device and protocol. Compatibility with other hardware and firmware remains unverified.
+- Sensor samples are retained for 30 days by default (`retention_days`). Configuration, SQLite data and logs are stored in private user directories; the repository holds no device addresses, account identifiers, protocol captures or configuration backups.
+- The service reads a module's complete configuration before changing its fields, and confirms each acknowledged change by reading the device state back.
+- Ordinary controls are rejected when data is stale, Bluetooth is disconnected or the protocol is unsupported. Reconnection does not replay historical commands.
+- The daemon owns pump timing; a client disconnect does not cancel the OFF action. If shutdown cannot be confirmed, the service reports the fault, blocks ordinary controls and turns the pump off after reconnecting. Software timing cannot guarantee shutdown during host power loss, forced termination or complete Bluetooth failure, so unattended irrigation needs device-side timing or independent hardware protection.
 
 ## Documentation
 
-The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) covers the whole platform: its architecture, the control and safety model, reference pages, and what has and has not been verified.
+The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) covers the whole platform: its architecture, the control and safety model, the research methods, reference pages, and what has and has not been verified.
 
 ## Development and validation
 
@@ -224,7 +227,7 @@ node --test tests/web/*.test.mjs
 
 The two `node` lines need Node.js (CI uses version 22) and run the same checks of the dashboard and console scripts as CI. See [VALIDATION.md](VALIDATION.md) for the detailed validation scope.
 
-Automated tests use synthetic devices, with no Bluetooth connection or physical hardware operation. They cover fragmentation and CRCs, unsupported protocol rejection, control readback, parameter bounds, authentication, duplicate requests, pump timeouts, and recovery. The operator console's unit tests run in Node without a browser, a server or a network.
+Automated tests use synthetic devices and a scripted model, with no Bluetooth connection, no physical hardware and no network. They cover the protocol (fragmentation and CRCs, unsupported protocol rejection), control read-back, parameter bounds, authentication, duplicate requests, pump timeouts and recovery, and whole research rounds from the goal to the delivered report. The console's unit tests run in Node without a browser, a server or a network.
 
 References:
 
