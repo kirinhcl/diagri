@@ -174,9 +174,10 @@ class WorkflowService(StageRecovery):
         own = tuple(self.validate(run_sheet)) if self.validate else ()
         if not self.check_treatments:
             return own
-        protocol = self.store.protocol(run_sheet.protocol_id, run_sheet.protocol_version)
+        rnd = self.store.round(round_id)  # the round's protocol, whatever the sheet names
+        protocol = self.store.protocol(rnd.protocol_id, rnd.protocol_version)
         if protocol is None:  # a round is only created for a saved protocol
-            raise Denied("state", f"protocol {run_sheet.protocol_id} is not saved")
+            raise Denied("state", f"protocol {rnd.protocol_id} is not saved")
         return (*own, *check_treatment(run_sheet, protocol, self.store.round_number(round_id)))
 
     def _add_stage(self, rnd: RoundRow, sheet: RunSheet) -> None:
@@ -522,6 +523,9 @@ class WorkflowService(StageRecovery):
         owner = (sheet.stage_id, sheet.experiment_id, sheet.project_id, sheet.device_id)
         if owner != (stage.stage_id, stage.experiment_id, stage.project_id, stage.device_id):
             raise Denied("state", "the new run sheet belongs to another stage or device")
+        rnd = self.store.round(stage.round_id)
+        if (sheet.protocol_id, sheet.protocol_version) != (rnd.protocol_id, rnd.protocol_version):
+            raise Denied("state", "the new run sheet belongs to another protocol than the round")
         if sheet.version <= stage.run_sheet_version:
             raise Denied("state", "the new run sheet needs a higher version")
         if self.store.run_sheet_digest(sheet.id, sheet.version) is not None:

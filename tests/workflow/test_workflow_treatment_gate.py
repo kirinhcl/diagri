@@ -3,8 +3,9 @@ the planner among the model roles may file a run sheet."""
 
 import pytest
 
-from growbridge.archive.models import Channel, TimedAction
+from growbridge.archive.models import Channel, TimedAction, Treatment
 from growbridge.ports import Actor, Denied
+from growbridge.sim.fixtures import make_protocol
 from growbridge.workflow.service import WorkflowService
 
 # make_protocol allocates treatment "high" (light 70 %) to round 1; the fixture day runs at 60
@@ -74,3 +75,23 @@ async def test_the_planner_may_file_a_run_sheet(checked):
 
     assert not any(finding.blocking for finding in findings)
     assert checked.svc.store.find_stage("stage-1") is not None
+
+
+async def test_a_live_switch_to_a_sheet_of_another_protocol_is_refused(checked):
+    """The treatment is the round's: a sheet naming another protocol, whose round 1 runs the
+    fixture day's light 60, must not pass the check against that protocol instead."""
+    await checked.running(timed_actions=HIGH)
+    sixty = (
+        Treatment(id="control", name="light 40 %", factors={"light": 40}),
+        Treatment(id="high", name="light 60 %", factors={"light": 60}),
+    )
+    checked.svc.save_protocol(
+        make_protocol(id="protocol-60", project_id=checked.project_id, treatments=sixty),
+        checked.op,
+    )
+    sheet = checked.sheet(version=2, protocol_id="protocol-60")
+
+    with pytest.raises(Denied):
+        await checked.svc.switch_run_sheet("stage-1", sheet, checked.op)
+
+    assert checked.svc.stage("stage-1").run_sheet.version == 1
