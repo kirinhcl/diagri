@@ -309,9 +309,16 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "run_local_analysis",
-            "Run an exploratory script in the sandbox on a snapshot of your task's project. "
+            "Run an exploratory Python script in the sandbox on a snapshot of your task's project. "
             "Pass the researcher task_id you are working on; a snapshot of another project, "
-            "an unknown snapshot or one holding held-out outcomes is refused.",
+            "an unknown snapshot or one holding held-out outcomes is refused. The script gets "
+            "the snapshot directory as sys.argv[1] (read only) and an empty output directory as "
+            "sys.argv[2], which is also its working directory; it has no network and no "
+            "environment variables. The snapshot holds manifest.json and one JSON line per record "
+            "in samples.jsonl, samples_untrusted.jsonl, actions.jsonl, measurements.jsonl, "
+            "interventions.jsonl and frozen_periods.jsonl (and manual_tasks.jsonl and "
+            "task_records.jsonl in a snapshot that records manual tasks). You get back stdout, "
+            "stderr and the names of the files written to sys.argv[2].",
             LocalAnalysisInput,
             lambda d: _local_analysis(deps, d),
             sandbox=True,

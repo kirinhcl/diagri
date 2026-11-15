@@ -184,3 +184,16 @@ def test_reads_web_flag_is_exposed():
     toolset = build_toolset("planner", [make_tool("search_and_verify_sources", reads_web=True)])
     assert toolset.reads_web("search_and_verify_sources") is True
     assert toolset.reads_web("nonexistent") is False
+
+
+def test_the_local_analysis_tool_says_how_the_script_finds_the_snapshot(tmp_path):
+    """The script gets ``<snapshot_dir> <out_dir>`` as arguments and runs in the empty output
+    directory; a model that is not told so reads nothing (seen in a Claude research round)."""
+    from growbridge.agents.handlers import Deps, build_role_tools
+    from growbridge.archive.snapshot import MANIFEST
+
+    deps = Deps(*(None,) * 5, work_root=tmp_path)  # descriptions only: no handler is called
+    (tool,) = [t for t in build_role_tools(deps)["researcher"] if t.name == "run_local_analysis"]
+
+    for needed in ("sys.argv[1]", "sys.argv[2]", MANIFEST, "samples.jsonl", "measurements.jsonl"):
+        assert needed in tool.description, needed
