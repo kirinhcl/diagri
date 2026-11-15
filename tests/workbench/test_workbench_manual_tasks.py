@@ -299,3 +299,30 @@ def test_an_attempt_that_never_reached_the_pump_makes_way_for_the_next(bench, op
     ((request, _, _),) = bench.control.irrigated
     assert request.request_id == run_id(2)
     assert response.json()["task"]["status"] == "done"
+
+
+def test_a_run_that_was_never_sent_is_not_recorded_and_may_be_tried_again(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    bench.control.irrigation_update = {"state": ActionState.FAILED, "error": "not sent: offline"}
+
+    first = irrigate(bench, operator)
+    bench.control.irrigation_update = {}
+    again = irrigate(bench, operator)
+
+    assert first.status_code == 200 and first.json()["task"] is None
+    assert again.json()["task"]["status"] == "done"
+    assert [r.request_id for r, *_ in bench.control.irrigated] == [run_id(1), run_id(2)]
+
+
+def test_a_run_whose_read_back_failed_may_have_watered_and_is_partial(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    failed = {"state": ActionState.FAILED, "error": "read-back level differs from 1"}
+    bench.control.irrigation_update = failed
+
+    record = irrigate(bench, operator).json()["task"]["record"]
+
+    assert record["outcome"] == "partial"
+    assert detail(irrigate(bench, operator))["code"] == "state"
+    assert len(bench.control.irrigated) == 1

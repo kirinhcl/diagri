@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from growbridge.archive.models import Channel
-from growbridge.control.device import DeviceIO
+from growbridge.archive.models import ActionState, Channel
+from growbridge.control.device import DeviceIO, changed_nothing
 
 
 async def wait_until(predicate, attempts=200):
@@ -135,3 +135,21 @@ async def test_cancelled_irrigation_does_not_latch_irrigating(rig):
     assert rig.service.interlocked() is True
     release.set()
     await asyncio.gather(blocker, return_exceptions=True)
+
+
+@pytest.mark.parametrize(
+    ("state", "error", "nothing"),
+    [
+        (ActionState.PENDING, None, True),
+        (ActionState.VOID, "hand-over", True),
+        (ActionState.FAILED, "not sent: offline", True),
+        (ActionState.FAILED, "Device rejected: code 500", True),
+        (ActionState.FAILED, "read-back level differs from 1", False),
+        (ActionState.FAILED, "read-back mode is 1, expected 0", False),
+        (ActionState.UNKNOWN, "read-back unavailable", False),
+        (ActionState.MAYBE_SENT, None, False),
+        (ActionState.CONFIRMED, None, False),
+    ],
+)
+def test_only_a_write_that_never_left_or_was_rejected_changed_nothing(state, error, nothing):
+    assert changed_nothing(state, error) is nothing

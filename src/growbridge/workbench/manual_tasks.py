@@ -23,6 +23,7 @@ from growbridge.archive.clock import Clock
 from growbridge.archive.ids import content_digest, new_id
 from growbridge.archive.models import ActionRecord, ActionState, Channel, TaskRecord
 from growbridge.archive.store import Archive
+from growbridge.control.device import changed_nothing
 from growbridge.planning import manual_tasks
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.workbench.common import Body
@@ -44,8 +45,7 @@ class PlannedIrrigation(Body):
     note: str = Field(default="", max_length=200)
 
 
-NEVER_SENT = frozenset({ActionState.PENDING, ActionState.VOID})  # nothing reached the device
-MAX_ATTEMPTS = 5  # attempts of one occurrence that never reached the device
+MAX_ATTEMPTS = 5  # attempts of one occurrence that changed nothing on the device
 
 
 def planned_request_id(stage_id: str, task_id: str, due_at: float, attempt: int) -> str:
@@ -55,24 +55,24 @@ def planned_request_id(stage_id: str, task_id: str, due_at: float, attempt: int)
 
 
 async def _run_once(control: ControlPort, request: ActionRequest, item) -> ActionRecord:
-    """Run the occurrence's pump cycle at most once. An attempt whose request never reached the
-    device (refused before sending, voided) makes way for the next; any other is the
-    occurrence's run, returned instead of starting the pump again."""
+    """Run the occurrence's pump cycle at most once. An attempt that certainly changed nothing
+    on the device (refused before sending, voided, not sent, rejected) makes way for the next;
+    any other is the occurrence's run, returned instead of starting the pump again."""
     for attempt in range(1, MAX_ATTEMPTS + 1):
         request_id = planned_request_id(request.stage_id or "", item.task_id, item.due_at, attempt)
         earlier = control.receipt(request_id)
         if earlier is None:
             attempt_request = request.model_copy(update={"request_id": request_id})
             return await control.irrigate(attempt_request, item.seconds, planned=True)
-        if earlier.state not in NEVER_SENT:
+        if not changed_nothing(earlier.state, earlier.error):
             return earlier
     raise Denied("state", f"{MAX_ATTEMPTS} attempts of this irrigation never reached the device")
 
 
 def _ran(action: ActionRecord) -> dict | None:
     """The task record a planned run leaves: done for a full confirmed run, partial for one cut
-    short or not confirmed, nothing when it never reached the device."""
-    if action.state in NEVER_SENT:
+    short or not confirmed, nothing when it certainly changed nothing on the device."""
+    if changed_nothing(action.state, action.error):
         return None
     if action.state is ActionState.CONFIRMED and action.ended_early is None:
         return {"outcome": "done", "ran_seconds": action.ran_seconds}
@@ -115,7 +115,7 @@ def _check_irrigation(archive: Archive, stage: StageRuntime, item, now: float) -
     records = archive.task_records(stage.experiment_id, start, end)
     mine = [r for r in records if manual_tasks.key(r.task_id, r.due_at) == wanted]
     if any(record.irrigation_request_id is not None for record in mine):
-        raise Denied("state", "the pump already ran for this irrigation")
+        raise Denied("state", "the pump already ran, or may have, for this irrigation")
     if _current(archive, stage, item, now)["status"] in ("done", "late"):
         raise Denied("state", "this irrigation is already recorded as done")
 

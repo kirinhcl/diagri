@@ -31,6 +31,16 @@ SENSORS = {
 PROTOCOL_VERSION = 1
 READBACK_POLLS = 3
 REJECTED = "Device rejected"
+NOT_SENT = "not sent"  # an outcome error that starts so: the write never left the host
+
+
+def changed_nothing(state: ActionState, error: str | None) -> bool:
+    """Whether a write certainly left the device as it was: refused before sending (pending),
+    voided, not sent, or rejected by the device. A read-back mismatch, a wrong mode or an
+    unknown outcome may have changed something."""
+    if state in (ActionState.PENDING, ActionState.VOID):
+        return True
+    return state is ActionState.FAILED and (error or "").startswith((NOT_SENT, REJECTED))
 
 
 class Outcome(NamedTuple):
@@ -158,7 +168,7 @@ class DeviceIO:
             config = await self.bridge.configuration()
             params = self.params(config, channel, level)
         except (BridgeError, ConnectionError, KeyError, TypeError) as error:
-            return Outcome(ActionState.FAILED, f"not sent: {error}")
+            return Outcome(ActionState.FAILED, f"{NOT_SENT}: {error}")
         try:
             await self.bridge.request("setConfigField", params)
         except BridgeError as error:
