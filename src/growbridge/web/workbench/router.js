@@ -1,5 +1,5 @@
 // Hash routes of the console.
-const FLAT = ["login", "projects", "alerts", "evidence", "compute", "safety"];
+const FLAT = ["login", "environment", "projects", "alerts", "evidence", "compute", "safety"];
 const WITH_ID = new Map([
   ["projects", ["project", "projectId"]],
   ["rounds", ["round", "roundId"]],

@@ -1,5 +1,6 @@
-"""Researcher tool handlers (architecture doc §9): freeze data, query evidence, run exploratory
-analysis in the sandbox, use CSC compute, and publish a report (see ``handlers_report``).
+"""Researcher tool handlers (architecture doc §9): inspect and freeze data, query evidence, run
+exploratory analysis in the sandbox, use CSC compute, and publish a report (see
+``handlers_report``).
 
 The model can only produce exploratory analyses. Freezing takes the window and sampling limits
 from the stage's run sheet, never from tool input, and leaves holdout outcomes out of the data.
@@ -25,6 +26,7 @@ from growbridge.agents.handlers_report import PublishInput, own_task, publish
 from growbridge.agents.tools import Tool
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.ids import new_id
+from growbridge.planning import manual_tasks
 from growbridge.ports import Denied
 from growbridge.workflow.states import RoundState
 
@@ -40,6 +42,11 @@ class FreezeInput(ToolInput):
     task_id: str  # the researcher task this freeze belongs to; the stage must be its project's
     stage_id: str
     round_id: str | None = None  # advance this round (数据核验 -> 研究分析) when the data is whole
+
+
+class InspectInput(ToolInput):
+    task_id: str  # the researcher task; the stage must be its project's
+    stage_id: str
 
 
 class EvidenceInput(ToolInput):
@@ -109,27 +116,84 @@ async def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
     }
 
 
-def _freeze(deps: Deps, data: FreezeInput) -> dict:
-    task = own_task(deps, data.task_id)
-    stage = deps.workflow.stage(data.stage_id)
-    if stage.project_id != task.project_id:  # before a snapshot is written or a round touched
-        raise Denied("scope", f"stage {data.stage_id} is not available to task {task.id}")
+def _started_stage(deps: Deps, task_id: str, stage_id: str):
+    """The stage, when it belongs to the task's project and has started."""
+    task = own_task(deps, task_id)
+    stage = deps.workflow.stage(stage_id)
+    if stage.project_id != task.project_id:  # before anything is read, written or touched
+        raise Denied("scope", f"stage {stage_id} is not available to task {task.id}")
     if stage.started_at is None:
-        raise Denied("state", f"stage {data.stage_id} never started; there is nothing to freeze")
-    if data.round_id is not None:
-        require_round(deps, data.round_id, RoundState.DATA_VERIFICATION, task.project_id)
+        raise Denied("state", f"stage {stage_id} never started; there is no data yet")
+    return task, stage
+
+
+def _window(deps: Deps, stage) -> tuple:
+    """The arguments ``freeze`` and ``preview`` share: all from the run sheet, none from input."""
     sheet = stage.run_sheet
     keep = None if deps.holdout is None else deps.holdout.development_filter(stage.project_id)
-    shot = snapshots.freeze(
+    args = (
         deps.archive,
         stage.experiment_id,
-        deps.clock,
         stage.started_at,
         stage.started_at + sheet.duration_seconds,
         sheet.sampling.interval_seconds,
         sheet.sampling.max_gap_seconds,
+    )
+    return args, keep
+
+
+def _schedule(stage) -> tuple[manual_tasks.Occurrence, ...]:
+    """The manual task occurrences the run sheet plans in the stage window."""
+    start = stage.started_at
+    return manual_tasks.occurrences(
+        stage.run_sheet, start, start + stage.run_sheet.duration_seconds
+    )
+
+
+def _manual_summary(deps: Deps, stage) -> dict:
+    items = _schedule(stage)
+    end = stage.started_at + stage.run_sheet.duration_seconds
+    records = deps.archive.task_records(stage.experiment_id, stage.started_at, end)
+    rows = manual_tasks.statuses(items, records, deps.clock.now(), end)
+    counts: dict[str, dict[str, int]] = {}
+    for item, _, state in rows:
+        kind = counts.setdefault(item.kind, {})
+        kind[state] = kind.get(state, 0) + 1
+    missed, total, _ = manual_tasks.missed(items, records, end)
+    return {"planned": total, "by_kind": counts, "not_done_in_time": missed}
+
+
+def _inspect(deps: Deps, data: InspectInput) -> dict:
+    _, stage = _started_stage(deps, data.task_id, data.stage_id)
+    (archive, experiment_id, *limits), keep = _window(deps, stage)
+    summary = snapshots.preview(
+        archive, experiment_id, *limits, DEFAULT_MIN_COVERAGE, measurement_filter=keep
+    )
+    summary["manual_tasks"] = _manual_summary(deps, stage)
+    frozen = archive.snapshots(experiment_id)
+    return {
+        "stage_id": stage.stage_id,
+        "stage_state": stage.state.value,
+        "experiment_id": experiment_id,
+        "clock_synced": deps.clock.synced,
+        **summary,
+        "snapshots": [{"snapshot_id": s.id, "version": s.version} for s in frozen],
+    }
+
+
+def _freeze(deps: Deps, data: FreezeInput) -> dict:
+    task, stage = _started_stage(deps, data.task_id, data.stage_id)
+    if data.round_id is not None:
+        require_round(deps, data.round_id, RoundState.DATA_VERIFICATION, task.project_id)
+    (archive, experiment_id, *limits), keep = _window(deps, stage)
+    shot = snapshots.freeze(
+        archive,
+        experiment_id,
+        deps.clock,
+        *limits,
         DEFAULT_MIN_COVERAGE,
         measurement_filter=keep,
+        schedule=_schedule(stage),
     )
     verified = snapshots.verify(deps.archive, shot.id)
     body = {
@@ -214,10 +278,25 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
 
     return [
         Tool(
+            "inspect_stage_data",
+            "Read-only summary of a started stage's data over the window freeze_dataset would "
+            "use: coverage and gaps, trusted and untrusted sample counts with reasons, ranges "
+            "per sensor channel, manual measurements per metric, actions and interventions, "
+            "the planned manual tasks and how many were done in time, "
+            "and the snapshots already frozen. Writes nothing; use it to check the data before "
+            "freezing. Pass the researcher task_id you are working on.",
+            InspectInput,
+            lambda d: _inspect(deps, d),
+        ),
+        Tool(
             "freeze_dataset",
-            "Freeze a stage's data into a verified snapshot (window and limits come from its "
-            "run sheet). Pass the researcher task_id you are working on; a stage or round of "
-            "another project is refused.",
+            "Freeze a stage's data into a snapshot and verify it (window and limits come from "
+            "its run sheet; the snapshot also holds the manual task records). The freeze "
+            "itself checks coverage, gaps and file digests and "
+            "returns complete/verified; it never fails because the data is poor, and freezing "
+            "again later writes a new version. Pass round_id to advance a round in "
+            "data_verification when the snapshot is complete and verified. Pass the researcher "
+            "task_id you are working on; a stage or round of another project is refused.",
             FreezeInput,
             lambda d: _freeze(deps, d),
             writes=True,

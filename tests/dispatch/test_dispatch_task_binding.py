@@ -243,9 +243,7 @@ async def test_a_delegation_parent_must_be_the_bound_task(env):
     assert outcome.is_error and "denied (scope)" in outcome.content
 
 
-@pytest.mark.parametrize(
-    ("role", "name"), [("orchestrator", "submit_run_for_review"), ("planner", "save_plan_draft")]
-)
+@pytest.mark.parametrize(("role", "name"), [("planner", "save_plan_draft")])
 async def test_a_draft_cannot_be_filed_into_another_projects_round(world, role, name):
     env = world.env
     caller = env.task(role, f"ev-{role}")

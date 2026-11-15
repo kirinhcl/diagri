@@ -133,11 +133,15 @@ n = ((z(1 - alpha/2) + z(power)) × sd / effect)²
 | --- | --- | --- | --- |
 | 独立重复太少 | 对照或处理的实验单位少于 2 个（`MIN_REPLICATES`） | 描述性 | 有数据的那些轮次的分配 |
 | 处理和时间分不开 | `confounded_with_time` | 描述性 | 对有数据的轮次做设计检查 |
-| 缺失过多 | 超过协议里的 `max_missing_fraction`，默认 0.2 | 探索性 | 两个数里较大的一个：计划的实验单位中没有主要终点测量的比例；1 减去各快照中最低的覆盖率 |
+| 缺失过多 | 超过协议里的 `max_missing_fraction`，默认 0.2 | 探索性 | 两个数里较大的一个：计划的实验单位中没有主要终点测量的比例；1 减去各快照中最低的覆盖率。只计已经运行的协议轮次，即报告引用的轮次和有阶段已开始的轮次。还没人运行的轮次不算缺失（轮次不够时由重复数规则降级）；运行过却没写进报告的轮次仍算缺失。 |
 | 看到结局之后改了方案 | 标记 `changed_after_outcomes` | 探索性 | 由研究 Agent 申报，服务端看不到 |
-| 实际处理偏离了批准的方案 | 超过 `max_deviation_fraction`，默认 0.1 | 探索性 | 两个数里较大的一个：有干预记录的实验所占比例；研究 Agent 申报的比例 |
+| 实际处理偏离了批准的方案 | 超过 `max_deviation_fraction`，默认 0.1 | 探索性 | 两个数里较大的一个：有干预记录、设备记录的档位从未达到本轮分配处理、或计划的人工任务有超过 10% 没有按时完成的实验所占比例；研究 Agent 申报的比例 |
 
 描述性优先于探索性，所有降级原因都写进报告。发布路径上还有三道上限，会把确认性降为探索性（[`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`research/report.py`](../../../src/growbridge/research/report.py)）：不是每份快照都有成功的确认性运行；快照不完整；留出数据已经被读过一次。
+
+**人工任务。** 快照里保存运行单在阶段时间窗内计划的人工任务，以及操作员在阶段页上做的记录（[`planning/manual_tasks.py`](../../../src/growbridge/planning/manual_tasks.py)）。某次任务的最新记录为"已完成"，且完成时间不晚于到期后两小时（`ON_TIME_SECONDS`），就算按时完成；`make_up_allowed` 的任务只要在阶段结束前完成即可。延迟、跳过和没有记录的都算没完成。有这类任务的轮次会在报告局限里写一条说明，超过 10%（`MAX_MISSED_SHARE`）的轮次算作偏离。在人工任务随快照冻结之前冻结的旧快照不参与这项核对。
+
+**说明的语言。** 服务器加进报告的每条原因和局限都是一条带代码的说明（[`research/notes.py`](../../../src/growbridge/research/notes.py)），同时有英文和中文。报告把它们存在 `notes` 里，每条有 `code`、`kind`（`reason` 或 `limitation`）、`params` 和 `text`（`en`、`zh`），模型自己写的局限另存在 `model_limitations`。轮次页按控制台当前语言显示。纯文本字段 `reasons`、`limitations`、`conclusion_text` 仍保存中文，旧的读取方式看到的内容不变。
 
 研究 Agent 可以传三个标记：`changed_after_outcomes`、`early_terminated` 和 `deviation_fraction`。每一个都只能让结果更严格。本来可以标为确认性、但还有未解决的问题，或者因为快照不完整而失去这个标签的报告，转入待复核（`needs_review`），这一轮不会交付。
 
@@ -172,7 +176,7 @@ n = ((z(1 - alpha/2) + z(power)) × sd / effect)²
 
 研究 Agent 是语言模型，所以它的工具有明确的边界（[`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py)、[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)）：
 
-- **限定在任务所属的项目内。** `freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要指明一个研究任务，而且所指明的必须就是调度器正在运行的任务：服务器在运行期间绑定任务，模型给出的编号只和这个绑定比对，从不直接采信。别的角色或别的项目的任务、同一项目的另一个任务、以及在调度运行之外发起的调用，一律拒绝。阶段、轮次和快照，只有和这个任务属于同一个项目才能使用。其他情况一律以 `scope` 拒绝；别的项目的快照，看上去和不存在的快照没有区别。
+- **限定在任务所属的项目内。** `inspect_stage_data`、`freeze_dataset`、`run_local_analysis` 和 `publish_research_report` 都要指明一个研究任务，而且所指明的必须就是调度器正在运行的任务：服务器在运行期间绑定任务，模型给出的编号只和这个绑定比对，从不直接采信。别的角色或别的项目的任务、同一项目的另一个任务、以及在调度运行之外发起的调用，一律拒绝。阶段、轮次和快照，只有和这个任务属于同一个项目才能使用。其他情况一律以 `scope` 拒绝；别的项目的快照，看上去和不存在的快照没有区别。
 - **每个实验只有一个所属项目。** 快照所属的项目，就是运行其实验的阶段所属的项目。工作流会拒绝复用别的项目 `experiment_id` 的运行单；一个实验若被两个项目的阶段同时占用，就没有所有者，所有范围检查都会拒绝它。
 - **不碰留出数据。** 测量文件里含有留出批次结局的快照，在读取或挂载任何内容之前就被拒绝。这能拦住那些在登记留出数据之前冻结的快照。
 - **限值取自运行单。** 冻结数据时，时间窗和采样限值来自运行单，不由模型提供。

@@ -194,6 +194,29 @@ class WorkflowStore:
             raise Denied("state", f"unknown round {round_id}")
         return RoundRow(**{key: row[key] for key in RoundRow.model_fields})
 
+    def round_number(self, round_id: str) -> int:
+        """The round's place among its project's rounds of the same protocol, from 1, in the
+        order they were created: the protocol's allocation round it runs. Aborted rounds keep
+        their number (a make-up round gets a new one)."""
+        row = self.round(round_id)
+        found = self.db.one(
+            "SELECT COUNT(*) AS n FROM wf_rounds WHERE project_id = ? AND protocol_id = ?"
+            " AND rowid <= (SELECT rowid FROM wf_rounds WHERE id = ?)",
+            (row.project_id, row.protocol_id, round_id),
+        )
+        return int(found["n"])
+
+    def started_round_numbers(self, project_id: str, protocol_id: str) -> frozenset[int]:
+        """The ``round_number`` of each of the project's rounds of this protocol that has a stage
+        that has started: the rounds whose data should exist, whether or not a report cites it."""
+        rows = self.db.query(
+            "SELECT EXISTS(SELECT 1 FROM wf_stages s WHERE s.round_id = r.id"
+            " AND s.started_at IS NOT NULL) AS started FROM wf_rounds r"
+            " WHERE r.project_id = ? AND r.protocol_id = ? ORDER BY r.rowid",
+            (project_id, protocol_id),
+        )
+        return frozenset(number for number, row in enumerate(rows, 1) if row["started"])
+
     def update_round(self, round_id: str, **changes: Any) -> RoundRow:
         sets, values = _assignments(changes, set(RoundRow.model_fields) - {"id"})
         self.db.execute(f"UPDATE wf_rounds SET {sets} WHERE id = ?", (*values, round_id))

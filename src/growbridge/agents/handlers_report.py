@@ -9,6 +9,7 @@ change under the same snapshot id.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from pydantic import Field, model_validator
@@ -23,17 +24,32 @@ from growbridge.agents.handlers_common import (
 )
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.ids import new_id
-from growbridge.archive.models import ManualMeasurement, ResearchProtocol, ResearchTask, Snapshot
+from growbridge.archive.models import (
+    ManualMeasurement,
+    ResearchProtocol,
+    ResearchTask,
+    Snapshot,
+    TaskRecord,
+)
+from growbridge.planning import manual_tasks
 from growbridge.planning.design import check_experimental_design
+from growbridge.planning.treatment import allocated, delivered, unread
 from growbridge.ports import Denied
-from growbridge.research.analysis import AnalysisDecision, AnalysisFacts, classify, conclusion
+from growbridge.research.analysis import (
+    AnalysisDecision,
+    AnalysisFacts,
+    classify,
+    conclusion,
+    decided,
+)
+from growbridge.research.notes import Note, note
 from growbridge.research.report import publish_research_report
 from growbridge.research.stats import UnitTable, paired_block_estimate, unit_table
 from growbridge.workflow.states import RoundState, TaskState
 
 ROLE = "researcher"
-NO_RUN_NOTE = "没有该数据快照上已冻结的确认性分析记录：不能作为确认性结果"
-HOLDOUT_NOTE = "留出集已被读取过：本次读取只能作为探索性结果"
+NO_RUN_NOTE = note("no_confirmatory_run")
+HOLDOUT_NOTE = note("holdout_read")
 
 
 class SnapshotRound(ToolInput):
@@ -130,12 +146,22 @@ def _confounded(protocol: ResearchProtocol, rounds: set[int]) -> bool:
     return any(f.code == "confounded_with_time" for f in check_experimental_design(restricted))
 
 
-def _missing_fraction(protocol: ResearchProtocol, frozen: Frozen, metric: str) -> float:
+def _missing_fraction(
+    protocol: ResearchProtocol, frozen: Frozen, metric: str, started: frozenset[int]
+) -> float:
+    """The share of planned units without an endpoint value, among the rounds that ran.
+
+    A round counts when a cited snapshot belongs to it or when one of its stages has started:
+    a protocol round nobody has run yet is not missing data (too few rounds lowers the label
+    through the replicate and sample-size rules instead), while a round that ran and is left
+    out of the report still counts as missing.
+    """
     positions: dict[int, set[str]] = {}
     for m in frozen.rows:
         if m.metric == metric:
             positions.setdefault(frozen.round_of[m.experiment_id], set()).add(m.position)
-    planned = {(a.round, a.unit) for a in protocol.allocations}
+    ran = set(frozen.round_of.values()) | started
+    planned = {(a.round, a.unit) for a in protocol.allocations if a.round in ran}
     per_round = {r: sum(1 for a in protocol.allocations if a.round == r) for r, _ in planned}
     present = {
         (r, u) for r, u in planned if r in positions and (per_round[r] == 1 or u in positions[r])
@@ -148,14 +174,127 @@ def _complete_blocks(table: UnitTable, control: str, treatment: str) -> int:
     return len({b for b in blocks if (b, treatment) in table.values})
 
 
-def _deviation(deps: Deps, frozen: Frozen) -> float:
+@dataclass(frozen=True)
+class TreatmentCheck:
+    """Rounds whose recorded device levels do not show their allocated treatment."""
+
+    failed: frozenset[str]  # experiment ids
+    details: tuple[dict, ...]
+    unverified: tuple[dict, ...] = ()  # rounds whose samples record no level to compare
+
+    def notes(self) -> list[Note]:
+        failed = [note("treatment_not_applied", **d) for d in self.details]
+        unread = [
+            note(
+                "treatment_unverified",
+                round=d["round"],
+                treatment_id=d["treatment_id"],
+                channels=", ".join(d["channels"]),
+            )
+            for d in self.unverified
+        ]
+        return failed + unread
+
+
+def _samples(deps: Deps, snap: Snapshot) -> list[dict]:
+    path = deps.archive.root / "snapshots" / snap.id / "samples.jsonl"
+    lines = path.read_text(encoding="utf-8").splitlines()
+    return [json.loads(line).get("data", {}) for line in lines if line]
+
+
+def _treatment_check(deps: Deps, protocol: ResearchProtocol, frozen: Frozen) -> TreatmentCheck:
+    """Compare each snapshot's recorded levels with its round's allocated treatment; a round
+    that never ran its treatment counts as a protocol deviation, whatever the model says."""
+    failed, details, unverified = set(), [], []
+    for snap in frozen.snaps:
+        number = frozen.round_of[snap.experiment_id]
+        treatment = allocated(protocol, number)
+        if treatment is None:
+            continue
+        rows = _samples(deps, snap)
+        problems = delivered(rows, treatment)
+        if problems:
+            failed.add(snap.experiment_id)
+            details.append({"round": number, "treatment_id": treatment.id, "problems": problems})
+        channels = unread(rows, treatment)
+        if channels:
+            unverified.append({"round": number, "treatment_id": treatment.id, "channels": channels})
+    return TreatmentCheck(frozenset(failed), tuple(details), tuple(unverified))
+
+
+@dataclass(frozen=True)
+class ManualCheck:
+    """Per round: the planned manual tasks the snapshot holds and how many were not done in time."""
+
+    deviated: frozenset[str]  # experiment ids whose share not done in time is over the limit
+    details: tuple[dict, ...]
+
+    def notes(self) -> list[Note]:
+        return [
+            note(
+                "manual_tasks_missed",
+                round=d["round"],
+                missed=d["missed"],
+                total=d["total"],
+                detail=manual_tasks.by_kind_text(d["by_kind"]),
+            )
+            for d in self.details
+            if d["missed"]
+        ]
+
+
+def _rows(deps: Deps, snap: Snapshot, name: str) -> list[str]:
+    path = deps.archive.root / "snapshots" / snap.id / name
+    return [line for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+def _manual_check(deps: Deps, frozen: Frozen) -> ManualCheck:
+    """Judge each snapshot's manual tasks from its own files, at the end of its window.
+
+    A snapshot frozen before manual tasks were frozen with it has neither file and is left out.
+    """
+    deviated, details = set(), []
+    for snap in frozen.snaps:
+        if "manual_tasks.jsonl" not in snap.files:
+            continue
+        items = [
+            manual_tasks.Occurrence.model_validate_json(x)
+            for x in _rows(deps, snap, "manual_tasks.jsonl")
+        ]
+        records = [
+            TaskRecord.model_validate_json(x) for x in _rows(deps, snap, "task_records.jsonl")
+        ]
+        manifest = json.loads(_rows(deps, snap, snapshots.MANIFEST)[0])
+        missed, total, by_kind = manual_tasks.missed(items, records, manifest["window"][1])
+        if not total:
+            continue
+        number = frozen.round_of[snap.experiment_id]
+        details.append({"round": number, "missed": missed, "total": total, "by_kind": by_kind})
+        if manual_tasks.deviates(missed, total):
+            deviated.add(snap.experiment_id)
+    return ManualCheck(frozenset(deviated), tuple(details))
+
+
+def _deviation(deps: Deps, frozen: Frozen, check: TreatmentCheck, manual: ManualCheck) -> float:
+    """The share of experiments with an intervention, a treatment not applied, or too many
+    manual tasks not done in time."""
     experiments = set(frozen.round_of)
-    hit = sum(1 for e in experiments if deps.archive.interventions(e))
+    hit = sum(
+        1
+        for e in experiments
+        if deps.archive.interventions(e) or e in check.failed or e in manual.deviated
+    )
     return hit / len(experiments)
 
 
 def _facts(
-    deps: Deps, protocol: ResearchProtocol, data: PublishInput, frozen: Frozen, table: UnitTable
+    deps: Deps,
+    protocol: ResearchProtocol,
+    data: PublishInput,
+    frozen: Frozen,
+    table: UnitTable,
+    check: TreatmentCheck,
+    manual: ManualCheck,
 ) -> AnalysisFacts:
     metric = protocol.analysis.primary_endpoint
     rounds = _data_rounds(frozen, metric)
@@ -164,24 +303,25 @@ def _facts(
         _unit_count(protocol, control, rounds), _unit_count(protocol, data.treatment_id, rounds)
     )
     worst_coverage = min(s.coverage for s in frozen.snaps)
-    missing = max(_missing_fraction(protocol, frozen, metric), 1 - worst_coverage)
+    started = deps.workflow.store.started_round_numbers(protocol.project_id, protocol.id)
+    missing = max(_missing_fraction(protocol, frozen, metric, started), 1 - worst_coverage)
     flags = data.flags
     return AnalysisFacts(
         independent_replicates=replicates,
         confounded_with_time=_confounded(protocol, rounds),
         missing_fraction=missing,
         changed_after_outcomes=flags.changed_after_outcomes,
-        deviation_fraction=max(_deviation(deps, frozen), flags.deviation_fraction),
+        deviation_fraction=max(_deviation(deps, frozen, check, manual), flags.deviation_fraction),
         planned_sample_size=protocol.blocks,
         achieved_sample_size=_complete_blocks(table, control, data.treatment_id),
         early_terminated=flags.early_terminated,
     )
 
 
-def _capped(decision: AnalysisDecision, note: str) -> AnalysisDecision:
+def _capped(decision: AnalysisDecision, why: Note) -> AnalysisDecision:
     if decision.label != "confirmatory":
         return decision
-    return AnalysisDecision(label="exploratory", reasons=(*decision.reasons, note))
+    return decided("exploratory", (*decision.notes, why))
 
 
 def _decide(
@@ -209,8 +349,8 @@ def _require_registered_runs(deps: Deps, protocol: ResearchProtocol, frozen: Fro
         if runner.status(snap.id, protocol) in ("none", "running"):
             raise Denied(
                 "state",
-                f"快照 {snap.id} 的预注册确认性运行还没有完成；"
-                "由操作员通过 POST /wb/analysis/runs 启动",
+                f"the pre-registered confirmatory run of snapshot {snap.id} has not finished;"
+                " the operator starts it with POST /wb/analysis/runs",
             )
 
 
@@ -269,19 +409,27 @@ def _data_protocol(
     return protocol
 
 
+def _written_notes(path: str) -> list[dict]:
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)["notes"]
+
+
 def publish(deps: Deps, data: PublishInput) -> dict:
     task = _precheck(deps, data)
     frozen = _freeze_inputs(deps, task, data)
     protocol = _data_protocol(deps, task, data, frozen)
     _require_registered_runs(deps, protocol, frozen)
     table = _table(protocol, data, frozen)
-    facts = _facts(deps, protocol, data, frozen, table)
+    check = _treatment_check(deps, protocol, frozen)
+    manual = _manual_check(deps, frozen)
+    facts = _facts(deps, protocol, data, frozen, table, check, manual)
     decision = _decide(deps, protocol, frozen, facts)
     if data.holdout_id is not None and data.model_sha is not None:
         read = deps.holdout.evaluate(data.holdout_id, ROLE, data.model_sha)
         decision = decision if read == "confirmatory" else _capped(decision, HOLDOUT_NOTE)
     estimate = paired_block_estimate(table.values, protocol.control_treatment_id, data.treatment_id)
-    notes = [f"{len(table.dropped)} 条测量没有对应的分配，未计入"] if table.dropped else []
+    notes = [note("unallocated_measurements", count=len(table.dropped))] if table.dropped else []
+    notes += check.notes() + manual.notes()
     weakest = min(frozen.snaps, key=lambda s: (s.complete, s.coverage))
     artifact, state = publish_research_report(
         deps.archive,
@@ -291,16 +439,20 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         estimate,
         conclusion(estimate, facts),
         (*data.evidence_chain, *(f"snapshot:{s.id}" for s in frozen.snaps)),
-        (*data.limitations, *notes),
+        data.limitations,
         data.next_round,
         data.unresolved,
         deps.work_root / "reports" / task.id / new_id("report"),
+        notes,
     )
     body = {
         "artifact_id": artifact.id,
         "label": artifact.label,
         "needs_review": state is TaskState.NEEDS_REVIEW,
         "task_state": state.value,
+        "treatment_check": {"failed": list(check.details), "unverified": list(check.unverified)},
+        "manual_task_check": list(manual.details),
+        "server_notes": [n["text"] for n in _written_notes(artifact.path)],
     }
     if data.round_id is not None:
         body["round_state"] = _deliver(deps, data.round_id, artifact.id, state)

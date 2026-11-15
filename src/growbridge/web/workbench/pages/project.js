@@ -1,4 +1,4 @@
-// One project: its rounds, protocols, call budget, goals, tasks and holdouts.
+// One project: its conversation, rounds, protocols, call budget, goals, tasks and holdouts.
 import { ApiError } from "../api.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
@@ -6,9 +6,11 @@ import { errorLines } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
+import { conversationSection } from "./conversation.js";
 import { budgetForm, goalEditor, holdoutEditor, protocolEditor, startRoundForm } from "./project-forms.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
+const POLL_SECONDS = 4;
 
 function roundsTable(ctx, project) {
   const rounds = array(project.rounds);
@@ -46,11 +48,25 @@ function budgetView(ctx, project) {
   ]);
 }
 
+const QUESTION_CHARS = 240; // a follow-up task carries the whole summary of the task before it
+
+// A long question shows its start; the rest opens on request.
+export function questionCell(ctx, question) {
+  const text = String(question || "");
+  if (text.length <= QUESTION_CHARS) return text;
+  return h(
+    "details",
+    { class: "task-question" },
+    h("summary", { text: `${text.slice(0, QUESTION_CHARS).trimEnd()}… ${ctx.t("project.tasks.more")}` }),
+    h("p", { class: "task-question-full", text }),
+  );
+}
+
 function tasksTable(ctx, project) {
   const tasks = array(project.tasks);
   if (!tasks.length) return note(ctx.t("project.tasks.empty"));
   const columns = [
-    { label: ctx.t("project.tasks.question"), cell: (row) => row.question },
+    { label: ctx.t("project.tasks.question"), cell: (row) => questionCell(ctx, row.question) },
     { label: ctx.t("project.tasks.owner"), cell: (row) => row.owner_role },
     { label: ctx.t("col.state"), cell: (row) => statePill(ctx.t, row.state) },
   ];
@@ -96,15 +112,18 @@ export async function render(ctx, params) {
   ]);
   ctx.setBreadcrumbs([{ label: ctx.t("nav.projects"), href: hrefFor("projects") }, { label: project.name }]);
   const lead = ctx.t("project.lead", { id: project.project_id, time: timeText(ctx, project.created_at) });
+  const chat = conversationSection(ctx, project);
+  await chat.refresh();
   const element = h(
     "div",
     { class: "page project" },
     pageHead(project.name, lead),
+    section(ctx.t("chat.title"), chat.element),
     section(ctx.t("project.rounds.title"), roundsTable(ctx, project), startRoundForm(ctx, project)),
     section(ctx.t("project.protocols.title"), protocolsTable(ctx, project), protocolEditor(ctx, project)),
     section(ctx.t("project.budget.title"), budgetView(ctx, project), budgetForm(ctx, project)),
     section(ctx.t("project.goals.title"), tasksTable(ctx, project), goalEditor(ctx, project)),
     holdoutsBlock(ctx, project, read),
   );
-  return { element };
+  return { element, refresh: chat.refresh, pollSeconds: POLL_SECONDS };
 }

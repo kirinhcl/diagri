@@ -8,7 +8,6 @@ from typing import Literal
 from growbridge.agents.handlers_common import (
     MAX_ITEMS,
     Deps,
-    DraftInput,
     ToolInput,
     bound_task,
     clip,
@@ -16,7 +15,6 @@ from growbridge.agents.handlers_common import (
     require_project,
     require_round_project,
     require_stage_project,
-    submit_draft,
 )
 from growbridge.agents.tools import Tool
 from growbridge.archive.ids import file_digest, new_id
@@ -83,9 +81,37 @@ def _task_summary(task: ResearchTask) -> dict:
     }
 
 
+_SAME_TASK_FIELDS = {"owner_role", "question", "constraints", "input_refs", "parent_task_id"}
+# Model roles run one task at a time: a task made here starts only after this run ends, so a
+# model that waits for it (polling its status) waits for nothing.
+STARTS_LATER = (
+    "This task starts after your run ends; it cannot progress while you wait. Do not poll it or "
+    "do its work. End your turn now with a short reply to the user; when the task ends you get "
+    "a follow-up task that tells you how it went."
+)
+TASK_REF = "task:"
+
+
 def _stored(deps: Deps, task: ResearchTask) -> dict:
-    stored = deps.tasks.create(task)  # one task per trigger event: a repeat returns the first
-    return {"task_id": stored.id, "state": stored.state.value, "reused": stored.id != task.id}
+    """One task per trigger event: a repeat of the same request returns the first task. A trigger
+    that already belongs to a different task is refused, so a model that copied an id (its own
+    task's, say) learns that nothing was created instead of being handed someone else's task."""
+    stored = deps.tasks.create(task)
+    reused = stored.id != task.id
+    if reused and stored.model_dump(include=_SAME_TASK_FIELDS) != task.model_dump(
+        include=_SAME_TASK_FIELDS
+    ):
+        raise Denied(
+            "state",
+            f"trigger_event_id {task.trigger_event_id!r} already belongs to task {stored.id} "
+            f"(owner {stored.owner_role}); nothing was created. Use a new trigger_event_id.",
+        )
+    return {
+        "task_id": stored.id,
+        "state": stored.state.value,
+        "reused": reused,
+        "next": STARTS_LATER,
+    }
 
 
 def build_orchestrator_tools(deps: Deps) -> list[Tool]:
@@ -163,9 +189,6 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
     def read_artifact(data: ArtifactInput) -> dict:
         return _read(deps, data.artifact_id)
 
-    def submit_for_review(data: DraftInput) -> dict:
-        return submit_draft(deps, ROLE, data)
-
     return [
         Tool(
             "get_project_state",
@@ -181,23 +204,22 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "create_research_task",
-            "Create a planner or researcher task.",
+            "Create a top-level task, not tied to yours: you are not told when it ends, so "
+            "prefer delegate_task. The planner designs experiments and run sheets; the "
+            "researcher analyses frozen data and writes reports. trigger_event_id must be a new "
+            "id for this task, never the id of your own task.",
             CreateTaskInput,
             create_task,
             writes=True,
         ),
         Tool(
             "delegate_task",
-            "Delegate a task with a full handoff.",
+            "Delegate a task under your own (parent_task_id) with a full handoff; when it ends "
+            "you get a follow-up task. The planner designs experiments and run sheets; the "
+            "researcher analyses frozen data and writes reports. trigger_event_id must be a new "
+            "id for this task, never the id of your own task.",
             DelegateInput,
             delegate,
-            writes=True,
-        ),
-        Tool(
-            "submit_run_for_review",
-            "File a validated run sheet draft for operator review.",
-            DraftInput,
-            submit_for_review,
             writes=True,
         ),
         Tool(
@@ -213,12 +235,15 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
 
 
 def _visible_task(deps: Deps, task_id: str) -> ResearchTask:
-    """The running task and the tasks delegated below it; nothing else, in any project."""
+    """The running task, the tasks delegated below it and a task it names as an input (a
+    follow-up names the task it follows); nothing else, in any project."""
     bound = bound_task(deps)
     try:
         cursor = deps.tasks.get(task_id)
     except Denied:
         raise Denied("scope", "that task is not available to this run") from None
+    if f"{TASK_REF}{task_id}" in bound.input_refs and cursor.project_id == bound.project_id:
+        return cursor
     while cursor.project_id == bound.project_id:
         if cursor.id == bound.id:
             return deps.tasks.get(task_id)

@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 49 个路由。第一张表末尾的七个读取路由总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 55 个路由。第一张表末尾的七个读取路由总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -86,6 +86,8 @@
 | `POST` | `/wb/drafts/run-sheet` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
 | `POST` | `/wb/manual/{channel}` | 操作员 | 局域网、覆盖网络 | 否 | `pump_on_forbidden`、`state`、写入类拒绝码 |
 | `POST` | `/wb/irrigation` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`state`、`cooldown`、写入类拒绝码 |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `scope`（没有这次任务）、`state`（阶段未开始，或离到期还有一小时以上）、`param`（`done_at`） |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`scope`（不是计划内浇水）、`state`（阶段不在 `running`、未到期、已完成）、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `scope` |
 | `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
@@ -96,11 +98,13 @@
 | `POST` | `/wb/protocols` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/rounds/{round_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/rounds/{round_id}/report` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds/{round_id}/choice` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
 | `POST` | `/wb/goals` | 操作员 | 局域网、覆盖网络 | 否 | `budget`、`state` |
+| `GET` | `/wb/projects/{project_id}/conversation` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、`script_hash`、`param` |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/analysis/runs` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、`scope`、`snapshot_incomplete`、`already_run`、`sandbox_unavailable` |
@@ -117,8 +121,10 @@
 | `GET` | `/wb/projects` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 | `GET` | `/wb/projects/{project_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/readings` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/environment` | 操作员 | 局域网、覆盖网络 | 否 | — |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/history` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/safety` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 
 最后二十八个路由只给操作员用，其中的十三个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
@@ -141,6 +147,8 @@
 | `POST` | `/wb/stages/{stage_id}/onsite-check` | `note`（1 到 500） | 阶段运行信息 |
 | `POST` | `/wb/drafts/run-sheet` | `round_id`（1 到 100）、`run_sheet`（一个 `RunSheet`） | `stage_id` 和 `findings`（由 `code`、`message`、`blocking` 组成的列表） |
 | `POST` | `/wb/manual/{channel}` | 路径参数 `channel`：`light`、`exhaust`、`fan` 或 `pump`；请求体 `stage_id`、`request_id`、`level`（整数：灯和排风 0 到 100，风扇 0 到 10，水泵只能是 0）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks` | `task_id`、`due_at`（指明哪一次任务，用列表给出的值）、`outcome`（`done` 或 `skipped`）、可选 `done_at`（UTC 秒，默认现在；只用于 `done`，不能晚于现在，也不能早于 `due_at` 一小时以上）、可选 `note`（最长 200）。追加一条记录，以最新的为准。 | 这次任务，格式同列表 |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | `task_id`、`due_at`、`request_id`、可选 `note`。在阶段写入权下让水泵运行该任务的 `seconds`，阶段继续运行（见[控制与安全模型](Control-and-Safety-Model.md)）；得到确认的运行记为已完成。 | `action`（`ActionRecord`）和 `task`（这次任务；运行没有得到确认时为 `null`） |
 | `POST` | `/wb/irrigation` | `stage_id`、`request_id`、`seconds`（大于 0，不超过 60，且不超过 `max_pump_seconds`）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值） | `protection_right` |
@@ -152,11 +160,13 @@
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |
 | `POST` | `/wb/rounds` | `project_id`、`protocol_id`（各 1 到 100） | `round_id`、`state` |
 | `GET` | `/wb/rounds/{round_id}` | 无 | `round_id`、`project_id`、`protocol_id`、`protocol_version`、`state`、`stages_done`、`stage_total`、`awaiting_choice`、`snapshot_id`、`report_artifact_id`，以及 `stages`（由 `stage_id`、`state` 组成的列表） |
+| `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。 |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`：`redo`、`next`、`verify` 或 `abort` | `round_id`、`state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 无 | `round_id`、`state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`message`、`blocking` 组成的列表：先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking` |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls`（整数，0 到 1000000）、`max_cost`（美元，0 到 1000000） | `project_id`、`max_calls`、`max_cost`、`remaining_calls`、`remaining_cost` |
-| `POST` | `/wb/goals` | `project_id`、`goal`（去掉首尾空白后 1 到 2000）；可选 `round_id`、`constraints`（最多 20 条，每条 1 到 500）、`request_id` | `task_id`、`state`、`reused` |
+| `POST` | `/wb/goals` | `project_id`、`goal`（去掉首尾空白后 1 到 2000）；可选 `round_id`、`constraints`（最多 20 条，每条 1 到 500）、`request_id` | `task_id`、`state`、`reused`。新目标同时写进项目对话 |
+| `GET` | `/wb/projects/{project_id}/conversation` | 查询参数 `after`（一个 `seq`，默认 0） | `entries`，从旧到新，最多 500 条：`seq`、`task_id`、`role`（`user` 或某个模型角色）、`kind`（`message`、`reply`、`tool`、`status`）、`text`、`detail`（工具调用时有 `input`、`is_error`、`result`，都会截短）、`at` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | `project_id`（1 到 100）、`script`（文本，1 到 20000 个字符，只编译、从不运行） | `protocol_id`、`version`、`script_sha256`、`frozen_at`、`note`（冻结的脚本不能更正） |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 查询参数 `project_id`（1 到 100） | `protocol_id`、`version`、`started`、`frozen`（`null`，或 `script_sha256`、`frozen_at`、`frozen_by`、`script`）、`snapshots`（一组 `snapshot_id`、`experiment_id`、`complete`、`run_status`） |
 | `POST` | `/wb/analysis/runs` | `project_id`、`protocol_id`、`snapshot_id`（各 1 到 100） | `run_id`、`status`、`exit_code`、`timed_out`、`stdout`、`stderr`（后两个截到 4000 个字符） |
@@ -173,7 +183,9 @@
 | `GET` | `/wb/projects` | 无 | `projects`：每个项目的摘要，最多 200 个 |
 | `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前）和 `protocols`（每个协议的最新版本）、`budget`（`calls_left` 和 `cost_left`，没有设置预算时为 `null`）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
 | `GET` | `/wb/stages/{stage_id}/readings` | 查询参数 `points`（2 到 2000，默认 600） | `samples`（由 `timestamp`、`data`、`quality`、`clock_synced`、`flagged` 组成的列表）、`window`（`start`、`end`、`bucket_seconds`，阶段尚未开始时为 `null`）、`total_samples`、`flagged_total` 和 `downsampled`。每个时间桶保留最新的一条样本；`flagged` 是该桶里质量不是 `ok` 或时钟未同步的样本数。`points` 超出范围时返回 422。 |
+| `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是运行中的阶段，包括每个通道的 `ownership` 和运行单此刻要求的档位 `expected`，没有时为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
+| `GET` | `/wb/stages/{stage_id}/manual-tasks` | 无 | `stage_id`、`stage_state`、`timezone`、`on_time_seconds`、`early_seconds`、`now`，以及 `occurrences`：运行单的人工任务在阶段时间窗内的每一次（`task_id`、`kind`、`due_at`、`make_up_allowed`、`seconds`），带 `status`（`upcoming`、`open`、`done`、`late`、`skipped`、`missed`）和起作用的那条 `record`（没有时为 `null`）；阶段开始前为空 |
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
 | `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`（含 `frozen`：每个传感器的 `minutes` 和 `max_gap_seconds`），没有批准过时为 `null` |
 
@@ -218,7 +230,6 @@
 | orchestrator | `get_run_status` | read | `stage_id` | 读取一个阶段的状态和近期历史。 |
 | orchestrator | `create_research_task` | write | `project_id`、`owner_role`、`question`、`trigger_event_id`、`correlation_id` | 给计划 Agent 或研究 Agent 创建一个研究任务。 |
 | orchestrator | `delegate_task` | write | `project_id`、`to_role`、`goal`、`budget`、`trigger_event_id`、`correlation_id` | 带完整交接信息，给计划 Agent 或研究 Agent 创建一个研究任务。 |
-| orchestrator | `submit_run_for_review` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。 |
 | orchestrator | `get_task_status` | read | `task_id` | 读取正在运行的任务或它下面委派出去的任务的状态，以及它的产物 ID。 |
 | orchestrator | `read_artifact` | read | `artifact_id` | 核对摘要后读取一个已登记的文本产物。 |
 | planner | `get_device_capabilities` | read | 无 | 读取设备的传感器、通道和档位范围。 |
@@ -227,17 +238,18 @@
 | planner | `search_and_verify_sources` | web | `query` | 搜索资料来源。 |
 | planner | `check_experimental_design` | read | `project_id`、`protocol_id` | 检查一份已保存的研究协议的设计。 |
 | planner | `estimate_sample_size` | read | `effect`、`sd` | 估算需要多少个区组或实验单位。 |
-| planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。 |
+| planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。带 `round_id` 时，还会像 `save_plan_draft` 一样检查运行单是否执行了本轮分配的处理。 |
 | planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
 | planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
-| planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。 |
+| planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。没有执行本轮分配处理的运行单（`treatment_not_applied`）不会保存。 |
+| researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、人工任务是否按时完成、已有快照），不写入任何东西。留出批次的测量只给条数。 |
 | researcher | `freeze_dataset` | write | `task_id`、`stage_id` | 把一个阶段的数据冻结成经过校验的数据快照；带 `round_id` 且快照完整时，还会推进轮次。 |
 | researcher | `query_evidence` | read | 无 | 在项目档案里搜索证据卡。 |
 | researcher | `run_local_analysis` | sandbox | `task_id`、`snapshot_id`、`script` | 在沙箱里对一个数据快照运行探索性脚本。 |
 | researcher | `submit_compute_job` | write | `task_id`、`template_id` | 按已登记的模板提交一个计算作业。 |
 | researcher | `get_compute_job` | read | `attempt_id` | 读取计算作业的状态。 |
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | 取回并校验计算作业的输出。 |
-| researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。 |
+| researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。返回 `treatment_check`：设备记录的档位和分配处理不符的轮次（按方案偏离计算），以及样本里没有档位、无法核对的轮次；`manual_task_check`：每轮计划的人工任务数和没有按时完成的次数；`server_notes`：服务器加进报告的每条说明，含中英文。 |
 
 证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
 

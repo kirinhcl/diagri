@@ -98,10 +98,11 @@ An example with `max_gap_seconds = 120`: the link is up and sensor packets keep 
 
 ## The pump
 
-If the link drops while the pump is running, the program cannot guarantee that it is switched off in time. So no automatic path may start the pump.
+If the link drops while the pump is running, the program cannot guarantee that it is switched off in time. So no automatic path may start the pump: a timed action, care rule or feedback rule that would switch it on blocks the run sheet (`pump_action`).
 
 - **`submit` never switches the pump on.** A pump request with a level other than 0 is refused with `pump_on_forbidden`, under every kind of right. The executor refuses even earlier and leaves pump entries out of the end actions.
 - **Only `irrigate` starts it.** It is reached from `POST /wb/irrigation` and needs all of this: an operator session on the LAN entry; a stage in `manual` whose manual right that operator holds; a duration above 0 and at most `max_pump_seconds`; and the cooldown `pump_cooldown_seconds` since the last run, with no other run in progress.
+- **A planned irrigation is the same run, started from the stage page.** A run sheet plans watering as a manual task of kind `irrigation` with `seconds` (at most 60). When it is due, an operator on the LAN entry starts it with `POST /wb/stages/{stage_id}/manual-tasks/irrigate`. The control service runs it under the stage right (`irrigate(..., planned=True)`), only for a request that names that right's own stage, while the stage is `running`; the stage keeps running and no takeover (an intervention) is needed. Everything else above still applies: a person on site starts it, the time limit, the cooldown, no other run in progress, the interlock, and the switch-off. The executor leaves the pump out of its external-change check while the run is in progress. A confirmed run is recorded as the task done ([Run a research round](Run-a-Research-Round.md#manual-tasks)).
 - **Off always runs.** The pump is switched on under the gate, the wait happens outside the gate, and the switch-off happens under the gate again, with two attempts (`PUMP_OFF_TRIES`). A hand-over, a protection write or a `pump_off` call ends the run early.
 
 **The pump-off interlock.** If the switch-off cannot be confirmed, the control service sets the interlock flag in its ledger. While it is set:

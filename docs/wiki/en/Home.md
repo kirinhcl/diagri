@@ -30,6 +30,7 @@ GrowBridge is DiAGRI's device bridge: the part that reads and controls a Spider 
 - [Overview](Overview.md): what DiAGRI is, where GrowBridge fits in it, the two modes, and what the system never does.
 - [Installation and quick start](Installation-and-Quick-Start.md): install it and read your tent.
 - [Tutorial: a simulated research round](Tutorial-Simulated-Round.md): run a round with no hardware.
+- [Example: a complete round with the model roles](Example-Full-Round-With-Claude.md): one recorded round, from the question to the report, with screenshots.
 
 **How-to guides**
 

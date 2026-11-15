@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from growbridge.agents.budget import CallBudget
+from growbridge.agents.conversation import ConversationLog
 from growbridge.api import create_app
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
@@ -76,8 +77,10 @@ class RecordingControl(FakeControl):
         self.submitted.append(request)
         return self._record(request)
 
-    async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
-        self.irrigated.append((request, seconds))
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
+        self.irrigated.append((request, seconds) if not planned else (request, seconds, "planned"))
         return self._record(request)
 
     def receipt(self, request_id: str) -> ActionRecord | None:
@@ -115,6 +118,7 @@ class Bench:
             self.archive.outcome_experiments, self.workflow.store.projects_of_experiment
         )
         self.holdout = HoldoutRegistry(self.db, self.clock, outcomes)
+        self.conversation = ConversationLog(self.db, self.clock)
         # a callable taking this bench: the compute service shares its database and clock
         self.compute = None if compute_factory is None else compute_factory(self)
         self.settings = Settings(
@@ -140,6 +144,7 @@ class Bench:
             runner=self.runner,
             holdout=self.holdout,
             compute=self.compute,
+            conversation=self.conversation,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)
         self.lan = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")

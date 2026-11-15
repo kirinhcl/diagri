@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter
 
 from growbridge.agents.budget import CallBudget
+from growbridge.agents.conversation import ConversationLog
 from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.llm import ModelClient
 from growbridge.agents.tools import Tool
@@ -271,6 +272,7 @@ class Runtime:
     monitor: ExternalMonitor | None
     source: LegacySampleSource
     agents_db: Database
+    conversation: ConversationLog
     backups: Backups
     databases: tuple[Database, ...] = ()
     failing: set[str] = field(default_factory=set)
@@ -314,7 +316,7 @@ class Runtime:
     def workbench(self, role_tokens: Mapping[str, str] | None = None) -> APIRouter:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
-        return create_workbench(*args, role_tokens or {}, *more)
+        return create_workbench(*args, role_tokens or {}, *more, conversation=self.conversation)
 
     @property
     def _device(self) -> str:
@@ -718,6 +720,7 @@ def build_runtime(
         monitor=None if heartbeats is None else ExternalMonitor(*heartbeats, clock),
         source=LegacySampleSource(bridge.store, clock),
         agents_db=dbs["agents"],
+        conversation=ConversationLog(dbs["agents"], clock),
         backups=backups,
         databases=tuple(dbs.values()),
     )

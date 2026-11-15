@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import ConfigDict, Field, StrictInt
 
+from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import (
     Channel,
@@ -43,6 +44,7 @@ from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
 from growbridge.workbench.holdouts import add_holdout_routes
+from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
@@ -183,6 +185,7 @@ class Workbench:
         runner: ConfirmatoryRunner | None = None,
         holdout: HoldoutRegistry | None = None,
         compute: ComputeService | None = None,
+        conversation: ConversationLog | None = None,
     ):
         self.workflow = workflow
         self.control = control
@@ -208,8 +211,13 @@ class Workbench:
         self._read_routes()
         reads = (self.router, self.operator, workflow, archive, control, self.clock)
         add_read_routes(*reads, tasks=tasks, budget=budget, alerts=alerts, compute=compute)
-        add_round_routes(self.router, self.operator, self.fresh, workflow, tasks, budget, archive)
+        add_round_routes(
+            self.router, self.operator, self.fresh, workflow, tasks, budget, archive, conversation
+        )
         add_evidence_routes(self.router, self.operator, archive)
+        add_manual_task_routes(
+            self.router, self.operator, self.on_site, workflow, archive, control, self.clock
+        )
         if runner is not None:
             args = (self.router, self.operator, self.fresh, workflow, archive, runner, holdout)
             add_analysis_routes(*args)
@@ -527,10 +535,13 @@ def create_workbench(
     runner: ConfirmatoryRunner | None = None,
     holdout: HoldoutRegistry | None = None,
     compute: ComputeService | None = None,
+    conversation: ConversationLog | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
     ``tasks`` and ``budget`` together add the call budget and research goal routes; ``runner``
     adds the analysis freeze and run routes (``holdout`` guards what they may analyse);
-    ``compute`` (with ``tasks``) adds the balance and task budget routes."""
+    ``compute`` (with ``tasks``) adds the balance and task budget routes; ``conversation`` (with
+    the goal routes) records each goal and adds the project conversation read."""
     args = (workflow, control, archive, operators, settings, role_tokens)
-    return Workbench(*args, alerts, tasks, budget, runner, holdout, compute).router
+    more = (alerts, tasks, budget, runner, holdout, compute, conversation)
+    return Workbench(*args, *more).router

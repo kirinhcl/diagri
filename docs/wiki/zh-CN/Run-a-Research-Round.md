@@ -112,7 +112,7 @@ GET /wb/rounds/ROUND_ID
 
 响应里有 `state`、`awaiting_choice`、`stages_done`、`stage_total`、协议的 ID 和版本、`snapshot_id`、`report_artifact_id`，以及 `stages`：一组 `{"stage_id": "...", "state": "..."}`。新建的轮次处于 `designing`，还没有阶段。
 
-真实模型拿到目标后会怎么做，没有验证过。测试用的是脚本化的模型，见 [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)。
+测试用的是脚本化的模型，见 [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py)。用真实模型时，这一步在模拟器上跑到了运行单待审，见[状态与已知限制](Status-and-Known-Limitations.md)。
 
 ## 在第一个阶段之前冻结分析脚本
 
@@ -228,17 +228,36 @@ POST /wb/stages/STAGE_ID/start
 
 执行 Agent 大约每秒按运行单评估一次：定时动作、反馈规则、保护规则。观察与通知 Agent 负责告警和日报。这里不涉及模型，所以模型角色没启用时阶段照样执行。
 
+控制台的**实时环境**页显示每个传感器的最新读数和每个通道记录的档位，每 5 秒刷新一次。阶段运行期间，运行单控制的通道还会显示运行单此刻要求的档位；实际档位不同时，标为**与运行单不符**。下方是最近 1 小时到 7 天的趋势，阶段之内和阶段之间的数据都包括在内。读数中断时会明确提示，不会把旧读数当成当前值。
+
 | 要做什么 | 发送 |
 | --- | --- |
 | 读取阶段 | `GET /wb/stages/STAGE_ID` |
+| 实时查看环境：最新读数、各通道档位与运行单此刻要求的对照、趋势 | `GET /wb/environment`，或控制台的**实时环境**页 |
 | 读取未解决的告警，把某条标为已读 | `GET /wb/alerts`、`POST /wb/alerts/EVENT_ID/read` |
 | 读取某次写入的回执 | `GET /wb/receipts/REQUEST_ID` |
 | 记录一次人工测量 | `POST /wb/measurements` |
+| 查看到期的人工任务，记录完成或跳过 | `GET /wb/stages/STAGE_ID/manual-tasks`、`POST /wb/stages/STAGE_ID/manual-tasks`，或阶段页的**人工任务** |
+| 执行计划内浇水（局域网入口） | `POST /wb/stages/STAGE_ID/manual-tasks/irrigate` |
 | 暂停 | `POST /wb/stages/STAGE_ID/pause`，请求体可选 `{"reason": "..."}` |
 | 续跑 | `POST /wb/stages/STAGE_ID/resume`（需要重新认证） |
 | 人工接管 | [人工接管、灌溉与交还](Manual-Takeover-and-Irrigation.md) |
 
 测量的请求体包含 `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`（UTC 秒）、`position`、`method`、`metric`、`value` 和 `unit`。要更正以前的一条测量，加上 `corrects` 并填那条记录的 ID；原记录会保留。
+
+### 人工任务
+
+运行单里的 `manual_tasks`（浇水、测量、拍照）每天到点都需要有人在现场。阶段页按时间倒序列出每次任务，最多显示到一天后，并标出状态：未到期、待完成、已完成、延迟完成、已跳过、已错过。每次任务都要记录：
+
+```http
+POST /wb/stages/STAGE_ID/manual-tasks
+
+{"task_id": "photo-noon", "due_at": 1800003600, "outcome": "done", "note": "tray 3"}
+```
+
+`due_at` 用列表里给出的值，指明是哪一次任务。`done_at`（UTC 秒）可选，默认是现在；它不能晚于现在，也不能早于到期时间一小时以上；到期前一小时以上的任务不能记录。记录不会被修改：再记一次，以最新的为准。到期两小时后才完成的算延迟，除非运行单允许补做（`make_up_allowed`），这时阶段结束前完成都算按时。报告会把人工任务有超过 10% 没有按时完成的轮次算作方案偏离（见[研究方法](Research-Methodology.md)）。
+
+带 `seconds` 的浇水任务是计划内的水泵运行。在局域网入口的阶段页上启动（`POST /wb/stages/STAGE_ID/manual-tasks/irrigate`，带 `task_id`、`due_at` 和 `request_id`）后，水泵在阶段写入权下运行这么多秒，阶段继续运行；得到确认的运行记为已完成。灌溉的所有检查照旧适用，见[控制与安全模型](Control-and-Safety-Model.md)。不带 `seconds` 的浇水任务是人工浇水。
 
 系统可能自己把阶段暂停，例如 BLE 中断影响了执行，或者有人在设备面板上改了设置。各种情况见[故障处理手册](Troubleshooting-Runbook.md)。设备状态和运行单不一致，或者有写入结果未知时，`resume` 会被拒绝，拒绝码 `state`。
 
@@ -273,7 +292,7 @@ POST /wb/rounds/ROUND_ID/abort
 
 ## 6. 数据核验
 
-研究 Agent 用 `freeze_dataset` 工具冻结这个阶段的数据快照。快照完整（覆盖率不低于 0.9）并且通过校验时，轮次进入 `analysis`；否则停在 `data_verification`。
+研究 Agent 可以先用 `inspect_stage_data` 查看这个阶段的数据（只读：覆盖率、缺口、各通道取值范围、人工测量、人工任务是否按时完成），再用 `freeze_dataset` 工具冻结数据快照。冻结时会自己核验覆盖率和文件摘要。快照完整（覆盖率不低于 0.9）并且通过校验时，轮次进入 `analysis`；否则停在 `data_verification`。
 
 人工测量必须在快照冻结之前用 `POST /wb/measurements` 记录进去。测量属于某个已存在阶段的实验：对没有任何阶段运行的实验 ID，路由以 `scope` 拒绝，这样每条测量都能追溯到一个项目。
 
@@ -321,7 +340,7 @@ curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
 - 读取阶段历史或暂停原因。
 - 撤销审批，给执行中的阶段切换运行单。
 - 给留出数据登记模型，或者给模型打分。
-- 读取日报、数据快照或研究报告。
+- 读取日报或数据快照。
 
 其中大部分功能在服务里已经有对应的方法，不少在 [`workflow/service.py`](../../../src/growbridge/workflow/service.py) 里。路由和命令还没有。一轮研究的任何一步都没有 CLI 命令。
 

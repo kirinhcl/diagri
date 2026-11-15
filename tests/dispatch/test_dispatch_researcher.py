@@ -3,6 +3,7 @@ import json
 import pytest
 from dispatch_helpers import call, result_blocks, script_calls
 
+from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import (
     EvidenceCard,
@@ -63,7 +64,7 @@ class FakeCompute:
 HOLE = (0, 1, 2, 3, 8, 9, 10)  # a 5 s silence: coverage 0.6 when the gap limit is 2 s
 
 
-def _samples(env, experiment_id: str, seconds=range(11)) -> None:
+def _samples(env, experiment_id: str, seconds=range(11), light: int | None = None) -> None:
     for second in seconds:
         env.archive.append_sample(
             SampleRecord(
@@ -74,7 +75,7 @@ def _samples(env, experiment_id: str, seconds=range(11)) -> None:
                 captured_at=START + second,
                 received_at=START + second,
                 clock_synced=True,
-                data={"temp": 21.0},
+                data={"temp": 21.0} if light is None else {"light": {"level": light, "on": 1}},
             )
         )
 
@@ -99,12 +100,19 @@ def _measurement(experiment_id: str, value: float, ident: str, batch="batch-1", 
 
 
 def _experiment(
-    env, number: int, value: float | None, batch="batch-1", holdout=None, seconds=range(11)
+    env,
+    number: int,
+    value: float | None,
+    batch="batch-1",
+    holdout=None,
+    seconds=range(11),
+    lights: dict[int, int] | None = None,
 ) -> str:
-    """Samples and one measurement for experiment e<number>, frozen; returns the snapshot id."""
+    """Samples and one measurement for experiment e<number>, frozen; returns the snapshot id.
+    ``lights`` gives the light level the device recorded in each round (default: none)."""
     name = f"e{number}"
     env.stage_for(name)  # a snapshot is only usable when its experiment has a stage of the project
-    _samples(env, name, seconds)
+    _samples(env, name, seconds, None if lights is None else lights[number])
     if value is not None:
         env.archive.add_measurement(_measurement(name, value, f"m{number}", batch))
     keep = None if holdout is None else holdout.development_filter(env.project_id)
@@ -216,6 +224,103 @@ async def test_freeze_dataset_with_an_unsynced_clock_is_an_error_result(env):
     assert outcome.is_error and "clock_unsynced" in outcome.content
 
 
+# --- inspect_stage_data ----------------------------------------------------------------------
+
+
+async def _inspect(env, deps=None, **fields):
+    fields = {"task_id": _task_id(env), "stage_id": "stage-1", **fields}
+    return await env.invoke("researcher", "inspect_stage_data", deps, **fields)
+
+
+async def test_inspect_predicts_the_freeze_and_writes_nothing(env):
+    sampling = SamplingPlan(interval_seconds=1, max_gap_seconds=2)
+    await _running_stage(env, seconds=HOLE, sampling=sampling)
+    untrusted = SampleRecord(
+        id="s-late",
+        experiment_id="experiment-stage-1",
+        stage_id="stage-1",
+        device_id="SIMULATED",
+        captured_at=START + 5,
+        received_at=START + 5,
+        clock_synced=False,
+        data={"temp": 99.0},
+    )
+    env.archive.append_sample(untrusted)
+
+    body = _payload(await _inspect(env))
+
+    assert env.archive.snapshots("experiment-stage-1") == ()
+    frozen = _payload(
+        await env.invoke("researcher", "freeze_dataset", task_id=_task_id(env), stage_id="stage-1")
+    )
+    assert body["coverage"] == pytest.approx(frozen["coverage"])
+    assert body["would_be_complete"] is frozen["complete"] is False
+    assert body["gap_count"] == frozen["gap_count"] == 1
+    assert body["longest_gap_seconds"] == pytest.approx(4.0)
+    samples = body["samples"]
+    assert (samples["trusted"], samples["untrusted"]) == (len(HOLE), 1)
+    assert samples["untrusted_reasons"]["clock_unsynced"] == 1
+    assert samples["channels"]["temp"] == {"n": len(HOLE), "min": 21.0, "max": 21.0, "mean": 21.0}
+    assert body["stage_state"] == "running" and body["snapshots"] == []
+
+
+def test_nested_device_readings_are_summarised_by_dotted_key():
+    reading = {"light": {"level": 70, "on": 1}, "sensor": {"temp": 22.5}, "ok": True}
+    sample = SampleRecord(
+        id="s",
+        experiment_id="e",
+        stage_id="st",
+        device_id="SIMULATED",
+        captured_at=START,
+        received_at=START,
+        clock_synced=True,
+        data=reading,
+    )
+
+    channels = snapshots._channels([sample, sample.model_copy(update={"id": "t"})])
+
+    assert set(channels) == {"light.level", "light.on", "sensor.temp"}
+    assert channels["light.level"] == {"n": 2, "min": 70.0, "max": 70.0, "mean": 70.0}
+
+
+async def test_inspect_summarises_measurements_and_only_counts_held_out_ones(env):
+    registry = _registry(env)
+    await _running_stage(env)
+    for n, value in enumerate((1.0, 3.0)):
+        env.archive.add_measurement(
+            _measurement("experiment-stage-1", value, f"m{n}", plant_id=f"p{n}")
+        )
+    env.archive.add_measurement(
+        _measurement("experiment-stage-1", 987.5, "m-hold", batch="batch-h")
+    )
+
+    outcome = await _inspect(env, env.make_deps(holdout=registry))
+
+    body = _payload(outcome)
+    growth = body["measurements"]["canopy_area_growth"]
+    assert (growth["n"], growth["min"], growth["max"], growth["mean"]) == (2, 1.0, 3.0, 2.0)
+    assert growth["plants"] == 2 and growth["units"] == ["cm2"]
+    assert body["measurements_withheld"] == 1 and "987.5" not in outcome.content
+
+
+async def test_inspect_refuses_a_stage_of_another_project_or_one_never_started(env):
+    env.other_project()
+    env.workflow.submit_run_sheet(env.round_id, env.sheet(), env.operator)
+
+    foreign = await _inspect(env, stage_id="stage-b")
+    unstarted = await _inspect(env)
+
+    assert foreign.is_error and "denied (scope)" in foreign.content
+    assert unstarted.is_error and "never started" in unstarted.content
+
+
+def test_inspect_is_a_read_only_tool_of_the_researcher(env):
+    (tool,) = [t for t in env.tools()["researcher"] if t.name == "inspect_stage_data"]
+
+    assert not tool.writes and not tool.sandbox
+    assert "inspect_stage_data" in ROLE_TOOLS["researcher"]
+
+
 # --- evidence and local analysis -------------------------------------------------------------
 
 
@@ -302,7 +407,7 @@ async def test_missing_compute_yields_error_results_and_the_loop_continues(env):
 
     assert run is not None and run.stop_reason == "end_turn"
     assert all(block["is_error"] for block in result_blocks(client))
-    assert env.tasks.get("task-ev-1").state is TaskState.DONE
+    assert env.tasks.get("task-ev-1").state is TaskState.NEEDS_ATTENTION  # nothing published
 
 
 async def test_compute_submission_for_another_roles_task_is_refused(env):
@@ -385,6 +490,49 @@ async def test_confirmatory_report_with_open_questions_needs_review(env, tmp_pat
 
     body = _payload(outcome)
     assert body["label"] == "confirmatory" and body["needs_review"] is True
+
+
+ALLOCATED_LIGHT = {1: 70, 2: 40, 3: 40, 4: 70}  # make_protocol: high, control, control, high
+
+
+async def test_rounds_that_ran_their_treatment_stay_confirmatory(env, tmp_path):
+    task = env.task("researcher")
+    rounds = _rounds(env, lights=ALLOCATED_LIGHT)
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    body = _payload(await _publish(env, task.id, rounds, deps))
+
+    assert body["label"] == "confirmatory"
+    assert body["treatment_check"] == {"failed": [], "unverified": []}
+
+
+async def test_a_round_the_device_never_ran_at_its_level_is_a_deviation(env, tmp_path):
+    """qwen3.6's round: the light stayed at 20 % while the report called it the 70 % round."""
+    task = env.task("researcher")
+    rounds = _rounds(env, lights={**ALLOCATED_LIGHT, 1: 20})
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    outcome = await _publish(env, task.id, rounds, deps)
+
+    body = _payload(outcome)
+    assert body["label"] != "confirmatory"
+    (failed,) = body["treatment_check"]["failed"]
+    assert failed == {
+        "round": 1,
+        "treatment_id": "high",
+        "problems": ["light was never at 70 (recorded [20])"],
+    }
+    assert any("第 1 轮没有按分配的处理 high" in x for x in _report(env, outcome)["limitations"])
+
+
+async def test_rounds_without_recorded_levels_are_reported_as_unverified(env):
+    task = env.task("researcher")
+
+    outcome = await _publish(env, task.id, _rounds(env))
+
+    unverified = _payload(outcome)["treatment_check"]["unverified"]
+    assert [u["round"] for u in unverified] == [1, 2, 3, 4]
+    assert any("无法核对处理" in x for x in _report(env, outcome)["limitations"])
 
 
 async def test_the_report_carries_the_computed_conclusion(env):
@@ -691,3 +839,136 @@ async def test_a_holdout_evaluation_without_a_registry_is_an_error(env):
     outcome = await _publish(env, task.id, rounds, holdout_id="hold-1", model_sha="m")
 
     assert outcome.is_error and env.archive.artifacts(task.id) == ()
+
+
+async def test_protocol_rounds_nobody_has_run_are_not_missing_data(env):
+    """Round 1 of a four-round protocol: rounds 2 to 4 are still to come, nothing is missing."""
+    task = env.task("researcher")
+    rounds = _rounds(env, (5.0, None, None, None))
+
+    outcome = await _publish(env, task.id, rounds)
+
+    reasons = _report(env, outcome)["reasons"]
+    assert not any("缺失" in reason for reason in reasons), reasons
+
+
+def test_a_started_round_left_out_of_the_report_still_counts_as_missing(env):
+    from growbridge.agents.handlers_report import Frozen, _missing_fraction
+
+    rows = (_measurement("e1", 5.0, "m1"), _measurement("e2", 4.0, "m2"))
+    frozen = Frozen((), {"e1": 1, "e2": 2}, rows)
+    metric = env.protocol.analysis.primary_endpoint
+
+    assert _missing_fraction(env.protocol, frozen, metric, frozenset()) == 0
+    assert _missing_fraction(env.protocol, frozen, metric, frozenset({3})) == pytest.approx(1 / 3)
+
+
+async def test_started_round_numbers_lists_the_rounds_with_a_started_stage(env):
+    store = env.workflow.store
+    assert store.started_round_numbers(env.project_id, env.protocol.id) == frozenset()
+
+    await _running_stage(env)  # stage-1 belongs to env.round_id, the project's first round
+    env.workflow.create_round(env.project_id, env.protocol.id, env.operator)
+
+    assert store.started_round_numbers(env.project_id, env.protocol.id) == {1}
+    assert store.started_round_numbers(env.project_id, "another-protocol") == frozenset()
+
+
+async def test_server_notes_are_stored_with_their_code_in_both_languages(env):
+    task = env.task("researcher")
+
+    outcome = await _publish(env, task.id, _rounds(env))
+
+    report = _report(env, outcome)
+    assert report["model_limitations"] == ["one cultivar"]
+    unverified = [n for n in report["notes"] if n["code"] == "treatment_unverified"]
+    assert [n["params"]["round"] for n in unverified] == [1, 2, 3, 4]
+    assert unverified[0]["kind"] == "limitation"
+    assert unverified[0]["text"]["en"].startswith("The samples of round 1 record no level")
+    assert unverified[0]["text"]["zh"] in report["limitations"]  # the plain text is unchanged
+    reasons = [n for n in report["notes"] if n["kind"] == "reason"]
+    assert [n["text"]["zh"] for n in reasons] == report["reasons"]
+    assert report["conclusion_texts"] == {"en": "uncertain", "zh": "不确定"}
+    assert _payload(outcome)["server_notes"][0].keys() == {"en", "zh"}
+
+
+def _with_tasks(env, number: int, done: int, planned: int = 4) -> dict:
+    """A frozen round whose snapshot holds ``planned`` watering occurrences, ``done`` recorded."""
+    from growbridge.archive.models import TaskRecord
+    from growbridge.planning.manual_tasks import Occurrence
+
+    name = f"e{number}"
+    env.stage_for(name)
+    _samples(env, name, light=ALLOCATED_LIGHT[number])
+    env.archive.add_measurement(_measurement(name, VALUES[number - 1], f"m{number}"))
+    items = [
+        Occurrence(task_id="water", kind="irrigation", due_at=START + 1 + i) for i in range(planned)
+    ]
+    for item in items[:done]:
+        env.archive.add_task_record(
+            TaskRecord(
+                id=f"rec-{name}-{item.due_at}",
+                experiment_id=name,
+                stage_id="stage-1",
+                task_id="water",
+                kind="irrigation",
+                due_at=item.due_at,
+                outcome="done",
+                done_at=item.due_at,
+                operator="op-1",
+                recorded_at=item.due_at,
+            )
+        )
+    shot = snapshots.freeze(env.archive, name, env.clock, START, START + 10, 1, 2, schedule=items)
+    return {"snapshot_id": shot.id, "round": number}
+
+
+async def test_manual_tasks_not_done_in_time_are_a_deviation(env, tmp_path):
+    task = env.task("researcher")
+    rounds = [_with_tasks(env, n, done=4 if n != 2 else 1) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    outcome = await _publish(env, task.id, rounds, deps)
+
+    body = _payload(outcome)
+    assert body["label"] == "exploratory"  # 1 of 4 experiments deviated, over the 0.1 limit
+    check = {d["round"]: (d["missed"], d["total"]) for d in body["manual_task_check"]}
+    assert check == {1: (0, 4), 2: (3, 4), 3: (0, 4), 4: (0, 4)}
+    (missed,) = [n for n in _report(env, outcome)["notes"] if n["code"] == "manual_tasks_missed"]
+    assert missed["text"]["en"] == (
+        "Round 2: 3 of 4 planned manual tasks were not done on time (irrigation 3)"
+    )
+
+
+async def test_manual_tasks_all_done_keep_the_result_confirmatory(env, tmp_path):
+    task = env.task("researcher")
+    rounds = [_with_tasks(env, n, done=4) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    body = _payload(await _publish(env, task.id, rounds, deps))
+
+    assert body["label"] == "confirmatory"
+    assert all(d["missed"] == 0 for d in body["manual_task_check"])
+
+
+async def test_the_freeze_tool_holds_the_planned_tasks_and_their_records(env):
+    from growbridge.archive.models import ManualTask
+
+    tasks = (ManualTask(id="water", kind="irrigation", at="10:00", seconds=5),)  # due at START
+    await _running_stage(env, manual_tasks=tasks)
+    env.clock.advance(20)
+
+    body = _payload(await _inspect(env, stage_id="stage-1"))
+    shot = _payload(
+        await env.invoke(
+            "researcher", "freeze_dataset", None, task_id=_task_id(env), stage_id="stage-1"
+        )
+    )
+
+    assert body["manual_tasks"] == {
+        "planned": 1,
+        "by_kind": {"irrigation": {"open": 1}},
+        "not_done_in_time": 1,
+    }
+    files = env.archive.snapshot(shot["snapshot_id"]).files
+    assert {"manual_tasks.jsonl", "task_records.jsonl"} <= set(files)

@@ -7,7 +7,7 @@ from growbridge.agents.handlers import Deps, build_role_tools
 from growbridge.agents.handlers_common import bind_task
 from growbridge.agents.tools import ROLE_TOOLS, build_toolset
 from growbridge.archive.db import Database
-from growbridge.archive.models import Budget, Channel, RuleAction, RunSheet
+from growbridge.archive.models import Budget, Channel, RuleAction, RunSheet, TimedAction
 from growbridge.archive.store import Archive
 from growbridge.config import RoleModel
 from growbridge.planning.validate import validate_run_sheet
@@ -17,6 +17,12 @@ from growbridge.sim.control import FakeControl
 from growbridge.sim.fixtures import make_protocol, make_run_sheet
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.tasks import TaskBoard
+
+HIGH_LIGHT = (
+    TimedAction(id="light-on", channel=Channel.LIGHT, at="06:00", level=70),
+    TimedAction(id="light-off", channel=Channel.LIGHT, at="22:00", level=0),
+    TimedAction(id="exhaust-base", channel=Channel.EXHAUST, at="00:00", level=30),
+)
 
 
 class Env:
@@ -115,6 +121,7 @@ class Env:
             "protocol_id": self.protocol.id,
             "version": version,
             "end_actions": (RuleAction(channel=Channel.LIGHT, level=0),),
+            "timed_actions": HIGH_LIGHT,  # protocol round 1 is allocated "high" (light 70)
         }
         return make_run_sheet(**{**defaults, **fields})
 

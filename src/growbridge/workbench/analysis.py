@@ -32,7 +32,10 @@ from growbridge.workbench.rounds import Ident, PathId
 from growbridge.workflow.service import WorkflowService
 
 OUTPUT_LIMIT = 4000
-STARTED = "确认性分析必须在看到结局数据之前冻结：这个协议版本下已有阶段开始运行（架构文档 §6.5）"
+STARTED = (
+    "a confirmatory analysis must be frozen before outcome data is seen: a stage of this"
+    " protocol version has already started (architecture doc §6.5)"
+)
 FROZEN_NOTE = (
     "The script is frozen and cannot be corrected afterwards; to change the analysis, save the "
     "protocol as a new protocol version and freeze a script for that."

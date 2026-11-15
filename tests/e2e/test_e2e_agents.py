@@ -61,8 +61,7 @@ async def design(world, runtime):
 
 
 def sheet_json(world, project, protocol) -> dict:
-    sheet = world.sheet(project, protocol_id=protocol.id, protocol_version=protocol.version)
-    return sheet.model_dump(mode="json")
+    return world.model_sheet(project, protocol).model_dump(mode="json")
 
 
 def tool_blocks(client) -> list[dict]:
@@ -136,6 +135,14 @@ async def test_model_driven_round_from_delegation_to_delivery(world):
     assert flow.stage(STAGE).state is StageState.PENDING_REVIEW
     assert flow.approvals(STAGE) == () and flow.active_stage() is None
     assert device_writes(world) == []
+
+    # the ended planning task wakes the orchestrator with a follow-up naming it
+    (follow,) = [
+        t for t in runtime.tasks.list(project) if t.trigger_event_id.startswith("followup:")
+    ]
+    assert follow.owner_role == "orchestrator" and f"task:{planning.id}" in follow.input_refs
+    assert await runtime.run_agents(ScriptedClient([text_reply("please review the draft")])) == 1
+    assert runtime.tasks.get(follow.id).state is TaskState.DONE
 
     # the operator approves and starts; ticks run the stage to its end
     flow.approve(STAGE, operator)

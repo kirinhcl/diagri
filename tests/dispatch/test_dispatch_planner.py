@@ -81,6 +81,59 @@ async def test_validate_run_sheet_reports_without_saving(env):
     assert env.workflow.store.find_stage("stage-1") is None
 
 
+# what qwen3.6 filed: the light held by the device at a "retained" 70, no timed action on it
+DEVICE_HELD = [
+    {"channel": "light", "ownership": "device", "retained_level": 70},
+    {"channel": "exhaust", "ownership": "host", "retained_level": 30},
+]
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"channels": DEVICE_HELD, "timed_actions": []},
+        {"timed_actions": [{"id": "on", "channel": "light", "at": "06:00", "level": 40}]},
+    ],
+)
+async def test_a_draft_that_does_not_apply_the_rounds_treatment_is_not_saved(env, fields):
+    sheet = env.sheet_json(**fields, end_actions=[])
+
+    saved = _payload(
+        await env.invoke("planner", "save_plan_draft", round_id=env.round_id, run_sheet=sheet)
+    )
+    checked = _payload(
+        await env.invoke("planner", "validate_run_sheet", round_id=env.round_id, run_sheet=sheet)
+    )
+
+    assert saved["saved"] is False and env.workflow.store.find_stage("stage-1") is None
+    for body in (saved, checked):
+        (finding,) = [f for f in body["findings"] if f["code"] == "treatment_not_applied"]
+        assert finding["blocking"] and "treatment high" in finding["message"]
+
+
+async def test_the_second_round_of_a_protocol_is_checked_against_its_own_treatment(env):
+    second = env.workflow.create_round(env.project_id, env.protocol.id, env.operator)
+    control = [{"id": "on", "channel": "light", "at": "06:00", "level": 40}]
+
+    high = _payload(
+        await env.invoke(
+            "planner", "validate_run_sheet", round_id=second, run_sheet=env.sheet_json()
+        )
+    )
+    low = _payload(
+        await env.invoke(
+            "planner",
+            "validate_run_sheet",
+            round_id=second,
+            run_sheet=env.sheet_json(timed_actions=control),
+        )
+    )
+
+    assert env.workflow.store.round_number(second) == 2
+    assert "treatment_not_applied" in {f["code"] for f in high["findings"]}
+    assert "treatment_not_applied" not in {f["code"] for f in low["findings"]}
+
+
 @pytest.mark.parametrize("tool", ["save_plan_draft", "validate_run_sheet"])
 async def test_a_run_sheet_number_that_is_not_finite_is_an_error_and_nothing_is_saved(env, tool):
     sheet = env.sheet_json()

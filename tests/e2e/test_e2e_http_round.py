@@ -133,8 +133,7 @@ async def designed(client) -> tuple[str, object, str]:
 
 
 def sheet_json(world, project: str, protocol, **fields) -> dict:
-    owner = {"protocol_id": protocol.id, "protocol_version": protocol.version}
-    return world.sheet(project, **owner, **fields).model_dump(mode="json")
+    return world.model_sheet(project, protocol, **fields).model_dump(mode="json")
 
 
 async def run_stage_to_its_end(world, runtime, client) -> dict:
@@ -171,6 +170,14 @@ async def test_round_from_goal_to_delivered_through_http_routes_only(world, site
     assert view["state"] == "stage_review"
     assert view["stages"] == [{"stage_id": STAGE, "state": "pending_review"}]
     assert device_writes(world) == []
+
+    # the ended planner task wakes the orchestrator, which tells the user what comes next
+    told = ScriptedClient([text_reply("the run sheet waits for your review")])
+    assert await runtime.run_agents(told) == 1
+    said = (await get(client, f"/wb/projects/{project}/conversation"))["entries"]
+    assert [e["text"] for e in said if e["kind"] == "message"] == [goal["goal"]]
+    assert said[-2]["role"] == "orchestrator"
+    assert said[-2]["text"] == "the run sheet waits for your review"
 
     # the operator reads what is to be approved, approves exactly that, and starts the stage
     review = await get(client, f"/wb/stages/{STAGE}/run-sheet")
@@ -233,6 +240,7 @@ async def test_round_from_goal_to_delivered_through_http_routes_only(world, site
 
     researcher = ReadingClient([freeze, publish, text_reply("published")])
     assert await runtime.run_agents(researcher) == 1
+    assert await runtime.run_agents(ScriptedClient([text_reply("the report is out")])) == 1
     delivered = await get(client, f"/wb/rounds/{round_id}")
     assert delivered["state"] == "delivered"
     assert delivered["snapshot_id"] and delivered["report_artifact_id"]

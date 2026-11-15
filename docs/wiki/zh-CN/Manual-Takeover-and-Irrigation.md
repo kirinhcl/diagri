@@ -73,6 +73,8 @@ POST /wb/manual/light
 
 灌溉只有操作员能做，而且只在局域网入口提供。它是唯一能开泵的途径：执行 Agent 从不开泵，`POST /wb/manual/pump` 也只接受 0。
 
+> **运行单计划好的浇水不需要接管。** 运行单里有带 `seconds` 的浇水任务时，在阶段页的**人工任务**里启动（`POST /wb/stages/STAGE_ID/manual-tasks/irrigate`，同样只在局域网入口），阶段继续运行。接管会被记为干预，在报告里算作方案偏离；计划内浇水则记为该任务已完成。见[运行一轮研究](Run-a-Research-Round.md)。
+
 ```http
 POST /wb/irrigation
 

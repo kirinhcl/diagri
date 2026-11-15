@@ -2,13 +2,14 @@
 import { hrefFor } from "../router.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
-import { simpleForm } from "../ui/forms.js";
+import { errorLines, simpleForm } from "../ui/forms.js";
 import { afterWrite, confirmedButton, keyValues, note, pageHead, section } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { analysisSection } from "./round-analysis.js";
 
 const CHOICES = ["redo", "next", "verify", "abort"];
+const CLOSED = new Set(["delivered", "aborted"]); // nothing is left to abort
 
 function summary(ctx, round) {
   const project = h("a", { class: "text-link", attrs: { href: hrefFor("project", { projectId: round.project_id }) }, text: round.project_id });
@@ -63,6 +64,69 @@ function abortButton(ctx, round) {
   return confirmedButton(ctx, { label: ctx.t("round.abort"), title: ctx.t("round.abortTitle"), lines, tone: "danger", run });
 }
 
+// --- the published report ------------------------------------------------------------------------
+
+// What the estimate says, in one line: the effect with its p value, or why there is none.
+export function estimateText(ctx, estimate) {
+  if (!estimate) return "—";
+  if (!estimate.estimable) return estimate.note || ctx.t("report.notEstimable");
+  const p = typeof estimate.p_value === "number" ? estimate.p_value.toPrecision(2) : "—";
+  return ctx.t("report.estimate", { effect: estimate.effect, p, blocks: estimate.blocks });
+}
+
+function listOrNone(ctx, items) {
+  const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!rows.length) return note(ctx.t("report.none"));
+  return h("ul", { class: "report-list" }, rows.map((item) => h("li", { text: String(item) })));
+}
+
+// A report written with coded notes shows each server note in the console's language; an older
+// report has only the plain-text fields, which are shown as they are.
+export function reportLists(report, lang) {
+  if (!Array.isArray(report.notes)) {
+    return { reasons: report.reasons || [], limitations: report.limitations || [] };
+  }
+  const text = (entry) => (entry.text && (entry.text[lang] || entry.text.en)) || entry.code;
+  const of = (kind) => report.notes.filter((entry) => entry.kind === kind).map(text);
+  return { reasons: of("reason"), limitations: [...(report.model_limitations || []), ...of("limitation")] };
+}
+
+function reportView(ctx, data) {
+  const report = data.report || {};
+  const lists = reportLists(report, ctx.lang);
+  const label = report.label || data.label;
+  const conclusion = report.conclusion || "uncertain";
+  return h(
+    "div",
+    { class: "report" },
+    keyValues([
+      [ctx.t("report.label"), h("span", { class: ["pill", `pill-label-${label}`], text: ctx.t(`report.labels.${label}`) })],
+      [ctx.t("report.conclusion"), ctx.t(`report.conclusions.${conclusion}`)],
+      [ctx.t("report.estimateTitle"), estimateText(ctx, report.estimate)],
+      [ctx.t("report.snapshot"), report.snapshot_id ? h("code", { text: report.snapshot_id }) : null],
+      [ctx.t("report.digest"), h("code", { text: data.sha256 })],
+    ]),
+    h("h3", { class: "report-sub", text: ctx.t("report.reasons") }),
+    listOrNone(ctx, lists.reasons),
+    h("h3", { class: "report-sub", text: ctx.t("report.limitations") }),
+    listOrNone(ctx, lists.limitations),
+    h("h3", { class: "report-sub", text: ctx.t("report.unresolved") }),
+    listOrNone(ctx, report.unresolved),
+    h("h3", { class: "report-sub", text: ctx.t("report.nextRound") }),
+    report.next_round ? h("p", { class: "report-text", text: report.next_round }) : note(ctx.t("report.none")),
+  );
+}
+
+async function reportSection(ctx, round) {
+  if (!round.report_artifact_id) return null;
+  try {
+    const data = await ctx.api.get(`/rounds/${encodeURIComponent(round.round_id)}/report`);
+    return section(ctx.t("report.title"), reportView(ctx, data));
+  } catch (error) {
+    return section(ctx.t("report.title"), note(ctx.t("report.unavailable", { reason: errorLines(error, ctx.lang, ctx.t).join(" ") })));
+  }
+}
+
 export async function render(ctx, params) {
   const round = await ctx.api.get(`/rounds/${encodeURIComponent(params.roundId)}`);
   ctx.setBreadcrumbs([
@@ -70,15 +134,16 @@ export async function render(ctx, params) {
     { label: ctx.t("crumb.project", { id: round.project_id }), href: hrefFor("project", { projectId: round.project_id }) },
     { label: ctx.t("crumb.round", { id: round.round_id }) },
   ]);
-  const analysis = await analysisSection(ctx, round);
+  const [analysis, report] = await Promise.all([analysisSection(ctx, round), reportSection(ctx, round)]);
   const element = h(
     "div",
     { class: "page round" },
     pageHead(ctx.t("crumb.round", { id: round.round_id }), ctx.t("round.lead")),
     section(ctx.t("round.summary"), summary(ctx, round)),
+    report,
     round.awaiting_choice ? choiceForm(ctx, round) : null,
     section(ctx.t("round.stages"), stagesView(ctx, round)),
-    section(ctx.t("round.abortSection"), note(ctx.t("round.abortNote")), abortButton(ctx, round)),
+    CLOSED.has(round.state) ? null : section(ctx.t("round.abortSection"), note(ctx.t("round.abortNote")), abortButton(ctx, round)),
     analysis,
   );
   return { element };

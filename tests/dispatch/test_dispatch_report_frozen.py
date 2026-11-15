@@ -169,7 +169,7 @@ async def test_a_run_that_is_still_going_also_refuses(env, tmp_path):
 
     outcome = await _publish(env, task.id, rounds, env.make_deps(runner=runner))
 
-    assert outcome.is_error and "还没有完成" in outcome.content
+    assert outcome.is_error and "has not finished" in outcome.content
     assert env.archive.artifacts(task.id) == ()
 
 

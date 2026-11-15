@@ -130,7 +130,9 @@ class FakeControl:
     async def submit(self, request: ActionRequest) -> ActionRecord:
         raise NotImplementedError("FakeControl does not simulate writes")
 
-    async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
         raise NotImplementedError("FakeControl does not simulate writes")
 
     def irrigating(self) -> bool:

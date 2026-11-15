@@ -9,6 +9,7 @@ import { errorLines } from "./forms.js";
 const ICONS = {
   brand: ["M5 19c0-8 6-14 14-14 0 8-6 14-14 14z", "M5 19l8-8"],
   inbox: ["M4 13l2-8h12l2 8v6H4z", "M4 13h4l2 3h4l2-3h4"],
+  environment: ["M12 3v4", "M12 17v4", "M3 12h4", "M17 12h4", "M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z"],
   projects: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
   alerts: ["M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z", "M10 20a2 2 0 0 0 4 0"],
   evidence: ["M7 3h7l5 5v13H7z", "M14 3v5h5", "M10 14l2 2 4-4"],
@@ -17,6 +18,7 @@ const ICONS = {
 };
 const NAV = [
   { page: "inbox", countKey: "inbox" },
+  { page: "environment" },
   { page: "projects", also: ["project", "round", "stage"] },
   { page: "alerts", countKey: "alerts" },
   { page: "evidence" },

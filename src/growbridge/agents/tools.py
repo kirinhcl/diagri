@@ -20,7 +20,9 @@ from growbridge.ports import Denied
 
 log = logging.getLogger(__name__)
 
-MAX_ERROR_CHARS = 500
+# Long enough for a validation report of a whole run sheet: a clipped one makes the model fix
+# a field or two per turn.
+MAX_ERROR_CHARS = 4000
 
 ROLE_TOOLS: dict[str, frozenset[str]] = {
     "orchestrator": frozenset(
@@ -29,7 +31,6 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
             "get_run_status",
             "create_research_task",
             "delegate_task",
-            "submit_run_for_review",
             "get_task_status",
             "read_artifact",
         }
@@ -50,6 +51,7 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
     ),
     "researcher": frozenset(
         {
+            "inspect_stage_data",
             "freeze_dataset",
             "query_evidence",
             "run_local_analysis",
@@ -111,6 +113,31 @@ def _close_objects(node: Any) -> Any:
     return node
 
 
+def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:
+    """Return a copy of a JSON schema with every local ``$ref`` replaced by its definition.
+
+    Some model servers render a ``$ref`` parameter as an untyped value, so the model never sees
+    the nested fields (seen with Ollama: a run sheet arrived as ``any``). The tool input models
+    have no recursive definitions, so the result is finite; a sibling of ``$ref`` (a description,
+    say) is kept on top of the definition.
+    """
+    if isinstance(node, dict):
+        if "$ref" in node:
+            name = node["$ref"].removeprefix("#/$defs/")
+            siblings = {k: _inline_refs(v, defs) for k, v in node.items() if k != "$ref"}
+            return {**_inline_refs(defs[name], defs), **siblings}
+        return {k: _inline_refs(v, defs) for k, v in node.items() if k != "$defs"}
+    if isinstance(node, list):
+        return [_inline_refs(item, defs) for item in node]
+    return node
+
+
+def input_schema(model: type[BaseModel]) -> dict:
+    """The self-contained, closed JSON schema a model sees for a tool input."""
+    schema = model.model_json_schema()
+    return _close_objects(_inline_refs(schema, schema.get("$defs", {})))
+
+
 def _serialise(result: Any) -> str:
     if isinstance(result, str):
         return result
@@ -142,7 +169,7 @@ class Toolset:
                 "name": tool.name,
                 "description": tool.description,
                 "strict": True,
-                "input_schema": _close_objects(tool.input_model.model_json_schema()),
+                "input_schema": input_schema(tool.input_model),
             }
             for tool in self._visible(restricted)
         ]

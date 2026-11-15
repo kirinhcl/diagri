@@ -26,15 +26,27 @@ def _reason(env, task_id: str) -> str:
     return rows[-1]["reason"]
 
 
-@pytest.mark.parametrize("role", ["orchestrator", "planner", "researcher"])
-async def test_a_normal_end_completes_the_task(env, role):
-    env.task(role)
+async def test_a_normal_end_completes_an_orchestrator_task(env):
+    env.task("orchestrator")
     client = ScriptedClient([text_reply("all good")])
 
     run = await env.dispatcher(client).run_task("task-ev-1")
 
     assert run is not None and run.text == "all good"
     assert env.tasks.get("task-ev-1").state is TaskState.DONE
+
+
+@pytest.mark.parametrize("role", ["planner", "researcher"])
+async def test_a_working_role_that_ends_with_only_text_hands_the_task_back(env, role):
+    """Text alone is a question or giving up: nothing was saved, so the user has to look."""
+    env.task(role)
+    client = ScriptedClient([text_reply("which crop do you mean?")])
+
+    run = await env.dispatcher(client).run_task("task-ev-1")
+
+    assert run is not None and run.stop_reason == "end_turn"
+    assert env.tasks.get("task-ev-1").state is TaskState.NEEDS_ATTENTION
+    assert "which crop do you mean?" in _reason(env, "task-ev-1")
 
 
 async def test_the_user_message_carries_the_task_as_data(env):
@@ -52,6 +64,7 @@ async def test_the_user_message_carries_the_task_as_data(env):
     message = request["messages"][0]["content"]
     data = json.loads(message[message.index("{") :])
     assert data["task_id"] == "task-ev-1"
+    assert data["project_id"] == env.project_id  # every project-scoped tool asks for it
     assert data["goal"] == "does more light speed up canopy growth?"
     assert data["constraints"] == ["no pump"]
     assert data["evidence_refs"] == ["card-1"]

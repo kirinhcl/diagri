@@ -1,0 +1,26 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { AHEAD_SECONDS, rowActions, visibleRows } from "../../src/growbridge/web/workbench/pages/stage-tasks.js";
+
+const NOW = 100_000;
+const row = (fields) => ({ task_id: "water", kind: "irrigation", seconds: 5, status: "open", record: null, due_at: NOW, ...fields });
+const body = (fields = {}) => ({ now: NOW, early_seconds: 3600, stage_state: "running", occurrences: [], ...fields });
+
+test("rows are listed newest first and at most a day ahead", () => {
+  const rows = [row({ due_at: NOW - 10 }), row({ due_at: NOW + 10 }), row({ due_at: NOW + AHEAD_SECONDS + 1 })];
+  assert.deepEqual(visibleRows(body({ occurrences: rows })).map((r) => r.due_at), [NOW + 10, NOW - 10]);
+});
+
+test("a planned irrigation can be started only while the stage runs and it is not done", () => {
+  assert.deepEqual(rowActions(row(), body()), { record: true, irrigate: true });
+  assert.deepEqual(rowActions(row({ status: "done" }), body()), { record: true, irrigate: false });
+  assert.deepEqual(rowActions(row(), body({ stage_state: "paused" })), { record: true, irrigate: false });
+  assert.deepEqual(rowActions(row({ seconds: null }), body()), { record: true, irrigate: false });
+  assert.deepEqual(rowActions(row({ kind: "photo", seconds: null }), body()), { record: true, irrigate: false });
+});
+
+test("a task more than an hour away cannot be recorded yet", () => {
+  assert.deepEqual(rowActions(row({ due_at: NOW + 3601 }), body()), { record: false, irrigate: false });
+  assert.deepEqual(rowActions(row({ due_at: NOW + 3600 }), body()).record, true);
+});

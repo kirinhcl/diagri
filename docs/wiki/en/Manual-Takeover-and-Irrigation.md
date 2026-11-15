@@ -73,6 +73,8 @@ Sending the same `request_id` with the same body again returns the first record 
 
 Irrigation is for operators only and is offered on the LAN entry only. It is the only path that switches the pump on: the executor never does, and `POST /wb/manual/pump` accepts level 0 only.
 
+> **Watering the run sheet plans needs no takeover.** When the run sheet has an irrigation task with `seconds`, start it from the stage page's **Manual tasks** (`POST /wb/stages/STAGE_ID/manual-tasks/irrigate`, also LAN only) while the stage keeps running. A takeover is recorded as an intervention and counts as a protocol deviation in the report; the planned run is recorded as the task done. See [Run a research round](Run-a-Research-Round.md#manual-tasks).
+
 ```http
 POST /wb/irrigation
 

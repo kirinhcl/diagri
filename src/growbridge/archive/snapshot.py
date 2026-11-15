@@ -5,13 +5,13 @@ Late additions never change a snapshot; freezing again writes a new version.
 """
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.ids import canonical_json, file_digest, new_id
-from growbridge.archive.models import ManualMeasurement, SampleRecord, Snapshot
+from growbridge.archive.models import ManualMeasurement, Model, SampleRecord, Snapshot
 from growbridge.archive.store import Archive
 from growbridge.ports import Denied
 
@@ -58,8 +58,12 @@ def _collect(
     start: float,
     end: float,
     measurement_filter: Callable[[ManualMeasurement], bool] | None,
+    schedule: Sequence[Model] | None = None,
 ) -> tuple[dict[str, list], int]:
-    """The rows of each file, and how many measurements the filter left out."""
+    """The rows of each file, and how many measurements the filter left out.
+
+    With a ``schedule`` (the manual task occurrences the run sheet plans in the window) the
+    snapshot also holds it and the task records of those occurrences."""
     samples = archive.samples(experiment_id, start, end)
     measured = [
         m
@@ -77,6 +81,9 @@ def _collect(
         ],
         "frozen_periods": list(archive.frozen_periods(start, end)),
     }
+    if schedule is not None:
+        data["manual_tasks"] = list(schedule)
+        data["task_records"] = list(archive.task_records(experiment_id, start, end))
     return data, len(measured) - len(kept)
 
 
@@ -101,6 +108,7 @@ def freeze(
     max_gap: float,
     min_coverage: float = 0.9,
     measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
+    schedule: Sequence[Model] | None = None,
 ) -> Snapshot:
     """Freeze the window. Trusted samples (synced, ok, planned) go to ``samples.jsonl``, the
     rest to ``samples_untrusted.jsonl``; ``measurement_filter`` returning False leaves a
@@ -110,7 +118,7 @@ def freeze(
     if end <= start:
         raise ValueError("snapshot window must have end > start")
     with archive.db.transaction():
-        data, excluded = _collect(archive, experiment_id, start, end, measurement_filter)
+        data, excluded = _collect(archive, experiment_id, start, end, measurement_filter, schedule)
         times = [_sample_time(s) for s in data["samples"]]
         coverage, gaps = coverage_of(times, start, end, expected_interval, max_gap)
         snapshot_id = new_id("snap")
@@ -137,6 +145,106 @@ def freeze(
         record_ids = [r.id for name in kept for r in data[name]]
         archive.save_snapshot(snapshot, record_ids)
     return snapshot
+
+
+MAX_CHANNELS = 30
+MAX_LISTED_GAPS = 5
+
+
+def _stats(values: list[float]) -> dict[str, float | int]:
+    return {
+        "n": len(values),
+        "min": min(values),
+        "max": max(values),
+        "mean": round(sum(values) / len(values), 6),
+    }
+
+
+def _numbers(data: dict[str, Any], prefix: str = "") -> list[tuple[str, float]]:
+    """Numeric leaves of a device reading, nested keys joined with dots (``light.level``)."""
+    found = []
+    for key, value in data.items():
+        name = f"{prefix}{key}"
+        if isinstance(value, dict):
+            found.extend(_numbers(value, f"{name}."))
+        elif isinstance(value, int | float) and not isinstance(value, bool):
+            found.append((name, float(value)))
+    return found
+
+
+def _channels(samples: list[SampleRecord]) -> dict[str, dict]:
+    """Numeric readings per data key (booleans are not numbers here)."""
+    found: dict[str, list[float]] = {}
+    for sample in samples:
+        for key, value in _numbers(sample.data):
+            found.setdefault(key, []).append(value)
+    return {key: _stats(found[key]) for key in sorted(found)[:MAX_CHANNELS]}
+
+
+def _counts(items: list[str]) -> dict[str, int]:
+    counted: dict[str, int] = {}
+    for item in items:
+        counted[item] = counted.get(item, 0) + 1
+    return counted
+
+
+def preview(
+    archive: Archive,
+    experiment_id: str,
+    start: float,
+    end: float,
+    expected_interval: float,
+    max_gap: float,
+    min_coverage: float = 0.9,
+    measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
+) -> dict[str, Any]:
+    """What ``freeze`` would see in the window, summarised; writes nothing.
+
+    Measurements the filter leaves out (held-out outcomes) are only counted, never described.
+    """
+    if end <= start:
+        raise ValueError("snapshot window must have end > start")
+    data, excluded = _collect(archive, experiment_id, start, end, measurement_filter)
+    trusted, untrusted = data["samples"], data["samples_untrusted"]
+    coverage, gaps = coverage_of(
+        [_sample_time(s) for s in trusted], start, end, expected_interval, max_gap
+    )
+    by_metric: dict[str, list[ManualMeasurement]] = {}
+    for m in data["measurements"]:
+        by_metric.setdefault(m.metric, []).append(m)
+    return {
+        "window": [start, end],
+        "expected_interval_seconds": expected_interval,
+        "max_gap_seconds": max_gap,
+        "coverage": round(coverage, 6),
+        "would_be_complete": coverage >= min_coverage,
+        "min_coverage": min_coverage,
+        "gap_count": len(gaps),
+        "longest_gap_seconds": max((b - a for a, b in gaps), default=0.0),
+        "gaps": [list(gap) for gap in gaps[:MAX_LISTED_GAPS]],
+        "samples": {
+            "trusted": len(trusted),
+            "untrusted": len(untrusted),
+            "untrusted_reasons": {
+                "clock_unsynced": sum(not s.clock_synced for s in untrusted),
+                "quality": _counts([s.quality for s in untrusted if s.quality != "ok"]),
+                "source": _counts([s.source for s in untrusted if s.source != "planned"]),
+            },
+            "channels": _channels(trusted),
+        },
+        "measurements": {
+            metric: {
+                **_stats([m.value for m in items]),
+                "units": sorted({m.unit for m in items}),
+                "plants": len({m.plant_id for m in items}),
+                "corrections": sum(m.corrects is not None for m in items),
+            }
+            for metric, items in sorted(by_metric.items())
+        },
+        "measurements_withheld": excluded,
+        "actions": _counts([a.state.value for a in data["actions"]]),
+        "interventions": len(data["interventions"]),
+    }
 
 
 def load(archive: Archive, snapshot_id: str) -> Snapshot:

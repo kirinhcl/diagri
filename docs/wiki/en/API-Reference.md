@@ -58,7 +58,7 @@ Source: `create_app` in [`api.py`](../../../src/growbridge/api.py). There are 14
 
 ## Workbench routes
 
-The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The operator console is a web page at `/workbench` that only calls these routes (see [Enable DiAGRI](Enable-DiAGRI.md)); the files in `web/` outside `web/workbench/` are the bridge dashboard. There are 49 routes. The seven read routes at the end of the first table are always mounted: [`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) leaves out of the inbox whatever service is not passed. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed, and the two holdout routes ([`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)) exist when a holdout registry is passed. The runtime always passes all of them.
+The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The operator console is a web page at `/workbench` that only calls these routes (see [Enable DiAGRI](Enable-DiAGRI.md)); the files in `web/` outside `web/workbench/` are the bridge dashboard. There are 55 routes. The seven read routes at the end of the first table are always mounted: [`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) leaves out of the inbox whatever service is not passed. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed, and the two holdout routes ([`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)) exist when a holdout registry is passed. The runtime always passes all of them.
 
 | Caller | Credential | Checks |
 | --- | --- | --- |
@@ -87,6 +87,8 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/manual/{channel}` | operator | LAN, overlay | no | `pump_on_forbidden`, `state`, write codes |
 | `POST` | `/wb/irrigation` | operator | LAN only | no | `entry` (not on the LAN entry), `state`, `cooldown`, write codes |
 | `POST` | `/wb/measurements` | operator | LAN, overlay | no | `scope` |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks` | operator | LAN, overlay | no | `scope` (no such occurrence), `state` (not started, or not due within the hour), `param` (`done_at`) |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | operator | LAN only | no | `entry` (not on the LAN entry), `scope` (not a planned irrigation), `state` (stage not `running`, not due, already done), `cooldown`, write codes |
 | `POST` | `/wb/safety/approve` | operator | LAN, overlay | yes | `reauth_required`, `host_unregistered` |
 | `GET` | `/wb/stages/{stage_id}` | operator, role token | LAN, overlay | no | only `session`, `entry`, `state` |
 | `GET` | `/wb/receipts/{request_id}` | operator, role token | LAN, overlay | no | only `session`, `entry` |
@@ -96,11 +98,13 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/protocols` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/rounds` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/rounds/{round_id}` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/rounds/{round_id}/report` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/rounds/{round_id}/choice` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | operator | LAN, overlay | yes | `reauth_required`, `state` |
 | `POST` | `/wb/goals` | operator | LAN, overlay | no | `budget`, `state` |
+| `GET` | `/wb/projects/{project_id}/conversation` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | operator | LAN, overlay | yes | `reauth_required`, `state`, `script_hash`, `param` |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/analysis/runs` | operator | LAN, overlay | yes | `reauth_required`, `state`, `scope`, `snapshot_incomplete`, `already_run`, `sandbox_unavailable` |
@@ -117,8 +121,10 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `GET` | `/wb/projects` | operator | LAN, overlay | no | none |
 | `GET` | `/wb/projects/{project_id}` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/readings` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/environment` | operator | LAN, overlay | no | — |
 | `GET` | `/wb/stages/{stage_id}/measurements` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/history` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/stages/{stage_id}/manual-tasks` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/safety` | operator | LAN, overlay | no | none |
 
 The last twenty-eight routes, the thirteen reads among them, are for operators only: a role token is refused with `model_role`.
@@ -142,6 +148,8 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/drafts/run-sheet` | `round_id` (1 to 100), `run_sheet` (a `RunSheet`) | `stage_id` and `findings` (a list of `code`, `message`, `blocking`) |
 | `POST` | `/wb/manual/{channel}` | path `channel`: `light`, `exhaust`, `fan` or `pump`; body `stage_id`, `request_id`, `level` (integer: light and exhaust 0 to 100, fan 0 to 10, pump 0 only), optional `note` (at most 200) | the `ActionRecord` |
 | `POST` | `/wb/irrigation` | `stage_id`, `request_id`, `seconds` (more than 0, at most 60, and at most `max_pump_seconds`), optional `note` (at most 200) | the `ActionRecord` |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks` | `task_id`, `due_at` (the occurrence, as the list gives it), `outcome` (`done` or `skipped`), optional `done_at` (UTC seconds, default now; only for `done`, not in the future, at most an hour before `due_at`), optional `note` (at most 200). Appends a record; the latest counts. | the occurrence as the list shows it |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | `task_id`, `due_at`, `request_id`, optional `note`. Runs the pump for the task's `seconds` under the stage right while the stage keeps running ([The pump](Control-and-Safety-Model.md#the-pump)); a confirmed run is recorded as done. | `action` (the `ActionRecord`) and `task` (the occurrence, or `null` when the run was not confirmed) |
 | `POST` | `/wb/measurements` | `experiment_id`, `batch`, `plant_id`, `layout_version`, `measured_at`, `position`, `method`, `metric`, `value`, `unit`; optional `id`, `corrects`; the `experiment_id` must belong to an existing stage, or the route refuses with `scope` | `id` |
 | `POST` | `/wb/safety/approve` | `config` (a `SafetyConfig`, including its `frozen` thresholds; left out, they default) | `protection_right` |
 | `GET` | `/wb/stages/{stage_id}` | none | stage runtime; for an operator also `round_id`, `project_id` and `state_at` of the stored stage (a role token gets the runtime as before, without `round_id`) |
@@ -152,11 +160,13 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/protocols` | `protocol` (a `ResearchProtocol`; `id` and `project_id` 1 to 100, `version` 1 to 1000000, no NaN or infinity) | `protocol_id`, `version`, `digest` |
 | `POST` | `/wb/rounds` | `project_id`, `protocol_id` (1 to 100 each) | `round_id`, `state` |
 | `GET` | `/wb/rounds/{round_id}` | none | `round_id`, `project_id`, `protocol_id`, `protocol_version`, `state`, `stages_done`, `stage_total`, `awaiting_choice`, `snapshot_id`, `report_artifact_id`, and `stages` (a list of `stage_id`, `state`) |
+| `GET` | `/wb/rounds/{round_id}/report` | none | The round's published report: `round_id`, `artifact_id`, `label`, `sha256`, and `report` (the report file: `label`, `reasons`, `conclusion`, `estimate`, `limitations`, `unresolved`, `next_round`, `evidence_chain`, `snapshot_id`). The file is read only when it matches the digest the archive recorded; otherwise, or when the round has no report, the answer is `state`. |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`: `redo`, `next`, `verify` or `abort` | `round_id`, `state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | none | `round_id`, `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | none | `stage_id`, `state`, `run_sheet_version`, `run_sheet_digest`, `run_sheet` (the `RunSheet`), `findings` (a list of `code`, `message`, `blocking`: the validator's findings, then the evidence hints `no_evidence`, `unverified_source` and `uncalibrated` for every set point, which never block), `blocking` |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls` (integer, 0 to 1000000), `max_cost` (US dollars, 0 to 1000000) | `project_id`, `max_calls`, `max_cost`, `remaining_calls`, `remaining_cost` |
-| `POST` | `/wb/goals` | `project_id`, `goal` (1 to 2000 after trimming); optional `round_id`, `constraints` (at most 20 texts of 1 to 500 each), `request_id` | `task_id`, `state`, `reused` |
+| `POST` | `/wb/goals` | `project_id`, `goal` (1 to 2000 after trimming); optional `round_id`, `constraints` (at most 20 texts of 1 to 500 each), `request_id` | `task_id`, `state`, `reused`. A new goal is also written into the project conversation |
+| `GET` | `/wb/projects/{project_id}/conversation` | query `after` (a `seq`, default 0) | `entries`, oldest first, at most 500: `seq`, `task_id`, `role` (`user` or a model role), `kind` (`message`, `reply`, `tool`, `status`), `text`, `detail` (for a tool: `input`, `is_error`, `result`, each cut short), `at` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | `project_id` (1 to 100), `script` (text, 1 to 20000 characters, compiled but never run) | `protocol_id`, `version`, `script_sha256`, `frozen_at`, `note` (a frozen script cannot be corrected) |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | query `project_id` (1 to 100) | `protocol_id`, `version`, `started`, `frozen` (`null`, or `script_sha256`, `frozen_at`, `frozen_by`, `script`), `snapshots` (a list of `snapshot_id`, `experiment_id`, `complete`, `run_status`) |
 | `POST` | `/wb/analysis/runs` | `project_id`, `protocol_id`, `snapshot_id` (1 to 100 each) | `run_id`, `status`, `exit_code`, `timed_out`, `stdout`, `stderr` (the last two cut at 4000 characters) |
@@ -173,7 +183,9 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `GET` | `/wb/projects` | none | `projects`: a summary of each project, at most 200 |
 | `GET` | `/wb/projects/{project_id}` | none | the project's `project_id`, `name`, `created_at`, `rounds` (newest first) and `protocols` (the latest version of each), `budget` (`calls_left` and `cost_left`, or `null` when no budget is set) and `tasks` (at most 100). An unknown project is refused with `state`. |
 | `GET` | `/wb/stages/{stage_id}/readings` | query `points` (2 to 2000, default 600) | `samples` (a list of `timestamp`, `data`, `quality`, `clock_synced`, `flagged`), `window` (`start`, `end`, `bucket_seconds`, or `null` before the stage started), `total_samples`, `flagged_total` and `downsampled`. The newest sample of each time bucket is kept; `flagged` counts the samples of the bucket whose quality is not `ok` or whose clock was not synchronised. A `points` outside the range is refused with 422. |
+| `GET` | `/wb/environment` | query `window` (seconds, 300 to 604800, default 21600), `points` (2 to 1000, default 360) | The live environment page's data, read from the archive, never from the device: `now`, `clock_synced`; `latest`, the newest sample (`timestamp`, `age_seconds`, `quality`, `clock_synced`, `experiment_id`, `sensors`, and `channels` with each channel's recorded `level` and `on`), or `null`; `stage`, the running stage with each channel's `ownership` and the level its run sheet `expected` now, or `null`; `sensors` and `level_ranges` from the device capabilities; `alerts`, open alerts counted by severity; `readings`, every sample of the window in or outside a stage, in the shape of a stage's readings. |
 | `GET` | `/wb/stages/{stage_id}/measurements` | none | `measurements`: the stage's experiment's measurements, corrected ones included |
+| `GET` | `/wb/stages/{stage_id}/manual-tasks` | none | `stage_id`, `stage_state`, `timezone`, `on_time_seconds`, `early_seconds`, `now`, and `occurrences`: each daily occurrence of the run sheet's manual tasks in the stage window (`task_id`, `kind`, `due_at`, `make_up_allowed`, `seconds`), with its `status` (`upcoming`, `open`, `done`, `late`, `skipped`, `missed`) and the `record` that counts, or `null`; empty before the stage starts |
 | `GET` | `/wb/stages/{stage_id}/history` | none | `history` (the stage's state changes) and `interventions` (the experiment's interventions that belong to this stage) |
 | `GET` | `/wb/safety` | none | `safety`: the approved `SafetyConfig` (with `frozen`: `minutes` per sensor and `max_gap_seconds`), or `null` when none is approved |
 
@@ -218,7 +230,6 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | orchestrator | `get_run_status` | read | `stage_id` | Reads the state and recent history of one stage. |
 | orchestrator | `create_research_task` | write | `project_id`, `owner_role`, `question`, `trigger_event_id`, `correlation_id` | Creates a research task for the planner or the researcher. |
 | orchestrator | `delegate_task` | write | `project_id`, `to_role`, `goal`, `budget`, `trigger_event_id`, `correlation_id` | Creates a research task for the planner or the researcher with a full handoff. |
-| orchestrator | `submit_run_for_review` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. |
 | orchestrator | `get_task_status` | read | `task_id` | Reads the state of the running task, or of a task delegated below it, and the ids of its artifacts. |
 | orchestrator | `read_artifact` | read | `artifact_id` | Reads a registered text artifact after checking its digest. |
 | planner | `get_device_capabilities` | read | none | Reads the sensors, channels and level ranges of the device. |
@@ -227,17 +238,18 @@ Sources: `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tool
 | planner | `search_and_verify_sources` | web | `query` | Searches for sources. |
 | planner | `check_experimental_design` | read | `project_id`, `protocol_id` | Checks the design of a saved research protocol. |
 | planner | `estimate_sample_size` | read | `effect`, `sd` | Estimates the number of blocks or units needed. |
-| planner | `validate_run_sheet` | read | `run_sheet` | Validates a run sheet without saving it. |
-| planner | `save_plan_draft` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. |
+| planner | `validate_run_sheet` | read | `run_sheet` | Validates a run sheet without saving it. With `round_id` it also checks that the sheet applies the round's allocated treatment, as `save_plan_draft` does. |
+| planner | `save_plan_draft` | write | `round_id`, `run_sheet` | Files a run sheet draft for operator review. It does not approve. A sheet that does not apply the round's allocated treatment (`treatment_not_applied`) is not saved. |
 | planner | `query_evidence` | read | none | Searches the evidence cards in the archive; each card says whether an operator verified it. |
 | planner | `propose_evidence_card` | write | `task_id`, `source_class`, `citation`, `claim` | Stores a source the planner read as an unverified evidence card and returns its `card_id` to cite in a run sheet. It cannot verify a card. |
+| researcher | `inspect_stage_data` | read | `task_id`, `stage_id` | Summarises a started stage's data over the window a freeze would use (coverage, gaps, sample counts, channel ranges, measurements per metric, manual tasks done in time, existing snapshots); writes nothing. Held-out measurements are only counted. |
 | researcher | `freeze_dataset` | write | `task_id`, `stage_id` | Freezes the data of a stage into a verified data snapshot; with `round_id` it also advances the round when the snapshot is complete. |
 | researcher | `query_evidence` | read | none | Searches the evidence cards in the project archive. |
 | researcher | `run_local_analysis` | sandbox | `task_id`, `snapshot_id`, `script` | Runs an exploratory script in the sandbox on a data snapshot. |
 | researcher | `submit_compute_job` | write | `task_id`, `template_id` | Submits a compute job from a registered template. |
 | researcher | `get_compute_job` | read | `attempt_id` | Reads the state of a compute job. |
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | Fetches and verifies the outputs of a compute job. |
-| researcher | `publish_research_report` | write | `task_id`, `protocol_id`, `treatment_id`, `snapshots` | Publishes the report of the round; with `round_id` it also delivers the round when the report is final. |
+| researcher | `publish_research_report` | write | `task_id`, `protocol_id`, `treatment_id`, `snapshots` | Publishes the report of the round; with `round_id` it also delivers the round when the report is final. Returns `treatment_check`: rounds whose recorded device levels contradict their allocated treatment (counted as protocol deviations) and rounds whose samples record no level to compare; `manual_task_check`: per round, the planned manual tasks and how many were not done in time; `server_notes`: each note the server added, in English and Chinese. |
 
 Evidence cards. `propose_evidence_card` needs the task the dispatcher is running, and that task must be a planner task. Whatever the input says, the card is stored unverified, with `model:planner` and the task id as its source: the input has no verification field and unknown fields are rejected. The input has no `calibrated` field either: a model cannot claim calibration, so a proposed card is stored uncalibrated and keeps the `uncalibrated` hint even after an operator verifies it, until the operator attests the calibration with `calibrated: true` when verifying (the attestation is stored with the verification record; the first verification stays). A card an operator enters keeps the `calibrated` value the operator entered. A model cannot propose a `local` card: `source_class` `local` is refused with `param`, because only an operator can record a local measurement as evidence. An unverified card of any class, `local` included, always gets the `unverified_source` hint in the review of the run sheet, until an operator verifies it. The card id is made by the server, one task may propose at most 20 cards (`quota`), and a planner that has read web content loses this write tool for the rest of the run, so it proposes before it searches. Only an operator verifies a card, through `POST /wb/evidence/{card_id}/verify`; that appends a record and the card text is never edited.
 

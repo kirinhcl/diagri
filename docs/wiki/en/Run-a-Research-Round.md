@@ -112,7 +112,7 @@ GET /wb/rounds/ROUND_ID
 
 The answer has `state`, `awaiting_choice`, `stages_done`, `stage_total`, the protocol id and version, `snapshot_id`, `report_artifact_id` and `stages`, a list of `{"stage_id": "...", "state": "..."}`. A new round is in `designing` and has no stage.
 
-How a real model handles a goal has not been verified. The tests use a scripted model; see [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py).
+The tests use a scripted model; see [`test_e2e_http_round.py`](../../../tests/e2e/test_e2e_http_round.py). With a real model the step has run on the simulator up to a run sheet waiting for review: see [Status and known limitations](Status-and-Known-Limitations.md).
 
 ## Freeze the analysis script before the first stage
 
@@ -228,17 +228,36 @@ You should get `"state": "running"` with a `right_number` and, when the run shee
 
 The executor follows the run sheet about once a second: timed actions, feedback rules, protection rules. The observer raises alerts and makes the daily report. No model is involved, so the stage keeps running when model roles are off.
 
+The console's **Live environment** page shows the newest reading of every sensor and the recorded level of each channel, refreshed every 5 seconds. During a stage, each channel the run sheet controls also shows the level the sheet wants at this moment, and a channel at another level is marked **Differs from the run sheet**. Below are the trends of the last hour to seven days, across stages and between them. A reading that stops arriving is said, not shown as current.
+
 | To do this | Send |
 | --- | --- |
 | Read the stage | `GET /wb/stages/STAGE_ID` |
+| Watch the environment live: newest readings, channel levels against what the run sheet wants now, trends | `GET /wb/environment`, or the console's **Live environment** page |
 | Read open alerts, mark one as read | `GET /wb/alerts`, `POST /wb/alerts/EVENT_ID/read` |
 | Read the receipt of a write | `GET /wb/receipts/REQUEST_ID` |
 | Record a measurement taken by hand | `POST /wb/measurements` |
+| List the manual tasks due, record one as done or skipped | `GET /wb/stages/STAGE_ID/manual-tasks`, `POST /wb/stages/STAGE_ID/manual-tasks`, or the stage page's **Manual tasks** |
+| Run a planned irrigation (on the LAN entry) | `POST /wb/stages/STAGE_ID/manual-tasks/irrigate` |
 | Pause | `POST /wb/stages/STAGE_ID/pause`, optional body `{"reason": "..."}` |
 | Resume | `POST /wb/stages/STAGE_ID/resume` (re-authentication) |
 | Take over by hand | [Manual takeover, irrigation and handback](Manual-Takeover-and-Irrigation.md) |
 
 A measurement body has `experiment_id`, `batch`, `plant_id`, `layout_version`, `measured_at` (UTC seconds), `position`, `method`, `metric`, `value` and `unit`. Add `corrects` with the id of an earlier measurement to correct it; the earlier record is kept.
+
+### Manual tasks
+
+The run sheet's `manual_tasks` (watering, measurement, photo) need someone on site each day at their time. The stage page lists each occurrence, newest first and up to a day ahead, with its state: upcoming, due now, done, done late, skipped or missed. Record each one:
+
+```http
+POST /wb/stages/STAGE_ID/manual-tasks
+
+{"task_id": "photo-noon", "due_at": 1800003600, "outcome": "done", "note": "tray 3"}
+```
+
+`due_at` names the occurrence as the list gives it. `done_at` (UTC seconds) is optional and defaults to now; it may not be in the future, nor more than an hour before the task was due, and a task cannot be recorded more than an hour before it is due. A record is never changed: record again and the latest counts. A task done more than two hours after it was due counts as late, unless the run sheet allows a make-up (`make_up_allowed`), which counts until the stage ends. The report counts a round with more than 10 % of its tasks not done in time as a protocol deviation ([Research methodology](Research-Methodology.md)).
+
+An irrigation task with `seconds` is a planned pump run. Started from the stage page on the LAN entry (`POST /wb/stages/STAGE_ID/manual-tasks/irrigate` with `task_id`, `due_at` and a `request_id`), it runs the pump for those seconds under the stage right while the stage keeps running, and a confirmed run is recorded as done. All the irrigation checks apply; see [The pump](Control-and-Safety-Model.md#the-pump). An irrigation task without `seconds` is watering by hand.
 
 The system may pause the stage by itself, for example after a BLE outage that mattered or a change on the device panel. Each case is in the [Troubleshooting runbook](Troubleshooting-Runbook.md). `resume` is refused with `state` while the device differs from the run sheet or a write has an unknown result.
 
@@ -273,7 +292,7 @@ Every stage of the round hands back the write rights it holds. Stages that have 
 
 ## 6. Data verification
 
-The researcher freezes a data snapshot of the stage with its `freeze_dataset` tool. When the snapshot is complete (coverage of at least 0.9) and passes verification, the round moves to `analysis`. Otherwise it stays in `data_verification`.
+The researcher can first look at the stage's data with `inspect_stage_data` (read-only: coverage, gaps, channel ranges, measurements, manual tasks done in time), then freezes a data snapshot of the stage with its `freeze_dataset` tool. The freeze checks coverage and digests itself. When the snapshot is complete (coverage of at least 0.9) and passes verification, the round moves to `analysis`. Otherwise it stays in `data_verification`.
 
 Measurements taken by hand must be recorded with `POST /wb/measurements` before the snapshot is frozen. A measurement belongs to an experiment of an existing stage: for an experiment id that no stage runs, the route refuses with `scope`, so every measurement can be traced to a project.
 
@@ -321,7 +340,7 @@ There is **no route** to read the report, to read or list research tasks, or to 
 - Read the stage history or the reason for a pause.
 - Revoke an approval, or switch the run sheet of a live stage.
 - Register a model for a holdout, or score one.
-- Read the daily reports, the data snapshot or the research report.
+- Read the daily reports or the data snapshot.
 
 The services already have methods for most of these, many of them in [`workflow/service.py`](../../../src/growbridge/workflow/service.py). The routes and commands do not exist yet. No step of a round has a CLI command.
 

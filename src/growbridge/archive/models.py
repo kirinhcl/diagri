@@ -12,7 +12,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from growbridge.archive.ids import content_digest
 from growbridge.workflow.states import TaskState
@@ -251,11 +251,67 @@ class ChannelPlan(Model):
     onsite_handling: str = ""
 
 
+MAX_PLANNED_IRRIGATION_SECONDS = 60.0  # the upper bound of max_pump_seconds in the settings
+TaskKind = Literal["irrigation", "measurement", "photo"]
+
+
 class ManualTask(Model):
+    """A task someone on site does each day at ``at`` (project-local time).
+
+    An irrigation with ``seconds`` is a planned pump run: it is still started by a person on
+    the LAN entry (no automatic path starts the pump), from the stage page, without taking the
+    stage over. Without ``seconds`` it is watering by hand.
+    """
+
     id: str
-    kind: Literal["irrigation", "measurement", "photo"]
+    kind: TaskKind
     at: str = Field(pattern=TIME_OF_DAY)
     make_up_allowed: bool = False
+    seconds: float | None = Field(default=None, gt=0, le=MAX_PLANNED_IRRIGATION_SECONDS)
+
+    @model_validator(mode="after")
+    def _pump_run_is_irrigation(self) -> "ManualTask":
+        if self.seconds is not None and self.kind != "irrigation":
+            raise ValueError("only an irrigation task has a pump run time (seconds)")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _without_unset_seconds(self, handler):
+        # A task without a pump run dumps as it did before the field existed, so the digest
+        # of a run sheet approved earlier stays the same.
+        data = handler(self)
+        if isinstance(data, dict) and data.get("seconds") is None:
+            data.pop("seconds", None)
+        return data
+
+
+class TaskRecord(Model):
+    """What happened to one daily occurrence of a manual task (append-only; the latest counts).
+
+    ``due_at`` names the occurrence (UTC); ``done_at`` is when it was done, as the operator
+    states it, never later than when it was recorded. A planned irrigation run from the stage
+    page records the action request in ``irrigation_request_id``.
+    """
+
+    id: str
+    experiment_id: str
+    stage_id: str
+    task_id: str
+    kind: TaskKind
+    due_at: float
+    outcome: Literal["done", "skipped"]
+    done_at: float | None = None
+    operator: str
+    recorded_at: float
+    note: str = ""
+    irrigation_request_id: str | None = None
+
+    @model_validator(mode="after")
+    def _done_has_a_time(self) -> "TaskRecord":
+        if (self.outcome == "done") != (self.done_at is not None):
+            raise ValueError("a done task has a done_at time, a skipped one has none")
+        require_finite(self, "Task record")
+        return self
 
 
 class SamplingPlan(Model):

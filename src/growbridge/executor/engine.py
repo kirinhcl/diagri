@@ -298,11 +298,17 @@ class ExecutorEngine:
         return True
 
     async def _differences(self) -> tuple[Difference, ...] | None:
-        """Differences to what was applied; ``None`` when the device state cannot be read."""
-        if not self._applied:
+        """Differences to what was applied; ``None`` when the device state cannot be read.
+
+        While an irrigation runs the pump is on by design (a planned one runs while the stage
+        keeps running), so the pump is left out of the comparison until it is over."""
+        expected = self._applied
+        if self.control.irrigating():
+            expected = {c: level for c, level in expected.items() if c is not Channel.PUMP}
+        if not expected:
             return ()
         try:
-            return await self.control.differences(self._applied)
+            return await self.control.differences(expected)
         except Denied:
             return None
 

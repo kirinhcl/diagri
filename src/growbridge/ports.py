@@ -265,8 +265,11 @@ class ControlPort(Protocol):
         """
         ...
 
-    async def irrigate(self, request: ActionRequest, seconds: float) -> ActionRecord:
-        """Operator-triggered pump run under a manual right; the only path that starts it."""
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
+        """Operator-triggered pump run; the only path that starts it. Under a manual right, or
+        (``planned``) under the stage right for a run sheet's irrigation task."""
         ...
 
     async def pump_off(self, trigger: PumpOffTrigger = "interlock") -> bool:

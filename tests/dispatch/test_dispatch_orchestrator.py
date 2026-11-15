@@ -2,6 +2,7 @@ import json
 
 from dispatch_helpers import call, script_calls
 
+from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive.ids import file_digest
 from growbridge.archive.models import Artifact
 from growbridge.sim.llm import ScriptedClient
@@ -72,6 +73,23 @@ async def test_delegating_the_same_trigger_twice_creates_one_task(env):
     assert len(env.delegated()) == 1
 
 
+async def test_a_trigger_already_used_by_another_task_is_refused(env):
+    """A real model copied its own task's trigger id: the tool returned the orchestrator's own task
+    as ``reused`` and the model believed it had delegated. Another task's trigger is refused."""
+    parent = env.task("orchestrator", "goal:project:dev:goal-1", question="does light help?")
+    for name, role_field in (("create_research_task", "owner_role"), ("delegate_task", "to_role")):
+        fields = {k: v for k, v in HANDOFF.items() if k not in {"to_role", "goal"}}
+        text = {"question" if name == "create_research_task" else "goal": "design it"}
+        if name == "create_research_task":
+            fields.pop("evidence_refs")
+        copied = {role_field: "planner", "trigger_event_id": parent.trigger_event_id}
+        body = {**fields, **text, **copied, "project_id": env.project_id}
+        outcome = await env.invoke_as(parent.id, "orchestrator", name, **body)
+        assert outcome.is_error and "already belongs to task" in outcome.content
+        assert parent.id in outcome.content
+    assert [t.id for t in env.delegated()] == [parent.id]
+
+
 async def test_delegation_to_a_non_model_role_is_rejected_by_the_schema(env):
     outcome = await env.invoke(
         "orchestrator",
@@ -110,25 +128,16 @@ async def test_create_research_task_makes_a_top_level_task(env):
     assert task.owner_role == "researcher" and task.parent_task_id is None
 
 
-async def test_submit_run_for_review_only_files_a_draft(env):
-    body = _payload(
-        await env.invoke(
-            "orchestrator",
-            "submit_run_for_review",
-            round_id=env.round_id,
-            run_sheet=env.sheet_json(),
-        )
-    )
+async def test_the_orchestrator_cannot_write_a_run_sheet(env):
+    """Run sheets come from the planner, whose checks and design work the orchestrator skips."""
+    names = {t.name for t in env.tools()["orchestrator"]}
 
-    assert body["saved"] is True
-    assert env.workflow.stage("stage-1").state is StageState.PENDING_REVIEW
-    assert env.workflow.approvals("stage-1") == ()
+    assert not names & {"submit_run_for_review", "save_plan_draft", "validate_run_sheet"}
+    assert not ROLE_TOOLS["orchestrator"] & {"submit_run_for_review", "save_plan_draft"}
 
 
 async def test_get_run_status_and_project_state_are_read_only(env):
-    await env.invoke(
-        "orchestrator", "submit_run_for_review", round_id=env.round_id, run_sheet=env.sheet_json()
-    )
+    env.workflow.submit_run_sheet(env.round_id, env.sheet(), env.operator)
     env.task("planner")
 
     status = _payload(await env.invoke("orchestrator", "get_run_status", stage_id="stage-1"))
