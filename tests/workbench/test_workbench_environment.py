@@ -29,10 +29,10 @@ def reading(bench, name, at, light=60, pump_on=1, experiment="experiment-stage-1
     )
 
 
-def running(bench, started_at):
+def running(bench, started_at, state=StageState.RUNNING):
     bench.pending()
     store = bench.workflow.store
-    store.update_stage(store.find_stage("stage-1"), state=StageState.RUNNING, started_at=started_at)
+    store.update_stage(store.find_stage("stage-1"), state=state, started_at=started_at)
 
 
 def test_the_view_needs_a_logged_in_operator(bench):
@@ -90,6 +90,20 @@ def test_a_running_stage_says_what_each_channel_should_be_at_now(bench, operator
     assert stage["stage_id"] == "stage-1" and stage["state"] == "running"
     assert stage["channels"]["light"] == {"ownership": "host", "expected": 60}
     assert stage["ends_at"] == pytest.approx(7 * 86400.0)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [StageState.PAUSED, StageState.MANUAL, StageState.RECOVERY_CHECK, StageState.ENDED],
+)
+def test_a_stage_that_is_not_running_expects_no_level(bench, operator, state):
+    running(bench, started_at=0.0, state=state)
+    bench.clock.wall = 12 * 3600.0  # the run sheet would say light 60 if the stage were running
+
+    stage = operator.get("/wb/environment").json()["stage"]
+
+    assert stage["state"] == state.value
+    assert stage["channels"]["light"] == {"ownership": "host", "expected": None}
 
 
 def test_open_alerts_are_counted_by_severity(bench, operator):
