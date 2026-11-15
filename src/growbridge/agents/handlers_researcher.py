@@ -175,6 +175,11 @@ def _manual_summary(deps: Deps, stage) -> dict:
 
 def _inspect(deps: Deps, data: InspectInput) -> dict:
     _, stage = _started_stage(deps, data.task_id, data.stage_id)
+    return stage_preview(deps, stage)
+
+
+def stage_preview(deps: Deps, stage) -> dict:
+    """What a freeze of the started stage would hold now; the caller has checked the scope."""
     (archive, experiment_id, *limits), keep = _window(deps, stage)
     summary = snapshots.preview(
         archive,

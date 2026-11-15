@@ -43,6 +43,7 @@ class Deps:
     sandbox: Any = None
     search: Any = None
     holdout: Any = None
+    alerts: Any = None  # the AlertBook; only the auditor's finding tool uses it
 
 
 class ToolInput(BaseModel):

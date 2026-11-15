@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from growbridge.agents.roles import INTENTS, ORCHESTRATOR, PLANNER, RESEARCHER, Handoff
+from growbridge.agents.roles import AUDITOR, INTENTS, ORCHESTRATOR, PLANNER, RESEARCHER, Handoff
 from growbridge.agents.tools import CONTROL_TOOLS, ROLE_TOOLS
 from growbridge.archive.models import Budget
 
@@ -24,11 +24,11 @@ def handoff(**over) -> Handoff:
     return Handoff(**{**fields, **over})
 
 
-def test_three_roles_named_after_their_tool_sets():
-    assert {r.name for r in (ORCHESTRATOR, PLANNER, RESEARCHER)} == set(ROLE_TOOLS)
+def test_four_roles_named_after_their_tool_sets():
+    assert {r.name for r in (ORCHESTRATOR, PLANNER, RESEARCHER, AUDITOR)} == set(ROLE_TOOLS)
 
 
-@pytest.mark.parametrize("role", [ORCHESTRATOR, PLANNER, RESEARCHER])
+@pytest.mark.parametrize("role", [ORCHESTRATOR, PLANNER, RESEARCHER, AUDITOR])
 def test_prompt_states_duties_limits_and_data_rule(role):
     prompt = role.system.lower()
     assert "data" in prompt and "instruction" in prompt

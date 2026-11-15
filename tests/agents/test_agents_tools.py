@@ -10,8 +10,8 @@ from growbridge.agents.tools import CONTROL_TOOLS, ROLE_TOOLS, Tool, build_tools
 from growbridge.ports import Denied
 
 
-def test_role_tools_cover_exactly_the_three_model_roles():
-    assert set(ROLE_TOOLS) == {"orchestrator", "planner", "researcher"}
+def test_role_tools_cover_exactly_the_four_model_roles():
+    assert set(ROLE_TOOLS) == {"orchestrator", "planner", "researcher", "auditor"}
 
 
 def test_no_role_can_ever_hold_a_control_tool():

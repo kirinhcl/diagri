@@ -32,6 +32,7 @@ def role_tools(runtime: Any, work_root: Path) -> dict[str, list[Tool]]:
         sandbox=runtime.sandbox,
         search=None,
         holdout=runtime.holdout,
+        alerts=runtime.book,
     )
     return build_role_tools(deps)
 

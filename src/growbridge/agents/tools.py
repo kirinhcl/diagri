@@ -61,6 +61,15 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
             "publish_research_report",
         }
     ),
+    "auditor": frozenset(
+        {
+            "get_project_state",
+            "get_run_status",
+            "inspect_stage_data",
+            "get_stage_records",
+            "raise_audit_finding",
+        }
+    ),
 }
 
 # Stage and device control: never reachable from a model role, whatever the configuration says.
