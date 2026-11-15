@@ -16,6 +16,8 @@ from growbridge.archive.models import Model, RunSheet, TaskKind, TaskRecord
 ON_TIME_SECONDS = 2 * 3600.0  # a task done up to two hours after it was due is on time
 EARLY_SECONDS = 3600.0  # it may be recorded up to an hour before it is due
 MAX_MISSED_SHARE = 0.1  # above this share of occurrences not done in time: a deviation
+# a record entered more than a day after the deadline counts as late, whatever done time it states
+LATE_ENTRY_SECONDS = 24 * 3600.0
 
 Status = Literal["upcoming", "open", "done", "late", "skipped", "missed"]
 
@@ -71,12 +73,18 @@ def deadline(item: Occurrence, end: float) -> float:
     return (end if item.make_up_allowed else item.due_at) + ON_TIME_SECONDS
 
 
+def on_time(record: TaskRecord, last: float) -> bool:
+    """Done by the deadline ``last``, and entered no later than a day after it."""
+    done = record.done_at is not None and record.done_at <= last
+    return done and record.recorded_at <= last + LATE_ENTRY_SECONDS
+
+
 def status(item: Occurrence, record: TaskRecord | None, now: float, end: float) -> Status:
     last = deadline(item, end)
     if record is not None:
         if record.outcome == "skipped":
             return "skipped"
-        return "done" if record.done_at is not None and record.done_at <= last else "late"
+        return "done" if on_time(record, last) else "late"
     if now < item.due_at:
         return "upcoming"
     return "open" if now <= last else "missed"

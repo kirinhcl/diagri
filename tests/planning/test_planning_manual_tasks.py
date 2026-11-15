@@ -74,6 +74,20 @@ def test_status_of_an_occurrence():
     assert mt.status(photo, record(photo, done_at=end - 1), end, end) == "done"
 
 
+def test_a_record_entered_more_than_a_day_after_the_deadline_is_late():
+    """A stated done time alone cannot make an entry made long afterwards count as on time."""
+    water, photo = mt.occurrences(sheet(), START, START + DAY)
+    end = START + DAY
+    deadline = water.due_at + mt.ON_TIME_SECONDS
+    in_time = record(water, recorded_at=deadline + mt.LATE_ENTRY_SECONDS)
+    a_month_later = record(water, recorded_at=water.due_at + 30 * DAY)
+    made_up = record(photo, done_at=end - 1, recorded_at=end + mt.ON_TIME_SECONDS + DAY + 1)
+
+    assert mt.status(water, in_time, end, end) == "done"
+    assert mt.status(water, a_month_later, end, end) == "late"
+    assert mt.status(photo, made_up, end, end) == "late"
+
+
 def test_the_latest_record_of_an_occurrence_counts():
     (water, _) = mt.occurrences(sheet(), START, START + DAY)
     skipped = record(water, "skipped", recorded_at=water.due_at + 10)
