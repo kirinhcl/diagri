@@ -17,6 +17,7 @@ const PAGES_CHECKED = [
   { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id } },
   { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id } },
   { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id }, fixtures: { "stage.json": OLD_STAGE } },
+  { page: "round", params: { roundId: FIXTURES["round.json"].round_id } },
 ];
 
 const BATCH_1_PAGES = ["inbox", "projects", "project", "round", "stage", "environment", "safety", "alerts", "evidence", "compute"];

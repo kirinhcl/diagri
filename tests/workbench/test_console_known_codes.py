@@ -18,7 +18,7 @@ from growbridge.control.device import SENSORS
 from growbridge.observer.alerts import Severity
 from growbridge.planning.manual_tasks import Status
 from growbridge.ports import Difference, StageEventKind
-from growbridge.research.analysis import Conclusion
+from growbridge.research.analysis import AnalysisRun, Conclusion, RunStatus
 from growbridge.workbench.reads import STAGE_KINDS
 from growbridge.workflow.states import RoundState, StageState, TaskState
 
@@ -84,6 +84,8 @@ def test_console_lists_every_code_of_a_fixed_type():
     assert literal(EvidenceCard.model_fields["source_class"].annotation) <= codes["evidence.class"]
     assert literal(Label) <= codes["report.labels"]
     assert literal(Conclusion) <= codes["report.conclusions"]
+    assert literal(RunStatus) <= codes["analysis.runState"]
+    assert literal(AnalysisRun.model_fields["status"].annotation) <= codes["analysis.runState"]
     assert set(STAGE_KINDS.values()) <= codes["inbox.kind"]
 
 

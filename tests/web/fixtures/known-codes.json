@@ -55,6 +55,7 @@
   "evidence.class": ["handbook", "paper", "local"],
   "report.labels": ["confirmatory", "exploratory", "descriptive"],
   "report.conclusions": ["supported", "not_supported", "uncertain"],
+  "analysis.runState": ["none", "running", "succeeded", "failed"],
   "inbox.kind": [
     "stage_review", "stage_manual", "stage_recovery", "stage_paused", "round_choice", "alert", "compute_stuck", "task"
   ],
@@ -81,6 +82,7 @@
     "evidence.class": "archive/models.py EvidenceCard.source_class literal.",
     "report.labels": "archive/models.py Label literal.",
     "report.conclusions": "research/analysis.py Conclusion literal.",
+    "analysis.runState": "research/analysis.py RunStatus literal (snapshots[].run_status of GET /protocols/{id}/analysis, workbench/analysis.py state) and AnalysisRun.status (status of POST /analysis/runs, workbench/analysis.py start).",
     "inbox.kind": "workbench/reads.py: STAGE_KINDS values, and _item(\"alert\" / \"compute_stuck\" / \"round_choice\" / \"task\", ...) (grep -n '_item(' workbench/reads.py)."
   }
 }
