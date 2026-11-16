@@ -1,6 +1,7 @@
 """Alerts on process errors in a started stage: a manual task past its deadline with no record,
 a measurement task recorded done with no measurement behind it, a measurement outside the data
-window. Reads stored records only; never reports a stage event or pauses anything."""
+window. Closes those alerts, and the auditor's findings, once their stage is no longer the
+active one. Reads stored records only; never reports a stage event or pauses anything."""
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.snapshot import outside_window
@@ -16,6 +17,9 @@ MEASUREMENT_GRACE_SECONDS = 2 * 3600.0  # after a measurement task is recorded d
 TASK_MISSED = "task_missed"
 MEASUREMENT_MISSING = "measurement_missing"
 OUTSIDE_WINDOW = "measurement_outside_window"
+AUDIT_FINDING = "audit_finding"  # raised by the auditor role; kept here so this module closes it
+# alerts keyed "<stage id>:..." that only mean something while that stage is the active one
+STAGE_KINDS = frozenset({TASK_MISSED, MEASUREMENT_MISSING, OUTSIDE_WINDOW, AUDIT_FINDING})
 SEVERITY = "warning"
 
 
@@ -34,12 +38,20 @@ class StageChecks:
             return False
         self._checked_at = mono
         stage = self.stages.active_stage()
+        self._close_other_stages(None if stage is None else stage.stage_id)
         if stage is None or stage.started_at is None:
             return True
         start, end = data_window(stage)
         self._check_tasks(stage, start, end)
         self._check_window(stage, start, end)
         return True
+
+    def _close_other_stages(self, active_id: str | None) -> None:
+        """Resolve the stage alerts of every stage but the active one: nothing re-evaluates them
+        once their stage is no longer active, so they would stay open for ever."""
+        for alert in self.book.open():
+            if alert.kind in STAGE_KINDS and alert.key.split(":", 1)[0] != active_id:
+                self.book.resolve(alert.kind, alert.key)
 
     def _check_tasks(self, stage: StageRuntime, start: float, end: float) -> None:
         now = self.clock.now()

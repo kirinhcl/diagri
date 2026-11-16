@@ -8,12 +8,14 @@ from growbridge.agents.budget import CallBudget
 from growbridge.archive.db import Database
 from growbridge.archive.models import Budget
 from growbridge.config import RoleModel
+from growbridge.observer.alerts import AlertBook
 from growbridge.ports import StageRuntime
 from growbridge.runtime_agents import (
     AUDIT_DAY_SECONDS,
     AUDIT_DEADLINE_SECONDS,
     AUDIT_MAX_CALLS,
     make_dispatcher,
+    run_agents,
     schedule_audits,
 )
 from growbridge.sim.clock import FakeClock
@@ -55,8 +57,19 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
     if budget:
         calls.set(PROJECT, Budget(max_calls=50, max_cost=100.0))
     stages = Stages(clock.now() if started else None, state)
-    runtime = SimpleNamespace(workflow=stages, tasks=board, budget=calls, clock=clock)
-    return runtime
+    book = AlertBook(db, clock)
+    return SimpleNamespace(
+        workflow=stages,
+        tasks=board,
+        budget=calls,
+        clock=clock,
+        book=book,
+        alert=lambda kind, key, message: book.raise_alert(kind, key, "critical", message),
+    )
+
+
+def open_alerts(runtime):
+    return {(a.kind, a.key): a for a in runtime.book.open()}
 
 
 def audits(runtime):
@@ -165,3 +178,19 @@ def test_a_configured_auditor_keeps_its_own_limit(monkeypatch, db):
     dispatcher = make_dispatcher(runtime, object(), Path("unused"))
 
     assert dispatcher.roles["auditor"].max_calls == 2
+
+
+async def test_the_schedule_alert_resolves_after_a_scheduling_that_did_not_raise(monkeypatch, db):
+    runtime = rig(db)
+
+    def broken(_runtime):
+        raise RuntimeError("board is locked")
+
+    monkeypatch.setattr(runtime_agents, "schedule_audits", broken)
+    assert await run_agents(runtime, dispatcher=None) == 0
+    assert ("audit_schedule", "schedule") in open_alerts(runtime)
+
+    monkeypatch.undo()
+    assert await run_agents(runtime, dispatcher=None) == 0
+
+    assert open_alerts(runtime) == {}

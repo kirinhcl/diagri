@@ -21,11 +21,11 @@ from growbridge.agents.handlers_common import (
 from growbridge.agents.handlers_orchestrator import build_orchestrator_tools
 from growbridge.agents.handlers_researcher import InspectInput, stage_preview
 from growbridge.agents.tools import Tool
+from growbridge.observer.stage_checks import AUDIT_FINDING
 from growbridge.planning import manual_tasks
 from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS, data_window
 from growbridge.ports import Denied
 
-AUDIT_FINDING = "audit_finding"
 MAX_LISTED = 200
 MAX_EVIDENCE = 10
 MAX_LINE = 300

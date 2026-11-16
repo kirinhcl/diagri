@@ -10,6 +10,7 @@ from growbridge.archive.models import ManualMeasurement, ManualTask, TaskRecord
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
 from growbridge.observer.stage_checks import (
+    AUDIT_FINDING,
     CHECK_SECONDS,
     MEASUREMENT_GRACE_SECONDS,
     StageChecks,
@@ -32,8 +33,11 @@ class FakeStages:
         self.started_at = started_at
         self.state = state
         self.ended_at: float | None = None
+        self.active = True
 
     def active_stage(self):
+        if not self.active:
+            return None
         sheet = make_run_sheet(
             duration_seconds=3 * 86400,
             manual_tasks=(
@@ -212,3 +216,47 @@ def test_the_observer_does_not_import_the_agents_package():
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+STAGE_KINDS = ("task_missed", "measurement_missing", "measurement_outside_window", AUDIT_FINDING)
+
+
+def _raise_for(rig, stage_id: str) -> None:
+    for kind in STAGE_KINDS:
+        rig.book.raise_alert(kind, f"{stage_id}:x", "warning", "left over")
+
+
+async def test_alerts_of_a_stage_that_is_no_longer_active_are_resolved(rig):
+    _raise_for(rig, "st0")
+    _raise_for(rig, "st10")  # shares the active stage's prefix, is another stage
+    rig.book.raise_alert(AUDIT_FINDING, f"{STAGE}:abc", "warning", "this stage's finding")
+    rig.book.raise_alert("stage_gap", "st0:x", "warning", "another kind is left alone")
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert set(rig.open_alerts()) == {(AUDIT_FINDING, f"{STAGE}:abc"), ("stage_gap", "st0:x")}
+
+
+async def test_with_no_active_stage_every_stage_alert_is_resolved(rig):
+    _raise_for(rig, STAGE)
+    rig.book.raise_alert("stage_gap", f"{STAGE}:x", "warning", "another kind is left alone")
+    rig.stages.active = False
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert set(rig.open_alerts()) == {("stage_gap", f"{STAGE}:x")}
+
+
+async def test_a_stage_not_yet_started_keeps_its_own_alerts_and_closes_older_ones(
+    db, clock, tmp_path
+):
+    rig = Rig(db, clock, tmp_path, FakeStages(started_at=None, state=StageState.PENDING_REVIEW))
+    _raise_for(rig, "st0")
+    rig.book.raise_alert(AUDIT_FINDING, f"{STAGE}:abc", "info", "this stage's finding")
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert set(rig.open_alerts()) == {(AUDIT_FINDING, f"{STAGE}:abc")}
