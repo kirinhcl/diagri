@@ -1,8 +1,9 @@
 // Environment curves of a stage: one small SVG line chart per reading that has data.
 // Downsampling and problem samples are always stated, never hidden (design §2, anti-goals).
-import { METRICS, gapLimit, seriesPoints, splitAtGaps } from "../chart-math.js";
-import { formatDateTime, formatNumber } from "../format.js";
+import { METRICS, MIN_SPAN, gapLimit, paddedRange, seriesPoints, splitAtGaps } from "../chart-math.js";
+import { DEFAULT_LEVEL_RANGES, formatDateTime, formatNumber } from "../format.js";
 import { h, svg } from "./dom.js";
+import { table } from "./table.js";
 
 const WIDTH = 600;
 const HEIGHT = 120;
@@ -59,6 +60,40 @@ function lines(segments) {
   return segments.filter((segment) => segment.length > 1).map((segment) => svg("polyline", { class: "chart-line", points: coordinates(segment) }));
 }
 
+// The scale beside the plot: top, middle and bottom value, each placed at its own height.
+function yTicks(series, metric, options) {
+  const [lo, hi] = series.domain;
+  const total = HEIGHT + 2 * PAD;
+  const labels = [hi, (lo + hi) / 2, lo].map((value, index) => {
+    const label = h("span", { class: "chart-tick", text: formatNumber(value, metric.precision, options.lang) });
+    label.style.top = `${(((PAD + (index * HEIGHT) / 2) / total) * 100).toFixed(2)}%`; // CSSOM: the CSP refuses style attributes
+    return label;
+  });
+  return h("div", { class: "chart-yticks", attrs: { "aria-hidden": "true" } }, labels);
+}
+
+function xTicks(span, options) {
+  return h(
+    "div",
+    { class: "chart-xticks", attrs: { "aria-hidden": "true" } },
+    h("span", { class: "chart-tick", text: timeLabel(span.start, options.timeZone, options.lang) }),
+    h("span", { class: "chart-tick", text: timeLabel(span.end, options.timeZone, options.lang) }),
+  );
+}
+
+function dataTable(t, series, metric, options) {
+  const columns = [
+    { label: t("chart.table.time"), cell: (point) => timeLabel(point.t, options.timeZone, options.lang) },
+    { label: t("chart.table.value"), cell: (point) => valueLabel(point.v, metric, options.lang) },
+  ];
+  return h(
+    "details",
+    { class: "chart-fold" },
+    h("summary", { text: t("chart.table.title") }),
+    table(columns, series.points, { label: t("chart.table.title") }),
+  );
+}
+
 function plot(t, series, segments, metric, options) {
   const { points } = series;
   const summary = t("chart.summary", {
@@ -100,6 +135,7 @@ function chartHead(t, series, metric, options) {
   );
 }
 
+// One line says what is drawn; what the marks mean is folded under "Legend".
 function notes(t, readings, samples, options, hasGaps) {
   const said = [];
   const { start, end } = span(readings, samples);
@@ -109,7 +145,18 @@ function notes(t, readings, samples, options, hasGaps) {
   }
   if (readings.flagged_total > 0) said.push(t("chart.flagged", { count: readings.flagged_total }));
   if (hasGaps) said.push(t("chart.gaps"));
-  return h("div", { class: "chart-notes" }, said.map((line) => h("p", { text: line })));
+  return h(
+    "div",
+    { class: "chart-notes" },
+    h("p", { class: "chart-count", text: t("chart.count", { count: samples.length }) }),
+    h("details", { class: "chart-fold" }, h("summary", { text: t("chart.legend") }), said.map((line) => h("p", { text: line }))),
+  );
+}
+
+function domainOf(series, metric) {
+  const fixed = DEFAULT_LEVEL_RANGES[metric.key];
+  if (fixed) return fixed;
+  return paddedRange(series.min, series.max, MIN_SPAN[metric.key] ?? 0);
 }
 
 // readingsChart(t, readings, { timeZone, lang, sampleSeconds, metrics, empty }) -> Element
@@ -129,11 +176,13 @@ export function readingsChart(
   const figures = [];
   let hasGaps = false;
   for (const metric of metrics) {
-    const series = seriesPoints(samples, metric.key, box);
-    if (series.points.length === 0) continue;
+    const own = seriesPoints(samples, metric.key, box);
+    if (own.points.length === 0) continue;
+    const series = seriesPoints(samples, metric.key, { ...box, domain: domainOf(own, metric) });
     const segments = splitAtGaps(series.points, maxGap);
     hasGaps = hasGaps || segments.length > 1;
-    const figure = h("figure", { class: "chart" }, chartHead(t, series, metric, options), plot(t, series, segments, metric, options));
+    const body = h("div", { class: "chart-body" }, yTicks(series, metric, options), plot(t, series, segments, metric, options));
+    const figure = h("figure", { class: "chart" }, chartHead(t, series, metric, options), body, xTicks(box, options), dataTable(t, series, metric, options));
     figures.push(figure);
   }
   if (figures.length === 0) return h("p", { class: "chart-empty", text: t(empty) });

@@ -79,3 +79,36 @@ test("the page has a route, a nav label and a label for every time range", () =>
   for (const seconds of WINDOWS) assert.ok(en[`env.window.${seconds}`], seconds);
   for (const key of ["light", "exhaust", "fan"]) assert.ok(en[`metric.${key}`], key);
 });
+
+const RUNNING = {
+  stage_id: "stage-round_9d38ffa4ca3049948194e0b60315c650-1",
+  state: "running",
+  sampling_seconds: 300,
+  project_name: "dev light stage",
+  round_number: 2,
+  stage_index: 1,
+  phase: "vegetative",
+  channels: { fan: { ownership: "host", expected: 1 }, pump: { ownership: "host", expected: null } },
+};
+
+async function envText(lang, stage = RUNNING) {
+  const { renderPage } = await import("./support/render-page.mjs");
+  const { FIXTURES } = await import("./support/render-page.mjs");
+  const { visibleText } = await import("./support/leaks.mjs");
+  const { element } = await renderPage("environment", {}, { lang, fixtures: { "environment.json": { ...FIXTURES["environment.json"], stage } } });
+  return visibleText(element);
+}
+
+test("the fan shows its full scale and the pump its plan", async () => {
+  const zh = await envText("zh");
+  assert.ok(zh.includes("1 / 10"));
+  assert.ok(zh.includes("运行单没有安排水泵"));
+  const en = await envText("en");
+  assert.ok(en.includes("The run sheet does not schedule the pump"));
+});
+
+test("the status line names the running stage, not its id", async () => {
+  const zh = await envText("zh");
+  assert.ok(zh.includes("正在运行：第 1 阶段 · vegetative"), zh.slice(0, 400));
+  assert.ok(!zh.includes("stage-round_"));
+});

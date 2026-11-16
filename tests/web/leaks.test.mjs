@@ -43,6 +43,17 @@ const MORE_ITEMS = [
 const BUSY_INBOX = { "inbox.json": { ...INBOX, items: [...INBOX.items, ...MORE_ITEMS], truncated: { alert: 12, task: 3 } } };
 const OLD_INBOX = { "inbox.json": { items: INBOX.items.filter((item) => item.kind === "stage_review").map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => !NAMES.has(key)))), truncated: {} } };
 
+const RUNNING_STAGE = {
+  stage_id: FIXTURES["stage.json"].stage_id,
+  state: "running",
+  sampling_seconds: 300,
+  project_name: "dev light stage",
+  round_number: 2,
+  stage_index: 1,
+  phase: "vegetative",
+  channels: { fan: { ownership: "host", expected: 1 }, pump: { ownership: "host", expected: null } },
+};
+
 // Each page task adds its pages here: { page, params, fixtures? }; `fixtures` overrides files by name.
 const PAGES_CHECKED = [
   { page: "inbox" },
@@ -56,6 +67,8 @@ const PAGES_CHECKED = [
   { page: "projects", fixtures: { "projects.json": OLD_PROJECTS } },
   { page: "project", params: { projectId: PROJECT.project_id } },
   { page: "project", params: { projectId: PROJECT.project_id }, fixtures: BUSY_PROJECT },
+  { page: "environment" },
+  { page: "environment", fixtures: { "environment.json": { ...FIXTURES["environment.json"], stage: RUNNING_STAGE } } },
 ];
 
 const BATCH_1_PAGES = ["inbox", "projects", "project", "round", "stage", "environment", "safety", "alerts", "evidence", "compute"];

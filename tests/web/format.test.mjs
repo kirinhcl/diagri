@@ -128,3 +128,10 @@ test("shortDigest keeps eight characters", () => {
   assert.equal(shortDigest(""), "—");
   assert.equal(shortDigest(undefined), "—");
 });
+
+test("levelText never prints undefined for an empty or null range", async () => {
+  const { levelText } = await import("../../src/growbridge/web/workbench/format.js");
+  const t = (key, vars) => (vars ? `${key}${JSON.stringify(vars)}` : key);
+  assert.equal(levelText(t, "fan", 3, null), "3");
+  assert.equal(levelText(t, "fan", 3, []), "3");
+});

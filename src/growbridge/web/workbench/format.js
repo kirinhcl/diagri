@@ -131,7 +131,7 @@ export function levelText(t, channel, level, range = DEFAULT_LEVEL_RANGES[channe
   if (level === null || level === undefined) return DASH;
   if (channel === "pump") return level > 0 ? t("level.on") : t("level.off");
   if (channel === "light" || channel === "exhaust") return t("level.percent", { level });
-  if (range) return t("level.steps", { level, max: range[1] });
+  if (Number.isFinite(range?.[1])) return t("level.steps", { level, max: range[1] });
   return String(level);
 }
 
