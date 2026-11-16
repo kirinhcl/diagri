@@ -322,19 +322,41 @@ def test_an_undefined_control_names_it() -> None:
     assert found.params == {"control": "placebo"}
 
 
-def test_an_unallocated_control_names_it() -> None:
+def declared(found: Finding) -> set[str]:
+    return set(CODES["finding"][message_code(found.code, found.variant)].params)
+
+
+def test_an_unallocated_control_is_named_by_its_name_with_its_id_for_the_details() -> None:
     from growbridge.archive.models import Treatment
 
     treatments = (*make_protocol().treatments, Treatment(id="extra", name="x"))
     protocol = make_protocol(treatments=treatments, control_treatment_id="extra")
     found = one(check_experimental_design(protocol), "missing_control", "unallocated")
-    assert found.params == {"control": "extra"}
+    assert found.params == {"control": "x", "control_id": "extra"}
+    assert set(found.params) == declared(found)
 
 
-def test_thin_treatments_are_listed() -> None:
+def test_thin_treatments_are_listed_by_name_with_their_ids_for_the_details() -> None:
     allocations = [alloc(1, 1, "control"), alloc(2, 1, "high")]
     found = one(check_experimental_design(protocol_with(allocations)), "no_replication")
-    assert found.params == {"treatments": ["control", "high"]}
+    assert found.params == {
+        "treatments": ["light 40 %", "light 70 %"],
+        "treatment_ids": ["control", "high"],
+    }
+    assert set(found.params) == declared(found)
+    assert "['control', 'high']" in found.message  # the English message keeps the ids
+
+
+def test_a_treatment_without_a_name_is_named_by_its_id() -> None:
+    from growbridge.archive.models import Treatment
+
+    high = make_protocol().treatments[1]
+    unnamed = (Treatment(id="control", name="", factors={"light": 40}), high)
+    allocations = [alloc(1, 1, "control"), alloc(2, 1, "high")]
+    found = one(
+        check_experimental_design(protocol_with(allocations, treatments=unnamed)), "no_replication"
+    )
+    assert found.params["treatments"] == ["control", "light 70 %"]
 
 
 def test_an_unbalanced_block_names_the_block_as_text() -> None:
@@ -402,10 +424,13 @@ def test_a_missing_level_gives_a_no_action_problem() -> None:
     assert (finding.code, finding.variant) == ("treatment_not_applied", "")
     assert finding.params == {
         "round": 1,
-        "treatment": "high",
+        "treatment": "light 70 %",
+        "treatment_id": "high",
         "problems": [{"kind": "no_action", "channel": "light", "level": 70, "other": None}],
     }
+    assert set(finding.params) == declared(finding)
     assert "no timed action sets light to 70" in finding.message
+    assert "treatment high (light 70)" in finding.message  # the English message keeps the id
 
 
 def test_other_levels_give_one_problem_each() -> None:
@@ -429,7 +454,12 @@ def test_a_device_owned_channel_gives_a_not_host_problem() -> None:
 def test_a_round_without_a_single_allocation_lists_the_treatments_it_could_not_apply() -> None:
     (finding,) = check_treatment(light(55, 0), PROTOCOL, None)
     assert (finding.code, finding.variant) == ("treatment_not_applied", "none")
-    assert finding.params == {"round": None, "treatments": ["control", "high"]}
+    assert finding.params == {
+        "round": None,
+        "treatments": ["light 40 %", "light 70 %"],
+        "treatment_ids": ["control", "high"],
+    }
+    assert set(finding.params) == declared(finding)
 
 
 def test_no_message_carries_chinese() -> None:

@@ -6,6 +6,7 @@ English ``message`` stays for API clients and logs; the console builds its text 
 and params.
 """
 
+from growbridge.archive.models import Treatment
 from growbridge.codes import checked
 from growbridge.ports import Finding
 
@@ -26,6 +27,12 @@ def source_text(kind: str, source: str) -> str:
 
 def message_code(code: str, variant: str) -> str:
     return f"{code}.{variant}" if variant else code
+
+
+def treatment_name(treatment: Treatment) -> str:
+    """The name a finding's text shows for a treatment: the one a person gave it, else its id.
+    The id itself goes in a ``*_id`` / ``*_ids`` param, which the console keeps in the details."""
+    return treatment.name or treatment.id
 
 
 def make_finding(

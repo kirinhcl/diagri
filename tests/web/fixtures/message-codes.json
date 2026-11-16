@@ -377,13 +377,15 @@
     },
     "missing_control.unallocated": {
       "params": [
-        "control"
+        "control",
+        "control_id"
       ],
       "action": true
     },
     "no_replication": {
       "params": [
-        "treatments"
+        "treatments",
+        "treatment_ids"
       ],
       "action": true
     },
@@ -409,6 +411,7 @@
       "params": [
         "round",
         "treatment",
+        "treatment_id",
         "problems"
       ],
       "action": true
@@ -416,7 +419,8 @@
     "treatment_not_applied.none": {
       "params": [
         "round",
-        "treatments"
+        "treatments",
+        "treatment_ids"
       ],
       "action": true
     }

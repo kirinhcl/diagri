@@ -16,6 +16,7 @@ from collections.abc import Iterable
 
 from growbridge.archive.models import Channel, Ownership, ResearchProtocol, RunSheet, Treatment
 from growbridge.planning.findings import block as _block
+from growbridge.planning.findings import treatment_name
 from growbridge.ports import Finding
 
 OFF = 0
@@ -109,7 +110,8 @@ def check_treatment(
             "treatment_not_applied",
             message,
             round=round_number,
-            treatment=expected.id,
+            treatment=treatment_name(expected),
+            treatment_id=expected.id,
             problems=problems,
         )
         return (finding,)
@@ -122,7 +124,8 @@ def check_treatment(
         message,
         variant="none",
         round=round_number,
-        treatments=[t.id for t in checkable],
+        treatments=[treatment_name(t) for t in checkable],
+        treatment_ids=[t.id for t in checkable],
     )
     return (none,)
 

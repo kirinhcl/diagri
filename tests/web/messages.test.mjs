@@ -98,6 +98,18 @@ test("ids go to the details, never into the text", () => {
   assert.ok(labels.includes("stage_id") && labels.includes("task_ids"));
 });
 
+test("a treatment finding names the treatments and keeps their ids in the details", () => {
+  const ctx = testCtx({ lang: "en" });
+  const params = { round: 1, treatment: "light 70 %", treatment_id: "t-high-7", treatments: ["light 40 %"], treatment_ids: ["t-ctl-9"], control: "light 40 %", control_id: "t-ctl-9" };
+  for (const code of ["treatment_not_applied", "treatment_not_applied.none", "no_replication", "missing_control.unallocated"]) {
+    const parts = messageParts(ctx, "finding", code, params);
+    assert.match(parts.text, /“light [47]0 %”/, code);
+    assert.ok(!/t-high-7|t-ctl-9/.test(parts.text), `${code}: ${parts.text}`);
+    const labels = parts.details.map(([label]) => label);
+    assert.ok(["treatment_id", "treatment_ids", "control_id"].every((name) => labels.includes(name)), labels.join());
+  }
+});
+
 test("a time param is a date and time in the site's zone", () => {
   const epoch = Date.UTC(2026, 5, 1, 10, 0) / 1000;
   const format = formatterFor("due_at");

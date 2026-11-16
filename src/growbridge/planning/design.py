@@ -11,6 +11,7 @@ from typing import Literal
 from growbridge.archive.models import Allocation, ResearchProtocol
 from growbridge.planning.findings import block as _block
 from growbridge.planning.findings import hint as _hint
+from growbridge.planning.findings import treatment_name
 from growbridge.ports import Finding
 
 MIN_SAMPLE_SIZE = 2
@@ -93,21 +94,32 @@ def _check_membership(protocol: ResearchProtocol, counts: Counter[str]) -> list[
             )
         )
     control = protocol.control_treatment_id
-    if control not in known:
+    if control not in known:  # no treatment of that id, so no name: the id is all there is
         message = "control treatment is not a defined treatment"
         findings.append(_block("missing_control", message, variant="undefined", control=control))
     elif counts[control] == 0:
         message = "control treatment is never allocated"
-        findings.append(_block("missing_control", message, variant="unallocated", control=control))
+        defined = next(t for t in protocol.treatments if t.id == control)
+        findings.append(
+            _block(
+                "missing_control",
+                message,
+                variant="unallocated",
+                control=treatment_name(defined),
+                control_id=control,
+            )
+        )
     return findings
 
 
 def _check_replication(protocol: ResearchProtocol, counts: Counter[str]) -> list[Finding]:
-    thin = [t.id for t in protocol.treatments if counts[t.id] < 2]
+    thin = [t for t in protocol.treatments if counts[t.id] < 2]
     if not thin:
         return []
-    message = f"treatments without two or more units: {thin}"
-    return [_block("no_replication", message, treatments=thin)]
+    ids = [t.id for t in thin]
+    message = f"treatments without two or more units: {ids}"
+    names = [treatment_name(t) for t in thin]
+    return [_block("no_replication", message, treatments=names, treatment_ids=ids)]
 
 
 def _check_blocks(protocol: ResearchProtocol) -> list[Finding]:
