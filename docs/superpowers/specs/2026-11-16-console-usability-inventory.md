@@ -1,0 +1,390 @@
+# 控制台可用性清单（三份审计合并版）
+
+来源：`audit-execution.md`（E，42 条）、`audit-research.md`（R，54 条）、`audit-server.md`（S，38 条），共 134 条原始发现。
+标准：`rubric.md`（N1–N10、ISO 9241-110、PD 渐进披露、CC 代码与文案分离）。
+新编号由页面前缀加序号组成（如 `INB-01`）；原始编号都保留在"编号"列里。
+"改在哪"：**客户端** = 控制台前端；**服务器文案** = 服务器返回的文字或字段；**模型提示词** = `agents/roles.py` 等提示词。
+
+---
+
+## 1. 总览
+
+合并并核实后，共 **116 条**（134 条原始发现，重复的合并，见各表）。
+
+| 严重程度 | 条数 |
+|---|---|
+| High | 26 |
+| Medium | 69 |
+| Low | 21 |
+
+按页面：收件箱 7，项目与对话 13，轮次与报告 20，阶段与运行单 21，阶段历史 5，人工任务与测量 7，实时环境 3，安全限值 5，告警 13，证据 2，计算 5，登录与框架 6，错误信息 9。
+
+**整体情况。** 控制台的骨架是好的：状态词诚实、危险操作多数有确认、拒绝原因有中英文目录。问题几乎都出在"最后一步"：把内部数据直接印到屏幕上。
+最常见的三种：把 30–40 位的 id 当标题和链接；把事件码、枚举值、字段名当文字；把本该折叠的哈希、JSON、原始报错默认摊开。
+第二层问题在服务器和模型：服务器把英文句子连同 id 和数字拼好再发出，控制台无法翻译；模型提示词没有"为操作员写作"的规则，所以报告里出现 epoch 秒数和字段名。
+大部分修复只在客户端：一个映射函数加一个"技术详情"折叠，就能解决一半以上的 High。
+
+---
+
+## 2. 根源问题
+
+按"改完后用户看到的变化有多大"排序。条数按**主要原因**计，每条原始发现只归一类；另有 14 条零散项不属于任何一类（134 = 16+20+8+24+8+8+12+5+7+12+14）。
+
+### C1. 用 id 当名字（16 条）
+- **用户看到：** 页面标题 "阶段 stage_round_9d38ffa4ca3049948194e0b60315c650-1"；轮次面包屑 "Project project_9d38…"；对话里的下拉框 "round_9d38ffa4… · 阶段审阅中"；收件箱标题 "Compute attempt att_…"。
+- **违反：** N2、N6、CC。
+- **涉及：** E-11, E-12, E-20, E-25, E-31, E-40, R-11, R-13, R-20, R-21, R-23, R-33, R-34, R-38, R-39, R-42。
+- **修法：** 写一个 `displayName(kind, row)`（项目名、"第 2 轮"、"第 1 阶段：营养生长"），所有页面共用；id 只放在小号可复制的说明里。读接口需要补 `ordinal`/`title` 的地方请服务器加字段。**客户端为主，少量服务器字段。**
+
+### C2. 事件码、枚举、字段名原样显示（20 条）
+- **用户看到：** "事件：end_condition_met"；检查结果旁的 `manual_task`；安全限值表里的 "temp (°C)"、"gt 30"、"fan → 0"；收件箱里的 "data_gap"。
+- **违反：** N2、CC。
+- **涉及：** E-01, E-02, E-03, E-06, E-23, E-36, E-37, E-38, E-41, R-09, R-10, R-14, R-18, R-19, R-53, S-12, S-13, S-27, S-28, S-29（R-06 的"缺标签显示 key"也属此类，列在零散项）。
+- **修法：** 一个 `labelOr(t, prefix, value)`（已有 `statePill` 的做法），覆盖事件、干预类型、检查码、告警类型、角色、阶段、字段名、工具名；找不到时显示"未知"，不显示 key。加一个测试：服务器能发出的每个码在目录里都有条目。**客户端。**
+
+### C3. 技术细节默认摊开（8 条）
+- **用户看到：** 64 位十六进制摘要在运行单事实栏和审批日志里；审批冲突提示要求比较两个 64 位字符串；"写入权 阶段 3 · 照护 3 · 人工 3"；每个拒绝下面多一行英文原始 message。
+- **违反：** PD、N2、N6、N9。
+- **涉及：** E-10, E-13, E-30, R-04, R-24, R-46, R-50, S-19。
+- **修法：** 全站一个"技术详情"折叠组件；默认只显示短指纹（`8bc36a6f…`，可复制）。运行单的 JSON 折叠已经做对了，照这个做法推广。**客户端。**
+
+### C4. 服务器发的是拼好的英文句子（24 条）
+- **用户看到：** "Stage st_ab12 is recovery_check after disconnect_affects: {\"reasons\": […], \"seconds\": 412.6}"；"temperature > 30 for 300 s (heat_high)"；"manual irrigation irrigate-daily needs the user at 09:00…"（中文页面里的英文）。
+- **违反：** N2、N4、N9、CC。
+- **涉及：** E-07, E-22, E-28, E-42, R-03, R-37, R-40, R-45, S-01, S-03, S-04, S-08, S-16, S-17, S-18, S-21, S-23, S-24, S-25, S-26, S-30, S-32, S-33, S-36。
+- **修法：** 服务器给 `code` + `params`（传感器、值、单位、秒数、状态），控制台用目录拼句子。`research/notes.py` 已经是这个模式，向告警、检查结果、拒绝、回执推广。**服务器文案（code+params）加客户端映射。**
+
+### C5. 模型提示词没有"为操作员写作"的规则（8 条）
+- **用户看到：** 中文报告页里的英文条目："ends at 1796594627, 128 s before…"、"max_missing_fraction 0.2"、"right_number=3 on the end_condition_met/end_actions events: unexplained"；对话回复是英文。
+- **违反：** N2、N4、N8、CC。
+- **涉及：** R-01, R-02, R-08, S-11, S-31, S-34, S-35, S-37。
+- **修法：** 在 `_COMMON_LIMITS` 加一段共用规则：不写 id、字段名、工具名、枚举值；时间写本地日期时间；时长写分钟或天；每个问题一句话说明该做什么；限定长度；使用用户语言。同时把控制台语言传给模型（目前没有任何地方传，见核实记录 R-08），审计任务的问题里不要喂 epoch 秒。**模型提示词，加少量服务器上下文。**
+
+### C6. 数字没有换算也没有单位（8 条）
+- **用户看到：** "时长 504.0 小时"；"持续 300"、"有效 600"（秒）；"风扇 1" 不说满档是 10；每个时间格都带 "2026-11-20 10:00 UTC"；预算 "1.8300000000000001"。
+- **违反：** N2。
+- **涉及：** E-09, E-21, E-24, E-32, R-15, R-30, R-35, S-38。
+- **修法：** `format.js` 里统一 `formatDuration`（21 天 / 5 分钟）、`levelText`（3 / 10）、`formatTime`（按语言，区域只在页头写一次，近期用相对时间）、`formatNumber`（含货币）。**客户端。**
+
+### C7. 错误和告警不说"下一步做什么"（12 条）
+- **用户看到：** 水泵意外开启的告警只说发生了什么，还提到 "interlock"、"unexpected_watering"；拒绝文字 "请用新的请求编号"（用户从没见过编号）；阻断项只说"设备没有 temp_air"，没说怎么改。
+- **违反：** N9、N10。
+- **涉及：** E-08, R-47, R-48, S-02, S-05, S-06, S-07, S-09, S-10, S-14, S-20, S-22。
+- **修法：** 每个告警、检查码、拒绝码都带"怎么处理"一句话；`state`、`scope`、`approval_invalid` 拆成子码（如 `stage_not_pausable`、`run_sheet_too_old`、`capabilities_changed`），分别配建议；内部异常只写固定的人话，异常类名放日志。**服务器文案（子码、固定文案）加客户端目录。**
+
+### C8. 用整份 JSON 文本框做高风险编辑（5 条）
+- **用户看到：** 运行单草稿、安全限值、协议、目标、保留集、冻结分析脚本，全都是 JSON 文本框；脚本要写成 JSON 字符串里的一行；安全限值首次进入是一份全是 `null` 的骨架，页面自己说"原样提交会被服务器拒绝"。
+- **违反：** N5、N7、N2、ISO 任务适合性。
+- **涉及：** E-17, E-39, R-25, R-28, R-29。
+- **修法：** 分字段的表单（带单位和范围，指标和方法从协议里选）；JSON 放进"高级"。目标编辑器直接删（对话框已经能发目标）。首次安全限值给一份已审定的模板，不给 null。**客户端。**
+
+### C9. 有后果的操作没有拦一下、没说后果（7 条）
+- **用户看到：** 轮次选择框默认选中"重做阶段"，点一下发送就执行；确认性分析只能跑一次，却在失败后才告诉你（`already_run`）；证据"核验"一键提交；浇水表单直接开泵，任务行里的浇水按钮却会先确认；"启动"在未审批时也可点。
+- **违反：** N5、N3、N4。
+- **涉及：** E-16, E-18, E-19, E-27, R-22, R-26, R-43。
+- **修法：** 用已有的 `confirmAction`；选择框加"请选择…"占位（`evidence.js` 已这样做）；每个选项下一句后果说明；输入框强制 min/max。**客户端。**
+
+### C10. 页面顺序和信息量不跟着任务走（12 条）
+- **用户看到：** 阶段页里"审批"按钮在它要审批的运行单上面；项目页一次堆六个表单；历史最早的在最上面；收件箱的标题是整段上一任务的摘要；"还有 12 项未显示"没法点开。
+- **违反：** N6、N8、N7、ISO 任务适合性。
+- **涉及：** E-04, E-05, E-14, E-15, E-29, E-34, R-16, R-17, R-31, R-32, R-36, R-49。
+- **修法：** 按任务排序（先运行单后审批；运行中先看读数）；长文本截两行加"展开"（`questionCell` 已有）；同类项分组并带数量；次要内容折叠。**客户端。**
+
+**零散项（14 条，不归入上面任何一类）：** E-26, E-33, E-35, R-05, R-06, R-07, R-12, R-27, R-41, R-44, R-51, R-52, R-54, S-15。
+
+---
+
+## 3. 逐页清单
+
+编号前缀：`INB` 收件箱，`P` 项目与对话，`RND` 轮次与报告，`STG` 阶段与运行单，`HIS` 阶段历史，`TSK` 人工任务与测量，`ENV` 实时环境，`SAF` 安全限值，`ALT` 告警，`EVI` 证据，`CMP` 计算，`FRM` 登录与框架，`ERR` 错误信息。
+严重程度已合并，取较高者；有分歧且要紧的，在表后加脚注。
+
+### 3.1 收件箱
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| INB-01 (R-13) | 标题是 "Stage stage_…"、"Round round_…"、"Compute attempt att_…"，元信息里有 "Project project_…"、"Device dev_…" | N2, N6, CC | High | 用含义命名："审阅运行单，莴苣光照试验第 2 轮"；项目名和轮次号放元信息；id 放可复制详情 | 客户端（读接口需带名称） |
+| INB-02 (R-14, S-12) | 元信息里直接写 `data_gap`、`threshold`、`frozen_reading`、`task_missed` | CC, N4 | Medium | `alert.kind.<kind>` 目录标签，找不到显示"其他" | 客户端 |
+| INB-03 (R-15) | 右侧 "2026-11-16 08:14 Europe/Helsinki"，没说这是什么时间 | N1, N2, N6 | Medium | "已等待 3 小时 20 分"，精确时间放 title | 客户端 |
+| INB-04 (R-16) | 任务 `question`（后续任务带着整段上一任务摘要）和告警原因整段当标题 | N8 | Medium | 截两行加"展开"，复用 `questionCell` | 客户端 |
+| INB-05 (R-17) | "还有 12 项未显示"，没有入口 | N3, N7 | Medium | 链到对应列表或"显示更多" | 客户端（及服务器上限） |
+| INB-06 (R-18) | "负责角色：researcher"，聊天里却是 "Researcher" | CC, N4 | Medium | 复用 `chat.role.<role>`（项目页同样） | 客户端 |
+| INB-07 (R-54) | 告警条目链到整个告警页，任务条目链到项目页，要重新找 | N6, N7 | Low | 深链接加锚点或筛选 | 客户端 |
+
+### 3.2 项目、项目页与对话
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| P-01 (R-34) | 项目列表里有"ID"列（`project_…`），最新轮次的链接文字是 `round_…` | CC, N6, N8 | Medium | 去掉 ID 列；链接写"第 2 轮" | 客户端 |
+| P-02 (R-28) | 创建协议只能改一份预填 JSON（作物、处理、`allocations`、`randomization_seed: 20261118`、`method: "paired_block"`）；示例数据（莴苣、tent-1）可原样保存，`question` 为空也能存（`ResearchProtocol.question: str` 无约束） | N5, N2, N10, PD, CC | High | 分字段表单（问题、假设、作物、处理、区组、终点从列表选）；JSON 放"高级"；`question` 为空时禁止保存 | 客户端 |
+| P-03 (R-29) | "目标（JSON）"和"保留集（JSON）"文本框；目标框和对话框重复（两者都 POST `/goals`） | N5, N4, N2, PD | High | 删除目标编辑器；保留集用多选，并解释"保留"与"开发" | 客户端 |
+| P-04 (R-30) | "剩余调用 37"，"剩余费用 1.8300000000000001"（`String(float)`），上限无币种 | N2, N10 | Medium | 格式化，写"已用 x / 共 y"，字段下加说明 | 客户端 |
+| P-05 (R-31) | 一页叠了对话、轮次、协议、预算、目标、保留集，六个表单，导语里还有 id | N8, N7 | Medium | 标签页或折叠；主操作（对话、轮次）在前 | 客户端 |
+| P-06 (R-32) | "研究任务"表里有原始角色和状态；区块叫"目标与任务"，表叫"研究任务" | N4, N2 | Medium | 统一名称；用文字写谁、做什么、结果 | 客户端 |
+| P-07 (R-33) | "保留批次""结果字段"列打印 id 数组；"读取次数"是裸数字 | CC, N2 | Medium | 显示名称；解释"读取"的含义 | 客户端 |
+| P-08 (R-44) | 预算、目标、保留集、冻结、余额、任务预算保存后都只回答"已完成。" | N1 | Medium | 点名对象："已设置预算：50 次调用，20 欧元" | 客户端 |
+| P-09 (R-08, S-34) | 整段编排回复是英文，页面是中文。提示词其实写了"用用户的语言"（`roles.py:59-60`），但没有任何地方把语言告诉模型 | N4, ISO 符合预期 | Medium | 发送目标时带上控制台语言，写进记录；见 RND-17 | 模型提示词＋服务器上下文 |
+| P-10 (R-09) | 主日志里每次工具调用一行：角色标签加 `<code>` 工具名，穿插在回答之间 | N2, CC, N8, PD | Medium | 工具名映射成短语；连续调用折叠成"用了 5 个工具" | 客户端 |
+| P-11 (R-10, S-36) | "编排 Agent的任务结束：已完成"（缺空格、"Agent"）；失败时附原始原因，如 "model unavailable: APIStatusError…"、"model stopped without finishing: max_tokens"；未知状态显示 `state.xxx` | N2, N9, CC | Medium | 改成"编排助手已完成"/"已停止，需要你处理：…"；原因用 `reason_code` 映射；提示词要求模型说明用户下一步 | 客户端＋服务器文案（reason_code）＋模型提示词 |
+| P-12 (R-11) | 下拉框默认选中最新的开放轮次，写成 "round_9d38…（38 位）· 阶段审阅中"，"无轮次"不是默认，一般问题会悄悄挂到轮次上 | N6, N5, N2 | Medium | 默认"无轮次"；轮次写"第 2 轮，等待审阅" | 客户端 |
+| P-13 (R-12) | 点发送后最多等约 30 秒，日志里没有待处理条目；提示是常驻两句话 | N1, N8 | Medium | 本地追加"已发送，编排助手稍后接手"；提示缩短 | 客户端 |
+
+### 3.3 轮次与报告
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| RND-01 (R-20) | 轮次页面包屑 "Project project_9d38…"，页面标题 "Round round_9d38ffa4…"（项目页用的是名称） | N4, N6, N2 | High | 项目名；"第 2 轮"（按 `project.rounds` 顺序或服务器 `ordinal`）；id 小字可复制 | 客户端（及服务器字段） |
+| RND-02 (R-21) | 摘要里 "Protocol: protocol-1-ab12cd v1"、"Data snapshot: snap_…"、"Report: art_…" | CC, PD, N6 | Medium | 项目名链接；协议显示名；去掉快照和报告 id（见 RND-12） | 客户端 |
+| RND-03 (R-23) | 阶段表链接文字是 `stage_…`；"等待选择的阶段"列打印原始 id | CC, N6 | Medium | 写"第 1 阶段：营养生长" | 客户端（及服务器字段） |
+| RND-04 (R-22) | 选择框默认选中第一项"重做阶段"（`CHOICES[0]`，无占位），点一下发送即执行；选项没有后果说明；文字里写 "Stage stage_… stopped" | N5, N10, N2 | Medium | 加"请选择…"占位；每项一句后果；去掉 id | 客户端 |
+| RND-05 (R-24) | 每个轮次都显示确认性分析块："脚本 SHA-256"、冻结人、脚本文本、`snap_…` 快照选择、原始"运行状态"、退出码、stdout/stderr | PD, N2, N10, CC | High | 折叠到"确认性分析（高级）"；状态用话说（未开始/脚本已锁定/运行完成）；哈希和输出放详情；快照按日期和完整度命名 | 客户端 |
+| RND-06 (R-25) | 冻结脚本要把代码写进 JSON 字符串字段 `{"project_id": "...", "script": ""}` | N5, N2, ISO 任务适合性 | High | 纯代码文本框（项目 id 由前端补）；提交前说明冻结不可撤销 | 客户端 |
+| RND-07 (R-26) | 确认性分析只能跑一次，只有失败后（`already_run`）才告诉你；"运行"按钮没有确认（`round-analysis.js` 没用 `confirmAction`） | N5, N3 | High | 运行前 `confirmAction`："这个快照上只能做一次" | 客户端 |
+| RND-08 (R-27) | "这个块显示协议第 3 版，即最新版；本轮用的是第 1 版。下面的冻结脚本、快照和运行都属于第 3 版。"；"阶段已开始：是" | N2, N8 | Medium | "本轮按第 1 版规划；第 3 版已存在。下面的分析针对第 3 版，不是本轮。"；"已开始采集数据" | 客户端 |
+| RND-09 (R-01, S-31) | 报告"局限"是英文条目，夹着 epoch 秒（"ends at 1796594627, 128 s before … 1796594755"）、字段名和字典（"max_missing_fraction 0.2"、"measurements={}, withheld=0"、"paired_block"） | N2, CC, N8, PD | High | 提示词要求平实句子、本地日期、不写字段名、用用户语言；客户端默认只展开前三条 | 模型提示词（客户端折叠） |
+| RND-10 (R-02, S-31) | "未解决问题"里有 "Meaning of … right_number=3 on the end_condition_met/end_actions events: unexplained"；"下一轮"是一整段英文 "Proposal only… (1)…(4)" | N2, N8, N9 | High | 提示词：每条一个决定，不提事件名；客户端按 `richText` 拆行 | 模型提示词＋客户端 |
+| RND-11 (R-03, S-32) | 估计栏直接显示服务器 `estimate.note`（"fewer than 2 complete blocks; no treatment effect can be estimated"，英文）；可估计时 "Effect 0.231234, p = 0.034" 不舍入、无指标和单位 | N2, N4, CC | Medium | `note` 改 `note_code`＋params，用目录；效应保留 2–3 位有效数字并写明指标；给 p 值一句说明 | 服务器文案＋客户端 |
+| RND-12 (R-04) | "报告摘要"后跟 64 位哈希；"数据快照 snap_…"与结论同等权重，摘要块又重复一遍 | PD, N8, N4 | Medium | 快照 id、摘要、报告 id 放"技术详情"折叠，只留一份 | 客户端 |
+| RND-13 (R-05) | 中文"报告摘要"指的是 SHA-256 哈希，读起来像"报告摘要（abstract）" | N2, N4 | Medium | 改"报告校验码（SHA-256）"，提示"用于确认报告未被改动" | 客户端 |
+| RND-14 (R-06) | "结论等级：描述性"和"结论：不确定"并排，没说各自允许下什么结论；缺标签时显示 key `report.labels.undefined`；缺结论被悄悄写成"不确定" | N10, N2, N5 | Medium | 在标签下加一句"描述性：只描述所见，不支持关于处理的结论"；缺值写"未说明" | 客户端 |
+| RND-15 (R-07) | 报告列表是纯文本 `<li>`，聊天回复是富文本 | N4 | Low | 列表项用 `richText`/`inline` | 客户端 |
+| RND-16 (S-33) | `research/notes.py` 本身是好模式，但参数里漏进内部内容：`{problems}` 是英文列表（"light was never at 3 (recorded [0, 2])"）、`{channels}` = "light, fan"、`{treatment_id}` 是 id | N2, N4, CC | Medium | 参数改结构化（通道键、各类任务数量、等级列表），在观看者语言里用 `channel.*` 标签渲染 | 服务器文案＋客户端 |
+| RND-17 (S-34) | 模型提示词只有两处语言规则（`roles.py:59-60` 编排、`:128` 审计）；规划和研究员没有；没有任何"平实、不写字段名、不写 id、不写原始时间、写下一步、限长"的规则 | N2, N9, N8, CC | High | 在 `_COMMON_LIMITS` 加一段共用的"为操作员写作"规则，并在发布工具的字段说明里重复 | 模型提示词 |
+| RND-18 (S-35) | 审计任务问题里写 "Data window 1796590000 to 1796680000 (epoch seconds)"，工具结果带 epoch 浮点数，模型照抄 | N2 | Medium | 给模型已按项目时区格式化的日期；至少禁止引用 epoch | 模型提示词＋服务器文案 |
+| RND-19 (S-37) | 写给模型的工具拒绝（"…the operator starts it with POST /wb/analysis/runs"）被模型转述给操作员 | N2, N9 | Low | 提示词加"把工具错误改写成操作员能做的事，不引用接口、id、工具名" | 模型提示词 |
+| RND-20 (R-49) | "报告读取失败：请求没有成功……HTTP 500"，多行拼成一句 | N9, N8 | Low | 只留第一行，其余放详情 | 客户端 |
+
+### 3.4 阶段与运行单
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| STG-01 (E-06, E-07, S-13) | 每条检查结果旁有 `manual_task`、`no_evidence` 代码，句子是英文且带内部 id（"manual irrigation irrigate-daily needs the user at 09:00…"）；第一行消息掉到药丸下面（布局问题） | N2, N4, N9, CC | High | 不显示 `finding.code`，映射成标题加建议；`Finding` 加 `params`，在用户语言里拼句子；同时把行改成可换行的 flex | 客户端＋服务器文案（params） |
+| STG-02 (E-08, S-14) | 检查结果是一长串平级的"提示/阻断"；阻断项只说错在哪，用运行单字段名（"host-controlled"、"validity"、"max gap"），不说怎么改，如 "max gap is shorter than the sampling interval" | N8, N9, N10, CC | High¹ | 阻断在前，按类别分组加计数；每个码配"怎么处理"；受影响的 id 用列表 | 服务器文案（参数、建议）＋客户端 |
+| STG-03 (S-15) | 水泵规则那条写得最好（原因加做法），只有 "with seconds" 是术语 | N9 | Low | 保留；去掉 "with seconds" | 服务器文案 |
+| STG-04 (S-16) | "protocol round 2 is allocated treatment high (light 3): light is not host-controlled; no timed action sets light to 3"：处理 id 和通道键直接出现，没有建议 | N2, N9, CC | Medium | 传处理名、通道、等级为参数，加"用定时动作把光照设为 3" | 服务器文案＋客户端 |
+| STG-05 (S-17) | "timed action light-on: card card_12 is not verified; confirm it"；"…is uncalibrated (未校准)"：英文句子里混着服务器写死的中文 | N2, N4 | Medium | 传卡片 id 和标题为参数，用码映射 | 服务器文案＋客户端 |
+| STG-06 (S-18) | "manual measurement canopy-measure needs the user at 10:00"：任务类型和 id 是原始值，时间无时区 | N2, N6 | Low | 传类型、id、时间、时区，复用任务页的标签（拍照/测量/浇水） | 服务器文案＋客户端 |
+| STG-07 (E-09) | "时长 504.0 小时" | N2 | Medium | "21 天"；48 小时以下才用小时 | 客户端 |
+| STG-08 (E-10) | 64 位摘要默认显示在"摘要（审批时记录）"下；审批日志"摘要 8bc3…37f"；冲突提示让操作员比对两个 64 位字符串 | N2, N6, PD, CC | High | "版本 1 · 指纹 8bc36a6f…"（短，可复制），全文放详情；冲突提示"你审阅的版本与已审批的不同"，附运行单链接 | 客户端 |
+| STG-09 (E-11) | "protocol-lettuce-light v1"、设备 "SIMULATED"、时区 "UTC"、版本 "1"（id 和枚举当文字） | N2, CC | Low | 协议名做链接；设备类型用标签（"模拟设备"） | 客户端 |
+| STG-10 (E-12) | 页面标题 "阶段 stage_round_9d38ffa4…-1"，面包屑、轮次和项目链接文字、环境页药丸都是原始 id | N2, N6 | Medium | 用实验或轮次标题、"第 2 阶段"；id 放 title 或详情 | 客户端（阶段读接口需带名称） |
+| STG-11 (E-13) | "写入权 阶段 3 · 照护 3 · 人工 3"（内部栅栏计数器） | N2, N8, PD | Medium | 移到"技术详情" | 客户端 |
+| STG-12 (E-14) | 从没暂停过的阶段显示"暂停时间 —"；"已到结束条件，结束动作尚未确认 否"是整句当标签 | N8, N2 | Low | 无值的行不显示；只在为真时显示横幅 | 客户端 |
+| STG-13 (E-15) | 控制区（含审批）在运行单上面，审批提示却说"请先核对下面的运行单"，而运行单在好几屏之后；运行中时曲线在控制区下面 | N6, N8, ISO 任务适合性 | Medium | 待审阅时先运行单、紧接审批；运行中先看读数 | 客户端 |
+| STG-14 (E-16) | 待审阅时"审批""开始""提交修改后的运行单"并排，权重相同；"开始"的提示自己写着"未审批时服务器会拒绝" | N5, ISO 任务适合性 | Medium | 只突出下一步；未审批时"开始"置灰并写原因 | 客户端 |
+| STG-15 (E-17) | 改运行单的唯一方式是整份 JSON 文本框；被拒后显示"草稿没有保存：…（见下方）"，下面是英文检查结果 | N5, N7, N2, PD | Medium | 常见改动用结构化表单（时间、等级、任务），JSON 作高级模式 | 客户端 |
+| STG-16 (E-18) | "档位"是裸数字框，允许范围只在说明里没做成 min/max；水泵可选，需要的等级是 0 | N5, N6, N10 | Medium | 每个通道下写范围并设 min/max；水泵换成"关闭水泵" | 客户端 |
+| STG-17 (E-19) | 浇水表单（"秒数（最多 60）"，没有 max）直接开泵，任务行的浇水按钮却先确认 | N4, N5 | Medium | 同一个确认框；输入框强制 max 60 | 客户端 |
+| STG-18 (E-20) | "请求 wb-3f2a…（uuid），发送于…"；"重发了较早的请求 wb-…"；"服务器按下面的请求编号保存结果" | N2, N6, PD | Medium | 写"发送于 10:03"；id 放可复制详情；"这是你刚才那次操作的结果" | 客户端 |
+| STG-19 (E-21) | "灯光 调到 50"、"风扇 调到 3"、"设备回报档位 3。" 无单位无量程 | N2 | Low | 复用 `levelText`（50 %、3 / 10） | 客户端 |
+| STG-20 (E-22, S-30) | "原因：not sent: [Errno 111] …"、"read-back level differs from 3"、"hand-over: recovery number changed"：原始设备或服务器字符串，英文 | N2, N9, CC | Medium | 回执加 `error_code`（`not_sent`、`rejected`、`link_lost`、`readback_level`…），映射成"设备没有执行，什么都没动"并说下一步（"请到现场确认"）；原文放日志 | 服务器文案（error_code）＋客户端 |
+| STG-21 (E-23) | 交接差异 "灯光 level：应为 50，实际 0"：原始 `field`，值可能是对象 | N2, CC | Medium | `diff.field.<name>` 标签；值带单位 | 客户端 |
+
+¹ E-08 原为 Medium，S-14 为 High；取 High，因为阻断项正是挡住审批的东西，不说怎么改会让人卡住。
+
+### 3.5 阶段历史
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| HIS-01 (E-01, S-27) | "事件：end_condition_met"、"事件：end_actions"、"事件：disconnect_affects"、"事件：readings_stale"、"事件：start"（中英文相同）。目录里只有一个包装模板 `history.event`，没有 `history.event.<id>` | N2, CC | High | 为所有事件加 `history.event.<id>` 句子（"结束条件已满足"）：`StageEventKind` 的 12 个值加 start、pause、resume、stop、takeover、handback 等；没有时显示通用说法 | 客户端 |
+| HIS-02 (E-02, S-28) | "confirmed: true · reason: stage ended · right_number: 3"；"reasons: [\"due_action\",\"gap_too_long\"] · seconds: 412.6 · state_unreadable: false"；`differences` 以 JSON 显示 | N2, CC, PD | High | 每种事件一个渲染器，字段带标签，时长换成分钟，通道用 `channel.*`；`right_number` 永不显示；原始字典放"技术详情" | 客户端 |
+| HIS-03 (E-03, S-29) | "干预：unexpected_watering"，下面 "status_at: 1796594400.2 · off_confirmed: true · off_confirmed_at: 1796594402.1 · request_id: wb-…"（原始 Unix 时间戳和请求 id）；`SAID_IN_LINE` 只过滤 4 个键 | N2, CC, PD | High² | `history.kind.<kind>` 标签；`*_at` 字段用 `timeText`；只显示白名单字段；请求 id 放详情 | 客户端 |
+| HIS-04 (E-04) | 事件结束条件的标题是 "运行中 → 运行中"（自己到自己，含义只在原始事件 id 里） | N1, N2 | Medium | 标题用事件句子；起止状态不同时才显示药丸 | 客户端 |
+| HIS-05 (E-05) | 最旧的在最上面，没有上限；三周阶段的最新事件在页面最下面 | N7, N8 | Low | 最新在前，或像任务列表一样折叠旧条目 | 客户端 |
+
+² E-03 原为 Medium，S-29 为 High；取 High，因为 Unix 时间戳原样显示是实际读不懂的内容（代码核实见 5.1）。
+
+### 3.6 人工任务与测量
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| TSK-01 (E-25) | "任务"列显示 `irrigate-daily`、`canopy-measure`；提示 "已记录任务 irrigate-daily。" | N2, CC | Medium | 去掉该列（类型列已有浇水/测量/拍照）或显示任务标题 | 客户端 |
+| TSK-02 (E-26) | 按钮文字是状态词"已完成"/"已跳过"；已完成的行显示药丸"已完成"，旁边按钮"已跳过"；窄格里竖排换行 | N4, N2, ISO 自描述性 | Medium | 改动词"标记完成"/"跳过"；按钮不换行 | 客户端 |
+| TSK-03 (E-27) | 一次点击就追加完成/跳过记录；已完成的行也能点"跳过"；无确认，无法撤销（只能再记一条） | N3, N5 | Medium | 跳过要确认（可选理由）；给"撤销"，或说明后一条记录覆盖前一条 | 客户端 |
+| TSK-04 (E-28) | "水泵运行了 20 秒；{ended_early}"打印原始原因；提示里带请求 id（"浇水 wb-… 已完成并记录"） | N2, N9, CC | Medium | 映射 `ended_early`；句子里去掉 id；失败时先说做什么（"请到现场检查水泵"） | 客户端＋服务器文案 |
+| TSK-05 (E-29) | 表上方有四句长段（列表规则、2 小时迟到规则、报告怎么计） | N8, PD | Low | 一句话；评分规则放帮助折叠 | 客户端 |
+| TSK-06 (E-30) | 测量表 11 列：植株 id、批次、"布局版本"、指标/单位/方法原值、操作员、记录 id、更正 id（"已被 m_…, m_… 更正"） | N2, N8, PD, CC | Medium | 默认 6 列（时间、植株、指标、值、方法、记录人）；指标用标签；id 和布局版本放行展开；更正做成行链接 | 客户端 |
+| TSK-07 (E-31) | 测量表单 10 个平级字段；指标、单位、方法、批次、布局版本是自由文本；更正要从表里复制记录 id | N5, N6, N7 | Medium | 指标/单位/方法从协议里选（datalist）；行上加"更正"按钮预填 | 客户端 |
+
+### 3.7 实时环境
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| ENV-01 (E-32) | "风扇 1" 无单位无量程（0–10）；水泵格写"运行单此刻没有设定档位"，而水泵本来没有档位 | N2, N10 | Medium | "风扇 档位 1 / 10"；水泵写"运行单没有安排水泵" | 客户端 |
+| ENV-02 (E-33) | 每条曲线按自己的最小最大值缩放（18.3–22.9 °C 填满整框，像大幅波动）；没有坐标轴和时间刻度，没有运行单目标带 | N1, N2, ISO 任务适合性 | Medium | 最小/中/最大刻度和起止时间；标出目标范围；设最小跨度 | 客户端 |
+| ENV-03 (E-34, E-35) | 曲线下方有降采样、空心点、空档的长说明，窗口里时区出现两次；数值和时间只在 SVG `<title>` 悬停里，键盘和触屏读不到 | N8, N2, N7, ISO 参与度 | Low | 一行状态（"共 145 个读数"），图例按需显示；点可聚焦或提供表格视图 | 客户端 |
+
+### 3.8 安全限值
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| SAF-01 (E-36) | 规则表：传感器 "temp (°C)"，触发 "gt 30"，动作 "fan → 0"，持续 "300"，有效 "600"（原始键、运算符代码、裸秒数） | N2, CC, ISO 自描述性 | High | 每条规则一句话："空气温度高于 30 °C 持续 5 分钟 → 风扇调到 0；读数超过 10 分钟没更新则无效"；id 放详情 | 客户端 |
+| SAF-02 (E-37) | 冻结阈值里传感器键原样（"tempSoil"），"读数之间最长空档（秒） 300"，分钟是裸数字 | N2, CC | Medium | `metric.<key>` 标签；写"5 分钟" | 客户端 |
+| SAF-03 (E-38) | 审批对话框列 `rules.0.trigger.value: 30 → 35`、`frozen.minutes.temp: 10 → 5`，值带 JSON 引号，缺失写"（无）" | N2, N5, CC | High | 用话描述变化并带规则名（"规则 heat-cut：触发温度 30 → 35 °C"）；这个对话框是安全配置的人工关口 | 客户端 |
+| SAF-04 (E-39) | 改安全限值只能用 JSON 文本框；首次进入的骨架全是 `null`，页面说"原样提交会被服务器拒绝" | N5, N7, N2 | Medium³ | 按规则分表单（带单位、范围）；首次提供已审定模板；JSON 放高级 | 客户端 |
+| SAF-05 (E-40) | "已批准。保护权 7。"（内部计数） | N2 | Low | "已批准，新限值已生效" | 客户端 |
+
+³ E-39 原为 High，下调为 Medium：服务器会拒绝空骨架（`safety-skeleton.js` 注释写明），且有审批对话框作关口，不会悄悄出错；真正会导致误操作的是对话框读不懂（SAF-03，保持 High）。
+
+### 3.9 告警
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| ALT-01 (S-01) | "Stage st_ab12 is recovery_check after disconnect_affects: {\"reasons\": [\"due_action\", \"gap_too_long\"], \"seconds\": 412.6, \"state_unreadable\": false}"（`runtime.py:176-184` 用 `json.dumps` 拼出） | N2, N9, CC, PD | High | 告警带 code＋params（状态、事件、原因列表、分钟数）；控制台用 `state.*`、新 `event.*` 标签拼句，再加一句"打开阶段页，记录一次现场检查" | 服务器文案（code/params）＋客户端 |
+| ALT-02 (S-02) | 水泵看门狗：五段文字（`watchdog.py:25-41`）里有 "interlock"、"outlet mode"、"unexpected_watering" 一类词，没有一段说操作员该做什么 | N2, N9, CC | High | 每段一个码（`pump_unexpected_on`、`pump_off_unconfirmed` 等）；加"请到现场检查水泵，然后记录现场检查"；去掉内部词 | 服务器文案；客户端映射 |
+| ALT-03 (S-03) | 阶段过程检查：测量 id、任务 id、`kind`/`metric` 枚举值出现在文字里；这组告警本身最好（说了怎么做，格式化了时间） | N2, N6, CC | Medium | 把 `kind`、`task_id`、`metric` 作为参数，用任务页的标签写"每日浇水（09:00 到期）" | 服务器文案（params）＋客户端 |
+| ALT-04 (S-04) | "temperature > 30 for 300 s (heat_high)"：原始传感器键、运算符、规则 id，无单位，无动作 | N2, N9, CC | Medium | 传传感器、运算、值、单位、持续、规则名；渲染"空气温度高于 30 °C 持续 5 分钟"，加"检查生长室" | 服务器文案＋客户端 |
+| ALT-05 (S-05) | "No usable humidity data; threshold alerts for it are suspended"：传感器键原样，无动作 | N2, N9 | Medium | 传 `sensor`，加标签，加"检查传感器连接" | 服务器文案＋客户端 |
+| ALT-06 (S-06) | "temperature has reported exactly 24.5 without change (frozen reading)"：无单位，没说后果（阶段可能暂停），无动作 | N2, N9 | Medium | 传传感器、值、单位；加"检查传感器" | 服务器文案＋客户端 |
+| ALT-07 (S-07) | 异常类名和原始异常当告警正文："capture: ValueError: …"、"Backup failed: OSError: [Errno 28] No space left on device"、"Model roles are off: AuthenticationError: …"（`observer/service.py`、`runtime_backup.py:72` 等） | N2, N9, CC | High | 每个码一条固定人话（"备份失败，请检查磁盘剩余空间"）；异常文本放日志或"技术详情" | 服务器文案；客户端折叠 |
+| ALT-08 (S-08) | "Run health failing: capture, ingest"（探针名） | N2, N9, CC | Medium | `failures` 作为列表，映射成"读数没有进来"，加动作 | 服务器文案＋客户端 |
+| ALT-09 (S-09) | "No backup_dir is configured…"、"GROWBRIDGE_HEARTBEAT_HOST_URL and GROWBRIDGE_HEARTBEAT_RUN_URL"：配置键和环境变量名给操作员看，操作员无法处理 | N2, N9 | Medium | 前半句保留人话（"备份没有设置"）；配置名另起一行写给管理员 | 服务器文案 |
+| ALT-10 (S-10) | "task_8f21: RuntimeError: …"、"model task task_8f21 needs attention"（`runtime_agents.py:128-154`）：任务 id 取代任务内容，带异常文本，无动作 | N2, N6, N9 | High | 传 `task_id`、`role`、问题标题："规划助手没能完成第 2 轮运行单。请打开任务并决定" | 服务器文案（params）＋客户端 |
+| ALT-11 (S-11) | 审计发现把模型写的摘要和证据行用换行拼进一个单元格；类型 `audit_finding` 原样显示 | N2, N8, PD | Medium | 摘要和证据分字段，证据用列表；类型标"审计备注"；文字质量取决于 RND-17 | 客户端＋模型提示词 |
+| ALT-12 (R-36) | 告警表里写 "Read by Ana, …; still raised at …, so it is asked about again"、"read before the severity read was recorded; mark it read again"（记账规则）；"次数"列；三个时间列加消息；不链到受影响对象 | N2, N8, N6 | Medium | 每行一个状态："未读"/"Ana 10:02 已读"/"已读，但情况变糟：请再读一次"；链到阶段或传感器 | 客户端 |
+| ALT-13 (R-37) | 告警页把 `message` 原样放出，kind 和 key 在这页不显示 | CC, N2 | Medium | 服务器发消息码加参数，客户端映射（与 ALT-01 至 ALT-10 同一修法） | 服务器文案 |
+
+### 3.10 证据
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| EVI-01 (R-42) | 卡片标题是 `card.id`（等宽字体）加状态药丸，结论在下面；"录入人 {source}" 打印原始 `source`（可能是模型角色或 id）；元数据是一条 " · " 串 | CC, N8, N2 | Medium | 结论做标题，id 小字；`source` 映射成"你/规划助手…"；字段分开显示 | 客户端 |
+| EVI-02 (R-43) | 核验表单"我保证已用本地测量校准过"默认选"否"；按钮只写"核验"；操作点上没有说卡片核验后不可改 | N5, N10 | Medium | 确认对话框写明后果；改成勾选框措辞 | 客户端 |
+
+### 3.11 计算
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| CMP-01 (R-19) | 阶段 `failed`、`cancelled` 在目录里没有 `state.*` 文字（`compute/phases.py` 定义了这两个）；药丸在中文页打印英文原词，落进无色的"其他"组 | CC, N4, N1 | Medium | 加 `state.failed`、`state.cancelled` 并分组；未知状态显示"未知状态"，值放 title | 客户端 |
+| CMP-02 (R-38) | 预算表单要手动输入任务 id（"任务"文本框），而上面的预算表正列着这些任务 | N6, N5 | High | 下拉选择已知任务，或在行上加"修改预算" | 客户端 |
+| CMP-03 (R-39) | "CPU 小时（已用、预留 / 预算）"单元格 "1.00, 2.00 / 10.00"；表里有 `attempt_id`、`template_id`、"远程任务" id | N2, N6, CC | Medium | "已用 1.0 小时，预留 2.0 小时，共 10 小时"或进度条；id 放详情 | 客户端 |
+| CMP-04 (R-40) | 卡住的尝试：`reason` 列打印服务器原文；结算说明 "It is charged as unknown use, and this cannot be undone" | N9, N2 | Medium | 服务器发原因码；用预算语言说明后果（保留必填原因和确认框） | 服务器文案 |
+| CMP-05 (R-41) | "从 MyCSC 读取后在下面输入"，假设读者知道 MyCSC | N10 | Low | 说明去哪里找（链接或一步说明） | 客户端 |
+
+### 3.12 登录与框架
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| FRM-01 (E-24, R-35) | 每个时间格都是 "2026-11-20 10:00 UTC"/"…Europe/Helsinki"（告警表一行三个）；`formatTime` 里 `void lang`，中英文同一格式；任务表里折成两行 | N2, N8 | Low | 区域只在页头说一次；按语言格式（"11月20日 10:00"）；近期用相对时间 | 客户端 |
+| FRM-02 (E-41, R-53) | 没有文字时显示 key（`inbox.kind.<新>`、`report.labels.<x>`、`tasks.status.xyz`）或原值（`state.xxx`） | CC, N2, N9 | Low | 一个 `labelOr` 函数，永不打印 key；目录覆盖测试 | 客户端 |
+| FRM-03 (R-50) | "页面无法加载。" 后面跟原始 JS 错误信息 | N9, CC | Low | 原因放"详情" | 客户端 |
+| FRM-04 (R-51) | 侧栏"入口：现场（实验室网络）/远程/未知"，不说为什么重要（有些操作只能在现场，如浇水） | N10, N2 | Low | 提示"有些操作只能在现场做" | 客户端 |
+| FRM-05 (R-52) | 登录框叫"口令（Secret）"；锁定提示"一段时间"，而拒绝文案里写的是 15 分钟 | N4, N9 | Low | 用站点自己的叫法（"密码"）；写出锁定时长 | 客户端 |
+| FRM-06 (S-38) | "for 300 s"、"seconds: 412.6"、"600 s between irrigations"、"a 20 s pump run" | N2 | Low | 控制台统一 `formatDuration()`；服务器侧文字超过 120 秒就换成分钟 | 客户端＋服务器文案 |
+
+### 3.13 错误信息
+
+| 编号 | 现在用户看到的 | 违反的标准 | 严重程度 | 建议改法 | 改在哪 |
+|---|---|---|---|---|---|
+| ERR-01 (R-46, S-19, E-42) | 已知错误码：映射好的说明和建议后，还多一行服务器英文原话（`errorLines` 在 message ≠ code 时追加），带 id、枚举值和 "light.level 3 != 5"、"stage st_91c2 is recovery_check; it cannot pause"。没有映射的码或 404 没有码：显示"请求没有成功"加 "HTTP 404"、"Failed to fetch" | N2, N9, CC, PD | High | 第三行只放进"详情"；404 无码时写"没有找到这一项，可能已被删除"；每个服务器码在目录里有条目 | 客户端（PD）＋服务器文案（params） |
+| ERR-02 (R-45) | JSON 编辑器里对不到字段的错误显示成 `protocol › treatments › 0 › id: Field required`（服务器路径加英文消息，`forms.js:207`） | N9, CC | High | 把常见路径映射成人话（"处理 1 缺少 id"）；表单化（P-02）后基本消失 | 服务器文案（及客户端映射） |
+| ERR-03 (S-20, S-22, R-47) | `state` 一个码覆盖 98 处 `Denied("state", …)` 和 29 处 `Denied("scope", …)`（未知项目、阶段状态不对、版本过旧、轮次已交付、尝试已终结……），只显示一句泛泛的说明；`approval_invalid` 的建议永远是"处理运行单上的问题"，即使原因是"device capabilities changed"、根本没有检查项；术语："写入权"、"recovery number"、"请用新的请求编号"（用户从未见过编号） | N9, N2, ISO 自描述性 | High | 在 `code` 旁加 `reason` 子码（`stage_not_pausable`、`run_sheet_too_old`、`capabilities_changed`、`round_already_delivered`…），先映射子码，`state` 作兜底；重写面向操作员的文字 | 服务器文案（子码）＋客户端 |
+| ERR-04 (S-21) | "irrigation must run for more than 0 and at most 120 s"、"the pump needs 600 s between irrigations"、"write right 14 is from an earlier recovery"、"no live BLE connection" | N2, N9 | Medium | ERR-01 修好后默认不显示；需要数字的地方发参数，写"再等 8 分钟" | 服务器文案（params）＋客户端 |
+| ERR-05 (S-23) | "limit must be one of ['a', 'b']"、"n_iter outside 1..1000"、"need 4.0, available 1.2"：参数键、Python 列表、预算数字无单位 | N2, N9 | Medium | 传 `field`、范围、单位；用模板字段标题 | 服务器文案（params）＋客户端 |
+| ERR-06 (S-24) | "…(architecture doc §6.5)"、"snapshot file differs from manifest: samples.jsonl"、"script differs from the hash in the protocol" | N2, N9 | Medium | 去掉文档章节号；文件名放详情 | 服务器文案 |
+| ERR-07 (S-25) | 文字里是状态原词："stage st_91c2 is recovery_check"、"round is stage_review"；控制台已有 `state.*` 标签 | N2, CC | Medium | 传 `state` 作参数，写成"阶段正在等待现场检查" | 服务器文案（params）＋客户端 |
+| ERR-08 (S-26) | 不带码的 HTTP 错误："Unknown request id"、"Authentication required"、"Browser origin is not allowed"、"Device writes go through the workbench"（`api.py:78-115,266`、`workbench/api.py:436,470,505`、`rounds.py:158-163`） | N9, CC | Medium | 各给一个码（`unknown_request`、`not_signed_in`、`origin`、`use_workbench`），在 `denials.js` 加行 | 服务器文案（加码）＋客户端 |
+| ERR-09 (R-48) | `budget` 的建议 "Stop. An operator should set or raise the budget…" 是对操作员本人说的 | N9 | Low | 面向读者："请在项目的预算区设置预算"，附链接 | 客户端 |
+
+---
+
+## 4. 保留
+
+三份审计的"保留"清单合并、去重后（括号里是来源）：
+
+**审批与确认**
+- 审批比较的是实际审阅的那份摘要，先重读再比对，拒绝时有标题（"未审批"、"已审批，但不是你审阅的那份运行单"）；审批按钮置灰时当场写原因（`pages/stage-actions.js:112-141`）（E）。
+- 停止、接管、交还、安全审批有确认框，点名阶段和后果；取消、结算的确认框"取消"在前并聚焦；结算要必填原因；中止说明"无法重新开始"（E、R）。
+- 证据"核验"是单独的有意动作，有"未核验"状态；录入时校准默认留空（R）。
+
+**状态与提示的诚实措辞**
+- "等待设备确认 / 已生效 / 结果未知 / 暂无结果"，"没有收到答复，结果未知"，带时长的陈旧读数提示，"刷新失败，下面显示的内容可能已过时"横幅（E）。
+- 回执状态映射（`receipts.js` OUTCOMES 和 `receipt.*`）：`receipt.unknownNote` 说明下一步，请求 id 仍可追溯（S、E）。
+- 状态药丸有译名和颜色分组；阶段和轮次状态在所有药丸里都走 `state.*`；告警严重程度是映射后的药丸；告警 `event_id` 不显示（E、S）。
+- 读数不跨空档画线，孤立点照常显示（E）。
+- 预算未设时的提示说明后果（"无法调用模型"）；空状态带下一步；未配置的服务有平实提示（`not-mounted.js`）（R）。
+
+**目录与文案**
+- `denials.js`：`Denied(` 抛出的 33 个码全部映射，另有 4 个客户端码，每个都有中英文说明和"该怎么办"；唯一漏网的是不带码的 `HTTPException`（S）。
+- `research/notes.py`：稳定的 `code` + `params` + `text.en/zh`，随报告保存，按观看者语言显示。这是推广到告警和检查结果的模板（S、R）。
+- `observer/stage_checks.py` 的文字已说明怎么做（"Record it as done or skipped"）并按运行单时区格式化时间（S）。
+- 水泵规则检查项（`validate.py:62-70`）和看门狗 `UNCONFIRMED_TEXT` 把原因和影响放在一句里（S；注意看门狗文字缺"下一步"，见 ALT-02）。
+- 报告的"为什么是这个标签"和编码好的说明用控制台语言显示；缺的可选值显示破折号（R）。
+
+**结构与交互**
+- 收件箱按紧急程度分组，有现场/等待的色调，"每 15 秒更新"一行，陈旧警告，重绘时保持焦点（R）。
+- 草稿在会话丢失时保留，并有"草稿已恢复"提示；`singleFlight` 防重复提交（`intents.js`）（R）。
+- 聊天里提示"这里说的任何话都不会批准运行单"；工具输入/输出默认折叠；长任务问题截断加"展开"（`questionCell`）（R）。
+- 离开现场入口的浇水按钮置灰并写原因（`irrigationGroup`）（E）。
+- 运行单 JSON 放在 `<details>` 后面：这是应推广到 id 和摘要的披露模式（E）。
+- 环境页：传感器格有单位，"预期 vs 实际"行带不一致药丸，窗口选择有 `aria-pressed`（E）。
+- 测量只追加的更正，两个方向都有"已被…更正"链接（E）。
+- 无障碍基础：跳转链接、有标签的区块、aria-live 提示、可聚焦的滚动区、`aria-current`（R）。
+
+---
+
+## 5. 核实记录
+
+**抽查范围：** 33 条原始 High 全部打开代码核对；另核对 11 条存疑的 Medium。共 **44 条**。
+结果：**确认 38 条，调整 6 条，丢弃 0 条。**
+核实在 `/Users/chenghao/Downloads/spiderfarmer-growbridge-auditor/src/growbridge/` 下进行；"客户端"指 `web/workbench/`。
+
+### 5.1 调整的 6 条
+
+| 原始编号 | 结果 | 说明 |
+|---|---|---|
+| E-39 | 调整：High → Medium | 代码支持"只有 JSON 文本框"（`pages/safety.js:103-118`），骨架全 `null`（`pages/safety-skeleton.js`）；但服务器会拒绝空骨架，且有审批对话框作关口，不会悄悄出错。真正的风险在 E-38（对话框读不懂），保持 High。 |
+| S-02 | 调整：措辞，问题比所述更大 | 审计说"只有 UNCONFIRMED 那条提示动作"。实际 `executor/watchdog.py:25-41` 五段文字里没有一段告诉操作员做什么（UNCONFIRMED 只说"会继续重试"）。仍为 High。所需建议其实已在 `denials.js` 的 `interlock` 条目里，告警本身没有。 |
+| R-08 | 调整：原因 | 审计让"提示编排助手用用户语言回答"。实际 `agents/roles.py:59-60` 已有这条规则；缺的是没有任何代码把控制台语言交给模型（`agents/*.py`、`workbench/*.py` 里搜不到 `lang`）。修法改为"把语言传给模型"。仍为 Medium。 |
+| S-20 | 调整：规模比所述更大 | 审计写"约 45 处 `Denied("state")`、约 25 处 `Denied("scope")`"。实际在 `src/growbridge` 下是 **98 处**和 **29 处**。结论更强，仍为 High。 |
+| S-14 | 调整：引文部分对不上 | 审计引的六条文字里，四条在 `planning/validate.py` 里按字面找到（行 60、154、204、220）；"device has no 'temp_air'"和"sensor 'rh' reports '%'"两条没有按字面找到（可能由别处拼接），表中未再引用。"阻断项没说怎么改"由找到的四条支持；保持 High。 |
+| E-03 | 调整：升为 High（合并） | 原为 Medium；与 S-29 合并取 High。核实 `stage-history.js:21-33`：`detailText` 对每个键 `String(value)`，Unix 时间戳和请求 id 原样打印，`SAID_IN_LINE` 只过滤 4 个键；`watchdog.py:96-112` 的载荷里确有 `status_at`、`off_confirmed_at`、`request_id`。 |
+
+另有两处合并后升级，不涉及代码调整：E-08（Medium）并入 S-14 取 High；R-47（Medium）并入 S-20/S-22 取 High。
+
+### 5.2 确认的 High
+
+| 原始编号 | 核对位置 | 结果 |
+|---|---|---|
+| E-01 / S-27 | `pages/stage-history.js:41,47`；`i18n/zh.js:431` | 确认：只有 `history.event` 包装模板，无 `history.event.<id>`。 |
+| E-02 / S-28 | `stage-history.js:30-36` | 确认：键值串，嵌套值 `JSON.stringify`。 |
+| E-06 | `pages/stage-actions.js:88-99` | 确认：`h("code", { text: finding.code })`。 |
+| E-10 | `stage.js:135-141`；`stage-actions.js:131,133`；`i18n/zh.js:294,309,313` | 确认：摘要默认显示，审批冲突文案带两个摘要。 |
+| E-36 | `pages/safety.js:15-25` | 确认：`${row.trigger.op} ${row.trigger.value}`、`String(row.duration_seconds)`。 |
+| E-38 | `pages/safety-diff.js:22-24` | 确认：`change.path` 加 `formatValue`。 |
+| R-01, R-02 | `pages/round.js:77-116`；`agents/handlers_report.py:69-81`；`agents/roles.py` | 确认：模型写的 `limitations`、`unresolved`、`next_round` 以 `String(item)` 或 `<p>` 原样渲染；提示词没有写作规则。 |
+| R-13 | `pages/inbox.js:77-112` | 确认：`ctx.t("inbox.stage", { id: item.id })` 等。 |
+| R-20 | `pages/round.js:132-141`；`main.js:150-156` | 确认：面包屑和标题用 `round_id`，默认面包屑也用 id。 |
+| R-24 | `pages/round-analysis.js:23-121` | 确认：每个轮次渲染；协议版本、"已开始：是/否"、快照选择。哈希和 stdout/stderr 的渲染行未逐行读，按审计。 |
+| R-25 | `round-analysis.js:50-59` | 确认：`jsonEditor`，初值 `{ project_id, script: "" }`。 |
+| R-26 | `round-analysis.js:61-76` | 确认：`runForm` 没有确认（`round-analysis.js`、`evidence.js` 中都搜不到 `confirmAction`）。 |
+| R-28 | `pages/project-forms.js:7-33,66-75`；`archive/models.py:419-436` | 确认：预填 JSON；`question: str` 无约束，空问题可保存。 |
+| R-29 | `project-forms.js:77-97`；`pages/conversation.js:132` | 确认：两个 JSON 编辑器；对话也 POST `/goals`，重复成立。 |
+| R-38 | `pages/compute.js:56-68` | 确认：`task_id` 文本框。 |
+| R-45 | `ui/forms.js:201-207` | 确认：`loc.filter(...).join(" › ") + ": " + msg`。 |
+| R-46 / S-19 | `ui/forms.js:57-63` | 确认：`message !== code` 时追加第三行；无码时 `[error.title, message]`。 |
+| S-01 | `runtime.py:176-184` | 确认：`json.dumps(detail, sort_keys=True)`。 |
+| S-07 | `observer/service.py:106-125`；`runtime_backup.py:68-72`；`runtime.py:386-392` | 确认：`f"Backup failed: {type(error).__name__}: {error}"`、`f"{name}: {type(error).__name__}: {error}"`。 |
+| S-10 | `runtime_agents.py:124-156` | 确认：`f"{task.id}: {type(error).__name__}: {error}"`、`"model task {task.id} needs attention"`。 |
+| S-13 | `stage-actions.js:95-97` | 确认（同 E-06）。 |
+| S-22 | `workflow/service.py:244-250,296-310`；`denials.js:18` | 确认：能力变化走 `Denied("approval_invalid", problem)`，建议却是"处理运行单上的问题"。 |
+| S-28 / S-29 | `executor/engine.py:280-296`；`executor/watchdog.py:96-112` | 确认：载荷里有 `right_number`、`seconds`、`status_at`、`off_confirmed_at`、`request_id`。 |
+| S-31 | `agents/handlers_report.py:69-81` | 确认：四个自由文本字段由模型填写。 |
+| S-34 | `agents/roles.py:44-150` | 确认：语言规则只有 59-60（编排）和 128（审计）；规划、研究员没有；没有"平实、不写字段名"的规则。 |
+
+### 5.3 确认的 Medium（抽查 11 条，含上面已列的 R-08）
+
+- E-09：`stage.js:132` 用 `formatNumber(seconds / 3600, 1)`，`stage.review.durationValue` 是 "{hours} 小时"。
+- E-24：`format.js:45-46` 里 `void lang`。
+- E-26、E-27：`stage-tasks.js:108-111`，按钮标签是状态词，已完成行仍显示"跳过"。
+- E-42：`forms.js:57-63`，无映射码显示 `error.title` 加原消息。
+- R-11：`conversation.js:74-83`，`select.value = open[0].round_id`，文字是原始 id。
+- R-19：`i18n/zh.js` 无 `state.failed`/`state.cancelled`；`compute/phases.py` 定义了两者。
+- R-22：`round.js:11` `CHOICES = ["redo", …]`；`forms.js:119-126` 无占位，首项被选中。
+- R-30：`project.js:46-47` 用 `String(budget.cost_left)`。
+- S-26：`api.py:78,89,96,100,115,266` 的裸字符串 `HTTPException`。
+
+### 5.4 未逐条核对的部分
+
+其余 Medium 和 Low 没有逐条打开代码，保留审计的原样。我读到的相邻代码与审计引用没有矛盾。
+截图证据（`docs/images/example-round/*`）没有重新查看，只按审计转述。
