@@ -177,7 +177,7 @@ export default {
   "history.field.reasons": "Why it matters",
   "history.field.request_id": "Request ID",
   "history.field.request_ids": "Request IDs",
-  "history.field.right_number": "Write right number",
+  "history.field.right_number": "Write-permission number",
   "history.field.rule": "Rule",
   "history.field.rules": "Rules",
   "history.field.seconds": "Duration",
