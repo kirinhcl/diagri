@@ -72,7 +72,8 @@ function alertsTable(ctx, alerts, focus) {
 
 // Once the page is in the document: bring the linked alert's row into view (a no-op without scrollIntoView).
 function scrollToAlert(element, focus) {
-  const row = typeof element.querySelector === "function" ? element.querySelector(`[id="alert-${focus}"]`) : null;
+  const rows = (node) => [...(node.children || [])].flatMap((child) => [child, ...rows(child)]);
+  const row = rows(element).find((el) => el.localName === "tr" && el.getAttribute("id") === `alert-${focus}`);
   if (!row || typeof row.scrollIntoView !== "function") return;
   setTimeout(() => row.scrollIntoView({ block: "center" }), 0);
 }

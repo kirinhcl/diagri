@@ -6,6 +6,8 @@ import {
   KIND_ORDER,
   DESCRIBERS,
   describe,
+  draw,
+  pageView,
   groupByKind,
   groupView,
   inboxCounts,
@@ -187,4 +189,37 @@ test("each alert row has an id and the focused one is highlighted", async () => 
   assert.ok(rows.length >= 2);
   const focused = rows.filter(withClass("alert-focused"));
   assert.deepEqual(focused.map((row) => row.getAttribute("id")), [`alert-${id}`]);
+});
+
+test("alerts page survives a hostile or unknown focus and highlights nothing", async () => {
+  const { renderPage } = await import("./support/render-page.mjs");
+  for (const focus of ['a"b', "a\\b", "nope", "]"]) {
+    const { element } = await renderPage("alerts", { focus });
+    assert.equal(findAll(element, withClass("alert-focused")).length, 0, focus);
+    assert.ok(visibleText(element).length > 20);
+  }
+});
+
+const LONG_TASK = { kind: "task", id: "t1", project_id: "p1", since: NOW - 60, detail: { question: `${"word ".repeat(80)}end`, state: "needs_review", owner_role: "researcher" } };
+const keyed = (view, key) => findAll(view.list, (n) => n.getAttribute?.("data-key") === key)[0];
+
+test("an open fold stays open across a redraw of the same item", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = pageView(ctx);
+  draw(view, ctx, { items: [LONG_TASK], truncated: {} });
+  const open = (node) => findAll(node, (n) => n.localName === "details");
+  const before = open(keyed(view, "task:t1"));
+  assert.ok(before.length >= 2);
+  before.forEach((fold) => fold.setAttribute("open", ""));
+  draw(view, ctx, { items: [{ ...LONG_TASK, since: NOW - 120 }, { kind: "alert", id: "a1", since: NOW, detail: { message: "m", alert_kind: "data_gap" } }], truncated: {} });
+  assert.ok(open(keyed(view, "task:t1")).every((fold) => fold.hasAttribute("open")));
+  assert.ok(open(keyed(view, "alert:a1")).every((fold) => !fold.hasAttribute("open")));
+});
+
+test("the open link of a folded row names the item", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = pageView(ctx);
+  draw(view, ctx, { items: [LONG_TASK], truncated: {} });
+  const link = findAll(view.list, withClass("inbox-open"))[0];
+  assert.match(link.getAttribute("aria-label"), /^打开: word word word/);
 });

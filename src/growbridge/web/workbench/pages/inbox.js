@@ -95,6 +95,7 @@ export const DESCRIBERS = {
   }),
   alert: (ctx, item, d) => ({
     title: foldedText(ctx, d.message || ""),
+    plain: d.message || "",
     pill: severityPill(ctx.t, d.severity),
     meta: [
       labelOr(ctx.t, "alert.kind", d.alert_kind),
@@ -110,6 +111,7 @@ export const DESCRIBERS = {
   }),
   task: (ctx, item, d) => ({
     title: d.question ? foldedText(ctx, d.question) : displayName(ctx, "researchTask", d),
+    plain: d.question || "",
     pill: statePill(ctx.t, d.state),
     meta: [d.owner_role ? ctx.t("inbox.owner", { role: roleLabel(ctx.t, d.owner_role) }) : null, ...where(ctx, item)],
   }),
@@ -141,9 +143,15 @@ function waitingText(ctx, since) {
   return ctx.t("inbox.waiting", { duration: formatDuration(ctx.t, age) });
 }
 
+const LABEL_CHARS = 80;
+const shortTitle = (text) => {
+  const chars = [...String(text).trim().replace(/\s+/g, " ")];
+  return chars.length > LABEL_CHARS ? `${chars.slice(0, LABEL_CHARS).join("")}…` : chars.join("");
+};
+
 // A folded title holds its own toggle, so it cannot sit inside a link: the row then has an open link.
 function itemView(ctx, item) {
-  const { title, pill, lines, meta } = describe(ctx, item);
+  const { title, plain, pill, lines, meta } = describe(ctx, item);
   const href = inboxTarget(item);
   const folded = typeof title !== "string";
   const main = h(
@@ -153,15 +161,15 @@ function itemView(ctx, item) {
     lines.filter(Boolean).map((line) => h("p", { class: "inbox-text", text: line })),
     h("p", { class: "inbox-meta" }, meta.filter(Boolean).map((part) => h("span", { text: part }))),
   );
-  const open = href && folded ? h("a", { class: "inbox-open", attrs: { href }, text: ctx.t("inbox.open") }) : null;
+  const open = href && folded ? h("a", { class: "inbox-open", attrs: { href, "aria-label": `${ctx.t("inbox.open")}: ${shortTitle(plain)}` }, text: ctx.t("inbox.open") }) : null;
   const time = h("span", { class: "inbox-time", text: waitingText(ctx, item.since), attrs: { title: timeText(ctx, item.since) } });
   const side = h("div", { class: "inbox-side" }, pill, time, open);
   const key = `${item.kind}:${item.id}`;
   const linked = href && !folded;
   const row = linked
-    ? h("a", { class: "inbox-item", attrs: { href, "data-key": key } }, main, side)
-    : h("div", { class: "inbox-item", attrs: { "data-key": key } }, main, side);
-  return h("li", {}, row, h("div", { class: "inbox-tech" }, itemDetails(ctx, item)));
+    ? h("a", { class: "inbox-item", attrs: { href } }, main, side)
+    : h("div", { class: "inbox-item" }, main, side);
+  return h("li", { attrs: { "data-key": key } }, row, h("div", { class: "inbox-tech" }, itemDetails(ctx, item)));
 }
 
 const MORE_PAGES = { alert: "alerts", compute_stuck: "compute" };
@@ -196,23 +204,50 @@ function emptyView(ctx) {
   return h("div", { class: "inbox-empty" }, h("p", { text: ctx.t("inbox.empty") }));
 }
 
-// Redraws only when the answer changed, keeping keyboard focus on the same item when it is still there.
-function draw(view, ctx, data) {
+// Every element under node (children only, so it works in any DOM).
+const descendants = (node) => (node.children ? [...node.children].flatMap((child) => [child, ...descendants(child)]) : []);
+const keyedItems = (list) => descendants(list).filter((el) => el.getAttribute("data-key") !== null);
+const FOCUSABLE = new Set(["a", "summary", "button"]);
+const focusables = (item) => descendants(item).filter((el) => FOCUSABLE.has(el.localName));
+const folds = (item) => descendants(item).filter((el) => el.localName === "details");
+
+// Where keyboard focus is and which folds are open, as item key + position inside the item.
+function remember(list) {
+  const items = keyedItems(list);
+  const active = typeof document !== "undefined" ? document.activeElement : null;
+  const holder = items.find((item) => item === active || item.contains(active));
+  const focus = holder ? { key: holder.getAttribute("data-key"), index: focusables(holder).indexOf(active) } : null;
+  const open = items.flatMap((item) => folds(item).flatMap((fold, i) => (fold.hasAttribute("open") ? [`${item.getAttribute("data-key")}#${i}`] : [])));
+  return { focus, open };
+}
+
+function restore(list, { focus, open }) {
+  const items = keyedItems(list);
+  for (const item of items) {
+    folds(item).forEach((fold, i) => {
+      if (open.includes(`${item.getAttribute("data-key")}#${i}`)) fold.setAttribute("open", "");
+    });
+  }
+  const holder = focus && items.find((item) => item.getAttribute("data-key") === focus.key);
+  const target = holder && (focus.index >= 0 ? focusables(holder)[focus.index] : null);
+  if (target) target.focus();
+}
+
+// Redraws only when the answer changed, keeping keyboard focus and open folds on the same items.
+export function draw(view, ctx, data) {
   const inbox = normalizeInbox(data);
   if (ctx.setCounts) ctx.setCounts(inboxCounts(inbox));
   view.updated.textContent = ctx.t("inbox.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   const signature = JSON.stringify(inbox);
   if (signature === view.signature) return;
   view.signature = signature;
-  const focused = view.list.contains(document.activeElement) ? document.activeElement : null;
-  const key = focused && focused.getAttribute("data-key");
+  const before = remember(view.list);
   const groups = groupByKind(inbox);
   clear(view.list).append(...(groups.length ? groups.map((group) => groupView(ctx, group)) : [emptyView(ctx)]));
-  const again = key ? [...view.list.querySelectorAll("[data-key]")].find((el) => el.getAttribute("data-key") === key) : null;
-  if (again) again.focus();
+  restore(view.list, before);
 }
 
-function pageView(ctx) {
+export function pageView(ctx) {
   const updated = h("p", { class: "page-sub" });
   const problem = h("div", { class: "form-status form-status-error", attrs: { role: "status", hidden: true } });
   const refreshButton = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: ctx.t("inbox.refresh") });
