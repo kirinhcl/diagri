@@ -246,3 +246,31 @@ async def test_the_frozen_check_alert_resolves_only_after_a_completed_check(rig)
     assert ("frozen_watch", "check") in {(a.kind, a.key) for a in rig.book.open()}
     await rig.observer.tick()  # a check completed
     assert ("frozen_watch", "check") not in {(a.kind, a.key) for a in rig.book.open()}
+
+
+async def test_a_failing_stage_check_raises_one_critical_alert_and_the_rules_still_run(rig, clock):
+    rig.observer.stage_checks = FakeFrozen(RuntimeError("boom"))
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(60)
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(10)
+    rig.hot()
+    await rig.observer.tick()
+    open_alerts = {(a.kind, a.key): a for a in rig.book.open()}
+    check = open_alerts[("stage_checks", "check")]
+    assert check.severity == "critical"
+    assert check.message == "The stage checks are failing"
+    assert ("threshold", "too_hot") in open_alerts
+    assert [a.key for a in rig.book.open() if a.kind == "stage_checks"] == ["check"]
+
+
+async def test_the_stage_check_alert_resolves_after_a_completed_check(rig):
+    rig.observer.stage_checks = FakeFrozen(RuntimeError("boom"), False, True)
+    await rig.observer.tick()
+    assert ("stage_checks", "check") in {(a.kind, a.key) for a in rig.book.open()}
+    await rig.observer.tick()  # nothing completed: the alert stays
+    assert ("stage_checks", "check") in {(a.kind, a.key) for a in rig.book.open()}
+    await rig.observer.tick()
+    assert ("stage_checks", "check") not in {(a.kind, a.key) for a in rig.book.open()}

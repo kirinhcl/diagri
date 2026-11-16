@@ -8,6 +8,8 @@ import logging
 from collections.abc import Callable, Sequence
 
 from growbridge.archive.clock import Clock
+from growbridge.archive.store import Archive
+from growbridge.control.service import ControlService
 from growbridge.observer.alerts import (
     Alert,
     AlertBook,
@@ -17,9 +19,11 @@ from growbridge.observer.alerts import (
 )
 from growbridge.observer.frozen_watch import FrozenWatch
 from growbridge.observer.outbox import Outbox
+from growbridge.observer.stage_checks import StageChecks
 from growbridge.ports import Reading, StageEvent, StageEventKind, StagePort
 
 DEFAULT_CHANNELS = ("telegram",)
+DEFAULT_ALERT_RULES: tuple[AlertRule, ...] = ()
 log = logging.getLogger(__name__)
 
 
@@ -34,6 +38,7 @@ class Observer:
         clock: Clock,
         notify_channels: Sequence[str] = DEFAULT_CHANNELS,
         frozen: FrozenWatch | None = None,
+        stage_checks: StageChecks | None = None,
     ):
         self.stages = stages
         self.control_readings = control_readings
@@ -43,6 +48,7 @@ class Observer:
         self.clock = clock
         self.notify_channels = tuple(notify_channels)
         self.frozen = frozen
+        self.stage_checks = stage_checks
         self.states: dict[str, RuleState] = {}
 
     def _queue_open_alerts(self) -> None:
@@ -91,6 +97,7 @@ class Observer:
             if rule.pause_stage:
                 await self._pause(rule, alert)
         await self._watch_frozen()
+        await self._watch_stage()
         self._queue_open_alerts()
 
     async def _watch_frozen(self) -> None:
@@ -106,3 +113,40 @@ class Observer:
         else:
             if checked:  # only a completed check shows the failure is over
                 self.book.resolve("frozen_watch", "check")
+
+    async def _watch_stage(self) -> None:
+        if self.stage_checks is None:
+            return
+        try:
+            checked = await self.stage_checks.tick()
+        except Exception:
+            log.exception("stage checks failed")
+            self.book.raise_alert(
+                "stage_checks", "check", "critical", "The stage checks are failing"
+            )
+        else:
+            if checked:  # only a completed check shows the failure is over
+                self.book.resolve("stage_checks", "check")
+
+
+def build_observer(
+    flow: StagePort,
+    control: ControlService,
+    archive: Archive,
+    book: AlertBook,
+    outbox: Outbox,
+    clock: Clock,
+    notify: Sequence[str],
+) -> Observer:
+    """The observer with its frozen-reading watch and stage checks."""
+    return Observer(
+        flow,
+        control.readings,
+        book,
+        outbox,
+        DEFAULT_ALERT_RULES,
+        clock,
+        notify,
+        frozen=FrozenWatch(archive, book, flow, control.safety, clock),
+        stage_checks=StageChecks(archive, book, flow, clock),
+    )

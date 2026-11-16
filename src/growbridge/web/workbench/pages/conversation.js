@@ -7,7 +7,7 @@ import { errorLines } from "../ui/forms.js";
 import { richText } from "../ui/rich-text.js";
 import { timeText } from "../ui/section.js";
 
-const ROLES = new Set(["user", "orchestrator", "planner", "researcher"]);
+const ROLES = new Set(["user", "orchestrator", "planner", "researcher", "auditor"]);
 const CLOSED_ROUNDS = new Set(["delivered", "aborted"]);
 const NEAR_BOTTOM_PX = 48;
 

@@ -225,7 +225,7 @@ stateDiagram-v2
 
 - [架构总览](Architecture.md)
 - [控制与安全模型](Control-and-Safety-Model.md)
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [运行一轮研究](Run-a-Research-Round.md)
 - [故障处理手册](Troubleshooting-Runbook.md)
 - [拒绝码与事件类型](Denial-Codes-and-Events.md)

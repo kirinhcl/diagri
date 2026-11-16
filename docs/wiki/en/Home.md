@@ -2,7 +2,7 @@
 
 [简体中文](../zh-CN/Home.md)
 
-DiAGRI is an AI agent platform for plant-growth research. It takes one research question through a complete experiment: it designs the experiment, runs the approved plan on growing hardware, records every reading and every write, analyzes the result and delivers a report. Three model roles design and analyze. Two deterministic programs carry out the plan and watch it. Every write to the device passes one checkpoint that no model can reach.
+DiAGRI is an AI agent platform for plant-growth research. It takes one research question through a complete experiment: it designs the experiment, runs the approved plan on growing hardware, records every reading and every write, analyzes the result and delivers a report. Four model roles design, analyze and audit. Two deterministic programs carry out the plan and watch it. Every write to the device passes one checkpoint that no model can reach.
 
 GrowBridge is DiAGRI's device bridge: the part that reads and controls a Spider Farmer AC5 grow-tent controller over Bluetooth. It can also be used on its own, with a local dashboard and MCP tools.
 
@@ -43,7 +43,7 @@ GrowBridge is DiAGRI's device bridge: the part that reads and controls a Spider 
 **Concepts and design**
 
 - [Architecture overview](Architecture.md): the parts and who owns what.
-- [The five agents](The-Five-Agents.md): what each may read and do, and what it cannot.
+- [The agents](The-Five-Agents.md): what each may read and do, and what it cannot.
 - [Control and safety model](Control-and-Safety-Model.md): write rights, the action ledger, the pump interlock, the two entries.
 - [Workflow and state machines](Workflow-and-State-Machines.md): rounds, stages and research tasks.
 - [Data, archive and traceability](Data-Archive-and-Traceability.md): what is recorded and how a number is traced back.

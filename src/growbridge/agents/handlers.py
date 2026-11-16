@@ -8,6 +8,7 @@ There is no handler for any tool in ``tools.CONTROL_TOOLS``.
 
 from __future__ import annotations
 
+from growbridge.agents.handlers_auditor import build_auditor_tools
 from growbridge.agents.handlers_common import Deps
 from growbridge.agents.handlers_orchestrator import build_orchestrator_tools
 from growbridge.agents.handlers_planner import build_planner_tools
@@ -22,6 +23,7 @@ def build_role_tools(deps: Deps) -> dict[str, list[Tool]]:
         "orchestrator": build_orchestrator_tools(deps),
         "planner": build_planner_tools(deps),
         "researcher": build_researcher_tools(deps),
+        "auditor": build_auditor_tools(deps),
     }
     for role, built in tools.items():
         names = {tool.name for tool in built}

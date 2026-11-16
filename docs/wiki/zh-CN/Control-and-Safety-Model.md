@@ -10,7 +10,7 @@
 
 操作员接管后把灯调到 50%。自动日程里还排着一条「灯调到 80%」的指令，两秒后发了出去。人工设置被覆盖了，而没有任何人做过这个决定。
 
-进程重启、从备份恢复、另一台机器、回执丢失的指令，都可能造成同类事故。控制模型用一个办法把它们全部堵住：**每次写入都要出示一张带编号的许可，这张许可在字节发出的那一刻必须仍然有效，并且由同一个服务来查。** 这个服务就是 [`control/service.py`](../../../src/growbridge/control/service.py) 里的 `ControlService`。模型角色根本调用不到它，见[五个 Agent](The-Five-Agents.md)。
+进程重启、从备份恢复、另一台机器、回执丢失的指令，都可能造成同类事故。控制模型用一个办法把它们全部堵住：**每次写入都要出示一张带编号的许可，这张许可在字节发出的那一刻必须仍然有效，并且由同一个服务来查。** 这个服务就是 [`control/service.py`](../../../src/growbridge/control/service.py) 里的 `ControlService`。模型角色根本调用不到它，见[Agent 一览](The-Five-Agents.md)。
 
 ## 写入权
 
@@ -176,7 +176,7 @@
 ## 另见
 
 - [工作流与状态机](Workflow-and-State-Machines.md)
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [人工接管、灌溉与交还](Manual-Takeover-and-Irrigation.md)
 - [故障处理手册](Troubleshooting-Runbook.md)
 - [拒绝码与事件类型](Denial-Codes-and-Events.md)

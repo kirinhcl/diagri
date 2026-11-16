@@ -16,7 +16,7 @@
 
 设备控制不受影响。驱动执行 Agent、保护规则和观察与通知 Agent 的那个 tick 从不调用模型，所以已批准的阶段会照常跑到结束（见 [`runtime.py`](../../../src/growbridge/runtime.py)）。模型调用失败的那个研究任务会转为 `needs_attention`，记下原因并发出告警；它不会自己重新运行（见 [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py)）。如果常驻服务启动时就建不起模型客户端，它会发一条告警，然后在没有模型角色的情况下继续提供服务。
 
-详见[五个 Agent](The-Five-Agents.md)和[故障处理手册](Troubleshooting-Runbook.md)。
+详见[Agent 一览](The-Five-Agents.md)和[故障处理手册](Troubleshooting-Runbook.md)。
 
 ### 为什么打开 DiAGRI 之后，`set_light` 和控制台上的控制都不能用了？
 

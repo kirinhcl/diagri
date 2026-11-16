@@ -68,6 +68,8 @@ Where to look up an identifier: data models are in [`archive/models.py`](../../.
 | planner | 计划 Agent | role `planner` | Designs the experiment and drafts protocols and run sheets. |
 | researcher | 研究 Agent | role `researcher` | Reads literature and data, runs analyses and delivers conclusions. |
 | executor | 执行 Agent | `ExecutorEngine` | Deterministic program that carries out the approved run sheet. It never calls a model. |
+| auditor | 监察 Agent | role `auditor` | Model role that reads the records of a stage and compares them with the run sheet. It can only file advisory `audit_finding` alerts. |
+| stage checks | 阶段检查 | `StageChecks`, alerts `task_missed`, `measurement_missing`, `measurement_outside_window` | Deterministic checks on the observer's tick: a manual task with no record past its deadline, a measurement task done without a measurement, a measurement the snapshot will leave out by its time. They warn and never pause a stage. |
 | frozen reading | 冻结读数 | `FrozenWatch`, `frozen_reading` alert | A sensor value that stays exactly the same for longer than its threshold. It opens a frozen period in the archive and an alert; it pauses a running stage only if one of the stage's rules depends on the sensor. |
 | observer and notifier | 观察与通知 Agent | `Observer` | Deterministic program for metrics, daily reports, alerts and notifications. It never calls a model. |
 | workflow service | 工作流服务 | `WorkflowService` | The only owner of round, stage and task state. |

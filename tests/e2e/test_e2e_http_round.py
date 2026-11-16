@@ -208,6 +208,9 @@ async def test_round_from_goal_to_delivered_through_http_routes_only(world, site
         "unit": "cm2/day",
     }
     assert await post(client, "/wb/measurements", measurement) == {"id": "m-1"}
+    # the loop's first pass after the end audits the stage once, before any goal is set
+    audited = ScriptedClient([text_reply("the stage matches its run sheet")])
+    assert await runtime.run_agents(audited) == 1
     analysis = {"project_id": project, "round_id": round_id, "goal": "verify the data and report"}
     await post(client, "/wb/goals", analysis)
     orchestrator = delegating("researcher", "freeze the data and publish the report", project)

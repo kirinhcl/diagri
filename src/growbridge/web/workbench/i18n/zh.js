@@ -149,6 +149,7 @@ export default {
   "chat.role.orchestrator": "编排 Agent",
   "chat.role.planner": "计划 Agent",
   "chat.role.researcher": "研究 Agent",
+  "chat.role.auditor": "监察 Agent",
   "chat.role.other": "系统",
   "chat.toolFailed": "（出错）",
   "chat.toolInput": "输入",

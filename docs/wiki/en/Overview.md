@@ -14,7 +14,7 @@ Today the platform drives one kind of hardware: a grow tent with a Spider Farmer
 
 GrowBridge is DiAGRI's device bridge, and a small part of the whole. It is a Python daemon that runs on a Mac or a Raspberry Pi next to the AC5 and holds the single Bluetooth (BLE) connection to it. Through that connection it reads the sensors and the device state, writes settings on request, confirms each write by reading the device back, and keeps a local history in SQLite.
 
-The rest of DiAGRI is built on top of that connection: the workflow service, the control service that checks every write, the archive, the five agents and the research methods. [Architecture overview](Architecture.md) shows the parts.
+The rest of DiAGRI is built on top of that connection: the workflow service, the control service that checks every write, the archive, the agents and the research methods. [Architecture overview](Architecture.md) shows the parts.
 
 Everything ships as one Python package. The package is `spiderfarmer-growbridge`, and the import name and the command are `growbridge` ([`pyproject.toml`](../../../pyproject.toml), [`cli.py`](../../../src/growbridge/cli.py)); the other parts of DiAGRI are sub-packages of it. The names come from the bridge, which was written first. The project is independent and has no affiliation with Spider Farmer.
 
@@ -61,19 +61,20 @@ flowchart LR
 
 This is what the code does today. From the run sheet onwards, every step exists as a service and runs in the end-to-end tests on a simulated AC5: drafting and validating a run sheet, the approval, the execution, alerts and the daily report, the snapshot, the analysis and the report. The beginning goes through the workbench routes: an operator creates the project, the research protocol and the round, sets the model call budget and states the question, which becomes a task of the orchestrator. The console at `/workbench` has forms for it; there is no command. The tests use a scripted model. A real model has also taken a question through whole rounds, on the development workbench with Claude in the three roles: see [Example: a complete round with the model roles](Example-Full-Round-With-Claude.md) and [Status and known limitations](Status-and-Known-Limitations.md).
 
-## The five agents
+## The agents
 
-Three agents are model roles: a language model reads data and hands in drafts. Two are deterministic programs: the same input always produces the same action, and they never call a model.
+Four agents are model roles: a language model reads data and hands in drafts. Two are deterministic programs: the same input always produces the same action, and they never call a model.
 
 | Agent | Kind | In code | What it does |
 | --- | --- | --- | --- |
 | Orchestrator | model role | role `orchestrator` | Takes the user's goal, creates research tasks and hands them to the planner or the researcher |
 | Planner | model role | role `planner` | Designs the experiment: drafts the run sheets, and checks them and the design of the research protocol with the validation tools |
 | Researcher | model role | role `researcher` | Freezes the data, runs the analysis and publishes the report |
+| Auditor | model role | role `auditor` | Reads the records of a running stage once per stage day and at its end, compares them with the run sheet, and files advisory findings |
 | Executor | deterministic program | `ExecutorEngine` | Carries out the approved run sheet and reports stage events |
-| Observer and notifier | deterministic program | `Observer` | Evaluates alert rules and queues notifications and the daily report |
+| Observer and notifier | deterministic program | `Observer` | Evaluates alert rules, runs the stage checks, and queues notifications and the daily report |
 
-The tools each model role may call are listed in `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tools.py). [The five agents](The-Five-Agents.md) describes each one in detail.
+The tools each model role may call are listed in `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tools.py). [The agents](The-Five-Agents.md) describes each one in detail.
 
 ## What the system never does
 
@@ -107,6 +108,6 @@ The full list is on [Status and known limitations](Status-and-Known-Limitations.
 ## See also
 
 - [Architecture document](../../diagri-agent-architecture.zh-CN.md) (Chinese): sections 1 to 4 are the design overview this page summarizes.
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Workflow and state machines](Workflow-and-State-Machines.md)
 - [FAQ](FAQ.md)

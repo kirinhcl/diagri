@@ -1,4 +1,4 @@
-# 五个 Agent
+# Agent 一览
 
 [English](../en/The-Five-Agents.md)
 
@@ -13,12 +13,13 @@
 | 编排 Agent | 模型角色 | 把目标变成研究任务，交给另外两个模型角色。 |
 | 计划 Agent | 模型角色 | 起草运行单并做校验。 |
 | 研究 Agent | 模型角色 | 冻结数据、做分析、发布报告。 |
+| 监察 Agent | 模型角色 | 读取阶段的记录，与运行单对照，提出建议性的发现。 |
 | 执行 Agent | 确定性程序 | 在设备上执行已批准的运行单。 |
 | 观察与通知 Agent | 确定性程序 | 监视读数和运行健康，发出告警和通知。 |
 
-这样划分只依据一条规则：模型可以推理，但能对设备动手的只能是行为固定的程序。同样的输入总是得到同样的动作，所以这些动作可以测试。这条界线靠代码执行，不靠提示词。
+六个 Agent 中四个是模型角色，两个是程序。这样划分只依据一条规则：模型可以推理，但能对设备动手的只能是行为固定的程序。同样的输入总是得到同样的动作，所以这些动作可以测试。这条界线靠代码执行，不靠提示词。
 
-## 三个模型角色共用的规则
+## 四个模型角色共用的规则
 
 - **工具清单是固定的。** [`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS` 列出每个角色的工具。配置项（`roles.<name>.tools`）只能在清单内再做缩减。实际装配的工具与清单不一致时，[`agents/handlers.py`](../../../src/growbridge/agents/handlers.py) 的 `build_role_tools` 直接报错。
 - **控制类工具按名字拒绝。** `CONTROL_TOOLS` 列出了控制阶段和设备的工具名，例如 `start_approved_stage`、`approve_run_sheet`、`set_light`、`run_pump`。请求其中任何一个都会得到 `Denied("model_role")`，而且这些工具根本没有对应的处理函数。
@@ -94,11 +95,35 @@
 
 用任务板交接的理由：写在数据库里的交接，重启后还在，事后也能审计。留在对话里的交接，这两点都做不到。
 
+## 监察 Agent
+
+**做什么用。** 读一个阶段的记录，与计划对照，然后在项目对话里说明哪些相符、哪些有出入、哪些没能检查。
+
+**能读。** 项目状态和运行状态。阶段在冻结窗口内的数据（`inspect_stage_data`，是研究 Agent 同名工具的独立副本，范围限定在所绑定任务的项目）。阶段的记录（`get_stage_records`）：运行单摘要、人工任务各次的状态和记录、标明在窗口内或窗口外的有效测量，以及该阶段尚未解决的告警。留出（holdout）批次的结果被隐藏。每个列表最多 200 条。
+
+**能做。**
+
+| 工具 | 作用 |
+| --- | --- |
+| `get_project_state`、`get_run_status` | 只读的项目状态和运行状态。 |
+| `inspect_stage_data` | 与研究 Agent 相同的只读数据摘要，限定在任务所属项目。 |
+| `get_stage_records` | 上面列出的阶段记录。 |
+| `raise_audit_finding` | 发出一条 `audit_finding` 告警，严重程度只能是 `info` 或 `warning`。它不暂停任何东西，也不改任何东西。 |
+
+监察运行的最后一条回复会作为对话条目存下，角色为「auditor」（控制台里显示为「监察 Agent」）。它不会唤醒其他角色。
+
+**何时运行。** 每次 `run_agents` 开头，`schedule_audits`（[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)）会判断：阶段处于运行中且第 n 个阶段日（n 至少为 1）已过，就开一个监察任务 `audit:{阶段}:day{n}`；阶段结束或停止后，开一个 `audit:{阶段}:end`。同一阶段已有监察在进行时不再开新的；项目没有调用预算或调用次数用完时也不开。因为它在 `run_agents` 里，只有模型循环在运行时阶段才会被监察。一次监察默认最多 8 次模型调用（除非配置另设，否则 `RoleModel(max_calls=8)`），截止时间为一天。调度本身抛出异常时，发出 `audit_schedule` 告警，其余任务照常运行。
+
+**绝对做不了。** 改任何东西：它没有控制类工具，`CONTROL_TOOLS` 也会按名字拒绝。暂停阶段（发现只是建议）。发出高于 `warning` 的告警。
+
+**代码。** [`agents/handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py)，[`agents/roles.py`](../../../src/growbridge/agents/roles.py) 里的 `AUDITOR` 角色，[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py) 里的 `schedule_audits`。
+
 ## 调用预算
 
 | 限制 | 位置 | 到达上限时 |
 | --- | --- | --- |
-| 每个项目的调用次数和费用，三个角色共用 | [`agents/budget.py`](../../../src/growbridge/agents/budget.py) 的 `CallBudget` | 每次模型调用之前先预留额度。额度不够时得到 `Denied("budget")`，任务转到 `needs_attention`。 |
+| 每个项目的调用次数和费用，四个角色共用 | [`agents/budget.py`](../../../src/growbridge/agents/budget.py) 的 `CallBudget` | 每次模型调用之前先预留额度。额度不够时得到 `Denied("budget")`，任务转到 `needs_attention`。 |
+| 每次监察运行 8 次模型调用（默认，仅监察 Agent） | `RoleModel(max_calls=8)`，在 `runtime_agents.py` 中设置 | 运行中止，监察任务转到 `needs_attention`。 |
 | 每次运行最多 20 轮模型调用 | `run_agent` 的 `max_turns` | 任务转到 `needs_attention`。 |
 | 委派深度，默认 2 | `Budget.max_delegation_depth`，由 `TaskBoard.create` 检查 | 新任务被拒绝，拒绝码是 `budget`。 |
 | 每个触发事件只运行一次 | `dispatch_claims` | 任务不会再次运行。 |
@@ -127,13 +152,21 @@
 
 **能读。** 传感器读数和当前阶段。生成日报时，还会读档案里的样本和动作记录，以及工作流服务记下的人工干预。
 
-**能做。** 评估阈值告警规则，维护告警簿（`AlertBook`）。把每条告警按渠道各入队一次，投递失败时按退避间隔重试（`Outbox`）。规则标了 `pause_stage` 时，上报 `ALERT_PAUSE` 阶段事件，由工作流服务把 `running` 的阶段暂停。用模板生成日报，里面的每个数字都来自 `compute_daily_metrics`。用六个探针检查运行健康（`RunHealthCheck`）。
+**能做。** 评估阈值告警规则，维护告警簿（`AlertBook`）。把每条告警按渠道各入队一次，投递失败时按退避间隔重试（`Outbox`）。规则标了 `pause_stage` 时，上报 `ALERT_PAUSE` 阶段事件，由工作流服务把 `running` 的阶段暂停。用模板生成日报，里面的每个数字都来自 `compute_daily_metrics`。用六个探针检查运行健康（`RunHealthCheck`）。运行阶段检查（见下）。
 
 **冻结读数。** `FrozenWatch` 大约每五分钟检查一次已存的样本。某个传感器的数值超过门槛（安全配置里的 `frozen`；默认 temp 120、humi 60、co2 60、tempSoil 240 分钟）都没有变化，就在档案里开一个冻结时段，并发出 `frozen_reading` 告警。如果正在执行的阶段有反馈规则用到这个传感器，或者保护规则用到它，观察者就报告一条 `ALERT_PAUSE` 事件。这项检查本身出错时，会发出一条严重的 `frozen_watch` 告警，不影响其他告警规则。
 
+**阶段检查。** `StageChecks`（[`observer/stage_checks.py`](../../../src/growbridge/observer/stage_checks.py)）是挂在观察者 tick 上的程序，由 `build_observer` 接入。它最多每 300 秒把当前阶段（只要已经开始，不论什么状态）与运行单对照一次，发出警告级告警：
+
+- `task_missed`（键 `stage:task:due`）：某次人工任务已过准时截止时间，却没有记录。有记录后解决。
+- `measurement_missing`（键相同）：某个测量任务已记为完成，但记录 2 小时后，该实验没有任何一条有效测量的时间落在「任务应做时间前一小时」到截止时间之间。
+- `measurement_outside_window`（键 `stage:measurement`）：有一条有效测量，因时间落在窗口之外，快照会把它排除（窗口和 2 小时宽限与冻结时相同）。更正后的测量替换它时解决。
+
+这些检查本身出错时，会发出一条严重的 `stage_checks` 告警（键 `check`），不影响其他告警规则。检查不涉及模型，模型 API 宕机时照常运行。
+
 **绝对做不了。** 写设备。续跑、停止或批准任何东西。往报告里放指标计算之外的数字。
 
-**为什么从不调用模型。** 告警如果依赖模型，模型一宕机，告警恰好也哑了。日报完全由模板生成：`render_daily_report` 可以附带一段模型写的叙述，但 `Runtime._report_text` 从不传入。
+**为什么从不调用模型。**（阶段检查也一样。）告警如果依赖模型，模型一宕机，告警恰好也哑了。日报完全由模板生成：`render_daily_report` 可以附带一段模型写的叙述，但 `Runtime._report_text` 从不传入。
 
 **目前没有启动的部分。** 运行时自带的告警规则清单是空的（`DEFAULT_ALERT_RULES`）；外部监测（`ExternalMonitor`）只在环境变量里两个心跳 URL 都设了时才运行。向真实的 Telegram 和邮件投递也还没有验证过。
 

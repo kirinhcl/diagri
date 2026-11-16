@@ -52,7 +52,7 @@ The workbench is the operator's HTTP interface: JSON routes under `/wb` in [`wor
 
 Two rules give the diagram its shape.
 
-**No model role can reach the device or a stage.** A model can be wrong, and it can be misled by text it reads. So the three model roles only get tools that read data and file drafts. Each role's tool list is fixed in `ROLE_TOOLS`, and every stage or device tool name is refused through `CONTROL_TOOLS`, whatever the configuration says ([`agents/tools.py`](../../../src/growbridge/agents/tools.py)). See [The five agents](The-Five-Agents.md).
+**No model role can reach the device or a stage.** A model can be wrong, and it can be misled by text it reads. So the four model roles only get tools that read data and file drafts. Each role's tool list is fixed in `ROLE_TOOLS`, and every stage or device tool name is refused through `CONTROL_TOOLS`, whatever the configuration says ([`agents/tools.py`](../../../src/growbridge/agents/tools.py)). See [The agents](The-Five-Agents.md).
 
 **Every write to the device goes through one checkpoint.** The executor and the operator both write through the control service, which checks the write right, records the intent, sends, and reads back. See [Control and safety model](Control-and-Safety-Model.md).
 
@@ -130,7 +130,7 @@ The [architecture document](../../diagri-agent-architecture.zh-CN.md) (in Chines
 
 ## See also
 
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Control and safety model](Control-and-Safety-Model.md)
 - [Workflow and state machines](Workflow-and-State-Machines.md)
 - [Data, archive and traceability](Data-Archive-and-Traceability.md)

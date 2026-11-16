@@ -267,5 +267,5 @@ In the daemon that `growbridge serve` builds, no search backend is passed, so `l
 - [Configuration reference](Configuration-Reference.md)
 - [CLI reference](CLI-Reference.md)
 - [Control and safety model](Control-and-Safety-Model.md)
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Glossary](Glossary.md)

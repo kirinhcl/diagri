@@ -5,7 +5,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from growbridge.agents.roles import INTENTS, ORCHESTRATOR, PLANNER, RESEARCHER, Handoff
+from growbridge.agents.roles import AUDITOR, INTENTS, ORCHESTRATOR, PLANNER, RESEARCHER, Handoff
 from growbridge.agents.tools import CONTROL_TOOLS, ROLE_TOOLS
 from growbridge.archive.models import Budget
 
@@ -24,11 +24,11 @@ def handoff(**over) -> Handoff:
     return Handoff(**{**fields, **over})
 
 
-def test_three_roles_named_after_their_tool_sets():
-    assert {r.name for r in (ORCHESTRATOR, PLANNER, RESEARCHER)} == set(ROLE_TOOLS)
+def test_four_roles_named_after_their_tool_sets():
+    assert {r.name for r in (ORCHESTRATOR, PLANNER, RESEARCHER, AUDITOR)} == set(ROLE_TOOLS)
 
 
-@pytest.mark.parametrize("role", [ORCHESTRATOR, PLANNER, RESEARCHER])
+@pytest.mark.parametrize("role", [ORCHESTRATOR, PLANNER, RESEARCHER, AUDITOR])
 def test_prompt_states_duties_limits_and_data_rule(role):
     prompt = role.system.lower()
     assert "data" in prompt and "instruction" in prompt
@@ -64,3 +64,11 @@ def test_handoff_renders_as_json_user_message_with_every_field():
     assert payload["trigger_event_id"] == "evt-1" and payload["correlation_id"] == "corr-1"
     assert payload["budget"]["max_calls"] == 10
     assert payload["parent_task_id"] == "task-1"
+
+
+def test_the_auditor_prompt_points_to_the_tools_that_hold_history_and_interventions():
+    lines = " ".join(AUDITOR.system.split())
+
+    assert "get_run_status for the stage's history" in lines
+    assert "inspect_stage_data for the data's coverage, gaps and intervention counts" in lines
+    assert "get_stage_records for the run sheet, the manual tasks and their records" in lines

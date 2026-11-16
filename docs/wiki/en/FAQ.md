@@ -16,7 +16,7 @@ Detail: [Control and safety model](Control-and-Safety-Model.md), [Manual takeove
 
 Device control goes on. The tick that runs the executor, the protection rules and the observer never calls a model, so an approved stage keeps running to its end ([`runtime.py`](../../../src/growbridge/runtime.py)). A research task whose model call fails moves to `needs_attention` with the reason and raises an alert; it does not run again by itself ([`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py)). If the model client cannot be built when the daemon starts, the daemon raises an alert and serves without model roles.
 
-Detail: [The five agents](The-Five-Agents.md), [Troubleshooting runbook](Troubleshooting-Runbook.md).
+Detail: [The agents](The-Five-Agents.md), [Troubleshooting runbook](Troubleshooting-Runbook.md).
 
 ### Why do `set_light` and the dashboard controls stop working once DiAGRI is on?
 

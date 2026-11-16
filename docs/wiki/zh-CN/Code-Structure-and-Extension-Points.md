@@ -35,7 +35,7 @@
 | [`observer/`](../../../src/growbridge/observer) | `Observer`：告警规则和告警簿、通知发件箱和通知渠道、每日指标和日报、运行健康检查与心跳。 |
 | [`planning/`](../../../src/growbridge/planning) | 纯函数：`design.py` 做实验设计检查，`validate.py` 做运行单校验。 |
 | [`research/`](../../../src/growbridge/research) | 分析库：统计方法、确认性分析的关口、`HoldoutRegistry`、报告发布和代码沙箱。 |
-| [`agents/`](../../../src/growbridge/agents) | 三个模型角色：提示词在 `roles.py`，工具注册表在 `tools.py`，工具处理函数在 `handlers*.py`，此外还有 Agent 循环、`Dispatcher`、`CallBudget`，以及 `llm.py` 里的模型客户端。 |
+| [`agents/`](../../../src/growbridge/agents) | 四个模型角色：提示词在 `roles.py`，工具注册表在 `tools.py`，工具处理函数在 `handlers*.py`，此外还有 Agent 循环、`Dispatcher`、`CallBudget`，以及 `llm.py` 里的模型客户端。 |
 | [`compute/`](../../../src/growbridge/compute) | `ComputeService`：额度检查和作业跟踪。`ComputeBackend` 协议。`FirecrestBackend`，没有对 CSC 验证过。 |
 | [`workbench/`](../../../src/growbridge/workbench) | 操作员使用的 HTTP 路由，都在 `/wb` 下：会话、阶段控制、人工写入和读取在 `api.py`，发起和掌控一轮研究在 `rounds.py`；控制台的读取路由（待办、项目、读数、测量、历史、安全配置）在 `reads.py`。`auth.py` 里是操作员凭据、会话和入口的判定。 |
 | [`sim/`](../../../src/growbridge/sim) | 模拟器和测试数据，测试和 `growbridge simulate` 都用它。 |
@@ -180,6 +180,6 @@ grep -rnE '^[[:space:]]*(from|import) +growbridge\.' src/growbridge/executor
 - [架构总览](Architecture.md)
 - [设计决策记录](Design-Decisions.md)
 - [控制与安全模型](Control-and-Safety-Model.md)
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [开发环境、测试与 CI](Development-Setup-Testing-and-CI.md)
 - [术语表](Glossary.md)

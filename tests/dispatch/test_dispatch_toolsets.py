@@ -14,8 +14,15 @@ def test_role_tool_list_equals_the_registry(env, role):
     assert len(tools) == len(ROLE_TOOLS[role])
 
 
-def test_only_the_three_model_roles_get_tools(env):
-    assert set(env.tools()) == {"orchestrator", "planner", "researcher"}
+def test_only_the_four_model_roles_get_tools(env):
+    assert set(env.tools()) == {"orchestrator", "planner", "researcher", "auditor"}
+
+
+def test_the_auditor_gets_exactly_its_tools_and_no_control_tool(env):
+    names = {tool.name for tool in env.tools()["auditor"]}
+
+    assert names == ROLE_TOOLS["auditor"]
+    assert names.isdisjoint(CONTROL_TOOLS)
 
 
 def test_no_handler_is_a_control_tool(env):
