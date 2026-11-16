@@ -67,7 +67,7 @@ The system prompts are in [`agents/roles.py`](../../../src/growbridge/agents/rol
 
 | Tool | What it does |
 | --- | --- |
-| `inspect_stage_data` | Read-only summary of a started stage's data over the freeze window: coverage, gaps, trusted and untrusted samples, channel ranges, measurements per metric (held-out ones only counted), existing snapshots. Lets the researcher check the data before freezing. |
+| `inspect_stage_data` | Read-only summary of a started stage's data over the freeze window: coverage, gaps, trusted and untrusted samples, channel ranges, measurements per metric (held-out ones only counted), the measurements left outside the window (ones timed before the stage started belong to an earlier stage and are only counted, as `measurements_before_stage`), existing snapshots. Lets the researcher check the data before freezing. |
 | `freeze_dataset` | Freezes a stage's data into a verified snapshot. If the snapshot is complete, moves the round from `data_verification` to `analysis`. |
 | `run_local_analysis` | Runs a script on a snapshot in the sandbox. The result is always labelled exploratory. |
 | `submit_compute_job`, `fetch_compute_artifacts` | Submit a job from a registered template and fetch its outputs. Return `unavailable` unless the compute service is configured; inputs must be verified snapshots of the task's own project. |
@@ -99,7 +99,7 @@ The reason for the task board: a hand-off that lives in a database row survives 
 
 **For.** Read the records of one stage and compare them with its plan, then say in the project conversation what matches, what deviates and what it could not check.
 
-**May read.** The project state and the run status. A stage's data over the freeze window (`inspect_stage_data`, its own copy of the researcher's tool, scoped to the bound task's project). The stage's records (`get_stage_records`): the run sheet summary, the manual-task occurrences with their status and record, the current measurements marked inside or outside the window, and the open alerts of the stage. Outcomes of held-out batches are hidden. Each list holds up to 200 entries.
+**May read.** The project state and the run status. A stage's data over the freeze window (`inspect_stage_data`, its own copy of the researcher's tool, scoped to the bound task's project). The stage's records (`get_stage_records`): the run sheet summary, the manual-task occurrences with their status and record, the current measurements timed at or after the stage's start, marked inside or outside the window, and the open alerts of the stage. Every stage of a round shares one experiment, so a measurement timed before the stage started is an earlier stage's: it is not listed, only counted in `measurements_before_stage`. Outcomes of held-out batches are hidden. Each list holds up to 200 entries.
 
 **May do.**
 

@@ -193,12 +193,13 @@ Settling marks the attempt `failed` and removes its remote directory. A larger l
 | `stage_checks` (key `check`) | The stage checks themselves are failing. Critical. | Read the log. It resolves after a completed check. The other alert rules still run. |
 | `audit_finding` | The auditor found something a person should act on. Info or warning; it pauses nothing. The message says what. | Read the finding and the auditor's note in the project conversation, then act on the stage yourself if needed. |
 | `audit_schedule` (key `schedule`) | Scheduling the audits raised an error. The other model tasks still ran. | Read the log. Audits resume when scheduling works. |
+| `audit_task` (key `audit:stage`) | An auditor run failed or ended needing attention. Warning, one per stage: later failed audits of the same stage add to its count. It pauses nothing; stage execution is not affected. | Read the log and the task the message names, and check the SDK and credentials. It resolves when an audit of that stage ends `done`, or once the stage is no longer the active one. |
 | `stage_waiting` | The system paused a stage or put it into the recovery check. The message names the event and its detail. | Find the event in the sections above. The alert resolves when the stage leaves that state. |
 | `backup`, `backup_unconfigured` | A backup failed, or no `backup_dir` is set. | [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
 | `notify_unconfigured` | No notification channel is configured. Alerts are recorded but not sent. | [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
 | `monitor_unconfigured` | Neither heartbeat URL is set, so nobody is told if the host or the run stops. | Set `GROWBRIDGE_HEARTBEAT_HOST_URL` and `GROWBRIDGE_HEARTBEAT_RUN_URL`; see [Notifications, daily reports and backup](Notifications-Reports-and-Backup.md). |
 | `external_monitor` (key `host` or `run`) | A heartbeat or failure signal was not delivered. | Check the monitor URL and the network; see the same page. |
-| `model_client`, `agent_task`, `task_deadline` | Model roles are off, or a model task failed or is overdue. Stage execution is not affected. | Check the SDK and credentials. There is **no route** to settle a task. |
+| `model_client`, `agent_task`, `task_deadline` | Model roles are off, or a model task failed or is overdue (a failed audit is `audit_task`, above). Stage execution is not affected. | Check the SDK and credentials. There is **no route** to settle a task. |
 
 **Latched watchdog alerts.** `pump_unreadable` and `pump_watchdog` are stored again every 5 minutes for as long as their cause is there. A read mark is kept, but an alert closed by hand (resolved in the database) while the cause is still there comes back within 5 minutes as a new alert, with a new notification. Fix the cause instead; the alert then resolves by itself. See [Control and safety model](Control-and-Safety-Model.md).
 

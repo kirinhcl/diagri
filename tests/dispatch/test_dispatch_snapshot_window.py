@@ -78,3 +78,20 @@ async def test_inspect_lists_the_measurements_left_outside_the_window(env):
     assert body["measurements_outside_window"] == [
         {"id": "m-later", "metric": "canopy_area_growth", "measured_at": end + GRACE + 60}
     ]
+
+
+async def test_inspect_counts_measurements_before_the_stage_start_and_does_not_list_them(env):
+    # every stage of a round shares one experiment: an earlier stage's measurement is not
+    # this stage's to judge
+    await _running_stage(env)
+    end = _ended(env)
+    earlier = _measurement("experiment-stage-1", 3.0, "m-earlier", measured_at=START - 60)
+    late = _measurement("experiment-stage-1", 3.0, "m-later", measured_at=end + GRACE + 60)
+    env.archive.add_measurement(earlier)
+    env.archive.add_measurement(late)
+
+    body = _payload(await _inspect(env))
+
+    assert [m["id"] for m in body["measurements_outside_window"]] == ["m-later"]
+    assert body["measurements_outside_count"] == 1
+    assert body["measurements_before_stage"] == 1

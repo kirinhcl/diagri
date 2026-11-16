@@ -29,9 +29,12 @@ MEASURE_DUE = DAY_START + 10 * HOUR
 
 
 class FakeStages:
-    def __init__(self, started_at: float | None = DAY_START, state=StageState.RUNNING):
+    def __init__(
+        self, started_at: float | None = DAY_START, state=StageState.RUNNING, stage_id=STAGE
+    ):
         self.started_at = started_at
         self.state = state
+        self.stage_id = stage_id
         self.ended_at: float | None = None
         self.active = True
 
@@ -46,7 +49,7 @@ class FakeStages:
             ),
         )
         return StageRuntime(
-            stage_id=STAGE,
+            stage_id=self.stage_id,
             experiment_id="e1",
             project_id="p1",
             state=self.state,
@@ -260,6 +263,41 @@ async def test_a_stage_not_yet_started_keeps_its_own_alerts_and_closes_older_one
     await rig.checks.tick()
 
     assert set(rig.open_alerts()) == {(AUDIT_FINDING, f"{STAGE}:abc")}
+
+
+async def test_a_stage_id_with_a_colon_keeps_its_own_alerts(db, clock, tmp_path):
+    # not started, so only the sweep runs and no check re-evaluates the stage's own alerts
+    stages = FakeStages(started_at=None, state=StageState.PENDING_REVIEW, stage_id="round:1")
+    rig = Rig(db, clock, tmp_path, stages)
+    _raise_for(rig, "round:1")
+    _raise_for(rig, "round")  # the part before the colon is another stage
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert set(rig.open_alerts()) == {(kind, "round:1:x") for kind in STAGE_KINDS}
+
+
+async def test_a_failed_audit_warning_closes_once_its_stage_is_no_longer_active(rig):
+    # raised by the runtime when an auditor run fails, keyed "audit:<stage id>"
+    rig.book.raise_alert("audit_task", "audit:st0", "warning", "an older stage's audit failed")
+    rig.book.raise_alert("audit_task", "audit:st10", "warning", "shares the prefix, other stage")
+    rig.book.raise_alert("audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed")
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert set(rig.open_alerts()) == {("audit_task", f"audit:{STAGE}")}
+
+
+async def test_with_no_active_stage_a_failed_audit_warning_is_resolved(rig):
+    rig.book.raise_alert("audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed")
+    rig.stages.active = False
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert rig.open_alerts() == {}
 
 
 def _missing(rig):

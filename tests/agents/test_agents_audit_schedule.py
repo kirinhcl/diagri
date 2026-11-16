@@ -59,6 +59,15 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         calls.set(PROJECT, Budget(max_calls=50, max_cost=100.0))
     stages = Stages(clock.now() if started else None, state)
     book = AlertBook(db, clock)
+
+    def resolve_alert(kind, key):
+        # Runtime.resolve_alert's contract: never raises, False when not stored
+        try:
+            book.resolve(kind, key)
+        except Exception:
+            return False
+        return True
+
     return SimpleNamespace(
         workflow=stages,
         tasks=board,
@@ -68,6 +77,7 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         alert=lambda kind, key, message, severity="critical": book.raise_alert(
             kind, key, severity, message
         ),
+        resolve_alert=resolve_alert,
     )
 
 
@@ -233,6 +243,30 @@ class Raises:
         raise RuntimeError("model unreachable")
 
 
+class Finishes:
+    """A dispatcher whose every run ends done, as a model run that finished does."""
+
+    def __init__(self, board):
+        self.board = board
+
+    async def run_task(self, task_id):
+        return self.board.transition(task_id, TaskState.DONE, f"done-{task_id}", "run finished")
+
+
+async def test_an_alert_store_that_cannot_close_the_schedule_alert_does_not_stop_the_runs(db):
+    runtime = rig(db, started=False)
+    task = runtime.tasks.create(make_task("planner", "ev-plan", project_id=PROJECT))
+
+    def locked(kind, key):
+        raise RuntimeError("database is locked")
+
+    runtime.book.resolve = locked
+
+    await run_agents(runtime, NeedsAttention(runtime.tasks))
+
+    assert runtime.tasks.get(task.id).state is TaskState.NEEDS_ATTENTION
+
+
 async def test_an_audit_that_fails_on_two_stage_days_is_one_warning(db):
     runtime = rig(db)
     dispatcher = NeedsAttention(runtime.tasks)
@@ -244,6 +278,19 @@ async def test_an_audit_that_fails_on_two_stage_days_is_one_warning(db):
     (alert,) = runtime.book.open()
     assert (alert.kind, alert.key) == ("audit_task", f"audit:{STAGE}")
     assert (alert.severity, alert.count) == ("warning", 2)
+
+
+async def test_an_audit_that_ends_done_closes_its_stages_failed_audit_warning(db):
+    runtime = rig(db)
+    runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+    await run_agents(runtime, NeedsAttention(runtime.tasks))
+    assert ("audit_task", f"audit:{STAGE}") in open_alerts(runtime)
+
+    runtime.clock.wall += AUDIT_DAY_SECONDS
+    await run_agents(runtime, Finishes(runtime.tasks))
+
+    assert len(audits(runtime)) == 2
+    assert open_alerts(runtime) == {}
 
 
 async def test_an_audit_run_that_raises_is_a_warning_not_a_critical_alert(db):

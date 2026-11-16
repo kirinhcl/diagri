@@ -16,6 +16,7 @@ from growbridge.agents.tools import ROLE_TOOLS, Tool
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Budget, ResearchTask
 from growbridge.config import RoleModel
+from growbridge.observer.stage_checks import AUDIT_TASK, audit_task_key
 from growbridge.planning.window import data_window
 from growbridge.ports import Denied, StageRuntime
 from growbridge.workflow.states import StageState, TaskState
@@ -127,8 +128,14 @@ def _report_failure(runtime: Any, task: ResearchTask, message: str) -> None:
     if task.owner_role != AUDIT_ROLE:
         runtime.alert("agent_task", task.id, message)
         return
+    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning")
+
+
+def _audit_key(task: ResearchTask) -> str:
+    """The failed-audit warning an audit task reports to: its stage's, or its own when it names
+    no stage."""
     stages = (ref[len(STAGE_REF) :] for ref in task.input_refs if ref.startswith(STAGE_REF))
-    runtime.alert("audit_task", f"audit:{next(stages, task.id)}", message, "warning")
+    return audit_task_key(next(stages, task.id))
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:
@@ -139,7 +146,7 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
         log.exception("audit scheduling failed")
         runtime.alert("audit_schedule", "schedule", f"{type(error).__name__}: {error}")
     else:
-        runtime.book.resolve("audit_schedule", "schedule")
+        runtime.resolve_alert("audit_schedule", "schedule")
     finished = 0
     for task in runtime.tasks.open_tasks(ROLE_TOOLS):
         try:
@@ -149,7 +156,11 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             _report_failure(runtime, task, f"{task.id}: {type(error).__name__}: {error}")
             continue
         finished += run is not None
+        state = runtime.tasks.get(task.id).state
         # whether the run was refused or ended without delivering
-        if runtime.tasks.get(task.id).state is TaskState.NEEDS_ATTENTION:
+        if state is TaskState.NEEDS_ATTENTION:
             _report_failure(runtime, task, f"model task {task.id} needs attention")
+        elif state is TaskState.DONE and task.owner_role == AUDIT_ROLE:
+            # an audit that finished shows the stage's audits work again
+            runtime.resolve_alert(AUDIT_TASK, _audit_key(task))
     return finished
