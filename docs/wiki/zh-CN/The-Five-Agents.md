@@ -112,7 +112,7 @@
 
 监察运行的最后一条回复会作为对话条目存下，角色为「auditor」（控制台里显示为「监察 Agent」）。它不会唤醒其他角色。
 
-**何时运行。** 每次 `run_agents` 开头，`schedule_audits`（[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)）会判断：阶段处于运行中且第 n 个阶段日（n 至少为 1）已过，就开一个监察任务 `audit:{阶段}:day{n}`；阶段结束或停止后，开一个 `audit:{阶段}:end`。同一阶段已有监察在进行时不再开新的；项目没有调用预算或调用次数用完时也不开。因为它在 `run_agents` 里，只有模型循环在运行时阶段才会被监察。一次监察默认最多 6 次模型调用（除非配置另设，否则 `RoleModel(max_calls=6)`），截止时间为一天。调度本身抛出异常时，发出 `audit_schedule` 告警，其余任务照常运行。
+**何时运行。** 每次 `run_agents` 开头，`schedule_audits`（[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)）会判断：阶段处于运行中且第 n 个阶段日（n 至少为 1）已过，就开一个监察任务 `audit:{阶段}:day{n}`；阶段结束或停止后，开一个 `audit:{阶段}:end`。同一阶段已有监察在进行时不再开新的；项目没有调用预算或调用次数用完时也不开。因为它在 `run_agents` 里，只有模型循环在运行时阶段才会被监察。一次监察默认最多 8 次模型调用（除非配置另设，否则 `RoleModel(max_calls=8)`），截止时间为一天。调度本身抛出异常时，发出 `audit_schedule` 告警，其余任务照常运行。
 
 **绝对做不了。** 改任何东西：它没有控制类工具，`CONTROL_TOOLS` 也会按名字拒绝。暂停阶段（发现只是建议）。发出高于 `warning` 的告警。
 
@@ -123,7 +123,7 @@
 | 限制 | 位置 | 到达上限时 |
 | --- | --- | --- |
 | 每个项目的调用次数和费用，四个角色共用 | [`agents/budget.py`](../../../src/growbridge/agents/budget.py) 的 `CallBudget` | 每次模型调用之前先预留额度。额度不够时得到 `Denied("budget")`，任务转到 `needs_attention`。 |
-| 每次监察运行 6 次模型调用（默认，仅监察 Agent） | `RoleModel(max_calls=6)`，在 `runtime_agents.py` 中设置 | 运行中止，监察任务转到 `needs_attention`。 |
+| 每次监察运行 8 次模型调用（默认，仅监察 Agent） | `RoleModel(max_calls=8)`，在 `runtime_agents.py` 中设置 | 运行中止，监察任务转到 `needs_attention`。 |
 | 每次运行最多 20 轮模型调用 | `run_agent` 的 `max_turns` | 任务转到 `needs_attention`。 |
 | 委派深度，默认 2 | `Budget.max_delegation_depth`，由 `TaskBoard.create` 检查 | 新任务被拒绝，拒绝码是 `budget`。 |
 | 每个触发事件只运行一次 | `dispatch_claims` | 任务不会再次运行。 |

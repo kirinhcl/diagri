@@ -73,7 +73,7 @@ The existing check in `build_role_tools` keeps every control tool out of the aud
 - `audit:{stage_id}:day{n}` once stage day `n` has passed while the stage is `running`;
 - `audit:{stage_id}:end` once the stage has ended.
 
-The trigger id makes a repeat return the existing task. While an audit task of that stage is open, no new one is created: the next audit covers everything since the last one, so a fast-forwarded stage gets a handful of audits, not one per day. Each audit task gets a budget of `AUDIT_MAX_CALLS` (6) model calls from the project budget and a deadline of one day, after which the existing expiry step closes it.
+The trigger id makes a repeat return the existing task. While an audit task of that stage is open, no new one is created: the next audit covers everything since the last one, so a fast-forwarded stage gets a handful of audits, not one per day. Each audit task gets a budget of `AUDIT_MAX_CALLS` (8) model calls from the project budget and a deadline of one day, after which the existing expiry step closes it.
 
 **Conversation.** The auditor's final reply is its note in the project conversation, under the role name "auditor" (console: "Auditor" / "监察"). It wakes no other role: a finding reaches the operator as an alert and in the conversation.
 
@@ -103,7 +103,7 @@ A separate branch (`fix/pr4-review-findings`) is fixing the PR 4 review findings
 
 - The console shows the alert messages, not per-kind labels. The only console change is the conversation label "Auditor" / "监察 Agent".
 - The data window follows the stage's actual end (taken from the fix branch), not only its planned end.
-- The 6-call cap is the auditor's default role limit (`RoleModel(max_calls=6)`). The per-task call budget is not enforced.
+- The call cap is the auditor's default role limit (`RoleModel(max_calls=8)`). The per-task call budget is not enforced. The cap was raised from 6 to 8 after the final review (ruling R11), to leave slack for a refused or repeated call.
 - An audit left in `needs_attention` does not block the next one.
 - A stage judges only measurements timed at or after its own start (ruling R6). All stages of a round share one experiment and a measurement carries no stage id, so earlier ones are an earlier stage's: they raise no `measurement_outside_window`, and `get_stage_records` leaves them out of "measurements" and reports their number as "measurements_before_stage".
 - The stage alerts close when their stage is no longer active (ruling R7). On each check, open `task_missed`, `measurement_missing`, `measurement_outside_window` and `audit_finding` alerts whose key names another stage than the active one are resolved; with no active stage all of them are. The `audit_schedule` alert resolves after a scheduling pass that did not fail. The `audit_finding` kind name lives in `observer/stage_checks.py`, so the observer does not import the agents package.

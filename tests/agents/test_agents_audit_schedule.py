@@ -274,3 +274,8 @@ async def test_another_roles_failing_task_is_still_a_critical_agent_task_alert(d
 
     (alert,) = runtime.book.open()
     assert (alert.kind, alert.key, alert.severity) == ("agent_task", task.id, "critical")
+
+
+def test_an_audit_has_eight_model_calls_by_default():
+    # raised from 6 after the final review, to leave slack for a refused or repeated call
+    assert AUDIT_MAX_CALLS == 8

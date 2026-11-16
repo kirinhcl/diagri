@@ -72,7 +72,7 @@ There are 9 fields. Each key of `roles` holds one `RoleModel`, written as a `[ro
 | `input_per_mtok` | number or unset | unset | 0 or more | Price of `model` in USD per million input tokens, used for the cost budget. Set it together with `output_per_mtok`. Required when `model` is not the default model. |
 | `output_per_mtok` | number or unset | unset | 0 or more | Price of `model` in USD per million output tokens. Set it together with `input_per_mtok`. |
 
-Role names that are read are `orchestrator`, `planner`, `researcher` and `auditor` (`ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tools.py)). Other keys pass validation and are ignored. When `roles` has at least one key, a role that is not listed runs with the defaults above, except the auditor, whose default is the default model with at most 6 model calls per audit (`AUDIT_MAX_CALLS`); a `[roles.auditor]` entry replaces that default, so set `max_calls` there if 6 is not what you want (`make_dispatcher` in [`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)).
+Role names that are read are `orchestrator`, `planner`, `researcher` and `auditor` (`ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tools.py)). Other keys pass validation and are ignored. When `roles` has at least one key, a role that is not listed runs with the defaults above, except the auditor, whose default is the default model with at most 8 model calls per audit (`AUDIT_MAX_CALLS`); a `[roles.auditor]` entry replaces that default, so set `max_calls` there if 8 is not what you want (`make_dispatcher` in [`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)).
 
 ## Job template files
 

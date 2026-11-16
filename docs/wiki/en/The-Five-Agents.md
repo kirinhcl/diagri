@@ -112,7 +112,7 @@ The reason for the task board: a hand-off that lives in a database row survives 
 
 The final reply of an auditor run is stored as a conversation entry under the role "auditor" (shown as "Auditor" in the console). It wakes no other role.
 
-**When it runs.** At the start of each `run_agents` pass, `schedule_audits` ([`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)) opens an auditor task `audit:{stage}:day{n}` once stage day n (n of at least 1) has passed while the stage is running, and `audit:{stage}:end` once the stage has ended or stopped. It does not open one while another audit of the same stage is in progress, nor for a project with no call budget or no calls left. Because it lives in `run_agents`, a stage is audited only while the model loop runs. An audit may use 6 model calls by default (`RoleModel(max_calls=6)` unless the configuration sets another) and has a one-day deadline. If scheduling raises an exception, an `audit_schedule` alert is raised and the other tasks still run.
+**When it runs.** At the start of each `run_agents` pass, `schedule_audits` ([`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)) opens an auditor task `audit:{stage}:day{n}` once stage day n (n of at least 1) has passed while the stage is running, and `audit:{stage}:end` once the stage has ended or stopped. It does not open one while another audit of the same stage is in progress, nor for a project with no call budget or no calls left. Because it lives in `run_agents`, a stage is audited only while the model loop runs. An audit may use 8 model calls by default (`RoleModel(max_calls=8)` unless the configuration sets another) and has a one-day deadline. If scheduling raises an exception, an `audit_schedule` alert is raised and the other tasks still run.
 
 **Can never.** Change anything: it has no control tool, and `CONTROL_TOOLS` would refuse one by name. Pause a stage (a finding is advisory). Raise an alert above `warning`.
 
@@ -123,7 +123,7 @@ The final reply of an auditor run is stored as a conversation entry under the ro
 | Limit | Where | What happens at the limit |
 | --- | --- | --- |
 | Calls and cost per project, shared by all four roles | `CallBudget` in [`agents/budget.py`](../../../src/growbridge/agents/budget.py) | Each model call is reserved before it is made. `Denied("budget")`; the task goes to `needs_attention`. |
-| 6 model calls per audit run (default, auditor only) | `RoleModel(max_calls=6)`, set in `runtime_agents.py` | The run stops; the audit task goes to `needs_attention`. |
+| 8 model calls per audit run (default, auditor only) | `RoleModel(max_calls=8)`, set in `runtime_agents.py` | The run stops; the audit task goes to `needs_attention`. |
 | 20 model turns per run | `max_turns` in `run_agent` | The task goes to `needs_attention`. |
 | Delegation depth, 2 by default | `Budget.max_delegation_depth`, checked by `TaskBoard.create` | The new task is refused with `Denied("budget")`. |
 | One run per trigger | `dispatch_claims` | The task is not run again. |

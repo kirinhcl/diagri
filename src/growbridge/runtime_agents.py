@@ -22,7 +22,7 @@ from growbridge.workflow.states import StageState, TaskState
 
 log = logging.getLogger(__name__)
 
-AUDIT_MAX_CALLS = 6
+AUDIT_MAX_CALLS = 8
 AUDIT_DAY_SECONDS = 86400.0
 AUDIT_DEADLINE_SECONDS = 86400.0
 AUDIT_ROLE = "auditor"
