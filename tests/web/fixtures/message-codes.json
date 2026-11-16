@@ -1,5 +1,89 @@
 {
-  "alert": {},
+  "alert": {
+    "data_gap": {
+      "params": [
+        "sensor"
+      ],
+      "action": true
+    },
+    "threshold": {
+      "params": [
+        "sensor",
+        "op",
+        "value",
+        "duration_seconds",
+        "rule"
+      ],
+      "action": true
+    },
+    "frozen_watch": {
+      "params": [],
+      "action": true
+    },
+    "stage_checks": {
+      "params": [],
+      "action": true
+    },
+    "frozen_reading": {
+      "params": [
+        "sensor",
+        "value"
+      ],
+      "action": true
+    },
+    "task_missed": {
+      "params": [
+        "stage_id",
+        "task_id",
+        "task_kind",
+        "due_at"
+      ],
+      "action": true
+    },
+    "measurement_missing": {
+      "params": [
+        "stage_id",
+        "task_id",
+        "window_start",
+        "window_end",
+        "timezone"
+      ],
+      "action": true
+    },
+    "measurement_outside_window": {
+      "params": [
+        "stage_id",
+        "measurement_id",
+        "metric",
+        "measured_at"
+      ],
+      "action": true
+    },
+    "pump_unexpected_off": {
+      "params": [],
+      "action": true
+    },
+    "pump_unexpected_interlocked": {
+      "params": [],
+      "action": true
+    },
+    "pump_unexpected_failed": {
+      "params": [],
+      "action": true
+    },
+    "pump_unreadable": {
+      "params": [],
+      "action": true
+    },
+    "pump_watchdog_step": {
+      "params": [],
+      "action": true
+    },
+    "pump_watchdog_record": {
+      "params": [],
+      "action": true
+    }
+  },
   "finding": {},
   "receipt": {},
   "task_end": {},

@@ -101,3 +101,30 @@ def test_codes_at_calls_finds_literal_codes(tmp_path: Path) -> None:
     )
     found = codes_at_calls(tmp_path, {"raise_alert"})
     assert found == [(str(tmp_path / "m.py"), 1, "a")]
+
+
+def test_observer_and_watchdog_alerts_name_registered_codes() -> None:
+    names = {"raise_alert", "_alert", "alert", "_raise", "_enter", "_set"}
+    src = REPO / "src" / "growbridge"
+    found = codes_at_calls(src / "observer", names)
+    found += [
+        hit for hit in codes_at_calls(src / "executor", names) if hit[0].endswith("watchdog.py")
+    ]
+    seen = {code for _, _, code in found}
+    assert seen == {
+        "data_gap",
+        "threshold",
+        "frozen_watch",
+        "stage_checks",
+        "frozen_reading",
+        "task_missed",
+        "measurement_missing",
+        "measurement_outside_window",
+        "pump_unexpected_off",
+        "pump_unexpected_interlocked",
+        "pump_unexpected_failed",
+        "pump_unreadable",
+        "pump_watchdog_step",
+        "pump_watchdog_record",
+    }
+    assert seen <= set(CODES["alert"])

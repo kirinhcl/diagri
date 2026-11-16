@@ -63,10 +63,12 @@ def make():
     alerts: list[tuple[str, str, str]] = []
     resolved: list[tuple[str, str]] = []
     texts: list[str] = []
+    coded: list[tuple[str, str, str | None, dict | None]] = []
 
-    def alert(kind, key, message, severity):
+    def alert(kind, key, message, severity, *, code=None, params=None):
         alerts.append((kind, key, severity))
         texts.append(message)
+        coded.append((kind, key, code, params))
         return True  # written
 
     def resolve(kind, key):
@@ -75,6 +77,7 @@ def make():
 
     dog.alert = alert
     dog.resolve = resolve
+    dog.coded = coded  # type: ignore[attr-defined]
     return control, stages, clock, dog, alerts, resolved, texts
 
 
@@ -82,11 +85,11 @@ def failing_first(hook, kind):
     """``hook``, except that its first call for ``kind`` reports a failed write."""
     failed: list[str] = []
 
-    def wrapped(*args):
+    def wrapped(*args, **kwargs):
         if args[0] == kind and not failed:
             failed.append(kind)
             return False  # what the runtime's hook reports after swallowing a write error
-        return hook(*args)
+        return hook(*args, **kwargs)
 
     return wrapped
 
@@ -304,16 +307,15 @@ async def test_a_step_failure_is_resolved_only_by_a_step_that_read_the_pump():
     assert ("pump_watchdog", "step") in resolved
 
 
-async def test_a_message_that_changes_every_tick_is_raised_at_most_once_a_minute():
-    _, _, clock, dog, alerts, _, texts = make()
+async def test_a_message_that_changes_every_tick_is_not_stored_again_while_its_code_is_the_same():
+    _, _, clock, dog, alerts, _, _ = make()
     dog.step_failed(RuntimeError("one"))
     clock.mono += 59.0
     dog.step_failed(RuntimeError("two"))
-    assert len(alerts) == 1
     clock.mono += 1.0
     dog.step_failed(RuntimeError("three"))
-    assert len(alerts) == 2 and "three" in texts[-1]
-    clock.mono += 1.0
+    assert len(alerts) == 1
+    clock.mono += 240.0
     dog.step_failed(RuntimeError("four"))
     assert len(alerts) == 2
 
@@ -361,3 +363,73 @@ async def test_a_resolve_that_failed_is_tried_again_on_the_next_good_step():
     assert resolved.count(("pump_unreadable", "pump")) == 1
     await dog.step(FakeStage())
     assert resolved.count(("pump_unreadable", "pump")) == 1
+
+
+async def test_pump_unexpected_off_alert_carries_its_code():
+    control, _, _, dog, _, _, _ = make()
+    control.reading = on(10.0)
+    await dog.step(FakeStage())
+    assert dog.coded == [("pump_unexpected", "pump", "pump_unexpected_off", {})]
+
+
+async def test_pump_unexpected_interlocked_alert_carries_its_code():
+    control, _, _, dog, _, _, _ = make()
+    control.reading = on(10.0)
+    control.result = False
+    control.interlock_after = True
+    await dog.step(FakeStage())
+    assert dog.coded == [("pump_unexpected", "pump", "pump_unexpected_interlocked", {})]
+
+
+async def test_pump_unexpected_failed_alert_carries_its_code():
+    control, _, _, dog, _, _, _ = make()
+    control.reading = on(10.0)
+    control.result = False
+    await dog.step(FakeStage())
+    assert dog.coded == [("pump_unexpected", "pump", "pump_unexpected_failed", {})]
+
+
+async def test_pump_unreadable_alert_carries_its_code():
+    control, _, _, dog, _, _, _ = make()
+    control.reading = PumpReading(on=None, at=100.0, mono=10.0)
+    await dog.step(FakeStage())
+    assert dog.coded == [("pump_unreadable", "pump", "pump_unreadable", {})]
+
+
+async def test_pump_watchdog_step_alert_carries_its_code_and_no_error_text():
+    _, _, _, dog, _, _, _ = make()
+    dog.step_failed(RuntimeError("secret detail"))
+    assert dog.coded == [("pump_watchdog", "step", "pump_watchdog_step", {})]
+
+
+async def test_pump_watchdog_record_alert_carries_its_code():
+    control, stages, _, dog, _, _, _ = make()
+
+    def broken(*_):
+        raise RuntimeError("disk full")
+
+    stages.record_intervention = broken
+    control.reading = on(10.0)
+    await dog.step(FakeStage())
+    assert ("pump_watchdog", "intervention", "pump_watchdog_record", {}) in dog.coded
+
+
+async def test_the_watchdog_restores_an_alert_only_when_its_code_or_params_change():
+    _, _, clock, dog, alerts, _, _ = make()
+    enter = dog._enter
+    enter("pump_unexpected", "pump", "text one", "critical", "pump_unexpected_off")
+    clock.mono += 59.0
+    enter("pump_unexpected", "pump", "text two", "critical", "pump_unexpected_off")
+    assert len(alerts) == 1  # the same shape inside a minute; the message is not compared
+    clock.mono += 1.0
+    enter("pump_unexpected", "pump", "text one", "critical", "pump_unexpected_interlocked")
+    assert len(alerts) == 2  # a new code is stored at once
+    enter(
+        "pump_unexpected", "pump", "text one", "critical", "pump_unexpected_interlocked", {"n": 2}
+    )
+    assert len(alerts) == 3  # so are new params
+    assert [c[2] for c in dog.coded] == [
+        "pump_unexpected_off",
+        "pump_unexpected_interlocked",
+        "pump_unexpected_interlocked",
+    ]

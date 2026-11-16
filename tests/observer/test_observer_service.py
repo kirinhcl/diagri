@@ -274,3 +274,47 @@ async def test_the_stage_check_alert_resolves_after_a_completed_check(rig):
     assert ("stage_checks", "check") in {(a.kind, a.key) for a in rig.book.open()}
     await rig.observer.tick()
     assert ("stage_checks", "check") not in {(a.kind, a.key) for a in rig.book.open()}
+
+
+async def test_data_gap_alert_carries_the_sensor(rig, clock):
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(200)
+    await rig.observer.tick()
+    alert = {(a.kind, a.key): a for a in rig.book.open()}[("data_gap", "temperature")]
+    assert alert.code == "data_gap"
+    assert alert.params == {"sensor": "temperature"}
+
+
+async def test_threshold_alert_carries_sensor_operator_value_and_seconds(rig, clock):
+    rig.hot()
+    await rig.observer.tick()
+    clock.advance(60)
+    rig.hot()
+    await rig.observer.tick()
+    alert = {(a.kind, a.key): a for a in rig.book.open()}[("threshold", "too_hot")]
+    assert alert.code == "threshold"
+    assert alert.params == {
+        "sensor": "temperature",
+        "op": ">",
+        "value": 30.0,
+        "duration_seconds": 60.0,
+        "rule": "too_hot",
+    }
+    assert alert.message == "temperature > 30.0 for 60 s (too_hot)"
+
+
+async def test_frozen_watch_alert_carries_no_params_and_keeps_the_error_out_of_them(rig):
+    rig.observer.frozen = FakeFrozen(RuntimeError("secret detail"))
+    await rig.observer.tick()
+    alert = {(a.kind, a.key): a for a in rig.book.open()}[("frozen_watch", "check")]
+    assert (alert.code, alert.params) == ("frozen_watch", {})
+    assert alert.message == "The frozen-reading check is failing"
+
+
+async def test_stage_checks_alert_carries_no_params(rig):
+    rig.observer.stage_checks = FakeFrozen(RuntimeError("secret detail"))
+    await rig.observer.tick()
+    alert = {(a.kind, a.key): a for a in rig.book.open()}[("stage_checks", "check")]
+    assert (alert.code, alert.params) == ("stage_checks", {})
+    assert alert.message == "The stage checks are failing"

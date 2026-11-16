@@ -24,7 +24,24 @@ class Code:
 
 
 CODES: dict[str, dict[str, Code]] = {
-    "alert": {},
+    "alert": {
+        "data_gap": Code(("sensor",)),
+        "threshold": Code(("sensor", "op", "value", "duration_seconds", "rule")),
+        "frozen_watch": Code(),
+        "stage_checks": Code(),
+        "frozen_reading": Code(("sensor", "value")),
+        "task_missed": Code(("stage_id", "task_id", "task_kind", "due_at")),
+        "measurement_missing": Code(
+            ("stage_id", "task_id", "window_start", "window_end", "timezone")
+        ),
+        "measurement_outside_window": Code(("stage_id", "measurement_id", "metric", "measured_at")),
+        "pump_unexpected_off": Code(),
+        "pump_unexpected_interlocked": Code(),
+        "pump_unexpected_failed": Code(),
+        "pump_unreadable": Code(),
+        "pump_watchdog_step": Code(),
+        "pump_watchdog_record": Code(),
+    },
     "finding": {},
     "receipt": {},
     "task_end": {},
