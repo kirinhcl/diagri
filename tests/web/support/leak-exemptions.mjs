@@ -14,4 +14,7 @@ export const EXEMPTIONS = [
   { page: "project", fixture: "conversation.json", path: "entries[kind=reply].text", shown: "richText", batch: 3, why: "模型写的回复（C5，P-10）" },
   { page: "project", fixture: "holdouts.json", path: "holdouts[*].outcome_fields[*]", batch: "keep", why: "结局字段名由操作员登记留出批次时自己填写（P-07），照原样显示" },
   { page: "project", fixture: "project.json", path: "tasks[*].question", shown: "folded", batch: 3, why: "委派和后续任务的问题是模型写的（C5，P-06）；操作员自己的目标在同一列，本身不含代码" },
+  { page: "inbox", fixture: "inbox.json", path: "items[*].detail.message", shown: "folded", batch: 2, why: "告警正文是服务器整句（INB-01，C4）" },
+  { page: "inbox", fixture: "inbox.json", path: "items[*].detail.question", shown: "folded", batch: 3, why: "研究任务的问题是模型写的（C5，INB-01）" },
+  { page: "inbox", fixture: "inbox.json", path: "items[*].detail.reason", batch: 2, why: "计算卡住的原因是服务器整句（INB-01，C4）" },
 ];

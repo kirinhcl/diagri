@@ -54,7 +54,7 @@ function readCell(ctx, alert) {
   return h("div", { class: "action" }, said ? h("p", { class: "block-note", text: said }) : null, button, box);
 }
 
-function alertsTable(ctx, alerts) {
+function alertsTable(ctx, alerts, focus) {
   const columns = [
     { label: ctx.t("alerts.severity"), cell: (row) => severityPill(ctx.t, row.severity) },
     { label: ctx.t("alerts.message"), cell: (row) => row.message },
@@ -63,7 +63,18 @@ function alertsTable(ctx, alerts) {
     { label: ctx.t("alerts.last"), cell: (row) => timeText(ctx, row.last_at) },
     { label: ctx.t("alerts.read"), cell: (row) => readCell(ctx, row) },
   ];
-  return table(columns, alerts, { label: ctx.t("alerts.title") });
+  const rowProps = (row) => ({
+    class: focus && row.event_id === focus ? "alert-focused" : undefined,
+    attrs: { id: `alert-${row.event_id}` },
+  });
+  return table(columns, alerts, { label: ctx.t("alerts.title"), rowProps });
+}
+
+// Once the page is in the document: bring the linked alert's row into view (a no-op without scrollIntoView).
+function scrollToAlert(element, focus) {
+  const row = typeof element.querySelector === "function" ? element.querySelector(`[id="alert-${focus}"]`) : null;
+  if (!row || typeof row.scrollIntoView !== "function") return;
+  setTimeout(() => row.scrollIntoView({ block: "center" }), 0);
 }
 
 async function loadAlerts(ctx) {
@@ -76,10 +87,10 @@ async function loadAlerts(ctx) {
   }
 }
 
-export async function render(ctx) {
+export async function render(ctx, params = {}) {
   const { alerts, mounted } = await loadAlerts(ctx);
   const zone = (ctx.me && ctx.me.timezone) || "UTC";
-  let body = alertsTable(ctx, alerts);
+  let body = alertsTable(ctx, alerts, params.focus);
   if (!mounted) body = note(ctx.t("alerts.unavailable"));
   else if (!alerts.length) body = note(ctx.t("alerts.empty"));
   const element = h(
@@ -88,5 +99,6 @@ export async function render(ctx) {
     pageHead(ctx.t("nav.alerts"), ctx.t("alerts.lead", { zone })),
     section(ctx.t("alerts.title"), body),
   );
+  if (params.focus) scrollToAlert(element, params.focus);
   return { element };
 }

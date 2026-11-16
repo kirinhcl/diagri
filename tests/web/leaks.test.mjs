@@ -31,8 +31,23 @@ const HOLDOUT = {
 };
 const BUSY_PROJECT = { "project.json": { ...PROJECT, rounds: [WAITING_ROUND] }, "holdouts.json": { holdouts: [HOLDOUT] } };
 
+// Inbox items of the kinds the captured read lacks: a stage waiting for review, a round waiting for a
+// choice, a stuck compute attempt and a research task, plus a kind this console does not know.
+const INBOX = FIXTURES["inbox.json"];
+const MORE_ITEMS = [
+  { kind: "round_choice", id: "round_9d38ffa4ca3049948194e0b60315c650", project_id: PROJECT.project_id, project_name: "dev light stage", round_number: 2, since: 1794821386, detail: { awaiting_choice: "stage-x-1", since_from: "round_created" } },
+  { kind: "compute_stuck", id: "attempt_9d38ffa4ca3049948194e0b60315c650", project_id: null, round_id: null, since: 1794821386, detail: { phase: "running", reason: "No result after 2 h on the cluster", task_id: "task_9d38ffa4ca3049948194e0b60315c650" } },
+  { kind: "task", id: "task_9d38ffa4ca3049948194e0b60315c650", project_id: PROJECT.project_id, project_name: "dev light stage", since: 1794821386, detail: { question: "Which light level keeps the lettuce compact?", state: "needs_review", owner_role: "researcher" } },
+  { kind: "brand_new_kind", id: "thing_1", project_id: null, round_id: null, since: 1794821386, detail: {} },
+];
+const BUSY_INBOX = { "inbox.json": { ...INBOX, items: [...INBOX.items, ...MORE_ITEMS], truncated: { alert: 12, task: 3 } } };
+const OLD_INBOX = { "inbox.json": { items: INBOX.items.filter((item) => item.kind === "stage_review").map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => !NAMES.has(key)))), truncated: {} } };
+
 // Each page task adds its pages here: { page, params, fixtures? }; `fixtures` overrides files by name.
 const PAGES_CHECKED = [
+  { page: "inbox" },
+  { page: "inbox", fixtures: BUSY_INBOX },
+  { page: "inbox", fixtures: OLD_INBOX },
   { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id } },
   { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id } },
   { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id }, fixtures: { "stage.json": OLD_STAGE } },

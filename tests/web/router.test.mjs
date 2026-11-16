@@ -47,3 +47,13 @@ test("hrefFor throws RangeError for an unknown page", () => {
     assert.throws(() => hrefFor(page, { projectId: "x" }), RangeError, page);
   }
 });
+
+test("the router passes focus to the alerts page", () => {
+  assert.deepEqual(parseHash("#/alerts?focus=ev1"), { page: "alerts", params: { focus: "ev1" } });
+  assert.deepEqual(parseHash("#/alerts?focus=a%20b"), { page: "alerts", params: { focus: "a b" } });
+  assert.deepEqual(parseHash("#/alerts?other=1"), { page: "alerts", params: {} });
+  assert.deepEqual(parseHash("#/alerts"), { page: "alerts", params: {} });
+  assert.equal(hrefFor("alerts", { focus: "a b" }), "#/alerts?focus=a%20b");
+  assert.equal(hrefFor("alerts"), "#/alerts");
+  assert.deepEqual(parseHash(hrefFor("alerts", { focus: "x/1" })), { page: "alerts", params: { focus: "x/1" } });
+});

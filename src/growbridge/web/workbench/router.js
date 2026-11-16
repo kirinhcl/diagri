@@ -15,10 +15,14 @@ function decode(part) {
 }
 
 export function parseHash(hash) {
-  const path = String(hash || "").replace(/^#/, "");
+  const [path, query = ""] = String(hash || "").replace(/^#/, "").split("?");
   if (path === "" || path === "/") return { page: "inbox", params: {} };
   const parts = path.replace(/^\//, "").split("/");
   const [head, id] = parts;
+  if (parts.length === 1 && head === "alerts") {
+    const focus = new URLSearchParams(query).get("focus");
+    return { page: head, params: focus ? { focus } : {} };
+  }
   if (parts.length === 1 && FLAT.includes(head)) return { page: head, params: {} };
   if (parts.length === 2 && WITH_ID.has(head) && id) {
     const value = decode(id);
@@ -30,6 +34,7 @@ export function parseHash(hash) {
 
 export function hrefFor(page, params = {}) {
   if (page === "inbox") return "#/";
+  if (page === "alerts" && params.focus) return `#/alerts?focus=${encodeURIComponent(params.focus)}`;
   if (FLAT.includes(page)) return `#/${page}`;
   for (const [segment, [name, key]] of WITH_ID) {
     if (name === page) return `#/${segment}/${encodeURIComponent(params[key])}`;

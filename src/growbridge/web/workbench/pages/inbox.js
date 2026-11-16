@@ -4,7 +4,8 @@ import { formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
-import { errorParts, replaceParts, timeText } from "../ui/section.js";
+import { displayName, nameDetails, roleLabel } from "../ui/names.js";
+import { errorParts, foldedText, replaceParts, techDetails, timeText } from "../ui/section.js";
 import { severityPill, statePill } from "../ui/status.js";
 
 const POLL_SECONDS = 15;
@@ -25,7 +26,7 @@ const ONSITE_KINDS = new Set(["stage_recovery", "alert"]);
 export function inboxTarget(item) {
   if (STAGE_KINDS.has(item.kind)) return hrefFor("stage", { stageId: item.id });
   if (item.kind === "round_choice") return hrefFor("round", { roundId: item.id });
-  if (item.kind === "alert") return hrefFor("alerts");
+  if (item.kind === "alert") return hrefFor("alerts", { focus: item.id });
   if (item.kind === "compute_stuck") return hrefFor("compute");
   if (item.kind === "task") {
     return item.project_id ? hrefFor("project", { projectId: item.project_id }) : hrefFor("projects");
@@ -63,71 +64,117 @@ function say(t, key, vars) {
   return present ? t(key, vars) : null;
 }
 
+// Project and round by name; a round choice is about one round, so it says the round in its title.
 function where(ctx, item) {
-  const round = item.kind === "round_choice" ? null : say(ctx.t, "inbox.round", { id: item.round_id });
-  return [say(ctx.t, "inbox.project", { id: item.project_id }), round];
+  const project = displayName(ctx, "project", item);
+  const round = item.kind === "round_choice" ? null : displayName(ctx, "round", item);
+  return [ctx.t("inbox.project", { name: project }), round];
 }
 
-const DESCRIBERS = {
-  stage: (ctx, item, d) => ({
-    title: ctx.t("inbox.stage", { id: item.id }),
-    pill: statePill(ctx.t, d.state),
-    meta: [say(ctx.t, "inbox.device", { id: d.device_id }), ...where(ctx, item)],
-  }),
+export const DESCRIBERS = {
+  stage: (ctx, item, d) => {
+    const stage = displayName(ctx, "stage", item);
+    const review = item.kind === "stage_review";
+    const title = review
+      ? ctx.t("inbox.title.review", { project: displayName(ctx, "project", item), round: displayName(ctx, "round", item), stage })
+      : ctx.t("inbox.title.stage", { stage, state: labelOr(ctx.t, "state", d.state) });
+    return {
+      title,
+      pill: statePill(ctx.t, d.state),
+      meta: [say(ctx.t, "inbox.device", { id: d.device_id }), ...(review ? [] : where(ctx, item))],
+    };
+  },
   round_choice: (ctx, item, d) => ({
-    title: ctx.t("inbox.round", { id: item.id }),
+    title: ctx.t("inbox.title.choice", { project: displayName(ctx, "project", item), round: displayName(ctx, "round", item) }),
     pill: statePill(ctx.t, "awaiting_choice"),
     lines: [
       say(ctx.t, "inbox.roundChoice", { stage: d.awaiting_choice }),
       d.since_from === "round_created" ? ctx.t("inbox.sinceRoundCreated") : null,
     ],
-    meta: where(ctx, item),
+    meta: [],
   }),
   alert: (ctx, item, d) => ({
-    title: d.message || String(item.id),
+    title: foldedText(ctx, d.message || ""),
     pill: severityPill(ctx.t, d.severity),
-    meta: [d.alert_kind, say(ctx.t, "inbox.alertCount", { count: d.count }), d.last_at ? ctx.t("inbox.lastAt", { time: timeText(ctx, d.last_at) }) : null],
+    meta: [
+      labelOr(ctx.t, "alert.kind", d.alert_kind),
+      say(ctx.t, "inbox.alertCount", { count: d.count }),
+      d.last_at ? ctx.t("inbox.lastAt", { time: timeText(ctx, d.last_at) }) : null,
+    ],
   }),
   compute_stuck: (ctx, item, d) => ({
-    title: ctx.t("inbox.attempt", { id: item.id }),
+    title: ctx.t("inbox.title.stuck", { phase: labelOr(ctx.t, "state", d.phase) }),
     pill: statePill(ctx.t, d.phase),
     lines: [d.reason],
-    meta: [say(ctx.t, "inbox.task", { id: d.task_id })],
+    meta: [],
   }),
   task: (ctx, item, d) => ({
-    title: d.question || ctx.t("inbox.task", { id: item.id }),
+    title: d.question ? foldedText(ctx, d.question) : displayName(ctx, "researchTask", d),
     pill: statePill(ctx.t, d.state),
-    meta: [say(ctx.t, "inbox.owner", { role: d.owner_role }), ...where(ctx, item)],
+    meta: [d.owner_role ? ctx.t("inbox.owner", { role: roleLabel(ctx.t, d.owner_role) }) : null, ...where(ctx, item)],
   }),
 };
 
-function describe(ctx, item) {
+export function describe(ctx, item) {
   const detail = item.detail && typeof item.detail === "object" ? item.detail : {};
   const kind = STAGE_KINDS.has(item.kind) ? "stage" : item.kind;
-  const fallback = () => ({ title: `${item.kind} ${item.id}`, meta: where(ctx, item) });
+  const fallback = () => ({ title: labelOr(ctx.t, "inbox.kind", item.kind), meta: where(ctx, item) });
   const describer = Object.hasOwn(DESCRIBERS, kind) ? DESCRIBERS[kind] : fallback;
   return { pill: null, lines: [], meta: [], ...describer(ctx, item, detail) };
 }
 
+// The item's own ids (and the raw alert code), for its technical details.
+function itemDetails(ctx, item) {
+  const d = item.detail && typeof item.detail === "object" ? item.detail : {};
+  const own = { stage: "stage_id", round_choice: "round_id", compute_stuck: "attempt_id", task: "task_id" };
+  const key = STAGE_KINDS.has(item.kind) ? own.stage : own[item.kind];
+  const row = key ? { ...item, id: undefined, [key]: item.id } : item;
+  if (item.kind === "compute_stuck") row.task_id = d.task_id;
+  const rawKind = item.kind === "alert" ? [[ctx.t("inbox.tech.alertKind"), d.alert_kind]] : [];
+  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...rawKind]);
+}
+
+// "Waiting 3 h 20 min", or the full time when the clock says the item is from the future.
+function waitingText(ctx, since) {
+  const age = (ctx.now ?? Date.now() / 1000) - since;
+  if (typeof since !== "number" || !(age >= 0)) return timeText(ctx, since);
+  return ctx.t("inbox.waiting", { duration: formatDuration(ctx.t, age) });
+}
+
+// A folded title holds its own toggle, so it cannot sit inside a link: the row then has an open link.
 function itemView(ctx, item) {
   const { title, pill, lines, meta } = describe(ctx, item);
   const href = inboxTarget(item);
+  const folded = typeof title !== "string";
   const main = h(
     "div",
     { class: "inbox-main" },
-    h("p", { class: "inbox-title", text: title }),
+    h("p", { class: "inbox-title", text: folded ? undefined : title }, folded ? title : null),
     lines.filter(Boolean).map((line) => h("p", { class: "inbox-text", text: line })),
     h("p", { class: "inbox-meta" }, meta.filter(Boolean).map((part) => h("span", { text: part }))),
   );
-  const side = h("div", { class: "inbox-side" }, pill, h("span", { class: "inbox-time", text: timeText(ctx, item.since) }));
+  const open = href && folded ? h("a", { class: "inbox-open", attrs: { href }, text: ctx.t("inbox.open") }) : null;
+  const time = h("span", { class: "inbox-time", text: waitingText(ctx, item.since), attrs: { title: timeText(ctx, item.since) } });
+  const side = h("div", { class: "inbox-side" }, pill, time, open);
   const key = `${item.kind}:${item.id}`;
-  const view = href
+  const linked = href && !folded;
+  const row = linked
     ? h("a", { class: "inbox-item", attrs: { href, "data-key": key } }, main, side)
     : h("div", { class: "inbox-item", attrs: { "data-key": key } }, main, side);
-  return h("li", {}, view);
+  return h("li", {}, row, h("div", { class: "inbox-tech" }, itemDetails(ctx, item)));
 }
 
-function groupView(ctx, group) {
+const MORE_PAGES = { alert: "alerts", compute_stuck: "compute" };
+
+// "N more, see <page>": a link to the full list.
+function moreView(ctx, group) {
+  const page = MORE_PAGES[group.kind] || "projects";
+  const link = h("a", { attrs: { href: hrefFor(page) }, text: ctx.t(`nav.${page}`) });
+  const [before, after] = ctx.t("inbox.more", { count: group.hidden, page: "\u0000" }).split("\u0000");
+  return h("p", { class: "inbox-more" }, before, link, after);
+}
+
+export function groupView(ctx, group) {
   const headingId = `inbox-group-${group.kind}`;
   const tone = ONSITE_KINDS.has(group.kind) ? "tone-onsite" : "tone-waiting";
   const count = group.items.length + group.hidden;
@@ -141,7 +188,7 @@ function groupView(ctx, group) {
       h("span", { class: "inbox-group-count", text: String(count) }),
     ),
     h("ul", { class: "inbox-list" }, group.items.map((item) => itemView(ctx, item))),
-    group.hidden > 0 ? h("p", { class: "inbox-more", text: ctx.t("inbox.more", { count: group.hidden }) }) : null,
+    group.hidden > 0 ? moreView(ctx, group) : null,
   );
 }
 
