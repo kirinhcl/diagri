@@ -38,16 +38,17 @@
 ### Task 1: 修正现有代码里的缺陷（不依赖开关）
 
 **Files:**
-- Modify: `src/growbridge/workflow/service.py`（`_replace_run_sheet`）、`src/growbridge/archive/store.py`（`add_measurement`）、`src/growbridge/agents/handlers_orchestrator.py`（`project_state`）、`src/growbridge/workflow/tasks.py`（`create` 的去重）
+- Modify: `src/growbridge/workflow/service.py`（`_replace_run_sheet`；`handback` 与 `_apply` 的交还前复核）、`src/growbridge/archive/store.py`（`add_measurement`）、`src/growbridge/agents/handlers_orchestrator.py`（`project_state`）、`src/growbridge/workflow/tasks.py`（`create` 的去重）
 - Test: `tests/workflow/test_workflow_sheet_binding.py`、`tests/archive/test_archive_corrections.py`、`tests/agents/test_orchestrator_scoping.py`（目录按现有测试布局放）
 
 **Interfaces:**
 - `_replace_run_sheet`：新运行单的 `(project_id, experiment_id, device_id)` 与阶段记录不同 → `Denied("state", "a replacement run sheet keeps the stage's project, experiment and device")`。
 - `add_measurement`：`corrects` 指向别的实验 → `ValueError`（工作台已转成 `rejected`）。
 - `project_state`：`active_stage` 仅当活动阶段的 `project_id == data.project_id` 时给出，否则 `None`。
+- 交还前复核：`handback()` 在 `await control.differences(...)` 之后、`control.handover(...)` 之前重新读阶段，`rev` 或状态变了 → `Denied("state", "stage changed while the request was running")`，不做任何交还；`_apply()` 在每次 `control.handover` 之前同样复核（保留最后的 CAS）。原因：`ControlService.handover()` 会无条件结束当前灌溉周期（`control/service.py:181`），迟到的交还会打断同一设备上别的阶段的灌溉（评审第 3 轮实测）。
 - `TaskBoard.create`：`trigger_event_id` 已属于另一个项目的任务 → `Denied("state", "this trigger_event_id is already used")`，回答里不含那个任务的 id、状态或所属；同项目的重复行为不变。`handlers_orchestrator.py` 里拼出已有任务 id 的那条消息只在同项目时使用。
 
-- [ ] **Step 1: 写失败测试** `test_replacement_cannot_change_device`、`test_replacement_cannot_change_experiment`、`test_correction_must_stay_in_experiment`（A 的测量数仍为 1）、`test_active_stage_of_other_project_is_hidden`、`test_trigger_of_other_project_is_refused_without_its_id`。
+- [ ] **Step 1: 写失败测试** `test_replacement_cannot_change_device`、`test_replacement_cannot_change_experiment`、`test_correction_must_stay_in_experiment`（A 的测量数仍为 1）、`test_active_stage_of_other_project_is_hidden`、`test_trigger_of_other_project_is_refused_without_its_id`、`test_late_handback_does_not_end_other_irrigation`（handback 在读差异时挂起，期间阶段被停止、另一阶段启动并开始计划灌溉；恢复后 handback 被拒，灌溉未被结束——用真实 `ControlService` 与假设备 I/O，沿用 `tests/control` 现有夹具）。
 - [ ] **Step 2–4: 失败 → 实现 → 通过**（再跑 `pytest tests/workflow tests/archive tests/agents -q`）。
 - [ ] **Step 5: 提交** `fix: replacement run sheets keep their stage's binding; corrections, project state and task triggers stay inside their project`
 
@@ -85,14 +86,14 @@
 - Test: `tests/workflow/test_workflow_locks.py`、`tests/workflow/test_workflow_owner.py`
 
 **Interfaces:**
-- `WorkflowStore`：`add_project(project_id, name, now, owner=None)`；`project_owner(project_id) -> str | None`；`set_project_owner(project_id, owner, actor, note, now)`（同事务写事件表）；`device_unfinished(device_id) -> bool`（有状态不在 `ENDED`/`STOPPED` 的阶段）；`project_unfinished(project_id) -> bool`；`care_holder(device_id) -> StageRow | None`；`mark_care_released(stage_id)`。
+- `WorkflowStore`：`add_project(project_id, name, now, owner=None)`；`project_owner(project_id) -> str | None`；`set_project_owner(project_id, owner, actor, note, now, eligible: Callable[[], None])`（同一事务里先调 `eligible()` 复核转移条件，再改所有者并写事件表）；`device_unfinished(device_id) -> bool`（有状态不在 `ENDED`/`STOPPED` 的阶段）；`project_unfinished(project_id) -> bool`；`care_holder(device_id) -> StageRow | None`；`mark_care_released(stage_id)`。
 - `project_summaries(store, limit, *, only_owner=None)`、`rounds_awaiting_choice(store, limit, *, only_owner=None)`、`count_rounds_awaiting_choice(store, *, only_owner=None)`；`TaskBoard.in_states(states, limit, *, only_owner=None)`、`TaskBoard.count_in_states(states, *, only_owner=None)`——`only_owner` 以 `JOIN wf_projects` 加进 `WHERE`，位于 `LIMIT` 之前。
 - `class GreenhouseLocks(db, clock, registry, store: WorkflowStore, control: ControlPort)`（命名空间 `"greenhouse_locks"`）：
   - `lock(holder, ids) -> tuple[str, ...]`：一个事务内全锁或全不锁；占用 → `Denied("lock_taken", <被占编号>)`；重复或未知 → `Denied("state")`。
   - `async release(greenhouse_id, actor: str, *, force=False, note="")`：事务前检查（未结束阶段 → `greenhouse_busy`；非强制且不是持有者 → `not_lock_holder`）；`care_holder` 有养护写入权则 `await control.handover(number, "release")`；然后一个事务：复核同样两条（失败抛同样的码）、`update_stage(care_right=None)`、`mark_care_released`、删锁、记事件（`release` / `force_release`）。
   - `holder_of_device(device_id)`、`locked_at(device_id)`、`held_by(holder)`、`greenhouse(id)`、`overview()`、`events(limit=100)`。
 
-- [ ] **Step 1: 写失败测试** `test_lock_is_all_or_nothing`、`test_lock_rejects_duplicates_and_unknown`、`test_two_threads_one_winner`、`test_release_hands_over_care_and_frees`（控制侧该写入权已交还；阶段 `care_right` 为空且 `care_released`）、`test_release_refused_while_stage_unfinished`、`test_release_only_own_unless_forced`、`test_release_loses_to_concurrent_submission`（在 `handover` 的 await 里插入一次提交）、`test_released_care_not_restored`、`test_crash_between_handover_and_commit_restores_care`（交还后让事务抛错，再建新服务 `restore_care` → 重新签发）、`test_operator_becomes_owner`、`test_legacy_projects_have_no_owner`、`test_listings_filter_before_limit`。
+- [ ] **Step 1: 写失败测试** `test_lock_is_all_or_nothing`、`test_lock_rejects_duplicates_and_unknown`、`test_two_threads_one_winner`、`test_release_hands_over_care_and_frees`（控制侧该写入权已交还；阶段 `care_right` 为空且 `care_released`）、`test_release_refused_while_stage_unfinished`、`test_release_only_own_unless_forced`、`test_release_loses_to_concurrent_submission`（在 `handover` 的 await 里插入一次提交）、`test_released_care_not_restored`、`test_crash_between_handover_and_commit_restores_care`（交还后让事务抛错，再按生产启动顺序 `control.startup()` → `workflow.on_restart()`：未完成的释放 → 锁仍在、得到新的有效养护写入权；已完成的释放 → 标记仍在、不签发）、`test_operator_becomes_owner`、`test_legacy_projects_have_no_owner`、`test_listings_filter_before_limit`。
 - [ ] **Step 2–4: 失败 → 实现 → 通过**（再跑 `pytest tests/workflow -q`）。
 - [ ] **Step 5: 提交** `feat: greenhouse locks with care hand-over on release, and project owners`
 
@@ -119,9 +120,9 @@
 
 **Interfaces:**
 - `class Access(store, locks, local_device)`：`is_admin(actor)`；`require_project(actor, project_id, hidden: Callable[[], Exception])`（非 operator 通过；所有者通过；管理员 → `Denied("not_owner")`；其他 → `raise hidden()`）；`require_stage(actor, stage, hidden, emergency=False)`（`emergency` 且管理员通过；所有者但非锁定人 → `Denied("not_lock_holder")`）；`require_sheet_device(project_id, device_id)`（所有 actor 种类；所有者未锁该设备 → `Denied("not_lock_holder")`）；`require_admin(actor)`；`sees_project / sees_stage / sees_device / sees_alert`；`owner_filter(actor) -> str | None`。
-- `WorkflowService.access: Access | None = None`（属性，Task 11 装配时赋值）。检查点：`save_protocol`、`create_round`、`choose_after_stop`、`abort_round` → `require_project`；`submit_run_sheet` → operator 时 `require_project`，并在**写入阶段的同一事务里** `require_sheet_device`；`approve`、`revoke_approval`、`resume_stage`、`takeover`、`handback`、`record_onsite_check`（在任何控制侧调用之前）、`switch_run_sheet`、`start_stage`（operator 时）→ `require_stage`；`pause_stage`（operator 时）、`stop_stage` → `require_stage(emergency=True)`。`hidden` 用该方法对不存在 id 的现有回答。检查抛出的码不得被 `_apply_once` 当作"已在目标状态"吞掉（它只吞 `state`；新码不是 `state`，加一条测试锁住）。
+- `WorkflowService.access: Access | None = None`（属性，Task 11 装配时赋值）。检查点：`save_protocol`、`create_round`、`choose_after_stop`、`abort_round` → `require_project`；`abort_round` 还要在它自己的事务开头（`service.py` 约 616 行）对 operator 再查一次当前所有者，不符则回滚（它在交还养护后才提交，期间项目可能被转移；评审第 3 轮实测）；`submit_run_sheet` → operator 时 `require_project`，并在**写入阶段的同一事务里** `require_sheet_device`；`approve`、`revoke_approval`、`resume_stage`、`takeover`、`handback`、`record_onsite_check`（在任何控制侧调用之前）、`switch_run_sheet`、`start_stage`（operator 时）→ `require_stage`；`pause_stage`（operator 时）、`stop_stage` → `require_stage(emergency=True)`。`hidden` 用该方法对不存在 id 的现有回答。检查抛出的码不得被 `_apply_once` 当作"已在目标状态"吞掉（它只吞 `state`；新码不是 `state`，加一条测试锁住）。
 
-- [ ] **Step 1: 写失败测试**：设计第 6 节表格每行一允一拒；`test_admin_can_stop_but_not_approve`；`test_model_draft_needs_owner_lock`；`test_onsite_check_by_other_has_no_control_effects`；`test_refusal_not_swallowed_by_apply_once`；`test_access_none_unchanged`（`tests/workflow` 现有启动用例原样再跑）。
+- [ ] **Step 1: 写失败测试**：设计第 6 节表格每行一允一拒；`test_admin_can_stop_but_not_approve`；`test_model_draft_needs_owner_lock`；`test_onsite_check_by_other_has_no_control_effects`；`test_refusal_not_swallowed_by_apply_once`；`test_abort_after_disable_and_transfer_is_refused`（A 的中止在交还养护时挂起，期间 A 被停用、项目转给 C，恢复后中止被拒、C 的轮次不变）；`test_access_none_unchanged`（`tests/workflow` 现有启动用例原样再跑）。
 - [ ] **Step 2–4: 失败 → 实现 → 通过**（`wc -l` ≤ 800；再跑 `pytest tests/workflow tests/e2e -q`）。
 - [ ] **Step 5: 提交** `feat: owner and lock-holder checks in the workflow`
 
