@@ -6,6 +6,13 @@ import { roleLabel } from "../ui/names.js";
 import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 
 const SOURCE_CLASSES = ["handbook", "paper", "local"];
+const CLAIM_CHARS = 40;
+
+// A card as a notice names it: its claim, cut to CLAIM_CHARS characters with "…".
+export function claimName(claim) {
+  const chars = [...String(claim ?? "").trim().replace(/\s+/g, " ")];
+  return chars.length > CLAIM_CHARS ? `${chars.slice(0, CLAIM_CHARS).join("")}…` : chars.join("");
+}
 
 const yesNo = (ctx) => [
   { value: "yes", label: ctx.t("common.yes") },
@@ -30,7 +37,7 @@ function enterForm(ctx) {
   const submitLabel = ctx.t("evidence.enter");
   const onSubmit = async ({ calibrated, ...rest }) => {
     const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated === "yes" }, { action: submitLabel });
-    afterWrite(ctx, ctx.t("evidence.entered", { id: card.id }));
+    afterWrite(ctx, ctx.t("evidence.entered", { claim: claimName(card?.claim ?? rest.claim) }));
   };
   return simpleForm({ fields: enterFields(ctx), submitLabel, onSubmit, draftKey: "evidence:new", ctx });
 }
@@ -44,7 +51,7 @@ function verifyForm(ctx, card) {
   const onSubmit = async ({ note: text, calibrated }) => {
     const body = { note: text || "", calibrated: calibrated === "yes" };
     await ctx.api.post(`/evidence/${encodeURIComponent(card.id)}/verify`, body, { action: submitLabel });
-    afterWrite(ctx, ctx.t("evidence.verified", { id: card.id }));
+    afterWrite(ctx, ctx.t("evidence.verified", { claim: claimName(card.claim) }));
   };
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: `evidence-verify:${card.id}`, ctx });
 }

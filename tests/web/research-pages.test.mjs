@@ -4,6 +4,7 @@ import test from "node:test";
 import { enterFields } from "../../src/growbridge/web/workbench/pages/evidence.js";
 import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { renderPage, testCtx } from "./support/render-page.mjs";
+import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { versionMismatch } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
 
 const ctx = { t: (key) => `t:${key}` };
@@ -83,4 +84,36 @@ test("an evidence value is shown exactly as entered", async () => {
     assert.match(visibleText(element), new RegExp(`${shown} cm`));
     assert.match(visibleTextIncludingDetails(element), new RegExp(`Value as entered.*${shown}`, "s"));
   }
+});
+
+// --- final review: evidence notices name the card by its claim (F2) ---------------------------
+const LONG_CLAIM = "Blue light at 450 nm shortens the hypocotyl of lettuce seedlings grown at 22 °C";
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+async function evidenceWithNotices(rows) {
+  const notices = [];
+  const ctx = { ...testCtx({ fixtures: cards(rows), now: NOW }), notify: (message) => notices.push(message) };
+  bindFormContext(ctx);
+  const { render } = await import("../../src/growbridge/web/workbench/pages/evidence.js");
+  const { element } = await render(ctx, {});
+  return { element, notices };
+}
+
+async function submitForm(form, values = {}) {
+  if (Object.keys(values).length) formControls(form).set(values);
+  form.dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+}
+
+test("the verify and enter notices name the card by its claim, cut to 40 characters", async () => {
+  const card = { ...CARD, id: "card_5c987768a8b544ad80c4af4c0af9a962", claim: LONG_CLAIM };
+  const cut = `${[...LONG_CLAIM].slice(0, 40).join("")}…`;
+  const { element, notices } = await evidenceWithNotices([card]);
+  const forms = walk(element).filter((el) => el.localName === "form");
+  await submitForm(forms[0]);
+  assert.equal(notices[0], `证据卡“${cut}”已核实。`);
+  await submitForm(forms[1], { source_class: "paper", citation: "Smith 2020", claim: "Short claim", calibrated: "yes" });
+  assert.equal(notices[1], "证据卡“Short claim”已录入并核实。");
+  for (const message of notices) assert.ok(!message.includes("card_") && !message.includes("undefined"), message);
 });

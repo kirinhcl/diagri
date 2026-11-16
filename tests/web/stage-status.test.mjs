@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { actionsView, differenceLines, logItem, manualGroup, manualHeading, outcomeLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
+import { actionsView, differenceLines, logItem, manualGroup, manualHeading, outcomeLines, plainActionLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
 import { statusView } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { installFakeDom, FIXTURES, testCtx } from "./support/render-page.mjs";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
@@ -115,4 +115,19 @@ test("hand-back differences use labels and units", () => {
   const ctx = testCtx({ lang: "zh" });
   const lines = differenceLines(ctx, [{ channel: "light", field: "level", expected: 50, actual: 0 }]);
   assert.ok(lines.includes("灯光档位：应为 50 %，实际 0 %"));
+});
+
+// --- final review: the stop and take-over dialogs name the stage, not its id (F2) --------------
+test("the stop and take-over dialogs name the stage and never its id", () => {
+  const named = { ...stage, stage_id: "stage-round_9d38ffa4ca3049948194e0b60315c650-1", stage_index: 1, phase: "vegetative" };
+  for (const lang of ["zh", "en"]) {
+    const ctx = testCtx({ lang });
+    for (const name of ["stop", "takeover"]) {
+      const lines = plainActionLines(ctx, name, named).join(" ");
+      assert.ok(!lines.includes(named.stage_id), `${lang} ${name}: ${lines}`);
+      assert.match(lines, lang === "zh" ? /第 1 阶段/ : /Stage 1/);
+    }
+  }
+  const zh = testCtx({ lang: "zh" });
+  assert.deepEqual(plainActionLines(zh, "stop", { stage_id: "stage-x-1" }), ["未命名阶段 将永久停止，不能再次启动。"]);
 });

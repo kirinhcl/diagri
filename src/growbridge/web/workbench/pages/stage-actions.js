@@ -8,6 +8,7 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
+import { displayName } from "../ui/names.js";
 import { formatDuration, levelText, shortDigest } from "../format.js";
 import { differenceText } from "./stage-diff.js";
 import { errorBox, errorFold, note, replaceParts, showErrors, techDetails, timeText } from "../ui/section.js";
@@ -78,11 +79,16 @@ function actionButton(env, { label, tone = "primary", ask = null, run }) {
   return { button, element: h("div", { class: "action" }, button, box) };
 }
 
+// What the confirm dialog of a plain action says: the stage by its name, never its id.
+export function plainActionLines(ctx, name, stage) {
+  return [ctx.t(`stage.${name}.line`, { stage: displayName(ctx, "stage", stage) })];
+}
+
 function plainAction(env, name) {
   const { ctx, stage } = env;
   const spec = PLAIN[name];
   const label = ctx.t(`stage.${name}`);
-  const ask = spec.ask ? { title: ctx.t(`stage.${name}.title`), lines: [ctx.t(`stage.${name}.line`, { id: stage.stage_id })] } : null;
+  const ask = spec.ask ? { title: ctx.t(`stage.${name}.title`), lines: plainActionLines(ctx, name, stage) } : null;
   const run = () => ctx.api.post(stagePath(stage, spec.verb), {}, { action: label });
   const control = actionButton(env, { label, tone: spec.tone, ask, run });
   return group(name, label, note(ctx.t(`stage.${name}.note`)), control.element);
