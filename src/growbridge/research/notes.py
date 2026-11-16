@@ -144,7 +144,8 @@ _TASK_KINDS = {
 _PROBLEMS = {
     "never_at": {
         "en": "{channel} was never at {level} (recorded {recorded})",
-        "zh": "{channel}从未处于 {level} 档（记录到 {recorded}）",
+        # light and exhaust levels are percentages, not steps: the text names no unit
+        "zh": "{channel}从未达到计划的 {level}（记录到 {recorded}）",
     },
     "other_share": {
         "en": "{channel} was at other levels in {share} of the readings",

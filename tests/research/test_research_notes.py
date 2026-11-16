@@ -22,10 +22,23 @@ def test_a_note_renders_its_params_in_each_language():
         "Round 1 did not run its allocated treatment High light: "
         "light was never at 70 (recorded 20)"
     )
-    assert item.text() == "第 1 轮没有按分配的处理 High light 运行：光照从未处于 70 档（记录到 20）"
+    assert item.text() == (
+        "第 1 轮没有按分配的处理 High light 运行：光照从未达到计划的 70（记录到 20）"
+    )
     entry = item.entry("limitation")
     assert entry["code"] == "treatment_not_applied" and entry["kind"] == "limitation"
     assert entry["text"] == {"en": item.text("en"), "zh": item.text("zh")}
+
+
+@pytest.mark.parametrize("channel", ["light", "exhaust", "fan"])
+def test_a_level_never_reached_reads_right_in_chinese_for_any_channel(channel):
+    """Light and exhaust levels are percentages, so the text names no step ("档")."""
+    problems = [{"channel": channel, "kind": "never_at", "level": 70, "recorded": [20], "share": 0}]
+
+    zh = note("treatment_not_applied", round=1, treatment="High", problems=problems).text("zh")
+
+    assert "档" not in zh
+    assert "从未达到计划的 70（记录到 20）" in zh
 
 
 def test_an_unknown_code_is_refused():
