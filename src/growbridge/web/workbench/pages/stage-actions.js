@@ -8,6 +8,7 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
+import { messageParts } from "../messages.js";
 import { displayName } from "../ui/names.js";
 import { formatDuration, levelText, shortDigest } from "../format.js";
 import { differenceText } from "./stage-diff.js";
@@ -109,12 +110,43 @@ export function groupFindings(findings) {
   return [...groups.filter((g) => g.blocking), ...groups.filter((g) => !g.blocking)];
 }
 
+// The message code of a finding: its code, plus the variant when it has one. Old data has neither
+// a variant nor params.
+function findingCode(item) {
+  return item.variant ? `${item.code}.${item.variant}` : item.code;
+}
+
+function findingParams(item) {
+  const p = item.params;
+  return p && typeof p === "object" && !Array.isArray(p) ? p : {};
+}
+
+// What the group's fold holds: the group code, then each item's message code (when it differs from
+// the group's), the server's own sentence and its id parameters.
+function groupDetails(ctx, group, parts) {
+  const details = [[ctx.t("tech.code"), group.code]];
+  group.items.forEach((item, i) => {
+    const code = findingCode(item);
+    if (code !== group.code) details.push([ctx.t("tech.code"), code]);
+    if (item.message) details.push([ctx.t("tech.serverMessage"), item.message]);
+    details.push(...parts[i].details.filter(([name]) => name !== ctx.t("tech.code") && name !== ctx.t("tech.params")));
+  });
+  return details;
+}
+
+function howToFix(ctx, parts) {
+  const actions = [...new Set(parts.map((p) => p.action).filter(Boolean))];
+  if (!actions.length) return null;
+  return h("p", { class: "finding-fix", text: `${ctx.t("stage.review.howToFix")} ${actions.join(" ")}` });
+}
+
 export function findingsList(ctx, findings) {
   const groups = groupFindings(findings);
   if (!groups.length) return note(ctx.t("stage.review.noFindings"));
   const pillClass = (blocking) => ["pill", blocking ? "pill-onsite" : "pill-waiting"];
-  const entry = (group) =>
-    h(
+  const entry = (group) => {
+    const parts = group.items.map((item) => messageParts(ctx, "finding", findingCode(item), findingParams(item)));
+    return h(
       "li",
       { class: "finding-group" },
       h(
@@ -123,9 +155,11 @@ export function findingsList(ctx, findings) {
         h("span", { class: pillClass(group.blocking), text: ctx.t(group.blocking ? "finding.blocking" : "finding.hint") }),
         h("strong", { text: ctx.t("stage.review.groupTitle", { label: labelOr(ctx.t, "finding", group.code), n: group.items.length }) }),
       ),
-      h("ul", { class: "finding-items" }, group.items.map((item) => h("li", { class: "finding-text", text: item.message }))),
-      techDetails(ctx.t, [[ctx.t("tech.code"), group.code]]),
+      howToFix(ctx, parts),
+      h("ul", { class: "finding-items" }, parts.map((p) => h("li", { class: "finding-text", text: p.text }))),
+      techDetails(ctx.t, groupDetails(ctx, group, parts)),
     );
+  };
   return h("ul", { class: "findings" }, groups.map(entry));
 }
 

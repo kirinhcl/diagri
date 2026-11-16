@@ -317,6 +317,7 @@ export default {
   "stage.review.duration": "Duration",
   "stage.review.timezone": "Run sheet time zone",
   "stage.review.findings": "Findings of the check",
+  "stage.review.howToFix": "How to fix:",
   "stage.review.noFindings": "The check found nothing.",
   "stage.review.blocking": "There are blocking findings: the run sheet cannot be approved until they are fixed.",
   "stage.review.json": "Full run sheet (JSON)",

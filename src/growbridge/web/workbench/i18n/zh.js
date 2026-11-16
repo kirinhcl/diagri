@@ -317,6 +317,7 @@ export default {
   "stage.review.duration": "时长",
   "stage.review.timezone": "运行单时区",
   "stage.review.findings": "校验发现",
+  "stage.review.howToFix": "怎么改：",
   "stage.review.noFindings": "校验没有发现问题。",
   "stage.review.blocking": "存在阻断性问题：修正之前，这份运行单不能审批。",
   "stage.review.json": "运行单全文（JSON）",
