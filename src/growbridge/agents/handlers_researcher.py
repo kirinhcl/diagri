@@ -188,11 +188,15 @@ def stage_preview(deps: Deps, stage) -> dict:
         measurement_grace=MEASUREMENT_GRACE_SECONDS,
     )
     start, end = limits[0], limits[1]
-    outside = snapshots.outside_window(
+    left_out = snapshots.outside_window(
         archive, experiment_id, start, end, MEASUREMENT_GRACE_SECONDS, keep
     )
+    # every stage of a round shares one experiment: a measurement timed before this stage
+    # started is an earlier stage's, so it is counted, not judged
+    outside = [m for m in left_out if m["measured_at"] >= start]
     summary["measurements_outside_window"] = outside[:MAX_LISTED_OUTSIDE]
     summary["measurements_outside_count"] = len(outside)
+    summary["measurements_before_stage"] = len(left_out) - len(outside)
     summary["manual_tasks"] = _manual_summary(deps, stage)
     frozen = archive.snapshots(experiment_id)
     return {
@@ -307,7 +311,8 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
             "Read-only summary of a started stage's data over the window freeze_dataset would "
             "use: coverage and gaps, trusted and untrusted sample counts with reasons, ranges "
             "per sensor channel, manual measurements per metric (and the measurements left "
-            "outside the window by their time), actions and interventions, "
+            "outside the window by their time; ones timed before the stage started belong to "
+            "an earlier stage and are only counted), actions and interventions, "
             "the planned manual tasks and how many were done in time, "
             "and the snapshots already frozen. Writes nothing; use it to check the data before "
             "freezing. Pass the researcher task_id you are working on.",
