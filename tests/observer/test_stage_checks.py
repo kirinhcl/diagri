@@ -15,7 +15,7 @@ from growbridge.observer.stage_checks import (
     MEASUREMENT_GRACE_SECONDS,
     StageChecks,
 )
-from growbridge.planning.manual_tasks import ON_TIME_SECONDS
+from growbridge.planning.manual_tasks import EARLY_SECONDS, ON_TIME_SECONDS
 from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS as WINDOW_GRACE_SECONDS
 from growbridge.planning.window import data_window
 from growbridge.ports import StageRuntime
@@ -260,3 +260,38 @@ async def test_a_stage_not_yet_started_keeps_its_own_alerts_and_closes_older_one
     await rig.checks.tick()
 
     assert set(rig.open_alerts()) == {(AUDIT_FINDING, f"{STAGE}:abc")}
+
+
+def _missing(rig):
+    return [a for k, a in rig.open_alerts().items() if k[0] == "measurement_missing"]
+
+
+async def test_a_task_done_and_measured_late_is_not_missing_its_measurement(rig):
+    late = MEASURE_DUE + 3 * HOUR  # past the on-time deadline of due + 2 h
+    rig.record("measure", "measurement", MEASURE_DUE, late)
+    rig.measure("m-late", late)
+    rig.at(late + MEASUREMENT_GRACE_SECONDS + 1)
+    await rig.checks.tick()
+    assert _missing(rig) == []
+
+
+async def test_a_measurement_timed_after_a_late_task_was_done_does_not_count(rig):
+    late = MEASURE_DUE + 3 * HOUR
+    rig.record("measure", "measurement", MEASURE_DUE, late)
+    rig.measure("m-later", late + 1)
+    rig.at(late + MEASUREMENT_GRACE_SECONDS + 1)
+    await rig.checks.tick()
+    (alert,) = _missing(rig)
+    assert "no measurement is timed within the task's window (from " in alert.message
+    assert "(from 2026-11-10 09:00 to 2026-11-10 13:00)" in alert.message  # sheet time
+
+
+async def test_a_measurement_outside_an_on_time_tasks_window_does_not_count(rig):
+    recorded = MEASURE_DUE + 300
+    rig.record("measure", "measurement", MEASURE_DUE, recorded)
+    rig.measure("m-early", MEASURE_DUE - EARLY_SECONDS - 1)
+    rig.measure("m-after", MEASURE_DUE + ON_TIME_SECONDS + 1)
+    rig.at(recorded + MEASUREMENT_GRACE_SECONDS + 1)
+    await rig.checks.tick()
+    (alert,) = _missing(rig)
+    assert alert.key == f"{STAGE}:measure:{int(MEASURE_DUE)}"

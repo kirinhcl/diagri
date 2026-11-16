@@ -3,6 +3,9 @@ a measurement task recorded done with no measurement behind it, a measurement ou
 window. Closes those alerts, and the auditor's findings, once their stage is no longer the
 active one. Reads stored records only; never reports a stage event or pauses anything."""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from growbridge.archive.clock import Clock
 from growbridge.archive.snapshot import outside_window
 from growbridge.archive.store import Archive
@@ -21,6 +24,7 @@ AUDIT_FINDING = "audit_finding"  # raised by the auditor role; kept here so this
 # alerts keyed "<stage id>:..." that only mean something while that stage is the active one
 STAGE_KINDS = frozenset({TASK_MISSED, MEASUREMENT_MISSING, OUTSIDE_WINDOW, AUDIT_FINDING})
 SEVERITY = "warning"
+TIME_FORMAT = "%Y-%m-%d %H:%M"  # in the run sheet's time zone
 
 
 class StageChecks:
@@ -64,21 +68,26 @@ class StageChecks:
                 continue
             slot = f"{stage.stage_id}:{item.task_id}:{int(item.due_at)}"
             self._set(state == "missed", TASK_MISSED, slot, self._missed_text(item))
-            self._set(
-                self._lacks_measurement(item, record, current, now, end),
-                MEASUREMENT_MISSING,
-                slot,
-                self._lacks_text(item),
-            )
+            gap = self._unmeasured(item, record, current, now, end)
+            text = "" if gap is None else self._lacks_text(item, gap, stage.run_sheet.timezone)
+            self._set(gap is not None, MEASUREMENT_MISSING, slot, text)
 
-    def _lacks_measurement(self, item, record, current, now: float, end: float) -> bool:
+    @staticmethod
+    def _unmeasured(item, record, current, now: float, end: float) -> tuple[float, float] | None:
+        """The window ``(first, last)`` of a measurement task recorded done in which no
+        measurement is timed, or None when nothing is wrong (yet). The window runs from an hour
+        before the task was due to its on-time deadline, or to when it was done if that is later:
+        a task done late and measured then has its measurement."""
         if item.kind != "measurement" or record is None or record.outcome != "done":
-            return False
+            return None
         if now < record.recorded_at + MEASUREMENT_GRACE_SECONDS:
-            return False
+            return None
         first = item.due_at - manual_tasks.EARLY_SECONDS
-        last = manual_tasks.deadline(item, end)
-        return not any(first <= m.measured_at <= last for m in current)
+        done = record.recorded_at if record.done_at is None else record.done_at
+        last = max(manual_tasks.deadline(item, end), done)
+        if any(first <= m.measured_at <= last for m in current):
+            return None
+        return first, last
 
     def _check_window(self, stage: StageRuntime, start: float, end: float) -> None:
         experiment = stage.experiment_id
@@ -118,8 +127,11 @@ class StageChecks:
         )
 
     @staticmethod
-    def _lacks_text(item) -> str:
+    def _lacks_text(item, window: tuple[float, float], timezone: str) -> str:
+        zone = ZoneInfo(timezone)
+        first, last = (datetime.fromtimestamp(t, zone).strftime(TIME_FORMAT) for t in window)
         return (
-            f"Task {item.task_id} was recorded done but no measurement was entered for it. "
-            "Enter the measurement with the time it was taken."
+            f"Task {item.task_id} was recorded done but no measurement is timed within the "
+            f"task's window (from {first} to {last}). Enter the measurement with the time it "
+            "was taken."
         )
