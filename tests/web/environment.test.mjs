@@ -112,3 +112,24 @@ test("the status line names the running stage, not its id", async () => {
   assert.ok(zh.includes("正在运行：第 1 阶段 · vegetative"), zh.slice(0, 400));
   assert.ok(!zh.includes("stage-round_"));
 });
+
+test("a live refresh keeps open folds open and closed ones closed", async () => {
+  const { renderPage } = await import("./support/render-page.mjs");
+  const { element, refresh } = await renderPage("environment", {}, { lang: "en" });
+  const folds = (node, out = []) => {
+    if (node.localName === "details" && node.getAttribute("data-fold")) out.push(node);
+    node.children.forEach((child) => folds(child, out));
+    return out;
+  };
+  const byKey = () => Object.fromEntries(folds(element).map((d) => [d.getAttribute("data-fold"), d]));
+  const before = byKey();
+  assert.ok(before["temp:table"] && before["sensors:legend"] && before["co2:table"]);
+  before["temp:table"].setAttribute("open", "");
+  before["sensors:legend"].setAttribute("open", "");
+  await refresh();
+  const after = byKey();
+  assert.notEqual(after["temp:table"], before["temp:table"]);
+  assert.ok(after["temp:table"].hasAttribute("open"));
+  assert.ok(after["sensors:legend"].hasAttribute("open"));
+  assert.ok(!after["co2:table"].hasAttribute("open"));
+});

@@ -4,7 +4,7 @@
 import { LEVELS, METRICS } from "../chart-math.js";
 import { formatNumber, levelText } from "../format.js";
 import { hrefFor } from "../router.js";
-import { readingsChart } from "../ui/chart.js";
+import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { displayName } from "../ui/names.js";
 import { note, pageHead, section, timeText } from "../ui/section.js";
@@ -146,15 +146,15 @@ function nowView(ctx, env) {
 }
 
 function trendsView(ctx, env) {
-  const options = { timeZone: (ctx.me && ctx.me.timezone) || "UTC", lang: ctx.lang };
+  const options = { timeZone: (ctx.me && ctx.me.timezone) || "UTC", lang: ctx.lang, now: ctx.now };
   const sampleSeconds = env.stage ? env.stage.sampling_seconds : null;
   return h(
     "div",
     { class: "env-trends" },
     h("h3", { class: "env-sub", text: ctx.t("env.sensors") }),
-    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, empty: "env.readingsEmpty" }),
+    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, empty: "env.readingsEmpty", scope: "sensors" }),
     h("h3", { class: "env-sub", text: ctx.t("env.channels") }),
-    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty" }),
+    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty", scope: "levels" }),
   );
 }
 
@@ -184,7 +184,9 @@ export async function render(ctx) {
   const draw = () => {
     clear(status).append(statusLine(ctx, env));
     clear(now).append(nowView(ctx, env));
+    const open = openChartFolds(trends); // a poll must not close what the reader opened
     clear(trends).append(trendsView(ctx, env));
+    restoreChartFolds(trends, open);
   };
   const refresh = async () => {
     env = await load(ctx);

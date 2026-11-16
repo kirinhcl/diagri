@@ -54,3 +54,11 @@ test("fixture readings still draw", () => {
   const chart = readingsChart(t, FIXTURES["readings.json"], { timeZone: "Europe/Helsinki", lang: "zh" });
   assert.ok(visibleText(chart).includes("个读数"));
 });
+
+test("time labels take the year from the page clock", () => {
+  const { t } = testCtx({ lang: "en" });
+  const thisYear = readingsChart(t, readings, { timeZone: "UTC", lang: "en", now: 1796593600 });
+  const later = readingsChart(t, readings, { timeZone: "UTC", lang: "en", now: 1796593600 + 400 * 86400 });
+  assert.ok(!/2026/.test(visibleText(thisYear)));
+  assert.ok(/ 2026 /.test(visibleText(later)));
+});
