@@ -3,13 +3,13 @@
 // Read again every 15 s; each part is redrawn only when what it shows changed, so nothing typed
 // into a form is lost, and the results of writes stay listed while the controls change. The readings
 // of a finished stage are asked for again only every five minutes.
-import { formatDuration, formatNumber } from "../format.js";
+import { formatDuration, shortDigest } from "../format.js";
 import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { errorDetail, errorLines } from "../ui/forms.js";
 import { displayName, nameDetails } from "../ui/names.js";
-import { codeBlock, errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
+import { errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
@@ -18,7 +18,6 @@ import { tasksView } from "./stage-tasks.js";
 
 const POLL_SECONDS = 15;
 const READING_POINTS = 600;
-const SECONDS_PER_HOUR = 3600;
 
 const enc = encodeURIComponent;
 const zoneOf = (ctx) => (ctx.me && ctx.me.timezone) || "UTC";
@@ -133,21 +132,27 @@ function statusView(ctx, stage) {
   return keyValues(rows.filter(Boolean));
 }
 
-function reviewView(ctx, review) {
+const SIMULATED_DEVICE = "SIMULATED";
+
+export function reviewView(ctx, review) {
   const sheet = review.run_sheet || {};
-  const hours = Number.isFinite(sheet.duration_seconds) ? formatNumber(sheet.duration_seconds / SECONDS_PER_HOUR, 1, ctx.lang) : null;
+  const device = sheet.device_id === SIMULATED_DEVICE ? ctx.t("stage.review.simulated") : sheet.device_id;
+  const protocol = sheet.protocol_id ? ctx.t("stage.review.protocolValue", { id: sheet.protocol_id, v: sheet.protocol_version }) : null;
   const facts = keyValues([
-    [ctx.t("stage.review.version"), String(review.run_sheet_version)],
-    [ctx.t("stage.review.digest"), h("code", { text: review.run_sheet_digest })],
-    [ctx.t("col.protocol"), `${sheet.protocol_id} v${sheet.protocol_version}`],
-    [ctx.t("stage.review.device"), sheet.device_id],
-    [ctx.t("stage.review.duration"), hours && ctx.t("stage.review.durationValue", { hours })],
+    [ctx.t("stage.review.version"), ctx.t("stage.review.versionValue", { n: review.run_sheet_version })],
+    [ctx.t("stage.review.fingerprint"), ctx.t("stage.review.fingerprintValue", { digest: shortDigest(review.run_sheet_digest) })],
+    [ctx.t("col.protocol"), protocol],
+    [ctx.t("stage.review.device"), device],
+    [ctx.t("stage.review.duration"), Number.isFinite(sheet.duration_seconds) ? formatDuration(ctx.t, sheet.duration_seconds) : null],
     [ctx.t("stage.review.timezone"), sheet.timezone],
   ]);
   const blocking = review.blocking ? problemBox([ctx.t("stage.review.blocking")]) : null;
-  const json = h("details", { class: "sheet-json" }, h("summary", { text: ctx.t("stage.review.json") }), codeBlock(JSON.stringify(review.run_sheet, null, 2)));
   const findingsTitle = h("h3", { class: "action-title", text: ctx.t("stage.review.findings") });
-  return h("div", { class: "review" }, facts, blocking, findingsTitle, findingsList(ctx, review.findings), json);
+  const tech = techDetails(ctx.t, [
+    [ctx.t("stage.review.digest"), review.run_sheet_digest],
+    [ctx.t("stage.review.json"), JSON.stringify(review.run_sheet, null, 2)],
+  ]);
+  return h("div", { class: "review" }, facts, blocking, findingsTitle, findingsList(ctx, review.findings), tech);
 }
 
 // Cheap enough to compare every 15 s; a running stage's window end moves, so it redraws then.
@@ -216,20 +221,33 @@ function makeParts() {
   return Object.fromEntries(names.map((name) => [name, region(`stage-part stage-part-${name}`)]));
 }
 
+// The regions of the page, in the order each state wants them: a stage waiting for review leads
+// with the run sheet to read; a live one leads with its readings and controls.
+const READING_FIRST = ["status", "readings", "controls", "tasks", "measurements", "runSheet", "history"];
+const ORDERS = {
+  pending_review: ["status", "runSheet", "controls", "tasks", "measurements", "history", "readings"],
+  running: READING_FIRST,
+  paused: READING_FIRST,
+};
+const DEFAULT_ORDER = ["status", "controls", "readings", "runSheet", "tasks", "measurements", "history"];
+
+export function sectionOrder(state) {
+  return [...(ORDERS[state] || DEFAULT_ORDER)];
+}
+
 function sections(ctx, page, stage, onRecorded) {
   const { parts } = page;
   const newMeasurement = h("h3", { class: "action-title", text: ctx.t("measure.new") });
-  return [
-    page.head.element,
-    page.problem,
-    section(ctx.t("stage.status"), parts.status.element),
-    section(ctx.t("stage.controls"), parts.actions.element, page.log.element),
-    section(ctx.t("stage.readings"), parts.readings.element),
-    section(ctx.t("stage.runSheet"), parts.review.element),
-    section(ctx.t("stage.tasks"), parts.tasks.element),
-    section(ctx.t("stage.measurements"), parts.measurements.element, newMeasurement, measurementForm(ctx, stage, onRecorded)),
-    section(ctx.t("stage.history"), parts.history.element),
-  ];
+  const regions = {
+    status: section(ctx.t("stage.status"), parts.status.element),
+    controls: section(ctx.t("stage.controls"), parts.actions.element, page.log.element),
+    readings: section(ctx.t("stage.readings"), parts.readings.element),
+    runSheet: section(ctx.t("stage.runSheet"), parts.review.element),
+    tasks: section(ctx.t("stage.tasks"), parts.tasks.element),
+    measurements: section(ctx.t("stage.measurements"), parts.measurements.element, newMeasurement, measurementForm(ctx, stage, onRecorded)),
+    history: section(ctx.t("stage.history"), parts.history.element),
+  };
+  return [page.head.element, page.problem, ...sectionOrder(stage.state).map((name) => regions[name])];
 }
 
 export async function render(shellCtx, params) {

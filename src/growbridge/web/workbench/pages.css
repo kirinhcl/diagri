@@ -199,17 +199,10 @@ code {
   gap: 6px 10px;
   font-size: 13px;
 }
+.finding-group { display: grid; gap: 4px; }
+.finding-items { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 13px; }
 .finding-text { min-width: 0; overflow-wrap: anywhere; }
 .draft-findings { display: grid; gap: 8px; }
-.sheet-json summary {
-  width: fit-content;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--green);
-  cursor: pointer;
-}
-.sheet-json summary:hover { color: var(--green-dark); }
-.sheet-json[open] summary { margin-bottom: 10px; }
 
 /* --- stage page: environment curves (one small chart per reading) ------------------------------ */
 .readings { display: grid; gap: 14px; }

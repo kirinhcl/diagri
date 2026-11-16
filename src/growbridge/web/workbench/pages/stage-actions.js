@@ -8,7 +8,8 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
-import { errorBox, errorFold, note, replaceParts, showErrors, timeText } from "../ui/section.js";
+import { shortDigest } from "../format.js";
+import { errorBox, errorFold, note, replaceParts, showErrors, techDetails, timeText } from "../ui/section.js";
 
 // A manual write may only switch the pump off; irrigation is what switches it on.
 const CHANNELS = ["light", "exhaust", "fan", "pump"];
@@ -86,18 +87,39 @@ function plainAction(env, name) {
   return group(name, label, note(ctx.t(`stage.${name}.note`)), control.element);
 }
 
+// Blocking groups first; inside each, one group per code in order of first appearance.
+export function groupFindings(findings) {
+  const groups = [];
+  for (const finding of Array.isArray(findings) ? findings : []) {
+    const blocking = Boolean(finding.blocking);
+    let group = groups.find((g) => g.blocking === blocking && g.code === finding.code);
+    if (!group) {
+      group = { blocking, code: finding.code, items: [] };
+      groups.push(group);
+    }
+    group.items.push(finding);
+  }
+  return [...groups.filter((g) => g.blocking), ...groups.filter((g) => !g.blocking)];
+}
+
 export function findingsList(ctx, findings) {
-  const list = Array.isArray(findings) ? findings : [];
-  if (!list.length) return note(ctx.t("stage.review.noFindings"));
-  const item = (finding) =>
+  const groups = groupFindings(findings);
+  if (!groups.length) return note(ctx.t("stage.review.noFindings"));
+  const pillClass = (blocking) => ["pill", blocking ? "pill-onsite" : "pill-waiting"];
+  const entry = (group) =>
     h(
       "li",
-      { class: "finding" },
-      h("span", { class: ["pill", finding.blocking ? "pill-onsite" : "pill-waiting"], text: ctx.t(finding.blocking ? "finding.blocking" : "finding.hint") }),
-      h("code", { text: finding.code }),
-      h("span", { class: "finding-text", text: finding.message }),
+      { class: "finding-group" },
+      h(
+        "p",
+        { class: "finding" },
+        h("span", { class: pillClass(group.blocking), text: ctx.t(group.blocking ? "finding.blocking" : "finding.hint") }),
+        h("strong", { text: ctx.t("stage.review.groupTitle", { label: labelOr(ctx.t, "finding", group.code), n: group.items.length }) }),
+      ),
+      h("ul", { class: "finding-items" }, group.items.map((item) => h("li", { class: "finding-text", text: item.message }))),
+      techDetails(ctx.t, [[ctx.t("tech.code"), group.code]]),
     );
-  return h("ul", { class: "findings" }, list.map(item));
+  return h("ul", { class: "findings" }, groups.map(entry));
 }
 
 // --- pending review -------------------------------------------------------------------------------
@@ -115,10 +137,10 @@ function approveGroup(env) {
   const label = ctx.t("stage.approve");
   const reviewed = review ? review.run_sheet_digest : null;
   const { own, env: titled } = titledRefusals(env);
-  const refuse = async (titleKey, lineKey, values) => {
+  const refuse = async (titleKey, lineKey, details = []) => {
     own.title = ctx.t(titleKey);
-    const line = ctx.t(lineKey, values);
-    env.log.add(label, [own.title, line]);
+    const line = ctx.t(lineKey);
+    env.log.add(label, [own.title, line, techDetails(ctx.t, details)]);
     ctx.notify(`${own.title}. ${line}`, "error");
     await env.onChanged();
     return new ApiError(0, "not_approved", line);
@@ -129,9 +151,13 @@ function approveGroup(env) {
     if (sheetCheck(reviewed, current && current.run_sheet_digest) !== "same") throw await refuse("stage.approve.notApproved", "stage.approve.changed");
     const approval = await ctx.api.post(stagePath(stage, "approve"), approveBody(reviewed), { action: label });
     const time = timeText(ctx, approval.approved_at);
-    env.log.add(label, [ctx.t("stage.approved", { version: approval.run_sheet_version, digest: approval.run_sheet_digest, time })]);
+    const approved = ctx.t("stage.approved", { version: approval.run_sheet_version, digest: shortDigest(approval.run_sheet_digest), time });
+    env.log.add(label, [approved, techDetails(ctx.t, [[ctx.t("stage.review.digest"), approval.run_sheet_digest]])]);
     if (sheetCheck(reviewed, approval.run_sheet_digest) !== "same") {
-      throw await refuse("stage.approve.mismatchTitle", "stage.approve.mismatch", { approved: approval.run_sheet_digest, reviewed });
+      throw await refuse("stage.approve.mismatchTitle", "stage.approve.mismatch", [
+        [ctx.t("stage.approve.digestApproved"), approval.run_sheet_digest],
+        [ctx.t("stage.approve.digestReviewed"), reviewed],
+      ]);
     }
   };
   const control = actionButton(titled, { label, run });
