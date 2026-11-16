@@ -13,6 +13,7 @@ from typing import Any
 from growbridge.archive.clock import Clock
 from growbridge.archive.models import RightKind, RunSheet
 from growbridge.ports import Actor, ControlPort, Denied, StageRuntime
+from growbridge.workflow.access import Access, guard_stage
 from growbridge.workflow.permissions import require_operator
 from growbridge.workflow.states import STAGE_TERMINAL, StageState
 from growbridge.workflow.store import Grant, Plan, StageRow, WorkflowStore, care_if_missing
@@ -24,6 +25,7 @@ class StageRecovery:
     store: WorkflowStore
     control: ControlPort
     clock: Clock
+    access: Access | None
 
     async def on_restart(self) -> None:
         """Process start: every live stage needs checking and every old write right is void."""
@@ -115,6 +117,7 @@ class StageRecovery:
     async def record_onsite_check(self, stage_id: str, actor: Actor, note: str) -> StageRuntime:
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)  # before anything reaches the control service
         if stage.state not in (S.RECOVERY_CHECK, S.PAUSED, S.MANUAL):
             raise Denied("state", f"stage {stage_id} is {stage.state.value}; no check is open")
         await self.control.onsite_check(actor.id, note)

@@ -30,6 +30,7 @@ from growbridge.ports import (
     StageEventKind,
     StageRuntime,
 )
+from growbridge.workflow.access import Access, guard_project, guard_round, guard_sheet, guard_stage
 from growbridge.workflow.permissions import require_kind, require_operator
 from growbridge.workflow.recovery import StageRecovery
 from growbridge.workflow.states import ROUND_TERMINAL, STAGE_TERMINAL, RoundState, StageState
@@ -93,6 +94,7 @@ class WorkflowService(StageRecovery):
         self.check_treatments = check_treatments
         self.on_intervention = on_intervention  # hands each recorded intervention on, once saved
         self.store = WorkflowStore(db)
+        self.access: Access | None = None  # multi-user rules; set once at assembly
         self._unsent: list[dict] = []  # saved in a transaction, not yet handed on
 
     # --- design --------------------------------------------------------------------------------
@@ -110,6 +112,8 @@ class WorkflowService(StageRecovery):
         require_kind(actor, DESIGNERS)
         if not self.store.has_project(protocol.project_id):
             raise Denied("state", f"unknown project {protocol.project_id}")
+        unknown = Denied("state", f"unknown project {protocol.project_id}")
+        guard_project(self.access, actor, protocol.project_id, lambda: unknown)
         saved = self.store.protocol(protocol.id, protocol.version)
         if saved is None:
             self.store.put_protocol(protocol, self.clock.now())
@@ -122,6 +126,9 @@ class WorkflowService(StageRecovery):
 
     def create_round(self, project_id: str, protocol_id: str, actor: Actor) -> str:
         require_kind(actor, DESIGNERS)
+        guard_project(
+            self.access, actor, project_id, lambda: Denied("state", f"unknown project {project_id}")
+        )
         protocol = self.store.latest_protocol(protocol_id, project_id)
         if protocol is None:
             raise Denied("state", f"no protocol {protocol_id} saved for project {project_id}")
@@ -143,6 +150,7 @@ class WorkflowService(StageRecovery):
         if actor.kind == "model" and actor.id != MODEL_DRAFTER:
             raise Denied("model_role", f"only the {MODEL_DRAFTER} files run sheets")
         rnd = self.store.round(round_id)
+        guard_round(self.access, actor, self.store, round_id)
         if rnd.state not in (RoundState.DESIGNING, RoundState.STAGE_REVIEW) or rnd.awaiting_choice:
             raise Denied("state", f"round is {rnd.state.value}; no run sheet can be submitted")
         owner = (run_sheet.project_id, run_sheet.protocol_id, run_sheet.protocol_version)
@@ -153,7 +161,8 @@ class WorkflowService(StageRecovery):
         if any(finding.blocking for finding in findings):
             return findings
         stage = self.store.find_stage(run_sheet.stage_id)
-        with self.db.transaction():
+        with self.db.transaction():  # the lock check and the stage insert are one step
+            guard_sheet(self.access, run_sheet.project_id, run_sheet.device_id)
             if stage is None:
                 self._add_stage(rnd, run_sheet)
             else:
@@ -246,6 +255,7 @@ class WorkflowService(StageRecovery):
         now = self.clock.now()
         require_operator(actor, now, recent=True)
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state is not S.PENDING_REVIEW:
             raise Denied("state", f"stage {stage_id} is {stage.state.value}; nothing to approve")
         sheet = self._sheet(stage)
@@ -281,6 +291,7 @@ class WorkflowService(StageRecovery):
         which has to hand over its write rights first."""
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state is not S.PENDING_REVIEW:
             raise Denied("state", f"stage {stage_id} is {stage.state.value}; stop it instead")
         plan = Plan(
@@ -321,6 +332,7 @@ class WorkflowService(StageRecovery):
         if actor.kind != "workflow":
             require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state is S.RUNNING:
             return self._runtime(stage)
         if stage.state is not S.PENDING_REVIEW:
@@ -356,6 +368,7 @@ class WorkflowService(StageRecovery):
     async def pause_stage(self, stage_id: str, actor: Actor, reason: str) -> StageRuntime:
         require_kind(actor, ("operator", "observer"))
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage, emergency=True)
         if stage.state is S.PAUSED:
             return self._runtime(stage)
         if stage.state is not S.RUNNING:
@@ -373,6 +386,7 @@ class WorkflowService(StageRecovery):
     async def resume_stage(self, stage_id: str, actor: Actor) -> StageRuntime:
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state is S.RUNNING:
             return self._runtime(stage)
         if stage.state is not S.PAUSED:
@@ -398,6 +412,7 @@ class WorkflowService(StageRecovery):
     async def stop_stage(self, stage_id: str, actor: Actor) -> StageRuntime:
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage, emergency=True)
         if stage.state in STAGE_TERMINAL:
             raise Denied("state", f"stage {stage_id} is already {stage.state.value}")
         plan = Plan(
@@ -416,6 +431,7 @@ class WorkflowService(StageRecovery):
     async def takeover(self, stage_id: str, actor: Actor) -> StageRuntime:
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state is S.MANUAL:
             return self._runtime(stage)
         if stage.state not in (S.RUNNING, S.PAUSED):
@@ -440,6 +456,7 @@ class WorkflowService(StageRecovery):
         this moment are listed, and recorded as an intervention when the operator accepts them."""
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state is not S.MANUAL or stage.manual_right is None:
             raise Denied("state", f"stage {stage_id} is {stage.state.value}; nothing to hand back")
         sheet = self._sheet(stage)
@@ -498,6 +515,7 @@ class WorkflowService(StageRecovery):
         now = self.clock.now()
         require_operator(actor, now, recent=True)
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)
         if stage.state not in (S.RUNNING, S.PAUSED):
             raise Denied("state", f"stage {stage_id} is {stage.state.value}; cannot switch")
         self._check_switch(stage, run_sheet)
@@ -597,6 +615,7 @@ class WorkflowService(StageRecovery):
 
     async def choose_after_stop(self, round_id: str, choice: Choice, actor: Actor) -> RoundState:
         require_operator(actor, self.clock.now())
+        guard_round(self.access, actor, self.store, round_id)
         rnd = self.store.round(round_id)
         if rnd.awaiting_choice is None or rnd.state in ROUND_TERMINAL:
             raise Denied("state", "no stopped stage is waiting for a choice")
@@ -615,6 +634,7 @@ class WorkflowService(StageRecovery):
 
     async def abort_round(self, round_id: str, actor: Actor) -> RoundState:
         require_operator(actor, self.clock.now())
+        guard_round(self.access, actor, self.store, round_id)
         rnd = self.store.round(round_id)
         if rnd.state in ROUND_TERMINAL:
             raise Denied("state", f"round is already {rnd.state.value}")
@@ -622,6 +642,7 @@ class WorkflowService(StageRecovery):
             for number in held(stage.right_number, stage.manual_right, stage.care_right):
                 await self.control.handover(number, "round aborted")
         with self.db.transaction():
+            guard_round(self.access, actor, self.store, round_id)  # transferred meanwhile?
             fresh = self.store.round(round_id)
             if fresh.state in ROUND_TERMINAL:
                 raise Denied("state", f"round is already {fresh.state.value}")
