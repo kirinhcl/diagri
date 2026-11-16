@@ -12,7 +12,9 @@
         "message": "No backup_dir is configured: the databases are not being backed up",
         "count": 2,
         "last_at": 1794821385.612114,
-        "never_read": true
+        "never_read": true,
+        "code": "backup_unconfigured",
+        "params": {}
       }
     },
     {
@@ -27,7 +29,9 @@
         "message": "No notification channel is configured: alerts are not sent anywhere",
         "count": 2,
         "last_at": 1794821385.6131048,
-        "never_read": true
+        "never_read": true,
+        "code": "notify_unconfigured",
+        "params": {}
       }
     },
     {
@@ -42,6 +46,52 @@
         "message": "No external heartbeat is configured (GROWBRIDGE_HEARTBEAT_HOST_URL and GROWBRIDGE_HEARTBEAT_RUN_URL): nobody is told if this host or the run stops",
         "count": 2,
         "last_at": 1794821385.6133492,
+        "never_read": true,
+        "code": "monitor_unconfigured",
+        "params": {}
+      }
+    },
+    {
+      "kind": "alert",
+      "id": "alert_5a1e0000000000000000000000000001",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794800000.5,
+      "detail": {
+        "alert_kind": "stage_waiting",
+        "severity": "critical",
+        "message": "Stage stage:a-1 is paused after disconnect_affects: {'seconds': 600, 'reasons': ['pump_off', 'light_off']}",
+        "count": 1,
+        "last_at": 1794821000.5,
+        "never_read": true,
+        "code": "stage_waiting",
+        "params": {
+          "stage_id": "stage:a-1",
+          "entry_id": 7,
+          "state": "paused",
+          "event": "disconnect_affects",
+          "detail": {
+            "seconds": 600,
+            "reasons": [
+              "pump_off",
+              "light_off"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "alert",
+      "id": "alert_5a1e0000000000000000000000000004",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794800000.5,
+      "detail": {
+        "alert_kind": "data_gap",
+        "severity": "info",
+        "message": "No readings for 20 min",
+        "count": 1,
+        "last_at": 1794821000.5,
         "never_read": true
       }
     },

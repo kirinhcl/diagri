@@ -1,8 +1,10 @@
 // Open alerts: how bad, how often, since when, and who has read them.
 import { h } from "../ui/dom.js";
 import { errorBox, note, pageHead, section, showErrors, timeCell, timeText } from "../ui/section.js";
-import { codeLabel, severityPill } from "../ui/status.js";
+import { labelOr } from "../i18n.js";
+import { severityPill } from "../ui/status.js";
 import { table } from "../ui/table.js";
+import { alertCell } from "./alert-text.js";
 import { isNotMounted } from "./not-mounted.js";
 
 const SEVERITY_ORDER = ["info", "warning", "critical"]; // mildest first
@@ -25,14 +27,6 @@ export function readLine(ctx, alert) {
   const worse = Boolean(alert.read_severity) && SEVERITY_ORDER.indexOf(alert.severity) > SEVERITY_ORDER.indexOf(alert.read_severity);
   if (worse) return ctx.t("alerts.readWorse");
   return ctx.t("alerts.readBy", { who: alert.read_by, time: timeText(ctx, alert.read_at) });
-}
-
-// The first line is the summary; the lines after it are what the alert found, one list item each.
-function messageCell(message) {
-  const lines = String(message ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
-  const [summary = "", ...rest] = lines;
-  const items = rest.map((line) => h("li", { text: line.replace(/^-\s+/, "") }));
-  return h("div", { class: "cell-stack" }, h("p", { text: summary }), items.length ? h("ul", {}, items) : null);
 }
 
 // Offered again only because the day has passed: it did not get worse, and was read.
@@ -69,8 +63,8 @@ function readCell(ctx, alert) {
 function alertsTable(ctx, alerts, focus) {
   const columns = [
     { label: ctx.t("alerts.severity"), cell: (row) => severityPill(ctx.t, row.severity) },
-    { label: ctx.t("alerts.kind"), cell: (row) => codeLabel(ctx.t, "alert.kind", row.kind) },
-    { label: ctx.t("alerts.message"), cell: (row) => messageCell(row.message) },
+    { label: ctx.t("alerts.kind"), cell: (row) => labelOr(ctx.t, "alert.kind", row.kind) },
+    { label: ctx.t("alerts.message"), cell: (row) => alertCell(ctx, row) },
     { label: ctx.t("alerts.count"), cell: (row) => String(row.count) },
     { label: ctx.t("alerts.first"), cell: (row) => timeCell(ctx, row.first_at) },
     { label: ctx.t("alerts.last"), cell: (row) => timeCell(ctx, row.last_at) },

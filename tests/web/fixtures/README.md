@@ -17,6 +17,16 @@ captured answer: analysis.json uses the time conversation.json records for the `
 call that froze it (entry seq 30), a close stand-in, not the stored value. environment.json has no
 active stage, so it gained nothing.
 
+Task 7 of console usability batch 2a gave every alert the server's new `code` and `params`, by hand.
+Converted from captured entries (same `message`, `code` = `kind`, `params` `{}`, per the code tables
+in tasks 5 and 6): the three `*_unconfigured` alerts in alerts.json, and their three alert items in
+inbox.json (as `detail.code` and `detail.params`). Synthetic, written by hand from the server's code
+tables (`src/growbridge/codes.py`) and not captured: in alerts.json a `stage_waiting` alert for the
+stage id `stage:a-1` (a colon, to test the link; `params.detail` holds `seconds` and `reasons`), an
+`audit_finding` with a summary and two evidence lines, a `threshold` alert, and a `data_gap` alert
+with no `code` or `params` (a row stored before codes); in inbox.json the `stage_waiting` and the
+code-less `data_gap` alert items.
+
 `known-codes.json` is not an API answer: it lists, per catalog prefix, the codes the server can
 send, and says in `_sources` where each list was found. `tests/web/catalog.test.mjs` checks that
 each code has text in both catalogs; `tests/workbench/test_console_known_codes.py` checks the lists
