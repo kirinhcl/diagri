@@ -59,6 +59,15 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         calls.set(PROJECT, Budget(max_calls=50, max_cost=100.0))
     stages = Stages(clock.now() if started else None, state)
     book = AlertBook(db, clock)
+
+    def resolve_alert(kind, key):
+        # Runtime.resolve_alert's contract: never raises, False when not stored
+        try:
+            book.resolve(kind, key)
+        except Exception:
+            return False
+        return True
+
     return SimpleNamespace(
         workflow=stages,
         tasks=board,
@@ -68,6 +77,7 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         alert=lambda kind, key, message, severity="critical": book.raise_alert(
             kind, key, severity, message
         ),
+        resolve_alert=resolve_alert,
     )
 
 
@@ -231,6 +241,20 @@ class NeedsAttention:
 class Raises:
     async def run_task(self, task_id):
         raise RuntimeError("model unreachable")
+
+
+async def test_an_alert_store_that_cannot_close_the_schedule_alert_does_not_stop_the_runs(db):
+    runtime = rig(db, started=False)
+    task = runtime.tasks.create(make_task("planner", "ev-plan", project_id=PROJECT))
+
+    def locked(kind, key):
+        raise RuntimeError("database is locked")
+
+    runtime.book.resolve = locked
+
+    await run_agents(runtime, NeedsAttention(runtime.tasks))
+
+    assert runtime.tasks.get(task.id).state is TaskState.NEEDS_ATTENTION
 
 
 async def test_an_audit_that_fails_on_two_stage_days_is_one_warning(db):

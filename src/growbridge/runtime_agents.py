@@ -139,7 +139,7 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
         log.exception("audit scheduling failed")
         runtime.alert("audit_schedule", "schedule", f"{type(error).__name__}: {error}")
     else:
-        runtime.book.resolve("audit_schedule", "schedule")
+        runtime.resolve_alert("audit_schedule", "schedule")
     finished = 0
     for task in runtime.tasks.open_tasks(ROLE_TOOLS):
         try:
