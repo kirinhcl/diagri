@@ -27,6 +27,11 @@ stage id `stage:a-1` (a colon, to test the link; `params.detail` holds `seconds`
 with no `code` or `params` (a row stored before codes); in inbox.json the `stage_waiting` and the
 code-less `data_gap` alert items.
 
+Before task 9 of batch 2a, run-sheet.json and run-sheet-pending.json were captured again from the
+same data, at commit 134e8c3, with the dev workbench started without model roles. Findings are
+computed on every read, so they now carry the server's `variant` and `params`. Nothing else in the
+two files changed (checked by comparing them without `findings`).
+
 `known-codes.json` is not an API answer: it lists, per catalog prefix, the codes the server can
 send, and says in `_sources` where each list was found. `tests/web/catalog.test.mjs` checks that
 each code has text in both catalogs; `tests/workbench/test_console_known_codes.py` checks the lists

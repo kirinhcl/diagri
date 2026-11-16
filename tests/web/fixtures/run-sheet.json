@@ -104,27 +104,55 @@
     {
       "code": "manual_task",
       "message": "manual irrigation irrigate-daily needs the user at 09:00: an on-site operator starts a 20 s pump run from the stage page",
-      "blocking": false
+      "blocking": false,
+      "variant": "irrigation",
+      "params": {
+        "task_id": "irrigate-daily",
+        "at_local": "09:00",
+        "seconds": 20.0
+      }
     },
     {
       "code": "manual_task",
       "message": "manual measurement canopy-measure needs the user at 10:00",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "task_kind": "measurement",
+        "task_id": "canopy-measure",
+        "at_local": "10:00"
+      }
     },
     {
       "code": "manual_task",
       "message": "manual photo canopy-photo needs the user at 10:00",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "task_kind": "photo",
+        "task_id": "canopy-photo",
+        "at_local": "10:00"
+      }
     },
     {
       "code": "no_evidence",
       "message": "timed action light-on: no evidence card or user input",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "source_kind": "timed_action",
+        "source": "light-on"
+      }
     },
     {
       "code": "no_evidence",
       "message": "timed action light-off: no evidence card or user input",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "source_kind": "timed_action",
+        "source": "light-off"
+      }
     }
   ],
   "blocking": false
