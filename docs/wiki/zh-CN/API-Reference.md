@@ -153,7 +153,7 @@
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值） | `protection_right` |
 | `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id`、`project_id` 和 `state_at`（角色令牌得到的运行信息和以前一样，没有 `round_id`）。操作员还得到 `project_name`、`round_number`、`stage_index` 和 `phase`，含义同轮次；找不到时各为 `null` |
-| `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord`。失败或作废的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
+| `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警。每条在英文 `message` 之外还有 `code`（`alert` 族的消息码；有代码之前存下的告警为 `null`）和 `params`（对象，代码没有参数时为空）。 |
 | `POST` | `/wb/alerts/{event_id}/read` | 无 | `event_id` |
 | `POST` | `/wb/projects` | `name`（1 到 200） | `project_id` |
@@ -194,6 +194,8 @@
 `request_id` 的规则和桥接 API 相同。`POST /wb/manual/{channel}` 和 `POST /wb/irrigation` 要求阶段处于 `manual` 状态。对 `POST /wb/manual/pump`，`level` 为 1 会以 `pump_on_forbidden` 被拒绝。
 
 控制台显示的文字由代码拼出，不取英文句子。一个代码属于某一族（`alert`、`finding`、`receipt`、`task_end`、`compute_error`、`compute_stuck`、`chat_end`、`estimate`），`params` 放句子要写出的值，控制台按页面语言写出文字。各族代码的完整清单在 `tests/web/fixtures/message-codes.json`，由 `scripts/export_message_codes.py` 从 `src/growbridge/codes.py` 导出。`message`、`error`、`reason` 和 `note` 保持英文、内容不变，供日志、旧客户端和通知使用。有代码之前存下的记录没有代码，控制台显示一句通用的话。
+
+人起的名字显示出来，id 只进技术详情。处理相关的发现 `treatment_not_applied`、`no_replication` 和 `missing_control.unallocated` 在 `treatment`、`treatments` 或 `control` 里写处理的名字，在 `treatment_id`、`treatment_ids` 或 `control_id` 里写 id。`unknown_treatment` 和 `missing_control.undefined` 没有名字可写，仍写 id。计划浇水时没能确认水泵已关，任务记录以 `task_end` 族的 `pump_off_unconfirmed` 结束（无参数），它优先于这次运行自己的提前结束代码。因输出文件太多而被拒绝的取回带 `compute_error` 族的 `too_many_files`，参数是 `file_count` 和 `limit_count`；其余输出上限仍是 `output_limit`。
 
 | 状态码 | 什么情况 | 响应体 |
 | --- | --- | --- |
