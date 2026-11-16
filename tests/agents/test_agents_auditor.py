@@ -190,6 +190,13 @@ async def test_raise_audit_finding_records_a_warning_that_pauses_nothing(env):
     assert (alert.kind, alert.severity) == ("audit_finding", "warning")
     assert alert.key.startswith("stage-1:") and "no light-on action" in alert.message
     assert body["key"] == alert.key
+    assert alert.code == "audit_finding"
+    assert alert.params == {
+        "stage_id": "stage-1",
+        "summary": "light schedule not followed",
+        "evidence": ["no light-on action at 06:00"],
+    }
+    assert alert.message == "light schedule not followed\nno light-on action at 06:00"
     assert env.workflow.stage("stage-1").state == before
 
 

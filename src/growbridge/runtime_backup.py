@@ -69,7 +69,8 @@ class Backups:
         except Exception as error:
             log.exception("backup failed")
             self.retry_at = asyncio.get_running_loop().time() + RETRY_SECONDS
-            self.alert("backup", "databases", f"Backup failed: {type(error).__name__}: {error}")
+            message = f"Backup failed: {type(error).__name__}: {error}"
+            self.alert("backup", "databases", message, code="backup")
             return
         self.resolve("backup", "databases")
 

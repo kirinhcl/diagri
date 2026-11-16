@@ -34,7 +34,14 @@ class InterventionMirror:
             log.exception("intervention could not be copied to the archive")
             if self.alert is not None:
                 message = f"{item.get('kind')} not copied to the archive: {error}"
-                self.alert("intervention_mirror", "archive", message)
+                params = {"intervention_kind": item.get("kind")}
+                self.alert(
+                    "intervention_mirror",
+                    "archive",
+                    message,
+                    code="intervention_mirror",
+                    params=params,
+                )
 
     def _mirror(self, item: dict) -> None:
         key = hashlib.sha256(json.dumps(item, sort_keys=True).encode()).hexdigest()

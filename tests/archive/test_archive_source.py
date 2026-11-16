@@ -85,6 +85,20 @@ def test_source_raises_when_cursor_is_ahead_of_the_table(store, clock):
     assert source.read_after(2, 10) == []  # cursor at the top is fine
 
 
+def test_source_rewound_carries_its_row_numbers(store, clock):
+    insert(store, 1)
+    insert(store, 1)
+
+    with pytest.raises(SourceRewound) as raised:
+        LegacySampleSource(store, clock).read_after(5, 10)
+
+    assert (raised.value.top_rowid, raised.value.cursor) == (2, 5)
+    assert str(raised.value) == (
+        "legacy samples end at rowid 2 but the archive cursor is 5; "
+        "rows were deleted and rowids reused, so new rows cannot be told apart"
+    )
+
+
 def test_source_raises_on_empty_table_with_nonzero_cursor(store, clock):
     with pytest.raises(SourceRewound):
         LegacySampleSource(store, clock).read_after(3, 10)

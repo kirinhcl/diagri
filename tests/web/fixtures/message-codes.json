@@ -82,6 +82,121 @@
     "pump_watchdog_record": {
       "params": [],
       "action": true
+    },
+    "backup_unconfigured": {
+      "params": [],
+      "action": true
+    },
+    "notify_unconfigured": {
+      "params": [],
+      "action": true
+    },
+    "monitor_unconfigured": {
+      "params": [],
+      "action": true
+    },
+    "not_write_host": {
+      "params": [],
+      "action": true
+    },
+    "tick_step": {
+      "params": [
+        "step"
+      ],
+      "action": true
+    },
+    "source_rewound": {
+      "params": [
+        "top_rowid",
+        "cursor"
+      ],
+      "action": true
+    },
+    "intervention_mirror": {
+      "params": [
+        "intervention_kind"
+      ],
+      "action": true
+    },
+    "stage_waiting": {
+      "params": [
+        "stage_id",
+        "entry_id",
+        "state",
+        "event",
+        "detail"
+      ],
+      "action": true
+    },
+    "task_deadline": {
+      "params": [
+        "task_id",
+        "project_id",
+        "role"
+      ],
+      "action": true
+    },
+    "run_health": {
+      "params": [
+        "failures"
+      ],
+      "action": true
+    },
+    "external_monitor": {
+      "params": [
+        "signal"
+      ],
+      "action": true
+    },
+    "backup": {
+      "params": [],
+      "action": true
+    },
+    "agent_task_failed": {
+      "params": [
+        "task_id",
+        "project_id",
+        "role"
+      ],
+      "action": true
+    },
+    "agent_task_attention": {
+      "params": [
+        "task_id",
+        "project_id",
+        "role"
+      ],
+      "action": true
+    },
+    "audit_task_failed": {
+      "params": [
+        "stage_id",
+        "task_id"
+      ],
+      "action": true
+    },
+    "audit_task_attention": {
+      "params": [
+        "stage_id",
+        "task_id"
+      ],
+      "action": true
+    },
+    "audit_schedule": {
+      "params": [],
+      "action": true
+    },
+    "model_client": {
+      "params": [],
+      "action": true
+    },
+    "audit_finding": {
+      "params": [
+        "stage_id",
+        "summary",
+        "evidence"
+      ],
+      "action": true
     }
   },
   "finding": {},

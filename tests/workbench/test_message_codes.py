@@ -128,3 +128,29 @@ def test_observer_and_watchdog_alerts_name_registered_codes() -> None:
         "pump_watchdog_record",
     }
     assert seen <= set(CODES["alert"])
+
+
+def test_every_alert_in_the_server_names_a_registered_code() -> None:
+    names = {"raise_alert", "_alert", "alert", "_raise", "_enter", "_set"}
+    src = REPO / "src" / "growbridge"
+    for _, _, code in codes_at_calls(src, names):
+        assert code in CODES["alert"], code
+    missing = []
+    for path in sorted(src.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            called = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+            if called in {"raise_alert", "_alert", "alert"} and not any(
+                item.arg == "code" for item in node.keywords
+            ):
+                missing.append(f"{path.relative_to(src)}:{node.lineno}")
+    assert missing == [], f"alerts raised without a code=: {missing}"
+
+
+def test_the_alert_codes_the_runtime_picks_by_outcome_are_registered() -> None:
+    # runtime_agents builds these two families from the outcome; a literal scan cannot see them
+    for family in ("agent_task", "audit_task"):
+        assert {f"{family}_failed", f"{family}_attention"} <= set(CODES["alert"])
+    assert len(CODES["alert"]) == 33

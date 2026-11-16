@@ -16,6 +16,7 @@ from growbridge.archive.models import Channel, Condition, Entry, EvidenceCard, L
 from growbridge.compute.phases import Phase
 from growbridge.control.device import SENSORS
 from growbridge.observer.alerts import Severity
+from growbridge.observer.health import PROBE_NAMES
 from growbridge.planning.manual_tasks import Status
 from growbridge.ports import Difference, StageEventKind
 from growbridge.research.analysis import AnalysisRun, Conclusion, RunStatus
@@ -103,3 +104,36 @@ def test_console_lists_every_finding_code():
     findings |= strings(found, "_block", 0) | strings(found, "_hint", 0)
     assert {"manual_task", "treatment_not_applied", "seed_mismatch"} <= findings
     assert findings <= known()["finding"]
+
+
+def method(tree: ast.Module, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    raise AssertionError(f"no function {name} in runtime.py")
+
+
+def test_console_lists_every_tick_step_probe_and_heartbeat():
+    tree = ast.parse((Path(growbridge.__file__).parent / "runtime.py").read_text(encoding="utf-8"))
+    steps = {
+        node.elts[0].value
+        for node in ast.walk(method(tree, "tick"))
+        if isinstance(node, ast.Tuple)
+        and len(node.elts) == 2
+        and isinstance(node.elts[0], ast.Constant)
+        and isinstance(node.elts[0].value, str)
+    }
+    signals = {
+        key.value
+        for node in ast.walk(method(tree, "_monitor_alerts"))
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "signals" for target in node.targets)
+        and isinstance(node.value, ast.Dict)
+        for key in node.value.keys
+        if isinstance(key, ast.Constant)
+    }
+    assert {"archive", "health", "backup"} <= steps and signals == {"host", "run"}
+    codes = known()
+    assert steps <= codes["tickStep"]
+    assert set(PROBE_NAMES) <= codes["probe"]
+    assert signals <= codes["heartbeat"]

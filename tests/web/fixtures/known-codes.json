@@ -59,6 +59,14 @@
   "inbox.kind": [
     "stage_review", "stage_manual", "stage_recovery", "stage_paused", "round_choice", "alert", "compute_stuck", "task"
   ],
+  "tickStep": [
+    "archive", "executor", "recovery", "observer", "outbox", "tasks", "compute", "report", "backup", "health"
+  ],
+  "probe": [
+    "growbridge_response", "executor_evaluation", "capture", "archive_write", "oldest_undelivered_alert",
+    "offsite_backup"
+  ],
+  "heartbeat": ["host", "run"],
   "_sources": {
     "_how": "Codes the console can receive from the server, gathered from src/growbridge on 2026-11-16 (branch feat/console-usability). tests/web/catalog.test.mjs checks that each one has text in en.js and zh.js; tests/workbench/test_console_known_codes.py checks that the enumerable ones are all listed here. Paths below are relative to src/growbridge.",
     "state": "workflow/states.py: every StageState, RoundState and TaskState value. compute/phases.py: the Phase literal (prepared, queued, running, reconcile, fetching, needs_review, failed, done, cancelled). Conversation status entries: agents/dispatch.py _end records state.value (a TaskState) and 'follow_up' (grep -n '_record(task, \"status\"' agents/dispatch.py). Not listed: 'awaiting_choice', which the console makes up itself (it has text and a colour group).",
@@ -83,6 +91,9 @@
     "report.labels": "archive/models.py Label literal.",
     "report.conclusions": "research/analysis.py Conclusion literal.",
     "analysis.runState": "research/analysis.py RunStatus literal (snapshots[].run_status of GET /protocols/{id}/analysis, workbench/analysis.py state) and AnalysisRun.status (status of POST /analysis/runs, workbench/analysis.py start).",
+    "tickStep": "runtime.py Runtime.tick: the first element of each (name, step) tuple handed to _guarded, which is the step name in a tick_step alert's params.",
+    "probe": "observer/health.py PROBE_NAMES: the probe names that RunHealth.failures lists (the failures param of a run_health alert).",
+    "heartbeat": "runtime.py Runtime._monitor_alerts: the keys of the signals dict (host, run), the signal param of an external_monitor alert.",
     "inbox.kind": "workbench/reads.py: STAGE_KINDS values, and _item(\"alert\" / \"compute_stuck\" / \"round_choice\" / \"task\", ...) (grep -n '_item(' workbench/reads.py)."
   }
 }

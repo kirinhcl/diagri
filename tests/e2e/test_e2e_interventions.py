@@ -61,4 +61,8 @@ async def test_a_failing_mirror_raises_an_alert_and_keeps_the_stage_moving(world
     assert runtime.workflow.stage(STAGE).state.value == "manual"
     alerts = [a for a in runtime.book.open() if a.kind == "intervention_mirror"]
     assert len(alerts) == 1 and "archive unavailable" in alerts[0].message
+    assert (alerts[0].code, alerts[0].params) == (
+        "intervention_mirror",
+        {"intervention_kind": "takeover"},
+    )
     assert runtime.archive.interventions(f"experiment-{STAGE}") == ()

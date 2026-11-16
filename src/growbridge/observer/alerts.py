@@ -144,7 +144,7 @@ class Alert(Model):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
-def _alert(row) -> Alert:
+def _from_row(row) -> Alert:
     values = {name: row[name] for name in Alert.model_fields}
     values["params"] = json.loads(values["params"]) if values["params"] else {}
     return Alert(**values)
@@ -223,7 +223,7 @@ class AlertBook:
         row = self.db.one("SELECT * FROM observer_alerts WHERE event_id = ?", (event_id,))
         if row is None:
             raise Denied("state", f"unknown alert {event_id}")
-        return _alert(row)
+        return _from_row(row)
 
     def resolve(self, kind: str, key: str) -> bool:
         cursor = self.db.execute(
@@ -237,7 +237,7 @@ class AlertBook:
         rows = self.db.query(
             "SELECT * FROM observer_alerts WHERE resolved_at IS NULL ORDER BY first_at, event_id"
         )
-        return tuple(_alert(row) for row in rows)
+        return tuple(_from_row(row) for row in rows)
 
     def mark_read(self, event_id: str, actor: Actor) -> None:
         if actor.kind != "operator":
