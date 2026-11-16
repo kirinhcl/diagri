@@ -146,7 +146,13 @@ CODES: dict[str, dict[str, Code]] = {
         "not_refreshed": Code(("age_seconds",)),
         "error": Code(action=False),
     },
-    "chat_end": {},
+    "chat_end": {
+        "denied": Code(("denied_code",)),
+        "model_unavailable": Code(),
+        "model_stopped": Code(("stop_reason",)),
+        "undelivered": Code(("role",)),
+        "run_finished": Code(action=False),
+    },
     "estimate": {},
 }
 

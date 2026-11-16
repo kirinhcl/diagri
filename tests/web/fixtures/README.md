@@ -39,6 +39,12 @@ also carries `error_code` and `error_params` (one with a code, `output_limit`, a
 from before codes). `reason` is unchanged. One row of each file has no `reason_code`, as stored
 before codes. These are synthetic, written to the shape of `src/growbridge/compute/overview.py`.
 
+Task 13 of batch 2a (P-11) gave five of the six "run finished" status entries in conversation.json
+(seq 5, 15, 18, 26, 38) the server's new `detail.code` (`run_finished`) and `detail.params` (`{}`) by
+hand, keeping `reason`. The one at seq 41 stays as captured, with no code, so the leak test covers
+both shapes. No captured entry ended in a refusal, a model failure or an undelivered result; those
+shapes are tested in tests/web/conversation.test.mjs.
+
 `known-codes.json` is not an API answer: it lists, per catalog prefix, the codes the server can
 send, and says in `_sources` where each list was found. `tests/web/catalog.test.mjs` checks that
 each code has text in both catalogs; `tests/workbench/test_console_known_codes.py` checks the lists

@@ -279,3 +279,29 @@ def test_every_compute_error_and_stuck_code_is_registered() -> None:
         "cancelled_no_job",
         "settled_by_operator",
     }
+
+
+def test_task_end_codes_in_dispatch_match_the_registry() -> None:
+    src = REPO / "src" / "growbridge" / "agents"
+    found = codes_at_calls(src, {"_end"})
+    assert {code for _, _, code in found} == set(CODES["chat_end"])
+    assert set(CODES["chat_end"]) == {
+        "denied",
+        "model_unavailable",
+        "model_stopped",
+        "undelivered",
+        "run_finished",
+    }
+
+
+def test_chat_end_codes_in_dispatch_match_the_registry() -> None:
+    src = REPO / "src" / "growbridge" / "agents"
+    found = codes_at_calls(src, {"_end"})
+    assert {code for _, _, code in found} == set(CODES["chat_end"])
+    assert set(CODES["chat_end"]) == {
+        "denied",
+        "model_unavailable",
+        "model_stopped",
+        "undelivered",
+        "run_finished",
+    }

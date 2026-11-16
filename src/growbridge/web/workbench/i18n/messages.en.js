@@ -327,4 +327,13 @@ export default {
   "msg.compute_error.artifact_mismatch.action": "Settle it, then submit again.",
   "msg.compute_error.no_artifacts": "No output files came back.",
   "msg.compute_error.no_artifacts.action": "Settle it, then submit again.",
+  "msg.chat_end.denied": "A step was refused, so the task did not finish.",
+  "msg.chat_end.denied.action": "The reason is in the technical details.",
+  "msg.chat_end.model_unavailable": "The model could not be reached, so the task did not finish.",
+  "msg.chat_end.model_unavailable.action": "Check the key and the budget, then ask again.",
+  "msg.chat_end.model_stopped": "The model stopped before it finished.",
+  "msg.chat_end.model_stopped.action": "Ask again with a shorter question.",
+  "msg.chat_end.undelivered": "{role} did not hand in a result.",
+  "msg.chat_end.undelivered.action": "Ask again, or do this step yourself.",
+  "msg.chat_end.run_finished": "The task finished.",
 };

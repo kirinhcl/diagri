@@ -625,6 +625,33 @@
       "action": false
     }
   },
-  "chat_end": {},
+  "chat_end": {
+    "denied": {
+      "params": [
+        "denied_code"
+      ],
+      "action": true
+    },
+    "model_unavailable": {
+      "params": [],
+      "action": true
+    },
+    "model_stopped": {
+      "params": [
+        "stop_reason"
+      ],
+      "action": true
+    },
+    "undelivered": {
+      "params": [
+        "role"
+      ],
+      "action": true
+    },
+    "run_finished": {
+      "params": [],
+      "action": false
+    }
+  },
   "estimate": {}
 }

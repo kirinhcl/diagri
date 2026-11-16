@@ -281,4 +281,13 @@ export default {
   "msg.compute_error.artifact_mismatch.action": "结算后重新提交。",
   "msg.compute_error.no_artifacts": "没有取回任何输出文件。",
   "msg.compute_error.no_artifacts.action": "结算后重新提交。",
+  "msg.chat_end.denied": "某一步被拒绝了，任务没有做完。",
+  "msg.chat_end.denied.action": "原因见技术详情。",
+  "msg.chat_end.model_unavailable": "模型连不上，任务没有做完。",
+  "msg.chat_end.model_unavailable.action": "检查密钥和预算后再问一次。",
+  "msg.chat_end.model_stopped": "模型没做完就停了。",
+  "msg.chat_end.model_stopped.action": "把问题说短一点再问一次。",
+  "msg.chat_end.undelivered": "{role}没有交出成果。",
+  "msg.chat_end.undelivered.action": "再问一次，或者自己做这一步。",
+  "msg.chat_end.run_finished": "任务做完了。",
 };
