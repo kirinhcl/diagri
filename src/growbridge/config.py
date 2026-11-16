@@ -45,6 +45,15 @@ class RoleModel(BaseModel):
         return self
 
 
+class Greenhouse(BaseModel):
+    """One greenhouse users can lock; ``device_id`` is the AC5 that controls it."""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
+    name: str = Field(min_length=1, max_length=64)
+    device_id: str = Field(min_length=1)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     device: str
@@ -77,6 +86,9 @@ class Settings(BaseModel):
     # The FirecREST credentials and project settings are environment variables, never config.
     compute_templates_dir: Path | None = None  # one JSON file per reviewed job template
     compute_member: str | None = Field(default=None, min_length=1)  # CSC account jobs run as
+    # Multi-user workbench (off by default): accounts with roles, greenhouse locks, owners.
+    multi_user: bool = False
+    greenhouses: list[Greenhouse] = Field(default_factory=list)  # empty: the local device only
 
     @field_validator("report_timezone")
     @classmethod
@@ -86,6 +98,23 @@ class Settings(BaseModel):
         except (KeyError, ValueError, OSError) as error:
             raise ValueError(f"{value!r} is not a known time zone name") from error
         return value
+
+    @model_validator(mode="after")
+    def _registry_fits(self) -> "Settings":
+        houses = self.greenhouses
+        for field in ("id", "device_id"):
+            values = [getattr(house, field) for house in houses]
+            if len(set(values)) != len(values):
+                raise ValueError(f"greenhouse {field} values must be unique")
+        if houses and self.device not in {house.device_id for house in houses}:
+            raise ValueError(f"the local device {self.device!r} is not a registered greenhouse")
+        return self
+
+    def greenhouse_registry(self) -> tuple[Greenhouse, ...]:
+        """The configured greenhouses, or the local device as the only one."""
+        if self.greenhouses:
+            return tuple(self.greenhouses)
+        return (Greenhouse(id="gh-01", name="Greenhouse 1", device_id=self.device),)
 
     @property
     def url(self) -> str:
