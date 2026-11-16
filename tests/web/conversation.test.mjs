@@ -295,3 +295,20 @@ test("a status line says why the task ended and what to do next", () => {
   const unknown = visibleText(statusView(zhCtx, entry("from_the_future", {})));
   assert.ok(unknown.includes("未知（技术详情）"), unknown);
 });
+
+test("a status entry from before codes keeps its reason in the details only", () => {
+  const zhCtx = testCtx({ lang: "zh" });
+  const old = { role: "planner", kind: "status", text: "needs_attention", task_id: "task_x", detail: { reason: "model stopped without finishing: max_tokens" } };
+  const view = statusView(zhCtx, old);
+  assert.equal(visibleText(view), "计划 Agent 的任务结束：需要关注");
+  assert.ok(visibleTextIncludingDetails(view).includes("model stopped without finishing: max_tokens"));
+  assert.equal(elements(view, "details").length, 1);
+  assert.equal(elements(view, "p").length, 1);
+  const bare = statusView(zhCtx, { role: "planner", kind: "status", text: "done", detail: {} });
+  assert.equal(visibleText(bare), "计划 Agent 的任务结束：已完成");
+  const noParams = statusView(zhCtx, { role: "planner", kind: "status", text: "needs_attention", detail: { reason: "r", code: "undelivered" } });
+  const shown = visibleText(noParams);
+  assert.ok(shown.includes("没有交出成果"), shown);
+  assert.ok(!shown.includes("{"), shown);
+  assert.equal(elements(noParams, "details").length, 1);
+});
