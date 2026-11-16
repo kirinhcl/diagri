@@ -1,0 +1,10 @@
+{
+  "alert": {},
+  "finding": {},
+  "receipt": {},
+  "task_end": {},
+  "compute_error": {},
+  "compute_stuck": {},
+  "chat_end": {},
+  "estimate": {}
+}
