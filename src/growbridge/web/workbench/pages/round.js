@@ -77,13 +77,18 @@ function abortButton(ctx, round) {
 
 // --- the published report ------------------------------------------------------------------------
 
-const digits = (value, count) => (typeof value === "number" && Number.isFinite(value) ? value.toPrecision(count) : "—");
+// `count` significant digits in the page's language, never with an exponent ("1,230", not "1.23e+3").
+function digits(value, count, lang) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat(lang, { minimumSignificantDigits: count, maximumSignificantDigits: count }).format(value);
+}
 
 // What the estimate says, in one line: the effect with its p value, or why there is none.
 export function estimateText(ctx, estimate) {
   if (!estimate) return "—";
   if (!estimate.estimable) return estimate.note || ctx.t("report.notEstimable");
-  return ctx.t("report.estimate", { effect: digits(estimate.effect, EFFECT_DIGITS), p: digits(estimate.p_value, P_DIGITS), blocks: estimate.blocks });
+  const effect = digits(estimate.effect, EFFECT_DIGITS, ctx.lang);
+  return ctx.t("report.estimate", { effect, p: digits(estimate.p_value, P_DIGITS, ctx.lang), blocks: estimate.blocks });
 }
 
 // The estimate, and under an estimated p value one line on what it means.

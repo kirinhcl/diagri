@@ -319,3 +319,13 @@ test("after a freeze the analysis opens again, for that round only", async () =>
   assert.notEqual(again.getAttribute("open"), null);
   assert.equal((await analysisSection(c, ROUND)).getAttribute("open"), null, "opened once");
 });
+
+// --- final review: an effect of a thousand or more has no exponent (F13) -------------------------
+test("a large effect and a tiny p value are written without an exponent, in the page's language", () => {
+  const big = { estimable: true, effect: 1234.5, p_value: 0.00000012, blocks: 3 };
+  assert.equal(estimateText(testCtx({ lang: "en" }), big), "Effect 1,230, p = 0.00000012, over 3 complete blocks");
+  assert.equal(estimateText(testCtx({ lang: "zh" }), big), "效应 1,230，p = 0.00000012，基于 3 个完整区组");
+  const small = { estimable: true, effect: 0.231234, p_value: 0.034, blocks: 2 };
+  assert.equal(estimateText(testCtx({ lang: "en" }), small), "Effect 0.231, p = 0.034, over 2 complete blocks");
+  for (const lang of ["en", "zh"]) assert.doesNotMatch(estimateText(testCtx({ lang }), big), /e[+-]/);
+});
