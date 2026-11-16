@@ -1,0 +1,16 @@
+{
+  "stage_id": "stage-dev",
+  "experiment_id": "experiment-dev",
+  "project_id": "project_a205fd7e2f2c4cb092839dc2bef4dbe8",
+  "state": "pending_review",
+  "prior_state": null,
+  "right_number": null,
+  "care_right": null,
+  "manual_right": null,
+  "started_at": null,
+  "paused_at": null,
+  "end_pending": false,
+  "ended_at": null,
+  "round_id": "round_00405e43c54b48d1902a7aa7b82f7200",
+  "state_at": 1794821386.0544891
+}

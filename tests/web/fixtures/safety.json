@@ -1,0 +1,33 @@
+{
+  "safety": {
+    "version": 1,
+    "rules": [
+      {
+        "id": "overheat-light-off",
+        "sensor": "temp",
+        "unit": "C",
+        "validity_seconds": 20.0,
+        "trigger": {
+          "op": ">",
+          "value": 35.0
+        },
+        "duration_seconds": 30.0,
+        "action": {
+          "channel": "light",
+          "level": 0
+        }
+      }
+    ],
+    "frozen": {
+      "minutes": {
+        "temp": 120.0,
+        "humi": 60.0,
+        "co2": 60.0,
+        "tempSoil": 240.0
+      },
+      "max_gap_seconds": 600.0
+    },
+    "approved_by": "dev",
+    "approved_at": 1794779648.209567
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "stage_id": "stage-dev",
+  "state": "pending_review",
+  "run_sheet_version": 1,
+  "run_sheet_digest": "bce9db07506a2d71ce09b94d59cf42041f78d6b78c086651b37c12b23d112a52",
+  "run_sheet": {
+    "id": "sheet-dev",
+    "project_id": "project_a205fd7e2f2c4cb092839dc2bef4dbe8",
+    "experiment_id": "experiment-dev",
+    "stage_id": "stage-dev",
+    "protocol_id": "protocol-1",
+    "protocol_version": 1,
+    "device_id": "SIMULATED",
+    "version": 1,
+    "timezone": "Europe/Helsinki",
+    "channels": [
+      {
+        "channel": "light",
+        "ownership": "host",
+        "retained_level": 0,
+        "max_tolerance_seconds": null,
+        "onsite_handling": ""
+      },
+      {
+        "channel": "exhaust",
+        "ownership": "host",
+        "retained_level": 30,
+        "max_tolerance_seconds": null,
+        "onsite_handling": ""
+      },
+      {
+        "channel": "fan",
+        "ownership": "host",
+        "retained_level": 1,
+        "max_tolerance_seconds": null,
+        "onsite_handling": ""
+      },
+      {
+        "channel": "pump",
+        "ownership": "host",
+        "retained_level": 0,
+        "max_tolerance_seconds": null,
+        "onsite_handling": ""
+      }
+    ],
+    "duration_seconds": 604800.0,
+    "sampling": {
+      "interval_seconds": 1.0,
+      "max_gap_seconds": 120.0
+    },
+    "max_wait_seconds": 21600.0,
+    "on_expiry": "stay_paused",
+    "timed_actions": [
+      {
+        "id": "light-on",
+        "channel": "light",
+        "at": "06:00",
+        "level": 60,
+        "evidence": null
+      },
+      {
+        "id": "light-off",
+        "channel": "light",
+        "at": "22:00",
+        "level": 0,
+        "evidence": null
+      },
+      {
+        "id": "exhaust-base",
+        "channel": "exhaust",
+        "at": "00:00",
+        "level": 30,
+        "evidence": null
+      }
+    ],
+    "feedback_rules": [],
+    "care_rules": [],
+    "manual_tasks": [],
+    "end_actions": []
+  },
+  "findings": [
+    {
+      "code": "missing_tolerance",
+      "message": "light: no maximum tolerated outage given",
+      "blocking": false
+    },
+    {
+      "code": "missing_tolerance",
+      "message": "exhaust: no maximum tolerated outage given",
+      "blocking": false
+    },
+    {
+      "code": "missing_tolerance",
+      "message": "fan: no maximum tolerated outage given",
+      "blocking": false
+    },
+    {
+      "code": "missing_tolerance",
+      "message": "pump: no maximum tolerated outage given",
+      "blocking": false
+    },
+    {
+      "code": "no_evidence",
+      "message": "timed action light-on: no evidence card or user input",
+      "blocking": false
+    },
+    {
+      "code": "no_evidence",
+      "message": "timed action light-off: no evidence card or user input",
+      "blocking": false
+    },
+    {
+      "code": "no_evidence",
+      "message": "timed action exhaust-base: no evidence card or user input",
+      "blocking": false
+    }
+  ],
+  "blocking": false
+}

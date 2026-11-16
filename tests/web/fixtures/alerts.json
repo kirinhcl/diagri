@@ -1,0 +1,46 @@
+{
+  "alerts": [
+    {
+      "event_id": "alert_7cf193b0163d47c195ea273ae36f58b2",
+      "kind": "backup_unconfigured",
+      "key": "backups",
+      "severity": "warning",
+      "message": "No backup_dir is configured: the databases are not being backed up",
+      "count": 2,
+      "first_at": 1794779648.2450318,
+      "last_at": 1794821385.612114,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null
+    },
+    {
+      "event_id": "alert_a71084164435490a9d4344321ed49313",
+      "kind": "notify_unconfigured",
+      "key": "channels",
+      "severity": "warning",
+      "message": "No notification channel is configured: alerts are not sent anywhere",
+      "count": 2,
+      "first_at": 1794779648.245307,
+      "last_at": 1794821385.6131048,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null
+    },
+    {
+      "event_id": "alert_c5d2e7ef8405499989f36367965ab6d4",
+      "kind": "monitor_unconfigured",
+      "key": "heartbeats",
+      "severity": "warning",
+      "message": "No external heartbeat is configured (GROWBRIDGE_HEARTBEAT_HOST_URL and GROWBRIDGE_HEARTBEAT_RUN_URL): nobody is told if this host or the run stops",
+      "count": 2,
+      "first_at": 1794779648.2454982,
+      "last_at": 1794821385.6133492,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null
+    }
+  ]
+}
