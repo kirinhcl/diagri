@@ -1,8 +1,10 @@
 // Evidence cards: every card with its source and verification, a form to enter one, and verification of a model's card.
 import { labelOr } from "../i18n.js";
+import { formatNumber } from "../format.js";
 import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
-import { afterWrite, note, pageHead, section, timeText } from "../ui/section.js";
+import { roleLabel } from "../ui/names.js";
+import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 
 const SOURCE_CLASSES = ["handbook", "paper", "local"];
 
@@ -48,13 +50,25 @@ function verifyForm(ctx, card) {
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: `evidence-verify:${card.id}`, ctx });
 }
 
-function factsLine(ctx, card) {
+// Who entered a card: "you" for the signed-in operator, the agent's role for the model's own cards
+// (agents/handlers_evidence.py SOURCE), any other operator name as it was recorded.
+const AGENT_SOURCES = { "model:planner": "planner" };
+
+function enteredBy(ctx, source) {
+  if (!source) return "—";
+  if (ctx.me && source === ctx.me.operator) return roleLabel(ctx.t, "user");
+  return Object.hasOwn(AGENT_SOURCES, source) ? roleLabel(ctx.t, AGENT_SOURCES[source]) : source;
+}
+
+function facts(ctx, card) {
   const hasValue = card.value !== null && card.value !== undefined;
-  const parts = [labelOr(ctx.t, "evidence.class", card.source_class)];
-  if (hasValue) parts.push(ctx.t("evidence.valueOf", { value: `${card.value} ${card.unit || ""}`.trim() }));
-  if (!card.calibrated) parts.push(ctx.t("evidence.uncalibrated"));
-  parts.push(ctx.t("evidence.entryLine", { source: card.source || "—", time: timeText(ctx, card.added_at) }));
-  return parts.join(" · ");
+  return keyValues([
+    [ctx.t("evidence.fact.class"), labelOr(ctx.t, "evidence.class", card.source_class)],
+    [ctx.t("evidence.fact.value"), hasValue ? `${formatNumber(card.value, 2, ctx.lang)} ${card.unit || ""}`.trim() : null],
+    [ctx.t("evidence.fact.calibration"), ctx.t(card.calibrated ? "evidence.calibratedYes" : "evidence.uncalibrated")],
+    [ctx.t("evidence.fact.by"), enteredBy(ctx, card.source)],
+    [ctx.t("evidence.fact.at"), timeText(ctx, card.added_at)],
+  ]);
 }
 
 function verificationBlock(ctx, card) {
@@ -75,11 +89,11 @@ function cardView(ctx, card) {
   return h(
     "li",
     { class: "evidence-card" },
-    h("div", { class: "evidence-head" }, h("code", { text: card.id }), pill),
-    h("p", { class: "evidence-claim", text: card.claim }),
+    h("div", { class: "evidence-head" }, h("h3", { class: "evidence-claim", text: card.claim }), pill),
     h("p", { class: "cell-sub", text: ctx.t("evidence.citedFrom", { citation: card.citation }) }),
-    h("p", { class: "cell-sub", text: factsLine(ctx, card) }),
+    facts(ctx, card),
     verificationBlock(ctx, card),
+    techDetails(ctx.t, [[ctx.t("tech.id.id"), card.id]]),
   );
 }
 

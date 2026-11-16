@@ -17,4 +17,5 @@ export const EXEMPTIONS = [
   { page: "inbox", fixture: "inbox.json", path: "items[*].detail.message", shown: "folded", batch: 2, why: "告警正文是服务器整句（INB-01，C4）" },
   { page: "inbox", fixture: "inbox.json", path: "items[*].detail.question", shown: "folded", batch: 3, why: "研究任务的问题是模型写的（C5，INB-01）" },
   { page: "inbox", fixture: "inbox.json", path: "items[*].detail.reason", batch: 2, why: "计算卡住的原因是服务器整句（INB-01，C4）" },
+  { page: "alerts", fixture: "alerts.json", path: "alerts[*].message", batch: 2, why: "告警正文是服务器整句（ALT-11，C4）" },
 ];

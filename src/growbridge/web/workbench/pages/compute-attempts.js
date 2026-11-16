@@ -1,7 +1,7 @@
 // Open and stuck compute attempts; a stuck one can be settled by a person, with a reason, after a confirmation.
 import { confirmAction } from "../ui/dialog.js";
 import { clear, h } from "../ui/dom.js";
-import { afterWrite, errorBox, note, section, showErrors, timeText } from "../ui/section.js";
+import { afterWrite, errorBox, note, section, showErrors, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 
@@ -44,13 +44,17 @@ function settleControl(ctx, row) {
   return h("div", { class: "action" }, h("div", { class: "inline-control" }, input, button), box);
 }
 
+// The attempt's ordinal in the list, with its ids one click away.
+function attemptCell(ctx, row, index, extra = []) {
+  const ids = [[ctx.t("tech.id.attempt_id"), row.attempt_id], [ctx.t("tech.id.task_id"), row.task_id], ...extra];
+  return h("div", { class: "cell-stack" }, ctx.t("compute.attemptOrdinal", { n: index + 1 }), techDetails(ctx.t, ids));
+}
+
 function jobsTable(ctx, jobs) {
   const columns = [
-    { label: ctx.t("compute.attempt"), cell: (row) => h("code", { text: row.attempt_id }) },
-    { label: ctx.t("compute.task"), cell: (row) => row.task_id },
+    { label: ctx.t("compute.attempt"), cell: (row, index) => attemptCell(ctx, row, index, [[ctx.t("compute.remoteJob"), row.remote_job_id]]) },
     { label: ctx.t("compute.template"), cell: (row) => row.template_id },
     { label: ctx.t("compute.phase"), cell: (row) => statePill(ctx.t, row.phase) },
-    { label: ctx.t("compute.remoteJob"), cell: (row) => row.remote_job_id || "—" },
     { label: ctx.t("col.created"), cell: (row) => timeText(ctx, row.created_at) },
   ];
   return table(columns, jobs, { label: ctx.t("compute.open") });
@@ -58,8 +62,7 @@ function jobsTable(ctx, jobs) {
 
 function stuckTable(ctx, stuck) {
   const columns = [
-    { label: ctx.t("compute.attempt"), cell: (row) => h("code", { text: row.attempt_id }) },
-    { label: ctx.t("compute.task"), cell: (row) => row.task_id },
+    { label: ctx.t("compute.attempt"), cell: (row, index) => attemptCell(ctx, row, index) },
     { label: ctx.t("compute.phase"), cell: (row) => statePill(ctx.t, row.phase) },
     { label: ctx.t("compute.why"), cell: (row) => row.reason },
     { label: ctx.t("compute.since"), cell: (row) => timeText(ctx, row.since) },

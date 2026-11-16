@@ -55,6 +55,13 @@ const RUNNING_STAGE = {
 };
 
 // Each page task adds its pages here: { page, params, fixtures? }; `fixtures` overrides files by name.
+// Two evidence cards: one entered by an operator and verified, one by an agent and not yet verified.
+const CARD = { source_class: "paper", citation: "Smith 2020, table 2", claim: "Blue light shortens lettuce", value: 12.5, unit: "cm", calibrated: false, added_at: 1796594000 };
+const EVIDENCE_CARDS = [
+  { ...CARD, id: "card_5c987768a8b544ad80c4af4c0af9a962", source: "dev", calibrated: true, verified_by: "dev", verified_at: 1796594100, note: "checked" },
+  { ...CARD, id: "card_6d098879b9c655be91d5b0d1b0ba0a073", source: "model:planner", value: null, unit: null, verified_by: null, verified_at: null, note: null },
+];
+
 const PAGES_CHECKED = [
   { page: "inbox" },
   { page: "inbox", fixtures: BUSY_INBOX },
@@ -70,6 +77,10 @@ const PAGES_CHECKED = [
   { page: "environment" },
   { page: "safety" },
   { page: "environment", fixtures: { "environment.json": { ...FIXTURES["environment.json"], stage: RUNNING_STAGE } } },
+  { page: "alerts" },
+  { page: "evidence" },
+  { page: "evidence", fixtures: { "evidence.json": { cards: EVIDENCE_CARDS } } },
+  { page: "compute" },
 ];
 
 const BATCH_1_PAGES = ["inbox", "projects", "project", "round", "stage", "environment", "safety", "alerts", "evidence", "compute"];
