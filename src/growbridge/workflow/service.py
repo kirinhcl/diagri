@@ -102,7 +102,8 @@ class WorkflowService(StageRecovery):
         if not name.strip():
             raise Denied("state", "a project needs a name")
         project_id = new_id("project")
-        self.store.add_project(project_id, name, self.clock.now())
+        owner = actor.id if actor.kind == "operator" else None
+        self.store.add_project(project_id, name, self.clock.now(), owner)
         return project_id
 
     def save_protocol(self, protocol: ResearchProtocol, actor: Actor) -> ResearchProtocol:

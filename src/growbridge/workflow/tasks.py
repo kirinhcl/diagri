@@ -101,27 +101,37 @@ class TaskBoard:
         rows = self.db.query(sql + " ORDER BY seq", params)
         return tuple(self._load(row) for row in rows)
 
-    def in_states(
-        self, states: Collection[TaskState], limit: int = 100
-    ) -> tuple[ResearchTask, ...]:
-        """Tasks of any project in one of ``states``, oldest first."""
-        wanted = [state.value for state in states]
-        if not wanted:
-            return ()
+    @staticmethod
+    def _in_states_sql(
+        states: Collection[TaskState], only_owner: str | None
+    ) -> tuple[str, tuple[object, ...]]:  # (``list`` is a method name in this class)
+        """FROM/WHERE of the tasks in ``states``; with ``only_owner`` only that owner's projects
+        (the join exists only then: a board on its own database has no project table)."""
+        wanted = tuple(state.value for state in states)
         marks = ",".join("?" for _ in wanted)
-        rows = self.db.query(
-            f"SELECT * FROM task_board WHERE state IN ({marks}) ORDER BY seq LIMIT ?",
-            (*wanted, limit),
-        )
+        if only_owner is None:
+            return f" FROM task_board t WHERE t.state IN ({marks})", wanted
+        joined = " FROM task_board t JOIN wf_projects p ON p.id = t.project_id"
+        return f"{joined} WHERE t.state IN ({marks}) AND p.owner = ?", (*wanted, only_owner)
+
+    def in_states(
+        self, states: Collection[TaskState], limit: int = 100, *, only_owner: str | None = None
+    ) -> tuple[ResearchTask, ...]:
+        """Tasks in one of ``states``, oldest first; of one owner's projects when given."""
+        if not states:
+            return ()
+        sql, params = self._in_states_sql(states, only_owner)
+        rows = self.db.query(f"SELECT t.*{sql} ORDER BY t.seq LIMIT ?", (*params, limit))
         return tuple(self._load(row) for row in rows)
 
-    def count_in_states(self, states: Collection[TaskState]) -> int:
-        """How many tasks of any project are in one of ``states``."""
-        wanted = [state.value for state in states]
-        if not wanted:
+    def count_in_states(
+        self, states: Collection[TaskState], *, only_owner: str | None = None
+    ) -> int:
+        """How many tasks are in one of ``states``; of one owner's projects when given."""
+        if not states:
             return 0
-        marks = ",".join("?" for _ in wanted)
-        row = self.db.one(f"SELECT COUNT(*) AS n FROM task_board WHERE state IN ({marks})", wanted)
+        sql, params = self._in_states_sql(states, only_owner)
+        row = self.db.one(f"SELECT COUNT(*) AS n{sql}", params)
         return row["n"] if row else 0
 
     def state_since(self, task_ids: Collection[str]) -> dict[str, float]:

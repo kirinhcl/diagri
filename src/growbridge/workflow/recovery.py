@@ -49,8 +49,8 @@ class StageRecovery:
     async def restore_care(self) -> None:
         """Re-issue the care right of the last finished stage once old writes are confirmed gone."""
         stage = self.store.active()
-        if stage is None or stage.care_right is not None:
-            return
+        if stage is None or stage.care_right is not None or stage.care_released:
+            return  # a released greenhouse keeps no care
         finished = stage.state in STAGE_TERMINAL
         recovering = stage.state is S.RECOVERY_CHECK and stage.prior_state is not S.MANUAL
         if not (finished or recovering) or stage.recovery_number != self.control.recovery_number():
