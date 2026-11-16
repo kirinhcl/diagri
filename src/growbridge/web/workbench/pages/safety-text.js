@@ -1,10 +1,9 @@
 // Safety limits written as words: a rule as one sentence, a change by rule name and unit. Pure: no DOM.
-import { formatDuration, levelText } from "../format.js";
+import { durationIsExact, formatDuration, levelText } from "../format.js";
 import { hasLabel, labelOr } from "../i18n.js";
 
 const UNIT_NAMES = { C: "°C" };
 const SECONDS_PER_MINUTE = 60;
-const DURATION_EXACT_BELOW = 120; // seconds shown as whole seconds
 const RULE_PATH = /^rules\[(\d+)\]\.(.+)$/;
 const FROZEN_PATH = /^frozen\.minutes\.(.+)$/;
 
@@ -53,9 +52,7 @@ function knownLabel(t, prefix, value) {
 function exactDuration(t, seconds) {
   if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return unsayable();
   const text = formatDuration(t, seconds);
-  const whole = Number.isInteger(seconds);
-  const exact = whole && (seconds < DURATION_EXACT_BELOW || seconds % SECONDS_PER_MINUTE === 0);
-  return exact ? text : t("safety.exactSeconds", { text, n: seconds });
+  return durationIsExact(seconds) ? text : t("safety.exactSeconds", { text, n: seconds });
 }
 
 // Two renderings of a real change that read the same hide it, so the line is raw instead.

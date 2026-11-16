@@ -1,4 +1,4 @@
-// The change list shown before safety limits are approved: one line per change, "path: old → new".
+// The change list shown before safety limits are approved: one line per change, "path: old → new" (rules and frozen limits in words when both sides are given).
 import { describeChange } from "./safety-text.js";
 
 const SERVER_STAMPED = new Set(["approved_by", "approved_at"]);

@@ -183,3 +183,20 @@ test("an unknown path is still listed", () => {
   assert.ok(out.some((line) => line.includes("extra.flag")));
   assert.ok(out.some((line) => line.includes("rules[0].mystery")));
 });
+
+test("a duration in the days band shows its exact seconds when hours do not hold it", () => {
+  const rule = (n) => lines({ rules: [HEAT] }, { rules: [withRule({ validity_seconds: n })] });
+  assert.equal(rule(172800).length, 1);
+  const out = lines({ rules: [withRule({ validity_seconds: 172800 })] }, { rules: [withRule({ validity_seconds: 174600 })] });
+  assert.equal(out[0], "规则 heat-cut：读数有效期 2 天 → 2 天 1 小时（174600 秒）");
+  const gap = lines({ frozen: { max_gap_seconds: 7200 } }, { frozen: { max_gap_seconds: 171000 } });
+  assert.equal(gap[0], "最长空档：2 小时 → 2 天（171000 秒）");
+});
+
+test("changes that read the same fall back to the raw line", () => {
+  const pump = { ...HEAT, action: { channel: "pump", level: 1 } };
+  const level = lines({ rules: [pump] }, { rules: [{ ...pump, action: { channel: "pump", level: 2 } }] });
+  assert.deepEqual(level, ["rules[0].action.level: 1 → 2"]);
+  const unit = lines({ rules: [withRule({ unit: "C" })] }, { rules: [withRule({ unit: "°C" })] });
+  assert.deepEqual(unit, ["rules[0].unit: \"C\" → \"°C\""]);
+});

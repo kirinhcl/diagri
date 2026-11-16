@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  durationIsExact,
   formatDateTime,
   formatDuration,
   formatMoney,
@@ -134,4 +135,12 @@ test("levelText never prints undefined for an empty or null range", async () => 
   const t = (key, vars) => (vars ? `${key}${JSON.stringify(vars)}` : key);
   assert.equal(levelText(t, "fan", 3, null), "3");
   assert.equal(levelText(t, "fan", 3, []), "3");
+});
+
+test("durationIsExact mirrors the bands of formatDuration", () => {
+  const exact = (n) => durationIsExact(n);
+  assert.deepEqual([119, 120, 7199, 7200, 170999, 171000, 172800, 174600].map(exact), [true, true, false, true, false, false, true, false]);
+  assert.equal(exact(59.5), false);
+  assert.equal(exact(-1), false);
+  assert.equal(exact("60"), false);
 });

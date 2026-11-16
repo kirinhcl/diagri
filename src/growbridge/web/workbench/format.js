@@ -114,6 +114,17 @@ export function formatDuration(t, seconds) {
   return h === 0 ? t("duration.days", { d }) : t("duration.daysHours", { d, h });
 }
 
+// Does formatDuration's text hold the value exactly? Same bands: whole seconds, whole minutes, whole minutes, whole hours.
+export function durationIsExact(seconds) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return false;
+  const s = Math.round(seconds);
+  const hourSeconds = SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+  let unit = SECONDS_PER_MINUTE; // the minutes band and the hours band both keep whole minutes
+  if (s < SHORT_SECONDS_LIMIT) unit = 1;
+  else if (Math.round(s / SECONDS_PER_MINUTE) >= MINUTES_LIMIT && Math.round(s / hourSeconds) >= HOURS_LIMIT) unit = hourSeconds;
+  return seconds % unit === 0;
+}
+
 // Date and time in the site zone; the year appears only when it is not the current year.
 export function formatDateTime(epochSeconds, timeZone, lang, nowSeconds = Date.now() / 1000) {
   if (typeof epochSeconds !== "number" || !Number.isFinite(epochSeconds)) return DASH;
