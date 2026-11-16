@@ -8,7 +8,8 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
-import { shortDigest } from "../format.js";
+import { formatDuration, levelText, shortDigest } from "../format.js";
+import { differenceText } from "./stage-diff.js";
 import { errorBox, errorFold, note, replaceParts, showErrors, techDetails, timeText } from "../ui/section.js";
 
 // A manual write may only switch the pump off; irrigation is what switches it on.
@@ -208,10 +209,10 @@ function pauseGroup(env) {
 // intent goes when an answer settles it, or when its followed receipt reaches a final outcome
 // (applied, failed, unknown); a timeout, a left page or a failed follow-up keeps it until it expires
 // after a few minutes. A resent request is named as such in the log.
-async function deviceWrite(env, { action, path, body, heading, label }) {
+async function deviceWrite(env, { action, channel, path, body, heading, label }) {
   const key = intentKey(env.stage.stage_id, action);
   const { id: requestId, reused } = claimIntent(key, body);
-  const shown = resentHeading(heading, env.ctx.t("receipt.resent", { id: requestId }), reused);
+  const shown = resentHeading(heading, env.ctx.t("receipt.resent"), reused);
   let record;
   try {
     record = await env.ctx.api.post(path, { ...body, request_id: requestId }, { action: label });
@@ -221,15 +222,19 @@ async function deviceWrite(env, { action, path, body, heading, label }) {
       throw error;
     }
     const pending = { request_id: requestId, created_at: Date.now() / 1000, state: "pending" };
-    env.log.track(shown, pending, { lost: true, onDone: () => settleIntent(key, requestId) });
+    env.log.track(shown, pending, { lost: true, channel, onDone: () => settleIntent(key, requestId) });
     throw error;
   }
   settleIntent(key, requestId);
-  env.log.track(shown, record);
+  env.log.track(shown, record, { channel });
   await env.onChanged();
 }
 
-function manualGroup(env) {
+export function manualHeading(ctx, channel, level) {
+  return ctx.t("receipt.manual", { channel: labelOr(ctx.t, "channel", channel), level: levelText(ctx.t, channel, level) });
+}
+
+export function manualGroup(env) {
   const { ctx, stage } = env;
   const title = ctx.t("stage.manual");
   const options = CHANNELS.map((value) => ({ value, label: labelOr(ctx.t, "channel", value) }));
@@ -240,8 +245,8 @@ function manualGroup(env) {
   ];
   const onSubmit = async ({ channel, level, note: text }) => {
     const body = { stage_id: stage.stage_id, level, note: text || "" };
-    const heading = ctx.t("receipt.manual", { channel: labelOr(ctx.t, "channel", channel), level });
-    await deviceWrite(env, { action: `manual:${channel}`, path: `/manual/${encodeURIComponent(channel)}`, body, heading, label: title });
+    const heading = manualHeading(ctx, channel, level);
+    await deviceWrite(env, { action: `manual:${channel}`, channel, path: `/manual/${encodeURIComponent(channel)}`, body, heading, label: title });
   };
   const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
   return group("manual", title, note(ctx.t("stage.manual.ranges")), form);
@@ -264,22 +269,16 @@ function irrigationGroup(env, allowed) {
   ];
   const onSubmit = async ({ seconds, note: text }) => {
     const body = { stage_id: stage.stage_id, seconds, note: text || "" };
-    const heading = ctx.t("receipt.irrigation", { seconds });
-    await deviceWrite(env, { action: "irrigation", path: "/irrigation", body, heading, label: submitLabel });
+    const heading = ctx.t("receipt.irrigation", { seconds: formatDuration(ctx.t, Number(seconds)) });
+    await deviceWrite(env, { action: "irrigation", channel: "pump", path: "/irrigation", body, heading, label: submitLabel });
   };
   return group("irrigation", title, simpleForm({ fields, submitLabel, onSubmit, ctx }));
 }
 
-function differenceLines(ctx, differences) {
+export function differenceLines(ctx, differences) {
   const list = Array.isArray(differences) ? differences : [];
   if (!list.length) return [ctx.t("stage.handback.none")];
-  const line = (item) =>
-    ctx.t("stage.handback.difference", {
-      channel: labelOr(ctx.t, "channel", item.channel),
-      field: item.field,
-      expected: item.expected,
-      actual: item.actual ?? "—",
-    });
+  const line = (item) => differenceText(ctx.t, item);
   return [ctx.t("stage.handback.differences"), ...list.map(line)];
 }
 
@@ -339,16 +338,18 @@ export function actionsView(env) {
 }
 
 // --- what came of the operator's writes: kept while the controls above are redrawn --------------
-function logItem(ctx, title, record) {
+export function logItem(ctx, title, record) {
   const pill = h("span", { class: "pill" });
   const detail = h("div", { class: "activity-detail" });
-  const meta = record ? ctx.t("receipt.request", { id: record.request_id, time: timeText(ctx, record.created_at) }) : null;
+  const meta = record ? ctx.t("receipt.request", { time: timeText(ctx, record.created_at) }) : null;
+  const details = record ? techDetails(ctx.t, [[ctx.t("receipt.requestId"), record.request_id]]) : null;
   const element = h(
     "li",
     { class: "activity-item" },
     h("p", { class: "activity-title" }, record ? pill : null, h("span", { text: title })),
     detail,
     meta ? h("p", { class: "activity-meta", text: meta }) : null,
+    details,
   );
   // Lines are text or nodes (a fold); the same again every poll leaves an opened fold as it is.
   const show = (status, lines) => {
@@ -368,15 +369,15 @@ export function checkParts(ctx, error) {
   return [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }), errorFold(ctx, error)];
 }
 
-function outcomeLines(ctx, { outcome, record, error }) {
+function outcomeLines(ctx, { outcome, record, error }, channel) {
   const problem = error ? checkParts(ctx, error) : [];
   if (outcome === "applied") {
     const level = record && record.confirmed_level;
-    return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level })];
+    return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level: levelText(ctx.t, channel, level) })];
   }
   if (outcome === "unknown") return [ctx.t("receipt.unknownNote")];
   if (outcome === "failed") return [record && record.error ? ctx.t("receipt.error", { error: record.error }) : null];
-  return [ctx.t("receipt.unsettledNote", { seconds: RECEIPT_LIMIT_MS / 1000 }), ...problem];
+  return [ctx.t("receipt.unsettledNote", { duration: formatDuration(ctx.t, RECEIPT_LIMIT_MS / 1000) }), ...problem];
 }
 
 // life = { signal, alive() }: the page's lifetime; a poll ends when the page is left.
@@ -391,7 +392,7 @@ export function activityLog(ctx, life) {
   };
   const add = (heading, lines) => push(logItem(ctx, heading, null)).show(null, lines);
   // lost: no readable answer came for this write; it is followed under its request id all the same.
-  const track = (heading, record, { lost = false, onDone = () => {} } = {}) => {
+  const track = (heading, record, { lost = false, channel, onDone = () => {} } = {}) => {
     const item = push(logItem(ctx, heading, record));
     const note = lost ? ctx.t("receipt.lost") : null;
     item.show("pending", [note]);
@@ -399,10 +400,10 @@ export function activityLog(ctx, life) {
     const fetchReceipt = () => ctx.api.get(`/receipts/${encodeURIComponent(record.request_id)}`);
     const followed = pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
       .then((result) => {
-        if (result.outcome !== "stopped") item.show(result.outcome === "timeout" ? "unsettled" : result.outcome, outcomeLines(ctx, result));
+        if (result.outcome !== "stopped") item.show(result.outcome === "timeout" ? "unsettled" : result.outcome, outcomeLines(ctx, result, channel));
         return result;
       })
-      .catch((error) => item.show("unsettled", outcomeLines(ctx, { outcome: "unsettled", record, error })));
+      .catch((error) => item.show("unsettled", outcomeLines(ctx, { outcome: "unsettled", record, error }, channel)));
     settleOnFinal(followed, onDone);
   };
   return { element, add, track };

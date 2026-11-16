@@ -110,26 +110,34 @@ function showResult(part, ctx, result, signatureOf, build) {
   part.show(signatureOf(result.value), () => build(result.value));
 }
 
-function roundCell(roundId) {
-  return roundId ? h("a", { class: "text-link", attrs: { href: hrefFor("round", { roundId }) }, text: roundId }) : null;
+function roundCell(ctx, stage) {
+  const text = displayName(ctx, "round", stage);
+  return stage.round_id ? h("a", { class: "text-link", attrs: { href: hrefFor("round", { roundId: stage.round_id }) }, text }) : text;
 }
 
-function statusView(ctx, stage) {
+// Write rights are counters for the audit trail, not for the operator: details only.
+function rightsEntries(t, stage) {
+  return [
+    [t("tech.right.stage"), stage.right_number],
+    [t("tech.right.care"), stage.care_right],
+    [t("tech.right.manual"), stage.manual_right],
+  ];
+}
+
+export function statusView(ctx, stage) {
   const projectHref = hrefFor("project", { projectId: stage.project_id });
-  const dash = (value) => (value === null || value === undefined ? "—" : String(value));
-  const rights = ctx.t("stage.rightsValue", { stage: dash(stage.right_number), care: dash(stage.care_right), manual: dash(stage.manual_right) });
+  const projectName = displayName(ctx, "project", stage);
   const rows = [
     [ctx.t("col.state"), statePill(ctx.t, stage.state)],
     stage.prior_state ? [ctx.t("stage.prior"), statePill(ctx.t, stage.prior_state)] : null,
-    [ctx.t("stage.project"), h("a", { class: "text-link", attrs: { href: projectHref }, text: stage.project_id })],
-    [ctx.t("stage.round"), roundCell(stage.round_id)],
-    [ctx.t("stage.experiment"), stage.experiment_id],
+    [ctx.t("stage.project"), h("a", { class: "text-link", attrs: { href: projectHref }, text: projectName })],
+    [ctx.t("stage.round"), roundCell(ctx, stage)],
     [ctx.t("stage.started"), timeText(ctx, stage.started_at)],
-    [ctx.t("stage.pausedAt"), timeText(ctx, stage.paused_at)],
-    [ctx.t("stage.endPending"), ctx.t(stage.end_pending ? "common.yes" : "common.no")],
-    [ctx.t("stage.rights"), rights],
+    stage.paused_at ? [ctx.t("stage.pausedAt"), timeText(ctx, stage.paused_at)] : null,
   ];
-  return keyValues(rows.filter(Boolean));
+  const banner = stage.end_pending ? h("p", { class: "block-note", text: ctx.t("stage.endPending") }) : null;
+  const details = techDetails(ctx.t, [...nameDetails(stage, ctx.t), ...rightsEntries(ctx.t, stage)]);
+  return h("div", { class: "status-view" }, keyValues(rows.filter(Boolean)), banner, details);
 }
 
 const SIMULATED_DEVICE = "SIMULATED";
