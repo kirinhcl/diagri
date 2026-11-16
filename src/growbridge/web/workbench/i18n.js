@@ -24,6 +24,13 @@ export function labelOr(t, prefix, value) {
   return text === key ? t("common.unknown") : text;
 }
 
+// Whether the catalog has text for this code (so the caller can send the rest to the details).
+export function hasLabel(t, prefix, value) {
+  if (typeof value !== "string" || value === "") return false;
+  const key = `${prefix}.${value}`;
+  return t(key) !== key;
+}
+
 export function initialLang(stored, navigatorLanguage) {
   if (LANGS.includes(stored)) return stored;
   return String(navigatorLanguage || "").toLowerCase().startsWith("zh") ? "zh" : "en";

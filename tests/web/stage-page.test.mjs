@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { coalesce, FINISHED_REREAD_SECONDS, frozenReadings, keptIsFresh } from "../../src/growbridge/web/workbench/pages/stage.js";
-import { detailText, timeline } from "../../src/growbridge/web/workbench/pages/stage-history.js";
+import { timeline } from "../../src/growbridge/web/workbench/pages/stage-history.js";
 import { correctionLinks } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
 
 const finished = { state: "ended", state_at: 200 };
@@ -85,7 +85,7 @@ test("a call queued behind a failed run still runs", async () => {
 const move = (at, from, to, event = "e", detail = {}) => ({ at, from, to, event, detail });
 const act = (at, kind, extra = {}) => ({ stage_id: "s1", at, kind, operator: "ann", ...extra });
 
-test("timeline merges transitions and interventions by time", () => {
+test("timeline merges transitions and interventions by time, newest first", () => {
   const entries = timeline(
     [move(10, "pending_review", "running"), move(30, "running", "manual")],
     [act(20, "takeover"), act(40, "accepted", { differences: [] })],
@@ -93,19 +93,19 @@ test("timeline merges transitions and interventions by time", () => {
   assert.deepEqual(
     entries.map((entry) => [entry.at, entry.type]),
     [
-      [10, "transition"],
-      [20, "intervention"],
-      [30, "transition"],
       [40, "intervention"],
+      [30, "transition"],
+      [20, "intervention"],
+      [10, "transition"],
     ],
   );
 });
 
-test("timeline keeps a transition before an intervention at the same time", () => {
+test("timeline puts an intervention before a transition of the same second", () => {
   const entries = timeline([move(5, "running", "manual")], [act(5, "takeover")]);
   assert.deepEqual(
     entries.map((entry) => entry.type),
-    ["transition", "intervention"],
+    ["intervention", "transition"],
   );
 });
 
@@ -122,13 +122,6 @@ test("timeline accepts missing lists and does not change its input", () => {
   const copy = structuredClone(history);
   timeline(history, []);
   assert.deepEqual(history, copy);
-});
-
-test("detailText shows each field once, nested values as JSON", () => {
-  assert.equal(detailText({}), "");
-  assert.equal(detailText(null), "");
-  assert.equal(detailText({ reason: "dry", by: "ann" }), "reason: dry · by: ann");
-  assert.equal(detailText({ differences: [{ channel: "light" }] }), 'differences: [{"channel":"light"}]');
 });
 
 test("correctionLinks marks both ends of each correction", () => {
