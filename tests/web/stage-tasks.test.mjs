@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { AHEAD_SECONDS, irrigationNotice, rowActions, tasksView, visibleRows } from "../../src/growbridge/web/workbench/pages/stage-tasks.js";
-import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
+import { activityLog } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
+import { AHEAD_SECONDS, irrigationNotice, irrigationPrompt, plannedIrrigation, rowActions, tasksView, visibleRows } from "../../src/growbridge/web/workbench/pages/stage-tasks.js";
+import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { installFakeDom, testCtx } from "./support/render-page.mjs";
 
 installFakeDom();
@@ -89,12 +90,14 @@ test("each task keeps its ids in its own technical details", () => {
 test("the lead is one sentence and the scoring rules fold away", () => {
   const { element } = view();
   const lead = elements(element, "p").find((p) => p.textContent.startsWith("列出"));
-  assert.equal(lead.textContent, "列出今天和明天的人工任务，最新的在上。");
+  assert.equal(lead.textContent, "列出到明天为止的人工任务，最新的在上。");
   const rules = elements(element, "details").find((d) => !(d.getAttribute("class") || "").includes("tech-details"));
   assert.equal(elements(rules, "summary")[0].textContent, "计分规则");
   assert.match(rules.textContent, /两小时/);
-  const en = elements(view("en").element, "summary").map((s) => s.textContent);
+  const english = view("en").element;
+  const en = elements(english, "summary").map((s) => s.textContent);
   assert.ok(en.includes("How tasks are scored"), en.join(", "));
+  assert.ok(elements(english, "p").some((p) => p.textContent === "Manual tasks up to tomorrow, newest first."));
 });
 
 test("recording a task names it, not its id", async () => {
@@ -108,4 +111,41 @@ test("recording a task names it, not its id", async () => {
   assert.match(notices[0].message, /^已记录：浇水（.+ 到期）$/);
   assert.ok(!notices[0].message.includes("irrigate-daily"));
   assert.equal(changed(), 1);
+});
+
+test("the water button and its confirmation write the pump time the way the row does", () => {
+  const { element, ctx } = view();
+  const labels = elements(element, "button").map((button) => button.textContent);
+  assert.ok(labels.includes("立即浇水（10 分钟）"), labels.join(", "));
+  const prompt = irrigationPrompt(ctx, row({ seconds: 600 }));
+  assert.equal(prompt.title, "立即浇水（10 分钟）");
+  assert.equal(prompt.lines[0], "水泵运行 10 分钟后关闭，阶段继续运行。");
+  const en = irrigationPrompt(testCtx({ lang: "en" }), row({ seconds: 600 }));
+  assert.equal(en.title, "Water now (10 min)");
+  assert.match(en.lines[0], /^The pump runs for 10 min and/);
+});
+
+test("a planned watering that reached no device keeps its request id in the activity log's details", async () => {
+  const requestId = "planned-0123456789abcdef0123456789abcdef-1";
+  const notices = [];
+  const posted = [];
+  const base = testCtx({ lang: "zh", now: NOW });
+  const answer = { action: { request_id: requestId, state: "failed", created_at: NOW, error: null }, task: null };
+  const api = { ...base.api, post: async (path, sent, options) => (posted.push({ path, sent, options }), answer) };
+  const ctx = { ...base, api, notify: (message, tone) => notices.push({ message, tone }) };
+  const log = activityLog(ctx, { signal: new AbortController().signal, alive: () => true });
+  let changed = 0;
+  const env = { ctx, stage: { stage_id: "stage-1" }, log, onChanged: async () => (changed += 1) };
+  await plannedIrrigation(env, row({ task_id: "irrigate-daily", seconds: 600 }));
+  await settle();
+  assert.deepEqual(posted.map((call) => [call.path, call.sent]), [["/stages/stage-1/manual-tasks/irrigate", { task_id: "irrigate-daily", due_at: NOW }]]);
+  assert.equal(notices.length, 1);
+  assert.match(notices[0].message, /^浇水（.+ 到期） 没有到达设备，未记录。/);
+  assert.ok(!notices[0].message.includes(requestId));
+  const shown = visibleText(log.element);
+  assert.match(shown, /你的操作结果 .*浇水（.+ 到期）/);
+  assert.ok(!shown.includes(requestId), shown);
+  assertNoLeaks(log.element);
+  assert.ok(visibleTextIncludingDetails(log.element).includes(requestId));
+  assert.equal(changed, 1);
 });

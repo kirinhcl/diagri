@@ -192,7 +192,7 @@ function draw(page, data) {
   showResult(parts.readings, ctx, data.readings, (readings) => `${readingsKey(readings)}|${sampleSeconds}`, chart);
   showResult(parts.review, ctx, data.review, (r) => JSON.stringify([r.run_sheet_digest, r.findings]), (r) => reviewView(ctx, r));
   const tasksKey = (r) => JSON.stringify([r.stage_state, r.occurrences, Math.floor((r.now || 0) / 60)]);
-  const tasksEnv = { ctx, stage, onChanged: page.env.onChanged };
+  const tasksEnv = { ...page.env, stage }; // ctx, the activity log (planned irrigation receipts), onChanged
   showResult(parts.tasks, ctx, data.tasks, tasksKey, (r) => tasksView(tasksEnv, r));
   showResult(parts.measurements, ctx, data.measurements, (r) => JSON.stringify(r.measurements), (r) => measurementsView(ctx, r.measurements, page.measure));
   showResult(parts.history, ctx, data.history, (r) => JSON.stringify(r), (r) => historyView(ctx, r));

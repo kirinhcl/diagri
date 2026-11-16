@@ -235,13 +235,18 @@ function convert(entries, timeZone, t) {
 }
 
 // Puts each 422 error beside its field; returns the lines for errors that match no field. A hidden
-// field's error could not be seen beside it, so it is one of those lines.
+// field's error could not be seen beside it, so it is one of those lines, under the field's label
+// (never its name), or alone when the field has none.
 function placeFieldErrors(entries, fieldErrors) {
-  const byName = new Map(entries.filter((entry) => entry.field.type !== "hidden").map((entry) => [entry.field.name, entry]));
+  const byName = (hidden) => new Map(entries.filter((entry) => (entry.field.type === "hidden") === hidden).map((entry) => [entry.field.name, entry]));
+  const shown = byName(false);
+  const unseen = byName(true);
   const rest = [];
   for (const { loc, msg } of fieldErrors) {
-    const name = loc.find((part) => byName.has(part));
-    if (name) setFieldError(byName.get(name), msg);
+    const name = loc.find((part) => shown.has(part));
+    const hidden = unseen.get(loc.find((part) => unseen.has(part)));
+    if (name) setFieldError(shown.get(name), msg);
+    else if (hidden) rest.push(hidden.field.label ? `${hidden.field.label}: ${msg}` : msg);
     else rest.push(`${loc.filter((part) => part !== "body").join(" › ")}: ${msg}`);
   }
   return rest;

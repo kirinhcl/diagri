@@ -91,7 +91,7 @@ function fields(ctx) {
     { name: "value", label: ctx.t("measure.value"), type: "number", required: true },
     suggested("unit"),
     suggested("method"),
-    { name: "corrects", type: "hidden" },
+    { name: "corrects", type: "hidden", label: ctx.t("measure.correctedRecord") },
   ];
 }
 

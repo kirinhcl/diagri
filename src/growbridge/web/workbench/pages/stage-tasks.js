@@ -33,7 +33,7 @@ export function rowActions(row, body) {
 }
 
 // After a planned run: done, partial (cut short or not confirmed), or nothing recorded (it never
-// reached the device). The notice names the task; a recorded run's request id is in its row's details.
+// reached the device). The notice names the task; the request id is in the activity log's details.
 export function irrigationNotice(answer) {
   const task = answer && answer.task;
   if (!task) return { key: "tasks.irrigateUnconfirmed", tone: "error" };
@@ -91,6 +91,26 @@ function button(label, tone, run, box) {
   return element;
 }
 
+// The planned run's button label and what its confirmation says, the pump time written as a duration.
+export function irrigationPrompt(ctx, row) {
+  const duration = formatDuration(ctx.t, row.seconds);
+  const title = ctx.t("tasks.irrigate", { duration });
+  return { title, lines: [ctx.t("tasks.irrigateLine", { duration }), ctx.t("tasks.irrigateOnSite")], confirmLabel: title };
+}
+
+// Runs a confirmed planned irrigation. Its receipt is followed in the page's activity log, where
+// the item's details hold the request id; the notice names the task.
+export async function plannedIrrigation(env, row) {
+  const { ctx, stage, log, onChanged } = env;
+  const name = displayName(ctx, "manualTask", row);
+  const path = `/stages/${encodeURIComponent(stage.stage_id)}/manual-tasks/irrigate`;
+  const answer = await ctx.api.post(path, { task_id: row.task_id, due_at: row.due_at }, { action: irrigationPrompt(ctx, row).title });
+  if (answer && answer.action) log.track(name, answer.action, { channel: "pump" });
+  const notice = irrigationNotice(answer);
+  ctx.notify(ctx.t(notice.key, { name }), notice.tone);
+  await onChanged();
+}
+
 function actionsCell(env, body, row) {
   const { ctx, stage, onChanged } = env;
   const allowed = rowActions(row, body);
@@ -104,14 +124,9 @@ function actionsCell(env, body, row) {
     ctx.notify(ctx.t("tasks.recorded", { name }), "ok");
     await onChanged();
   };
+  const prompt = irrigationPrompt(ctx, row);
   const irrigate = async () => {
-    const label = ctx.t("tasks.irrigate", { seconds: row.seconds });
-    const lines = [ctx.t("tasks.irrigateLine", { seconds: row.seconds }), ctx.t("tasks.irrigateOnSite")];
-    if (!(await confirmAction(ctx.t, { title: label, lines, confirmLabel: label }))) return;
-    const answer = await ctx.api.post(`${base}/irrigate`, occurrence, { action: label });
-    const notice = irrigationNotice(answer);
-    ctx.notify(ctx.t(notice.key, { name }), notice.tone);
-    await onChanged();
+    if (await confirmAction(ctx.t, prompt)) await plannedIrrigation(env, row);
   };
   const wrap = (run) => async () => {
     try {
@@ -122,7 +137,7 @@ function actionsCell(env, body, row) {
     }
   };
   const buttons = [];
-  if (allowed.irrigate) buttons.push(button(ctx.t("tasks.irrigate", { seconds: row.seconds }), "primary", wrap(irrigate), box));
+  if (allowed.irrigate) buttons.push(button(prompt.title, "primary", wrap(irrigate), box));
   if (!DONE.has(row.status)) buttons.push(button(ctx.t("tasks.markDone"), allowed.irrigate ? "quiet" : "primary", wrap(record("done", ctx.t("tasks.markDone"))), box));
   if (row.status !== "skipped") buttons.push(button(ctx.t("tasks.markSkipped"), "quiet", wrap(record("skipped", ctx.t("tasks.markSkipped"))), box));
   return h("div", { class: "task-actions" }, h("div", { class: "task-buttons" }, buttons), box);

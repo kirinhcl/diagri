@@ -151,3 +151,22 @@ test("suggestions make a datalist the page can refill", () => {
   assert.throws(() => formControls(form).suggest("when", ["x"]), /no suggestions/);
   assert.throws(() => formControls(form).get("nope"), /no field/);
 });
+
+test("a refusal of a hidden field is written with the field's label, not its name", async () => {
+  installFakeDom();
+  const fields = [
+    { name: "metric", label: "Metric", required: true },
+    { name: "link", type: "hidden", label: "Corrected record" },
+  ];
+  const refusal = new ApiError(422, "validation", "invalid", [{ loc: ["body", "link"], msg: "no such record" }]);
+  const onSubmit = async () => {
+    throw refusal;
+  };
+  const form = simpleForm({ fields, submitLabel: "Save", onSubmit, ctx: testCtx({ lang: "en" }) });
+  formControls(form).set({ metric: "height", link: "m-1" });
+  form.dispatchEvent(new Event("submit"));
+  await settle();
+  const text = visibleText(form);
+  assert.match(text, /Corrected record: no such record/);
+  assert.ok(!/\blink\b/.test(text), text);
+});

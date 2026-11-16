@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { saveDraft } from "../../src/growbridge/web/workbench/drafts.js";
 import { measurementForm, measurementOptions, measurementTable } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
 import { timeText } from "../../src/growbridge/web/workbench/ui/section.js";
@@ -151,4 +152,19 @@ test("a draft restored after a lost session still says it corrects a record", ()
   form.update(RECORDED);
   assert.ok(visibleText(form.element).includes(`正在更正 ${timeText(ctx, RECORDED[2].measured_at)} 的 ${METRIC} 记录`));
   assertNoLeaks(form.element, [METRIC]);
+});
+
+test("a refused correction names the corrected record, not the field", async () => {
+  const { ctx, form } = formView();
+  ctx.api.post = async () => {
+    throw new ApiError(422, "validation", "invalid", [{ loc: ["body", "corrects"], msg: "no such measurement" }]);
+  };
+  form.update(RECORDED);
+  form.correct(RECORDED[0]);
+  elements(form.element, "form")[0].dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+  const text = visibleText(form.element);
+  assert.match(text, /被更正的记录: no such measurement/);
+  assert.ok(!text.includes("corrects:"), text);
 });
