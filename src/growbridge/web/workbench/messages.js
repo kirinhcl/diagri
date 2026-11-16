@@ -4,7 +4,7 @@
 // param shows a dash; a key or a code is never printed as text.
 import { METRICS } from "./chart-math.js";
 import { formatDuration, formatNumber, levelText } from "./format.js";
-import { hasLabel, labelOr } from "./i18n.js";
+import { labelOr, textOr } from "./i18n.js";
 import { unitText } from "./pages/safety-text.js";
 import { h } from "./ui/dom.js";
 import { roleLabel } from "./ui/names.js";
@@ -40,13 +40,13 @@ function sensorValue(ctx, v, params) {
 }
 
 function problem(ctx, p) {
-  if (!p || !isText(p.kind) || !hasLabel(ctx.t, "findingProblem", p.kind)) return DASH;
-  const key = `findingProblem.${p.kind}`; // checked by hasLabel above
-  return ctx.t(key, {
+  if (!p) return DASH;
+  const vars = {
     channel: labelOr(ctx.t, "channel", p.channel),
     level: levelText(ctx.t, p.channel, p.level),
     other: levelText(ctx.t, p.channel, p.other),
-  });
+  };
+  return textOr(ctx.t, "findingProblem", p.kind, vars) ?? DASH;
 }
 
 const EXACT = {
@@ -106,17 +106,14 @@ function idDetails(params) {
 export function messageParts(ctx, family, code, params = {}) {
   const t = ctx.t;
   const safe = params && typeof params === "object" && !Array.isArray(params) ? params : {};
-  const key = `msg.${family}.${code}`;
-  const template = t(key);
-  const known = template !== key;
-  const actionKey = `${key}.action`;
-  const actionTemplate = t(actionKey);
-  const hasAction = known && actionTemplate !== actionKey;
+  const prefix = ["msg", family];
+  const template = textOr(t, prefix, code);
+  const actionTemplate = template === null ? null : textOr(t, [...prefix, code], "action");
   const details = [[t("tech.code"), code], ...idDetails(safe), [t("tech.params"), safe]];
   return {
-    known,
-    text: known ? fill(ctx, template, safe) : t("common.unknown"),
-    action: hasAction ? fill(ctx, actionTemplate, safe) : null,
+    known: template !== null,
+    text: template === null ? t("common.unknown") : fill(ctx, template, safe),
+    action: actionTemplate === null ? null : fill(ctx, actionTemplate, safe),
     details,
   };
 }

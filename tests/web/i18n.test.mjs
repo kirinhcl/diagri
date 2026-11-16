@@ -28,3 +28,13 @@ test("initialLang prefers stored value then browser language", () => {
   assert.equal(initialLang(null, "fi"), "en");
   assert.equal(initialLang("fr", "fi"), "en");
 });
+
+test("textOr fills a known key and never returns a key", async () => {
+  const { textOr } = await import("../../src/growbridge/web/workbench/i18n.js");
+  const t = makeT("en");
+  assert.equal(textOr(t, "common", "hello", { name: "Ann" }), "Hello, Ann");
+  assert.equal(textOr(t, ["common"], "hello", { name: "Bo" }), "Hello, Bo");
+  assert.equal(textOr(t, "common", "no.such"), null);
+  assert.equal(textOr(t, "common", null), null);
+  assert.equal(textOr(t, "common", ""), null);
+});
