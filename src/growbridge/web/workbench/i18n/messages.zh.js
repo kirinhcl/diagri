@@ -245,6 +245,8 @@ export default {
   "msg.task_end.pump_off_interlock.action": "查一下联锁为什么动作。",
   "msg.task_end.pump_off_watchdog": "水泵看门狗关了水泵，浇水提前结束。",
   "msg.task_end.pump_off_watchdog.action": "查一下看门狗为什么动作。",
+  "msg.task_end.pump_off_unconfirmed": "没有确认水泵已关，水泵可能还开着；联锁已锁住水泵。",
+  "msg.task_end.pump_off_unconfirmed.action": "到现场手动关泵。",
   "msg.task_end.not_confirmed": "浇水没有确认完成（结果：{action_state}）。",
   "msg.task_end.not_confirmed.action": "到现场核对是否浇过水。",
   "msg.task_end.other": "浇水提前结束。",

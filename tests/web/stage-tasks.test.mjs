@@ -194,6 +194,19 @@ test("a partial irrigation whose pump run is unconfirmed says so", () => {
   assert.match(visibleText(element), /浇水没有确认完成/);
 });
 
+test("a planned irrigation whose pump was not confirmed off says the pump may still be on and to switch it off on site", () => {
+  const record = partialRecord({ ran_seconds: 20, ended_early_code: "pump_off_unconfirmed", ended_early_params: {}, ended_early: "hand-over: paused" });
+  for (const [lang, said, todo] of [["zh", /水泵可能还开着/, /到现场手动关泵。/], ["en", /may still be on/, /Switch the pump off by hand on site\./]]) {
+    const element = partialView(record, lang);
+    const text = visibleText(element);
+    assert.match(text, said, lang);
+    assert.match(text, todo, lang);
+    assert.doesNotMatch(text, /未知（技术详情）|Unknown|hand-over: paused/, lang);
+    assert.match(visibleTextIncludingDetails(element), /hand-over: paused/, lang);
+    assertNoLeaks(element);
+  }
+});
+
 test("irrigation notices name the task, not the request", async () => {
   const notices = [];
   const ctx = { ...testCtx({ lang: "zh", now: NOW }), notify: (message, tone) => notices.push({ message, tone }) };

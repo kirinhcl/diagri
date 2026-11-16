@@ -371,6 +371,38 @@ def test_a_run_that_was_not_confirmed_says_which_state_it_reached(bench, operato
     assert record["ended_early_params"] == {"action_state": "unknown"}
 
 
+PUMP_OFF_UNCONFIRMED = {
+    "state": ActionState.UNKNOWN,
+    "error": "pump off unconfirmed; interlock set",
+    "error_code": "pump_off_unconfirmed",
+}
+CUT_SHORT = {"ran_seconds": 2.0, "ended_early": "hand-over: paused", "ended_early_code": "handover"}
+
+
+@pytest.mark.parametrize(
+    ("early", "english"),
+    [
+        ({}, "the run was not confirmed (unknown): pump off unconfirmed; interlock set"),
+        (CUT_SHORT, "hand-over: paused"),
+    ],
+    ids=["run-not-cut-short", "run-also-cut-short"],
+)
+def test_a_run_whose_pump_off_was_unconfirmed_says_the_pump_may_still_be_on(
+    bench, operator, early, english
+):
+    """The pump may still be on and is locked: that wins over the early end and not confirmed."""
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    bench.control.irrigation_update = {**PUMP_OFF_UNCONFIRMED, **early}
+
+    record = irrigate(bench, operator).json()["task"]["record"]
+
+    assert record["outcome"] == "partial"
+    assert record["ended_early_code"] == "pump_off_unconfirmed"
+    assert record["ended_early_params"] == {}
+    assert record["ended_early"] == english  # the English stays as it was
+
+
 def test_a_stored_task_record_without_the_early_end_code_still_reads():
     old = (
         '{"id": "t", "experiment_id": "e", "stage_id": "s", "task_id": "w", "kind": "irrigation",'

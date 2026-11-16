@@ -122,6 +122,7 @@ CODES: dict[str, dict[str, Code]] = {
         "protection_write": Code(("channel",)),
         "pump_off_interlock": Code(),
         "pump_off_watchdog": Code(),
+        "pump_off_unconfirmed": Code(),  # the pump may still be on; the interlock holds it
         "not_confirmed": Code(("action_state",)),
         "other": Code(),
     },

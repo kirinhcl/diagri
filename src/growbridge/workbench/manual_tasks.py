@@ -71,11 +71,22 @@ async def _run_once(control: ControlPort, request: ActionRequest, item) -> Actio
 
 def _ran(action: ActionRecord) -> dict | None:
     """The task record a planned run leaves: done for a full confirmed run, partial for one cut
-    short or not confirmed, nothing when it certainly changed nothing on the device."""
+    short or not confirmed, nothing when it certainly changed nothing on the device. A pump not
+    confirmed off may still be on, held by the interlock: that is the end's code, before an early
+    end's own code or "not confirmed"."""
     if changed_nothing(action.state, action.error, action.error_code):
         return None
     if action.state is ActionState.CONFIRMED and action.ended_early is None:
         return {"outcome": "done", "ran_seconds": action.ran_seconds}
+    why = f"the run was not confirmed ({action.state.value}): {action.error or 'no detail'}"
+    if action.error_code == "pump_off_unconfirmed":  # the receipt code of the same name
+        return {
+            "outcome": "partial",
+            "ran_seconds": action.ran_seconds,
+            "ended_early": action.ended_early or why,
+            "ended_early_code": "pump_off_unconfirmed",
+            "ended_early_params": {},
+        }
     if action.ended_early:
         return {
             "outcome": "partial",
@@ -84,7 +95,6 @@ def _ran(action: ActionRecord) -> dict | None:
             "ended_early_code": action.ended_early_code or "other",
             "ended_early_params": action.ended_early_params,
         }
-    why = f"the run was not confirmed ({action.state.value}): {action.error or 'no detail'}"
     return {
         "outcome": "partial",
         "ran_seconds": action.ran_seconds,

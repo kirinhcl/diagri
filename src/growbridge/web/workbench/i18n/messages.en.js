@@ -287,6 +287,9 @@ export default {
   "msg.task_end.pump_off_interlock.action": "Find out why the interlock acted.",
   "msg.task_end.pump_off_watchdog": "The pump watchdog switched the pump off, so the irrigation ended early.",
   "msg.task_end.pump_off_watchdog.action": "Find out why the watchdog acted.",
+  "msg.task_end.pump_off_unconfirmed":
+    "The pump was not confirmed off, so it may still be on; the interlock keeps the pump locked.",
+  "msg.task_end.pump_off_unconfirmed.action": "Switch the pump off by hand on site.",
   "msg.task_end.not_confirmed":
     "The irrigation was not confirmed complete (result: {action_state}).",
   "msg.task_end.not_confirmed.action": "Check on site that the watering happened.",

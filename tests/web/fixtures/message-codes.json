@@ -530,6 +530,10 @@
       "params": [],
       "action": true
     },
+    "pump_off_unconfirmed": {
+      "params": [],
+      "action": true
+    },
     "not_confirmed": {
       "params": [
         "action_state"

@@ -244,7 +244,7 @@ def test_every_receipt_and_task_end_code_is_registered() -> None:
     # and the registry lists nothing the server never sends
     assert set(CODES["receipt"]) <= receipt, set(CODES["receipt"]) - receipt
     assert set(CODES["task_end"]) <= task_end, set(CODES["task_end"]) - task_end
-    assert len(CODES["receipt"]) == 17 and len(CODES["task_end"]) == 6
+    assert len(CODES["receipt"]) == 17 and len(CODES["task_end"]) == 7
 
 
 def compute_codes(root: Path) -> tuple[set[str], set[str]]:
