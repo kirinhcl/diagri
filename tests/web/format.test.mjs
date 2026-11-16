@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   durationIsExact,
+  formatAge,
   formatDateTime,
   formatDuration,
   formatMoney,
@@ -140,7 +141,35 @@ test("levelText never prints undefined for an empty or null range", async () => 
 test("durationIsExact mirrors the bands of formatDuration", () => {
   const exact = (n) => durationIsExact(n);
   assert.deepEqual([119, 120, 7199, 7200, 170999, 171000, 172800, 174600].map(exact), [true, true, false, true, false, false, true, false]);
-  assert.equal(exact(59.5), false);
+  assert.equal(exact(59.5), true); // the seconds band keeps tenths
+  assert.equal(exact(59.55), false);
   assert.equal(exact(-1), false);
   assert.equal(exact("60"), false);
+});
+
+// --- final review: a planned duration keeps its tenths of a second; a clock age does not (F5) -----
+test("formatDuration keeps one decimal in the seconds band when the value is not whole", () => {
+  assert.equal(formatDuration(tz, 2.5), "2.5 秒");
+  assert.equal(formatDuration(te, 2.5), "2.5 s");
+  assert.equal(formatDuration(tz, 0.4), "0.4 秒");
+  assert.equal(formatDuration(tz, 0.3), "0.3 秒");
+  assert.equal(formatDuration(tz, 2.54), "2.5 秒");
+  assert.equal(formatDuration(tz, 20), "20 秒");
+  assert.equal(formatDuration(tz, 0), "0 秒");
+  assert.equal(formatDuration(tz, 119.4), "119.4 秒");
+  assert.equal(formatDuration(tz, 119.6), "2 分钟");
+});
+
+test("durationIsExact holds the seconds band to a tenth of a second", () => {
+  assert.deepEqual([2.5, 0.4, 0.3, 0.1, 5, 119.4].map((n) => durationIsExact(n)), [true, true, true, true, true, true]);
+  assert.deepEqual([2.54, 0.05, 119.45].map((n) => durationIsExact(n)), [false, false, false]);
+  assert.equal(durationIsExact(150), false);
+  assert.equal(durationIsExact(630), false);
+});
+
+test("formatAge counts whole seconds: a clock age has no tenths", () => {
+  assert.equal(formatAge(tz, 73.4), "73 秒");
+  assert.equal(formatAge(te, 12000.7), "3 h 20 min");
+  assert.equal(formatAge(tz, -1), "—");
+  assert.equal(formatAge(tz, undefined), "—");
 });

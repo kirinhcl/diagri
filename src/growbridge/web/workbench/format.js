@@ -96,11 +96,16 @@ const HOURS_LIMIT = 48;
 
 export const DEFAULT_LEVEL_RANGES = { light: [0, 100], exhaust: [0, 100], fan: [0, 10] };
 
-// Human duration: the unit follows the size (seconds, minutes, hours, days).
+const TENTHS = 10;
+const TENTH_TOLERANCE = 1e-6; // 0.3 * 10 is 3.0000000000000004 in floating point
+const toTenths = (seconds) => Math.round(seconds * TENTHS) / TENTHS;
+
+// Human duration: the unit follows the size (seconds, minutes, hours, days). The seconds band keeps
+// one decimal when the value is not whole: a 2.5 s pump run is not "3 s".
 export function formatDuration(t, seconds) {
   if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return DASH;
   const s = Math.round(seconds);
-  if (s < SHORT_SECONDS_LIMIT) return t("duration.seconds", { n: s });
+  if (s < SHORT_SECONDS_LIMIT) return t("duration.seconds", { n: toTenths(seconds) });
   const totalMinutes = Math.round(s / SECONDS_PER_MINUTE);
   if (totalMinutes < MINUTES_LIMIT) return t("duration.minutes", { n: totalMinutes });
   const totalHours = Math.round(s / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR));
@@ -114,14 +119,20 @@ export function formatDuration(t, seconds) {
   return h === 0 ? t("duration.days", { d }) : t("duration.daysHours", { d, h });
 }
 
-// Does formatDuration's text hold the value exactly? Same bands: whole seconds, whole minutes, whole minutes, whole hours.
+// A clock age ("waiting 3 min", "5 min ago"): whole seconds, as the clock's fraction means nothing there.
+export function formatAge(t, seconds) {
+  return formatDuration(t, typeof seconds === "number" ? Math.round(seconds) : seconds);
+}
+
+// Does formatDuration's text hold the value exactly? Same bands: tenths of a second, whole minutes,
+// whole minutes, whole hours.
 export function durationIsExact(seconds) {
   if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return false;
   const s = Math.round(seconds);
   const hourSeconds = SECONDS_PER_MINUTE * MINUTES_PER_HOUR;
+  if (s < SHORT_SECONDS_LIMIT) return Math.abs(seconds * TENTHS - Math.round(seconds * TENTHS)) < TENTH_TOLERANCE;
   let unit = SECONDS_PER_MINUTE; // the minutes band and the hours band both keep whole minutes
-  if (s < SHORT_SECONDS_LIMIT) unit = 1;
-  else if (Math.round(s / SECONDS_PER_MINUTE) >= MINUTES_LIMIT && Math.round(s / hourSeconds) >= HOURS_LIMIT) unit = hourSeconds;
+  if (Math.round(s / SECONDS_PER_MINUTE) >= MINUTES_LIMIT && Math.round(s / hourSeconds) >= HOURS_LIMIT) unit = hourSeconds;
   return seconds % unit === 0;
 }
 

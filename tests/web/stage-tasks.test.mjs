@@ -149,3 +149,13 @@ test("a planned watering that reached no device keeps its request id in the acti
   assert.ok(visibleTextIncludingDetails(log.element).includes(requestId));
   assert.equal(changed, 1);
 });
+
+// --- final review: a planned pump run keeps its tenths of a second (F5) --------------------------
+test("a planned 2.5 s irrigation asks to run the pump 2.5 s, and 0.4 s is not 0 s", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const said = (seconds) => [irrigationPrompt(ctx, row({ seconds })).title, ...irrigationPrompt(ctx, row({ seconds })).lines].join(" ");
+  assert.match(said(2.5), /2\.5 秒/);
+  assert.doesNotMatch(said(2.5), /3 秒/);
+  assert.match(said(0.4), /0\.4 秒/);
+  assert.doesNotMatch(said(0.4), /(^|[^.\d])0 秒/);
+});

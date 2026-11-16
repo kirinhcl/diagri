@@ -48,3 +48,8 @@ test("the css keeps the green on-site entry and the zone override after it", asy
   const zone = css.indexOf(".wb-entry-lan strong.wb-entry-zone { color: inherit; }");
   assert.ok(green >= 0 && zone > green);
 });
+
+test("a relative time counts whole seconds, never tenths", () => {
+  const ctx = testCtx({ now: NOW });
+  assert.equal(timeCell(ctx, NOW - 73.4).textContent, "73 秒前");
+});

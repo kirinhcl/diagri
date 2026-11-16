@@ -200,3 +200,15 @@ test("changes that read the same fall back to the raw line", () => {
   const unit = lines({ rules: [withRule({ unit: "C" })] }, { rules: [withRule({ unit: "°C" })] });
   assert.deepEqual(unit, ["rules[0].unit: \"C\" → \"°C\""]);
 });
+
+// --- final review: a rule's durations say the exact seconds when the words round them (F5, R18) ---
+test("a rule's duration and validity say the exact seconds when the words round them", () => {
+  const s = ruleSentence(makeT("zh"), { ...HEAT, duration_seconds: 150, validity_seconds: 630 });
+  assert.match(s, /持续 3 分钟（150 秒）/);
+  assert.match(s, /11 分钟（630 秒）/);
+  const en = ruleSentence(makeT("en"), { ...HEAT, duration_seconds: 150, validity_seconds: 630 });
+  assert.match(en, /for 3 min \(150 s\)/);
+  assert.match(en, /11 min \(630 s\)/);
+  assert.match(ruleSentence(makeT("zh"), HEAT), /持续 5 分钟[^（]/);
+  assert.match(ruleSentence(makeT("zh"), { ...HEAT, duration_seconds: undefined }), /持续 —/);
+});

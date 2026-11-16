@@ -281,3 +281,9 @@ test("a poll with unchanged data still moves the waiting times on and leaves the
   assert.equal(findAll(view.list, (n) => n.localName === "details")[0], fold, "the row was not rebuilt");
   assert.ok(fold.hasAttribute("open"));
 });
+
+test("the waiting time counts whole seconds, never tenths", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = groupView(ctx, { kind: "alert", hidden: 0, items: [{ kind: "alert", id: "a1", since: NOW - 75.6, detail: { message: "m", alert_kind: "data_gap" } }] });
+  assert.match(visibleText(view), /已等待 76 秒/);
+});

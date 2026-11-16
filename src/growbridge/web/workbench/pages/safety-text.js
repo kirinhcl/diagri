@@ -21,10 +21,10 @@ export function ruleSentence(t, rule) {
     sensor: labelOr(t, "metric", rule?.sensor),
     op: labelOr(t, "safety.op", rule?.trigger?.op),
     value: withUnit(rule?.trigger?.value ?? "—", rule?.unit),
-    duration: formatDuration(t, rule?.duration_seconds),
+    duration: exactText(t, rule?.duration_seconds),
     channel: labelOr(t, "channel", action.channel),
     level: levelText(t, action.channel, action.level),
-    validity: formatDuration(t, rule?.validity_seconds),
+    validity: exactText(t, rule?.validity_seconds),
   });
 }
 
@@ -48,11 +48,17 @@ function knownLabel(t, prefix, value) {
   return hasLabel(t, prefix, value) ? labelOr(t, prefix, value) : unsayable();
 }
 
-// A duration in words; when the words round the value, the exact seconds follow.
-function exactDuration(t, seconds) {
-  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return unsayable();
+const isDuration = (seconds) => typeof seconds === "number" && Number.isFinite(seconds) && seconds >= 0;
+
+// A duration in words; when the words round the value, the exact seconds follow (R18). "—" when
+// there is none.
+function exactText(t, seconds) {
   const text = formatDuration(t, seconds);
-  return durationIsExact(seconds) ? text : t("safety.exactSeconds", { text, n: seconds });
+  return !isDuration(seconds) || durationIsExact(seconds) ? text : t("safety.exactSeconds", { text, n: seconds });
+}
+
+function exactDuration(t, seconds) {
+  return isDuration(seconds) ? exactText(t, seconds) : unsayable();
 }
 
 // Two renderings of a real change that read the same hide it, so the line is raw instead.

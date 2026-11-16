@@ -1,5 +1,5 @@
 // Building blocks shared by the project, round and stage pages.
-import { formatDateTime, formatDuration } from "../format.js";
+import { formatAge, formatDateTime } from "../format.js";
 import { confirmAction } from "./dialog.js";
 import { clear, h } from "./dom.js";
 import { errorDetail, errorLines } from "./forms.js";
@@ -29,7 +29,7 @@ export function timeCell(ctx, epoch) {
   const age = nowSeconds(ctx) - epoch;
   let text = full;
   if (age >= 0 && age < SECONDS_PER_DAY) {
-    text = age < JUST_NOW_SECONDS ? ctx.t("time.justNow") : ctx.t("time.ago", { duration: formatDuration(ctx.t, age) });
+    text = age < JUST_NOW_SECONDS ? ctx.t("time.justNow") : ctx.t("time.ago", { duration: formatAge(ctx.t, age) });
   }
   return h("time", { text, attrs: { datetime: new Date(epoch * 1000).toISOString(), title: full } });
 }

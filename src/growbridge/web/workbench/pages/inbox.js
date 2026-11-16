@@ -1,6 +1,6 @@
 // "My inbox": everything that waits for a person, grouped by kind and refreshed every 15 seconds.
 import { singleFlight } from "../api.js";
-import { formatDuration } from "../format.js";
+import { formatAge, formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
@@ -152,7 +152,7 @@ function itemDetails(ctx, item) {
 function waitingText(ctx, since) {
   const age = (ctx.now ?? Date.now() / 1000) - since;
   if (typeof since !== "number" || !(age >= 0)) return timeText(ctx, since);
-  return ctx.t("inbox.waiting", { duration: formatDuration(ctx.t, age) });
+  return ctx.t("inbox.waiting", { duration: formatAge(ctx.t, age) });
 }
 
 // Each waiting time and the epoch it counts from: a poll that brings the same items still moves them on.
