@@ -12,6 +12,7 @@ from growbridge.archive.models import (
     ManualTask,
     RightKind,
     RuleAction,
+    TaskRecord,
 )
 from growbridge.planning.manual_tasks import ON_TIME_SECONDS
 from growbridge.sim.fixtures import make_run_sheet
@@ -338,3 +339,54 @@ def test_a_stage_stopped_early_lists_no_task_due_after_the_stop(bench, operator)
     rows = operator.get(PATH).json()["occurrences"]
 
     assert [(row["task_id"], row["due_at"]) for row in rows] == [("water", WATER_DUE)]
+
+
+def test_a_cut_short_run_keeps_its_end_code_and_params_on_the_task_record(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    bench.control.irrigation_update = {
+        "ran_seconds": 2.0,
+        "ended_early": "protection write: rule",
+        "ended_early_code": "protection_write",
+        "ended_early_params": {"channel": "light"},
+    }
+
+    record = irrigate(bench, operator).json()["task"]["record"]
+
+    assert record["ended_early"] == "protection write: rule"
+    assert record["ended_early_code"] == "protection_write"
+    assert record["ended_early_params"] == {"channel": "light"}
+
+
+def test_a_run_that_was_not_confirmed_says_which_state_it_reached(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    unknown = {"state": ActionState.UNKNOWN, "error": "no receipt: x", "ran_seconds": None}
+    bench.control.irrigation_update = unknown
+
+    record = irrigate(bench, operator).json()["task"]["record"]
+
+    assert record["ended_early"] == "the run was not confirmed (unknown): no receipt: x"
+    assert record["ended_early_code"] == "not_confirmed"
+    assert record["ended_early_params"] == {"action_state": "unknown"}
+
+
+def test_a_stored_task_record_without_the_early_end_code_still_reads():
+    old = (
+        '{"id": "t", "experiment_id": "e", "stage_id": "s", "task_id": "w", "kind": "irrigation",'
+        ' "due_at": 1.0, "outcome": "partial", "done_at": 1.0, "operator": "a",'
+        ' "recorded_at": 2.0, "ended_early": "hand-over: paused"}'
+    )
+
+    record = TaskRecord.model_validate_json(old)
+
+    assert record.ended_early == "hand-over: paused"
+    assert record.ended_early_code is None and record.ended_early_params == {}
+
+
+def test_an_old_action_without_a_code_is_still_judged_by_its_english_text(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    bench.control.irrigation_update = {"state": ActionState.FAILED, "error": "not sent: offline"}
+
+    assert irrigate(bench, operator).json()["task"] is None

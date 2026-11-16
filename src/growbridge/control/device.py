@@ -34,18 +34,28 @@ REJECTED = "Device rejected"
 NOT_SENT = "not sent"  # an outcome error that starts so: the write never left the host
 
 
-def changed_nothing(state: ActionState, error: str | None) -> bool:
+CODES_THAT_CHANGED_NOTHING = frozenset({"not_sent", "device_rejected"})
+
+
+def changed_nothing(state: ActionState, error: str | None, error_code: str | None = None) -> bool:
     """Whether a write certainly left the device as it was: refused before sending (pending),
     voided, not sent, or rejected by the device. A read-back mismatch, a wrong mode or an
-    unknown outcome may have changed something."""
+    unknown outcome may have changed something. The code decides when there is one; a record
+    from before codes is judged by the start of its English text."""
     if state in (ActionState.PENDING, ActionState.VOID):
         return True
-    return state is ActionState.FAILED and (error or "").startswith((NOT_SENT, REJECTED))
+    if state is not ActionState.FAILED:
+        return False
+    if error_code is not None:
+        return error_code in CODES_THAT_CHANGED_NOTHING
+    return (error or "").startswith((NOT_SENT, REJECTED))
 
 
 class Outcome(NamedTuple):
     state: ActionState
     error: str | None = None
+    error_code: str | None = None  # a receipt message code for ``error``
+    error_params: dict[str, Any] = {}  # noqa: RUF012  # never mutated; copied when stored
 
 
 CONFIRMED = Outcome(ActionState.CONFIRMED)
@@ -168,15 +178,17 @@ class DeviceIO:
             config = await self.bridge.configuration()
             params = self.params(config, channel, level)
         except (BridgeError, ConnectionError, KeyError, TypeError) as error:
-            return Outcome(ActionState.FAILED, f"{NOT_SENT}: {error}")
+            return Outcome(ActionState.FAILED, f"{NOT_SENT}: {error}", error_code="not_sent")
         try:
             await self.bridge.request("setConfigField", params)
         except BridgeError as error:
             if str(error).startswith(REJECTED):
-                return Outcome(ActionState.FAILED, str(error))
-            return Outcome(ActionState.UNKNOWN, f"no receipt: {error}")
+                return Outcome(ActionState.FAILED, str(error), error_code="device_rejected")
+            return Outcome(ActionState.UNKNOWN, f"no receipt: {error}", error_code="no_receipt")
         except (ConnectionError, OSError) as error:
-            return Outcome(ActionState.UNKNOWN, f"link broke while sending: {error}")
+            return Outcome(
+                ActionState.UNKNOWN, f"link broke while sending: {error}", error_code="link_broke"
+            )
         return await self.confirm(channel, level)
 
     async def confirm(self, channel: Channel, level: int) -> Outcome:
@@ -188,12 +200,26 @@ class DeviceIO:
                 if attempt + 1 < READBACK_POLLS:
                     await asyncio.sleep(self.bridge.readback_interval)
             else:
-                return Outcome(ActionState.FAILED, f"read-back level differs from {level}")
+                return Outcome(
+                    ActionState.FAILED,
+                    f"read-back level differs from {level}",
+                    error_code="readback_level",
+                    error_params={"channel": channel.value, "expected": level},
+                )
             mode = self.modes_from(await self.bridge.configuration()).get(channel)
         except (BridgeError, ConnectionError, OSError) as error:
-            return Outcome(ActionState.UNKNOWN, f"read-back unavailable: {error}")
+            return Outcome(
+                ActionState.UNKNOWN,
+                f"read-back unavailable: {error}",
+                error_code="readback_unavailable",
+            )
         if mode != 0:
-            return Outcome(ActionState.FAILED, f"read-back mode is {mode}, expected 0")
+            return Outcome(
+                ActionState.FAILED,
+                f"read-back mode is {mode}, expected 0",
+                error_code="readback_mode",
+                error_params={"mode": mode},
+            )
         return CONFIRMED
 
 

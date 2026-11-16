@@ -232,4 +232,64 @@ export default {
     "The run sheet applies none of the protocol's treatments ({treatments}).",
   "msg.finding.treatment_not_applied.none.action":
     "Add timed actions for the levels of the treatment this round needs.",
+  "msg.receipt.not_sent": "The command was never sent, so the device is unchanged.",
+  "msg.receipt.not_sent.action": "Check the connection, then try again.",
+  "msg.receipt.device_rejected": "The device refused the command, so it is unchanged.",
+  "msg.receipt.device_rejected.action": "Check the device, then try again.",
+  "msg.receipt.no_receipt": "The device sent no receipt, so the result is not known.",
+  "msg.receipt.no_receipt.action":
+    "Check the device on site, then record an on-site check.",
+  "msg.receipt.link_broke": "The connection broke while the command was being sent, so the result is not known.",
+  "msg.receipt.link_broke.action":
+    "Check the device on site, then record an on-site check.",
+  "msg.receipt.readback_level":
+    "The device did not read back {expected} on {channel}.",
+  "msg.receipt.readback_level.action": "Check the device on site.",
+  "msg.receipt.readback_unavailable":
+    "The device state could not be read back, so the result is not known.",
+  "msg.receipt.readback_unavailable.action": "Check the device on site.",
+  "msg.receipt.readback_mode":
+    "The outlet is in mode {mode}, not manual, after the command.",
+  "msg.receipt.readback_mode.action": "Check the device on site.",
+  "msg.receipt.void_recovery_changed":
+    "The recovery number changed, so the command was cancelled and did not run.",
+  "msg.receipt.void_recovery_changed.action": "Submit it again if it is still needed.",
+  "msg.receipt.void_handover":
+    "Control was handed over, so the command was cancelled and did not run.",
+  "msg.receipt.void_handover.action": "Submit it again if it is still needed.",
+  "msg.receipt.void_restart":
+    "The server stopped before the command was sent, so it did not run.",
+  "msg.receipt.void_restart.action": "Submit it again if it is still needed.",
+  "msg.receipt.void_superseded":
+    "A safety write on {channel} took its place, so the command did not run.",
+  "msg.receipt.void_superseded.action": "Check that the safety write left {channel} as you need it; submit again if needed.",
+  "msg.receipt.void_denied": "The command was refused, so it did not run.",
+  "msg.receipt.void_denied.action": "The reason is in the technical details.",
+  "msg.receipt.internal_error":
+    "The server hit an internal error while writing, so the result is not known.",
+  "msg.receipt.internal_error.action":
+    "Check the device on site and tell an administrator.",
+  "msg.receipt.lost_receipt":
+    "The server stopped before the receipt was stored, so the result is not known.",
+  "msg.receipt.lost_receipt.action": "Check the device on site.",
+  "msg.receipt.pump_off_unconfirmed": "The pump was not confirmed off.",
+  "msg.receipt.pump_off_unconfirmed.action": "Switch the pump off by hand on site.",
+  "msg.receipt.settled_applied":
+    "A read-back confirmed that {channel} is at {level}, so the command took effect.",
+  "msg.receipt.settled_not_applied":
+    "A read-back found {channel} at {level} in mode {mode}, so the command did not take effect.",
+  "msg.receipt.settled_not_applied.action": "Submit it again if it is still needed.",
+  "msg.task_end.handover": "Control was handed over, so the irrigation ended early.",
+  "msg.task_end.protection_write":
+    "A safety protection took over {channel}, so the irrigation ended early.",
+  "msg.task_end.protection_write.action": "Find out why the protection acted.",
+  "msg.task_end.pump_off_interlock": "The interlock switched the pump off, so the irrigation ended early.",
+  "msg.task_end.pump_off_interlock.action": "Find out why the interlock acted.",
+  "msg.task_end.pump_off_watchdog": "The pump watchdog switched the pump off, so the irrigation ended early.",
+  "msg.task_end.pump_off_watchdog.action": "Find out why the watchdog acted.",
+  "msg.task_end.not_confirmed":
+    "The irrigation was not confirmed complete (result: {action_state}).",
+  "msg.task_end.not_confirmed.action": "Check on site that the watering happened.",
+  "msg.task_end.other": "The irrigation ended early.",
+  "msg.task_end.other.action": "Check on site if it matters.",
 };

@@ -421,8 +421,122 @@
       "action": true
     }
   },
-  "receipt": {},
-  "task_end": {},
+  "receipt": {
+    "not_sent": {
+      "params": [],
+      "action": true
+    },
+    "device_rejected": {
+      "params": [],
+      "action": true
+    },
+    "no_receipt": {
+      "params": [],
+      "action": true
+    },
+    "link_broke": {
+      "params": [],
+      "action": true
+    },
+    "readback_level": {
+      "params": [
+        "channel",
+        "expected"
+      ],
+      "action": true
+    },
+    "readback_unavailable": {
+      "params": [],
+      "action": true
+    },
+    "readback_mode": {
+      "params": [
+        "mode"
+      ],
+      "action": true
+    },
+    "void_recovery_changed": {
+      "params": [],
+      "action": true
+    },
+    "void_handover": {
+      "params": [],
+      "action": true
+    },
+    "void_restart": {
+      "params": [],
+      "action": true
+    },
+    "void_superseded": {
+      "params": [
+        "channel"
+      ],
+      "action": true
+    },
+    "void_denied": {
+      "params": [
+        "denied_code"
+      ],
+      "action": true
+    },
+    "internal_error": {
+      "params": [],
+      "action": true
+    },
+    "lost_receipt": {
+      "params": [],
+      "action": true
+    },
+    "pump_off_unconfirmed": {
+      "params": [],
+      "action": true
+    },
+    "settled_applied": {
+      "params": [
+        "channel",
+        "level"
+      ],
+      "action": false
+    },
+    "settled_not_applied": {
+      "params": [
+        "channel",
+        "level",
+        "mode"
+      ],
+      "action": true
+    }
+  },
+  "task_end": {
+    "handover": {
+      "params": [],
+      "action": false
+    },
+    "protection_write": {
+      "params": [
+        "channel"
+      ],
+      "action": true
+    },
+    "pump_off_interlock": {
+      "params": [],
+      "action": true
+    },
+    "pump_off_watchdog": {
+      "params": [],
+      "action": true
+    },
+    "not_confirmed": {
+      "params": [
+        "action_state"
+      ],
+      "action": true
+    },
+    "other": {
+      "params": [],
+      "action": true
+    }
+  },
   "compute_error": {},
   "compute_stuck": {},
   "chat_end": {},

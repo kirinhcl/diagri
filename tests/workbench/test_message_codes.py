@@ -191,3 +191,56 @@ def test_every_finding_names_a_registered_message_code() -> None:
     # and the registry lists nothing the server never sends
     assert set(CODES["finding"]) <= emitted, set(CODES["finding"]) - emitted
     assert len(CODES["finding"]) == 32
+
+
+RECEIPT_CALLS = {"Outcome", "_void_queued"}
+COMPUTED_TASK_END = {"pump_off_interlock", "pump_off_watchdog"}  # f"pump_off_{trigger}"
+
+
+def emitted_codes(root: Path) -> tuple[set[str], set[str]]:
+    """(receipt codes, task_end codes) written as literals under ``root``: the ``error_code=`` of
+    an Outcome, the ``code=`` of _void_queued, a "error_code" dict key, and for early ends the
+    ``code=`` of _end_cycle and the "ended_early_code" dict key. A conditional yields both arms."""
+    receipt: set[str] = set()
+    task_end: set[str] = set()
+
+    def strings(node: ast.expr) -> set[str]:
+        if isinstance(node, ast.JoinedStr):
+            return set()  # computed: COMPUTED_TASK_END
+        return {
+            n.value
+            for n in ast.walk(node)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        }
+
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, "id", getattr(node.func, "attr", None))
+                for item in node.keywords:
+                    if item.arg == "error_code" and name in RECEIPT_CALLS:
+                        receipt |= strings(item.value)
+                    elif item.arg == "code" and name == "_void_queued":
+                        receipt |= strings(item.value)
+                    elif item.arg == "code" and name == "_end_cycle":
+                        task_end |= strings(item.value)
+            elif isinstance(node, ast.Dict):
+                for key, value in zip(node.keys, node.values, strict=True):
+                    if isinstance(key, ast.Constant) and key.value == "error_code":
+                        receipt |= strings(value)
+                    elif isinstance(key, ast.Constant) and key.value == "ended_early_code":
+                        task_end |= strings(value)
+    return receipt, task_end
+
+
+def test_every_receipt_and_task_end_code_is_registered() -> None:
+    src = REPO / "src" / "growbridge"
+    receipt, task_end = emitted_codes(src / "control")
+    manual_receipt, manual_end = emitted_codes(src / "workbench")
+    receipt, task_end = receipt | manual_receipt, task_end | manual_end | COMPUTED_TASK_END
+    assert receipt <= set(CODES["receipt"]), receipt - set(CODES["receipt"])
+    assert task_end <= set(CODES["task_end"]), task_end - set(CODES["task_end"])
+    # and the registry lists nothing the server never sends
+    assert set(CODES["receipt"]) <= receipt, set(CODES["receipt"]) - receipt
+    assert set(CODES["task_end"]) <= task_end, set(CODES["task_end"]) - task_end
+    assert len(CODES["receipt"]) == 17 and len(CODES["task_end"]) == 6

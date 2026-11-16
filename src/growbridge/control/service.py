@@ -74,7 +74,8 @@ class ControlService:
         self.device = DeviceIO(bridge)
         self.gate = PriorityGate()
         self._cycle: asyncio.Event | None = None  # set while an irrigation cycle is in flight
-        self._cycle_ended: str | None = None  # why the running cycle was ended before its time
+        # why the running cycle was ended before its time: (English text, code, params)
+        self._cycle_ended: tuple[str, str, dict[str, Any]] | None = None
         self._last_cycle_end: float | None = None
         self._last_pump_off_id: str | None = None
         self.ready = False  # False until ``startup`` has finished: ordinary writes are blocked
@@ -126,7 +127,7 @@ class ControlService:
             number = self.ledger.recovery() + 1
             self.ledger.set_meta(META_RECOVERY, str(number))
             self.ledger.revoke_all(now)
-            voided = self._void_queued("recovery number changed")
+            voided = self._void_queued("recovery number changed", code="void_recovery_changed")
             self.ledger.set_flag(FLAG_TRANSPORT_STOPPED, False)
             self.ledger.event("recovery_bump", {"number": number, "reason": reason}, now)
         self._publish(voided)
@@ -180,10 +181,12 @@ class ControlService:
 
     async def handover(self, number: int, reason: str) -> None:
         now = self.clock.now()
-        self._end_cycle(f"hand-over: {reason}")
+        self._end_cycle(f"hand-over: {reason}", code="handover")
         with self.db.transaction():
             self.ledger.revoke(number, now)
-            voided = self._void_queued(f"hand-over: {reason}", right_number=number)
+            voided = self._void_queued(
+                f"hand-over: {reason}", code="void_handover", right_number=number
+            )
             self.ledger.event("handover", {"right": number, "reason": reason}, now)
         self._publish(voided)
         # URGENT: waits only for the receipt of the action already on its way
@@ -279,26 +282,38 @@ class ControlService:
         note = "process stopped before the receipt was stored; not replayed"
         changed = []
         for record in self.ledger.actions_in(ActionState.MAYBE_SENT):
-            changed.append(record.model_copy(update={"state": ActionState.UNKNOWN, "error": note}))
+            update = {"state": ActionState.UNKNOWN, "error": note, "error_code": "lost_receipt"}
+            changed.append(record.model_copy(update=update))
             self.ledger.update_action(changed[-1])
-        changed.extend(self._void_queued("process stopped before the action was sent"))
+        changed.extend(
+            self._void_queued("process stopped before the action was sent", code="void_restart")
+        )
         return changed
 
     def _void_queued(
         self,
         why: str,
+        code: str,
+        params: dict[str, Any] | None = None,
         right_number: int | None = None,
         channel: Channel | None = None,
         spare: RightKind | None = None,
     ) -> list[ActionRecord]:
-        """Void queued actions, optionally only on ``channel`` and sparing right kind ``spare``."""
+        """Void queued actions, optionally only on ``channel`` and sparing right kind ``spare``.
+        ``code`` and ``params`` are the receipt message for ``why``."""
         voided = []
         for record in self.ledger.actions_in(ActionState.PENDING, right_number=right_number):
             if channel is not None and record.channel is not channel:
                 continue
             if spare is not None and record.right_kind is spare:
                 continue
-            voided.append(record.model_copy(update={"state": ActionState.VOID, "error": why}))
+            update = {
+                "state": ActionState.VOID,
+                "error": why,
+                "error_code": code,
+                "error_params": dict(params or {}),
+            }
+            voided.append(record.model_copy(update=update))
             self.ledger.update_action(voided[-1])
         return voided
 
@@ -360,7 +375,11 @@ class ControlService:
         right = self._authorize(request)
         if right.kind is RightKind.PROTECTION:
             # a protection write must not wait for a pump run to finish
-            self._end_cycle(f"protection write: {request.trigger}")
+            self._end_cycle(
+                f"protection write: {request.trigger}",
+                code="protection_write",
+                params={"channel": request.channel.value},
+            )
             self._supersede_queued(request.channel)
         record = rights.intent(request, right, request.level, self.clock.now())
         self._save(record, fingerprint)
@@ -374,7 +393,13 @@ class ControlService:
         would otherwise run after it and undo it. The write already on its way is left alone."""
         why = f"superseded by a protection write on {channel.value}"
         with self.db.transaction():
-            voided = self._void_queued(why, channel=channel, spare=RightKind.PROTECTION)
+            voided = self._void_queued(
+                why,
+                code="void_superseded",
+                params={"channel": channel.value},
+                channel=channel,
+                spare=RightKind.PROTECTION,
+            )
         self._publish(voided)
 
     async def irrigate(
@@ -476,7 +501,13 @@ class ControlService:
             if starts_pump:
                 self._check_cooldown()
         except Denied as error:
-            self._save(current.model_copy(update={"state": ActionState.VOID, "error": str(error)}))
+            update = {
+                "state": ActionState.VOID,
+                "error": str(error),
+                "error_code": "void_denied",
+                "error_params": {"denied_code": error.code},
+            }
+            self._save(current.model_copy(update=update))
             raise
 
     async def _send(self, record: ActionRecord) -> ActionRecord:
@@ -489,19 +520,32 @@ class ControlService:
             return await self.device.write(channel, level)
         except Exception as error:
             log.exception("device write failed unexpectedly")
-            return Outcome(ActionState.UNKNOWN, f"{type(error).__name__}: {error}")
+            return Outcome(
+                ActionState.UNKNOWN,
+                f"{type(error).__name__}: {error}",
+                error_code="internal_error",
+            )
 
     def _settle(self, record: ActionRecord, outcome: Outcome) -> ActionRecord:
-        update: dict[str, Any] = {"state": outcome.state, "error": outcome.error}
+        update: dict[str, Any] = {
+            "state": outcome.state,
+            "error": outcome.error,
+            "error_code": outcome.error_code,
+            "error_params": dict(outcome.error_params),
+        }
         if outcome.state is ActionState.CONFIRMED:
             update.update(confirmed_at=self.clock.now(), confirmed_level=record.planned_level)
         return self._save(record.model_copy(update=update))
 
     # --- pump (7.6, 7.8) ----------------------------------------------------------------------
 
-    def _end_cycle(self, reason: str) -> None:
+    def _end_cycle(
+        self, reason: str, code: str = "other", params: dict[str, Any] | None = None
+    ) -> None:
+        """End the running cycle early; ``reason`` is the English text, ``code`` and ``params``
+        the task_end message for it."""
         if self._cycle is not None and not self._cycle.is_set():
-            self._cycle_ended = reason
+            self._cycle_ended = (reason, code, dict(params or {}))
             self._cycle.set()
 
     async def _hold(self, cycle: asyncio.Event, seconds: float) -> dict[str, Any]:
@@ -514,7 +558,20 @@ class ControlService:
         except TimeoutError:
             return {"ran_seconds": seconds, "ended_early": None}
         ran = min(seconds, loop.time() - began)
-        return {"ran_seconds": ran, "ended_early": self._cycle_ended or "ended early"}
+        if self._cycle_ended is None:
+            return {
+                "ran_seconds": ran,
+                "ended_early": "ended early",
+                "ended_early_code": "other",
+                "ended_early_params": {},
+            }
+        reason, code, params = self._cycle_ended
+        return {
+            "ran_seconds": ran,
+            "ended_early": reason,
+            "ended_early_code": code,
+            "ended_early_params": params,
+        }
 
     async def _run_cycle(
         self, record: ActionRecord, request: ActionRequest, seconds: float, planned: bool = False
@@ -535,7 +592,9 @@ class ControlService:
                 sent = sent.model_copy(update=await self._hold(cycle, seconds))
         finally:
             if cycle is not None:
-                off = Outcome(ActionState.UNKNOWN, "pump off did not run")
+                off = Outcome(
+                    ActionState.UNKNOWN, "pump off did not run", error_code="pump_off_unconfirmed"
+                )
                 try:
                     async with self.gate.acquire(URGENT):
                         off = await self._switch_pump_off()
@@ -545,7 +604,11 @@ class ControlService:
                     if off.state is not ActionState.CONFIRMED:
                         self._set_interlock(sent.request_id)
         if off.state is not ActionState.CONFIRMED:
-            on = Outcome(ActionState.UNKNOWN, "pump off unconfirmed; interlock set")
+            on = Outcome(
+                ActionState.UNKNOWN,
+                "pump off unconfirmed; interlock set",
+                error_code="pump_off_unconfirmed",
+            )
         return self._settle(sent, on)
 
     def _set_interlock(self, request_id: str) -> None:
@@ -553,7 +616,7 @@ class ControlService:
         self.ledger.event("interlock", {"request_id": request_id}, self.clock.now())
 
     async def _switch_pump_off(self) -> Outcome:
-        outcome = Outcome(ActionState.UNKNOWN, "no attempt")
+        outcome = Outcome(ActionState.UNKNOWN, "no attempt", error_code="pump_off_unconfirmed")
         for attempt in range(PUMP_OFF_TRIES):
             outcome = await self._write(Channel.PUMP, 0)
             if outcome.state is ActionState.CONFIRMED:
@@ -570,7 +633,7 @@ class ControlService:
         self._require_host()
         if not self.bridge.connected:
             return False
-        self._end_cycle(f"pump switched off ({trigger})")
+        self._end_cycle(f"pump switched off ({trigger})", code=f"pump_off_{trigger}")
         now = self.clock.now()
         pending = [item for item in self.ledger.unsettled() if item.channel is Channel.PUMP]
         record = ActionRecord(
@@ -618,9 +681,17 @@ class ControlService:
                 level, mode = state.levels.get(record.channel), state.modes.get(record.channel)
                 applied = level == record.planned_level and mode == 0
                 verdict = "applied" if applied else "not applied"
+                params = {"channel": record.channel.value, "level": level}
+                if not applied:
+                    params["mode"] = mode
                 note = f"settled by read-back: {verdict} (level {level}, mode {mode})"
                 error = f"{record.error}; {note}" if record.error else note
-                update = {"settled_at": self.clock.now(), "error": error}
+                update = {
+                    "settled_at": self.clock.now(),
+                    "error": error,
+                    "error_code": "settled_applied" if applied else "settled_not_applied",
+                    "error_params": params,
+                }
                 settled.append(record.model_copy(update=update))
                 self.ledger.update_action(settled[-1])
         self._publish(settled)

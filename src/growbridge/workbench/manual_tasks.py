@@ -64,7 +64,7 @@ async def _run_once(control: ControlPort, request: ActionRequest, item) -> Actio
         if earlier is None:
             attempt_request = request.model_copy(update={"request_id": request_id})
             return await control.irrigate(attempt_request, item.seconds, planned=True)
-        if not changed_nothing(earlier.state, earlier.error):
+        if not changed_nothing(earlier.state, earlier.error, earlier.error_code):
             return earlier
     raise Denied("state", f"{MAX_ATTEMPTS} attempts of this irrigation never reached the device")
 
@@ -72,14 +72,26 @@ async def _run_once(control: ControlPort, request: ActionRequest, item) -> Actio
 def _ran(action: ActionRecord) -> dict | None:
     """The task record a planned run leaves: done for a full confirmed run, partial for one cut
     short or not confirmed, nothing when it certainly changed nothing on the device."""
-    if changed_nothing(action.state, action.error):
+    if changed_nothing(action.state, action.error, action.error_code):
         return None
     if action.state is ActionState.CONFIRMED and action.ended_early is None:
         return {"outcome": "done", "ran_seconds": action.ran_seconds}
-    why = action.ended_early or (
-        f"the run was not confirmed ({action.state.value}): {action.error or 'no detail'}"
-    )
-    return {"outcome": "partial", "ran_seconds": action.ran_seconds, "ended_early": why}
+    if action.ended_early:
+        return {
+            "outcome": "partial",
+            "ran_seconds": action.ran_seconds,
+            "ended_early": action.ended_early,
+            "ended_early_code": action.ended_early_code or "other",
+            "ended_early_params": action.ended_early_params,
+        }
+    why = f"the run was not confirmed ({action.state.value}): {action.error or 'no detail'}"
+    return {
+        "outcome": "partial",
+        "ran_seconds": action.ran_seconds,
+        "ended_early": why,
+        "ended_early_code": "not_confirmed",
+        "ended_early_params": {"action_state": action.state.value},
+    }
 
 
 def _window(stage: StageRuntime) -> tuple[float, float]:
