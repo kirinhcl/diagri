@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`（第 14、15 节是两轮审查后的修订，以它们为准）
 
+**每个任务开工前先读文末「集成注意事项」里对应编号的条目**（评审第 4 轮逐文件核对过，照字面执行会踩的坑都在那里）。
+
 ## Global Constraints
 
 - 只在 `settings.auto_research and settings.multi_user` 时启用；`multi_user` 默认 `False`。关闭时不构造 `Access`，所有调用点以 `access is None` 跳过检查。
@@ -129,7 +131,7 @@
 ### Task 7: 测试夹具
 
 **Files:**
-- Modify: `tests/workbench/workbench_support.py`
+- Modify: `tests/workbench/workbench_support.py`、`src/growbridge/workbench/api.py`（只做参数接线：`create_workbench(..., access=None, locks=None)` 与 `Workbench.__init__` 末尾追加同名关键字参数，保持现有位置参数顺序；路由检查留给 Task 8）
 - Test: `tests/workbench/test_workbench_support_multi_user.py`
 
 **Interfaces:**
@@ -143,7 +145,7 @@
 
 **Files:**
 - Create: `src/growbridge/workbench/scope.py`（`project_write(access, actor, project_id, hidden)`、`stage_write(access, actor, stage_id, hidden, emergency=False)`、`admin_only(access, actor)`，`access is None` 时直接返回）
-- Modify: `workbench/api.py`（`create_workbench(..., access=None, locks=None)`；`manual_stage` → `stage_write`；`/measurements` → 实验所属项目；`/safety/approve` → 锁定人或管理员；`/drafts/run-sheet` 在 `access` 非空时拒绝模型令牌（`model_role`）；`/alerts/{id}/read` 不可见 → 与不存在同答；`/me` 加 `multi_user`、`role`、`greenhouses`；`STATUS_BY_CODE`）、`workbench/rounds.py`、`workbench/manual_tasks.py`、`workbench/analysis.py`、`workbench/holdouts.py`、`workbench/compute.py`（任务预算按任务项目；余额与结算 `admin_only`）
+- Modify: `workbench/api.py`（`manual_stage(stage_id, actor)` 加 `actor` 参数并改两处调用 → `stage_write`；把 `access` 传进 `api.py:214–228` 调用的各路由工厂；`/measurements` → 实验所属项目；`/safety/approve` → 锁定人或管理员；`/drafts/run-sheet` 在 `access` 非空时拒绝模型令牌（`model_role`）；`/alerts/{id}/read` 不可见 → 与不存在同答；`/me` 加 `multi_user`、`role`、`greenhouses`；`STATUS_BY_CODE`）、`workbench/rounds.py`、`workbench/manual_tasks.py`、`workbench/analysis.py`、`workbench/holdouts.py`、`workbench/compute.py`（任务预算按任务项目；余额与结算 `admin_only`）
 - Test: `tests/workbench/test_workbench_multi_user_writes.py`
 
 - [ ] **Step 1: 写失败测试**：顶部一张写路由表（路径、方法、样例体），参数化 `test_b_cannot_write_a`（与 `absent_twin` 对同一 id 的回答完全相同）与 `test_a_can_write_own`；`test_compute_balance_admin_only`；`test_manual_write_and_irrigation_need_lock`；`test_model_token_draft_refused_when_multi_user`；`test_corrects_other_experiment_refused`；`test_goal_with_foreign_round_hidden`。
@@ -212,3 +214,20 @@
 - [ ] **Step 1: 写文档。**
 - [ ] **Step 2: 运行** `pytest tests/docs -q` → 通过；全量门禁。
 - [ ] **Step 3: 提交** `docs: multi-user accounts, greenhouse locks and the adaptation notes`
+
+---
+
+## 集成注意事项（评审第 4 轮）
+
+**I-1（Task 1、4）真实控制夹具。** `FakeControl`（`sim/control.py`）没有 `startup()`，`RecordingControl` 也没有。用到真实 `ControlService` 的测试（迟到交还、崩溃恢复）从 `tests/control/conftest.py` 抽出可复用的工厂放到 `tests/support/`（或在 `tests/workflow/conftest.py` 显式引入）；需要第二个实例时给它新的目录，不要复用同一个 `control.sqlite3`。复核交还时比较的是**命令开始时读到的**阶段 `rev`，变了就拒绝，不能接受新版本继续往下走。
+
+**I-2（Task 4）模型与插入语句。** `StageRow` 加 `care_released: bool = False`（行加载按 `model_fields`、`update_stage` 拒绝未知字段）。`add_project` 现在按三个位置值插入（`workflow/store.py:139`），加 `owner` 后改成显式列名。`project_summaries(limit=200)`、`rounds_awaiting_choice(limit=50)` 的默认值保留；只有传了 `only_owner` 才 `JOIN wf_projects`——`tests/tasks/conftest.py` 的独立 `TaskBoard` 库里没有这张表。`TaskBoard.create()` 签名不变，同项目去重的现有测试不改。
+
+**I-3（Task 5）构造参数与回调。** 新的 `device_id` 构造参数会打断 `tests/observer/test_observer_service.py:51`、`tests/observer/test_frozen_watch.py:92,516`；回调多了 `scope=` 会打断 `tests/executor/test_watchdog.py:67,72,85`、`tests/executor/test_executor_watchdog.py:130`、`tests/agents/test_agents_audit_schedule.py:63,77` 的假回调——这些测试一并改，包装回调（含注入失败的）要转发关键字参数。现有的解除调用也要带上归属：`observer/service.py:81,90`、`observer/frozen_watch.py:121,129`、`runtime.py:475`、`runtime_agents.py:165`、`executor/watchdog.py:152`；`scope=None` 默认值语法上能过，但会解除错的记录，逐个改并各加一条断言。`tests/agents/test_agents_auditor.py:84,142` 与 `tests/observer/test_stage_checks.py:229,283` 用无归属的种子告警断言能读到、能解除，与新规则冲突：改为带归属的种子，再各加一条"无归属的旧告警不被读到、不被合并"的用例。
+
+**I-4（Task 7）夹具。** 保留 `Bench(compute_factory=...)`（`tests/workbench/test_workbench_compute.py:61` 在用），`with_compute=True` 只是用默认工厂的快捷方式。`seed_round()` / `pending()` 用 workflow 身份建项目（所有者为空），多用户测试另写 `seed_round_as(client)` / `pending_as(client)`，以普通用户身份建项目与阶段，并先锁温室。`bench.lock()` 直接调 `GreenhouseLocks.lock`（温室路由要到 Task 11 才有）。`absent_twin()` 用独立目录与数据库，建同名账号并登录，只是不建 A 的对象。
+
+**I-5（Task 11）运行时的两处接线。** `Runtime.workbench()`（`runtime.py:314`）另行构造路由，所以除了 `workflow.access = parts.access`，还要在这里把 `access`、`locks` 传给 `create_workbench`。两处都放进 `runtime_access.py` 的辅助函数，`runtime.py` 只加调用。CLI 的 `--admin` 要改三处：解析器、`_add_operator`、分派（`cli.py:32,205,234`）。
+
+**I-6（Task 12）控制台。** `ui/layout.js` 的导航项需要对应的 `ICONS.greenhouses` 与 `ICONS.admin`，否则在第 32 行崩溃；`navigation(t)` 现在只收 `t`，按 `multi_user` 与角色过滤要连同第 147 行的调用一起改。`tests/web/support/render-page.mjs:87` 的 POST 恒返回 `{}`，`lock_taken` 等冲突用例需要能按路径给出脚本化回答。管理页的渲染测试用单独的管理员 `me` 夹具。
+
