@@ -1,7 +1,11 @@
+import os
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 from conftest import DAY_START
 
-from growbridge.agents import handlers_researcher
 from growbridge.archive.models import ManualMeasurement, ManualTask, TaskRecord
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
@@ -11,6 +15,7 @@ from growbridge.observer.stage_checks import (
     StageChecks,
 )
 from growbridge.planning.manual_tasks import ON_TIME_SECONDS
+from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS as WINDOW_GRACE_SECONDS
 from growbridge.planning.window import data_window
 from growbridge.ports import StageRuntime
 from growbridge.sim.fixtures import make_run_sheet
@@ -148,7 +153,7 @@ async def test_a_measurement_stored_before_the_task_record_counts(rig):
 
 async def test_a_measurement_outside_the_window_alerts(rig):
     _, end = data_window(rig.stages.active_stage())
-    late = end + handlers_researcher.MEASUREMENT_GRACE_SECONDS + 128
+    late = end + WINDOW_GRACE_SECONDS + 128
     rig.measure("m9", late)
     rig.at(DAY_START + 60)
     await rig.checks.tick()
@@ -157,7 +162,7 @@ async def test_a_measurement_outside_the_window_alerts(rig):
 
 async def test_a_corrected_measurement_resolves_its_outside_window_alert(rig):
     _, end = data_window(rig.stages.active_stage())
-    rig.measure("m9", end + handlers_researcher.MEASUREMENT_GRACE_SECONDS + 128)
+    rig.measure("m9", end + WINDOW_GRACE_SECONDS + 128)
     rig.at(DAY_START + 60)
     await rig.checks.tick()
     rig.measure("m9b", DAY_START + 2 * HOUR, corrects="m9")
@@ -181,3 +186,29 @@ async def test_checks_run_at_most_every_check_seconds(rig):
     assert await rig.checks.tick() is False
     rig.clock.mono += 1
     assert await rig.checks.tick() is True
+
+
+async def test_a_measurement_dated_before_the_stage_start_is_not_judged(rig):
+    # every stage of a round shares one experiment: an earlier stage's measurement is not this
+    # stage's to judge
+    rig.measure("m-earlier", DAY_START - 5 * HOUR)
+    rig.at(DAY_START + 60)
+    await rig.checks.tick()
+    assert not [k for k in rig.open_alerts() if k[0] == "measurement_outside_window"]
+
+
+def test_the_observer_does_not_import_the_agents_package():
+    code = (
+        "import sys, growbridge.observer.service\n"
+        "found = sorted(m for m in sys.modules if m.startswith('growbridge.agents'))\n"
+        "assert not found, found"
+    )
+    src = Path(__file__).resolve().parents[2] / "src"
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        env={**os.environ, "PYTHONPATH": str(src)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr

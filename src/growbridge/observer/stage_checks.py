@@ -2,12 +2,12 @@
 a measurement task recorded done with no measurement behind it, a measurement outside the data
 window. Reads stored records only; never reports a stage event or pauses anything."""
 
-from growbridge.agents import handlers_researcher
 from growbridge.archive.clock import Clock
 from growbridge.archive.snapshot import outside_window
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
 from growbridge.planning import manual_tasks
+from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS as WINDOW_GRACE_SECONDS
 from growbridge.planning.window import data_window
 from growbridge.ports import StagePort, StageRuntime
 
@@ -70,12 +70,14 @@ class StageChecks:
 
     def _check_window(self, stage: StageRuntime, start: float, end: float) -> None:
         experiment = stage.experiment_id
-        grace = handlers_researcher.MEASUREMENT_GRACE_SECONDS
+        grace = WINDOW_GRACE_SECONDS
         current = {m.id for m in self.archive.measurements(experiment)}
         outside = {
             row["id"]: row
             for row in outside_window(self.archive, experiment, start, end, grace)
-            if row["id"] in current
+            # an earlier stage of the round shares the experiment; its measurements are not
+            # this stage's to judge
+            if row["id"] in current and row["measured_at"] >= start
         }
         for mid, row in outside.items():
             text = (

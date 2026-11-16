@@ -1,6 +1,11 @@
 """The time window a stage's data belongs to."""
 
+from growbridge.planning import manual_tasks
 from growbridge.ports import StageRuntime
+
+# a manual measurement taken up to two hours after the stage ended (a harvest weight) belongs
+# to it, as a manual task done up to two hours late does
+MEASUREMENT_GRACE_SECONDS = manual_tasks.ON_TIME_SECONDS
 
 
 def data_window(stage: StageRuntime) -> tuple[float, float]:

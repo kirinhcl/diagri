@@ -27,14 +27,12 @@ from growbridge.agents.tools import Tool
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.ids import new_id
 from growbridge.planning import manual_tasks
+from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS
 from growbridge.ports import Denied
 from growbridge.workflow.states import RoundState
 
 ROLE = "researcher"
 DEFAULT_MIN_COVERAGE = 0.9  # the server's threshold for a complete snapshot
-# a manual measurement taken up to two hours after the stage ended (a harvest weight) belongs
-# to it, as a manual task done up to two hours late does
-MEASUREMENT_GRACE_SECONDS = manual_tasks.ON_TIME_SECONDS
 MAX_LISTED_OUTSIDE = 20  # measurements left outside the window that inspect_stage_data names
 MAX_SCRIPT_CHARS = 20_000
 MAX_TIMEOUT_SECONDS = 600.0

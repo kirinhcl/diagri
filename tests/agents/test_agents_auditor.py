@@ -51,24 +51,28 @@ def _body(outcome) -> dict:
     return json.loads(outcome.content)
 
 
-async def test_get_stage_records_lists_tasks_measurements_and_open_alerts(env):
-    await _start(env)
+def _measure(env, mid: str, measured_at: float, metric: str = "height") -> None:
     env.archive.add_measurement(
         ManualMeasurement(
-            id="m-in",
+            id=mid,
             experiment_id="experiment-stage-1",
             batch="b",
             plant_id="p1",
             layout_version="v1",
-            measured_at=START + 1,
+            measured_at=measured_at,
             position="t1",
             method="ruler",
-            metric="height",
+            metric=metric,
             value=3.0,
             unit="cm",
             operator="op-1",
         )
     )
+
+
+async def test_get_stage_records_lists_tasks_measurements_and_open_alerts(env):
+    await _start(env)
+    _measure(env, "m-in", START + 1)
     env.book.raise_alert("stage_gap", "stage-1:x", "warning", "gap")
     env.book.raise_alert("stage_gap", "stage-2:x", "warning", "other stage")
     env.book.raise_alert("stage_gap", "stage-10:x", "warning", "a stage that shares the prefix")
@@ -82,9 +86,26 @@ async def test_get_stage_records_lists_tasks_measurements_and_open_alerts(env):
     assert body["run_sheet"]["manual_tasks"]
     assert [m["id"] for m in body["measurements"]] == ["m-in"]
     assert body["measurements"][0]["in_window"] is True
+    assert body["measurements_before_stage"] == 0
     assert [a["key"] for a in body["open_alerts"]] == ["stage-1:x"]
     for row in body["manual_tasks"]:
         assert {"status", "record"} <= set(row)
+
+
+async def test_get_stage_records_counts_an_earlier_stages_measurements_without_listing_them(env):
+    await _start(env)
+    _measure(env, "m-earlier", START - 3600)  # the round's earlier stage shares the experiment
+    _measure(env, "m-in", START + 1)
+    _measure(env, "m-late", START + 10 + 3 * 3600)
+
+    body = _body(await _call(env, "get_stage_records", stage_id="stage-1"))
+
+    assert [(m["id"], m["in_window"]) for m in body["measurements"]] == [
+        ("m-in", True),
+        ("m-late", False),
+    ]
+    assert body["measurements_before_stage"] == 1
+    assert "m-earlier" not in json.dumps(body)
 
 
 async def test_auditor_tools_refuse_another_project_and_an_unbound_run(env):

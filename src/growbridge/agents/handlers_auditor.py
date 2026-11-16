@@ -19,14 +19,10 @@ from growbridge.agents.handlers_common import (
     require_stage_project,
 )
 from growbridge.agents.handlers_orchestrator import build_orchestrator_tools
-from growbridge.agents.handlers_researcher import (
-    MEASUREMENT_GRACE_SECONDS,
-    InspectInput,
-    stage_preview,
-)
+from growbridge.agents.handlers_researcher import InspectInput, stage_preview
 from growbridge.agents.tools import Tool
 from growbridge.planning import manual_tasks
-from growbridge.planning.window import data_window
+from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS, data_window
 from growbridge.ports import Denied
 
 AUDIT_FINDING = "audit_finding"
@@ -92,21 +88,24 @@ def _task_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict],
     return rows, len(due) - len(rows)
 
 
-def _measurement_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict], int]:
+def _measurement_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict], int, int]:
+    """``(rows, left out by the list limit, timed before the stage)``. Every stage of a round
+    shares one experiment, so a measurement timed before this stage started is an earlier
+    stage's: it is counted, not listed."""
     keep = None if deps.holdout is None else deps.holdout.development_filter(stage.project_id)
-    found = [m for m in deps.archive.measurements(stage.experiment_id) if keep is None or keep(m)]
-    found.sort(key=lambda m: m.measured_at)
+    kept = [m for m in deps.archive.measurements(stage.experiment_id) if keep is None or keep(m)]
+    found = sorted((m for m in kept if m.measured_at >= start), key=lambda m: m.measured_at)
     rows = [
         {
             "id": m.id,
             "metric": m.metric,
             "value": m.value,
             "measured_at": m.measured_at,
-            "in_window": start <= m.measured_at <= end + MEASUREMENT_GRACE_SECONDS,
+            "in_window": m.measured_at <= end + MEASUREMENT_GRACE_SECONDS,
         }
         for m in found[-MAX_LISTED:]
     ]
-    return rows, len(found) - len(rows)
+    return rows, len(found) - len(rows), len(kept) - len(found)
 
 
 def _open_alerts(deps: Deps, stage_id: str) -> list[dict]:
@@ -123,7 +122,7 @@ def stage_records(deps: Deps, data: StageInput) -> dict:
     stage = _started_stage(deps, data.task_id, data.stage_id)
     start, end = data_window(stage)
     tasks, tasks_left_out = _task_rows(deps, stage, start, end)
-    measurements, measurements_left_out = _measurement_rows(deps, stage, start, end)
+    measurements, measurements_left_out, before = _measurement_rows(deps, stage, start, end)
     return {
         "stage": {
             "id": stage.stage_id,
@@ -137,6 +136,7 @@ def stage_records(deps: Deps, data: StageInput) -> dict:
         "manual_tasks_left_out": tasks_left_out,
         "measurements": measurements,
         "measurements_left_out": measurements_left_out,
+        "measurements_before_stage": before,
         "open_alerts": _open_alerts(deps, stage.stage_id),
     }
 

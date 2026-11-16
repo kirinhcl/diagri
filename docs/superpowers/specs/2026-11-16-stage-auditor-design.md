@@ -49,7 +49,7 @@ A new `StageChecks` in `observer/stage_checks.py`, run by the observer's tick li
 | --- | --- | --- | --- |
 | `task_missed` | A manual task occurrence's on-time deadline has passed with no record (status `missed`) | stage, task, due time | Any record of that occurrence exists |
 | `measurement_missing` | A `measurement` task is recorded `done`, and `MEASUREMENT_GRACE_SECONDS` (2 h) after the record no measurement of the stage's experiment has a time between an hour before the task was due and its on-time deadline | stage, task, due time | Such a measurement exists |
-| `measurement_outside_window` | A measurement of the stage's experiment has a time outside the data window the snapshot will use | stage, measurement id | Never (the measurement stays outside); it is a warning to record a correction |
+| `measurement_outside_window` | A measurement of the stage's experiment, timed at or after the stage's start, has a time after the data window the snapshot will use. One timed before the stage's start belongs to an earlier stage of the round (all stages of a round share one experiment) and is not judged | stage, measurement id | A correction replaces the measurement |
 
 All three are warnings: they never pause a stage. The window is computed by the same function the freeze uses, so a later change of the window rule carries over. The console shows each kind with an English and a Chinese label.
 
@@ -105,3 +105,4 @@ A separate branch (`fix/pr4-review-findings`) is fixing the PR 4 review findings
 - The data window follows the stage's actual end (taken from the fix branch), not only its planned end.
 - The 6-call cap is the auditor's default role limit (`RoleModel(max_calls=6)`). The per-task call budget is not enforced.
 - An audit left in `needs_attention` does not block the next one.
+- A stage judges only measurements timed at or after its own start (ruling R6). All stages of a round share one experiment and a measurement carries no stage id, so earlier ones are an earlier stage's: they raise no `measurement_outside_window`, and `get_stage_records` leaves them out of "measurements" and reports their number as "measurements_before_stage".
