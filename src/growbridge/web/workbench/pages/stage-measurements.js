@@ -118,13 +118,20 @@ export function measurementForm(ctx, stage, onRecorded) {
   const line = correctingLine(ctx);
   let recorded = [];
   let controls = null;
+  let copied = null; // the corrected record's time: its epoch and the minute the field showed for it
   const showCorrecting = () => line.show(controls.get("corrects"), recorded);
   const stopCorrecting = () => {
     controls.set({ corrects: null });
+    copied = null;
     showCorrecting();
   };
+  // The field holds minutes only: an untouched copied time keeps the record's own seconds.
+  const measuredAt = (values) => {
+    const untouched = copied && values.corrects === copied.id && controls.get("measured_at") === copied.text;
+    return untouched ? copied.epoch : values.measured_at;
+  };
   const onSubmit = async (values) => {
-    const body = { position: "", ...values, experiment_id: stage.experiment_id };
+    const body = { position: "", ...values, measured_at: measuredAt(values), experiment_id: stage.experiment_id };
     await ctx.api.post("/measurements", body, { action: submitLabel });
     stopCorrecting();
     await onRecorded(ctx.t("measure.recorded", { metric: values.metric, plant: values.plant_id }));
@@ -137,6 +144,7 @@ export function measurementForm(ctx, stage, onRecorded) {
   showCorrecting(); // a draft restored after a lost session may already correct a record
   const correct = (record) => {
     controls.set({ ...Object.fromEntries(COPIED.map((name) => [name, record[name]])), corrects: record.id });
+    copied = { id: record.id, epoch: record.measured_at, text: controls.get("measured_at") };
     showCorrecting();
     controls.focus("value");
   };

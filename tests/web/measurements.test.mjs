@@ -168,3 +168,38 @@ test("a refused correction names the corrected record, not the field", async () 
   assert.match(text, /被更正的记录: no such measurement/);
   assert.ok(!text.includes("corrects:"), text);
 });
+
+// --- final review: a correction keeps the seconds of the time it copied (F6) ----------------------
+async function submitCorrection(form, record, editTime) {
+  form.update([record]);
+  form.correct(record);
+  if (editTime) input(form.element, "measured_at").value = editTime;
+  elements(form.element, "form")[0].dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+}
+
+test("a correction whose time was not touched sends the original epoch, seconds and all", async () => {
+  const { ctx, form } = formView();
+  const record = { ...RECORDED[0], measured_at: 1796594755 };
+  assert.equal(record.measured_at % 60, 55, "the record has seconds");
+  await submitCorrection(form, record);
+  const sent = ctx.api.calls.find((call) => call.method === "POST");
+  assert.equal(sent.body.measured_at, 1796594755);
+  assert.equal(sent.body.corrects, record.id);
+});
+
+test("a correction whose time was changed sends the new minute", async () => {
+  const { ctx, form } = formView();
+  const record = { ...RECORDED[0], measured_at: 1796594755 };
+  const shown = input(form.element, "measured_at");
+  form.update([record]);
+  form.correct(record);
+  const [day, time] = shown.value.split("T");
+  const [hour, minute] = time.split(":").map(Number);
+  const edited = `${day}T${String(hour).padStart(2, "0")}:${String((minute + 1) % 60).padStart(2, "0")}`;
+  await submitCorrection(form, record, edited);
+  const sent = ctx.api.calls.find((call) => call.method === "POST");
+  assert.notEqual(sent.body.measured_at, 1796594755);
+  assert.equal(sent.body.measured_at % 60, 0);
+});
