@@ -125,7 +125,7 @@ code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.tech-copy { min-height: 28px; padding: 3px 10px; font-size: 12px; user-select: none; } /* not part of a selected list */
+.tech-copy { min-height: 28px; padding: 3px 10px; font-size: 12px; -webkit-user-select: none; user-select: none; } /* not part of a selected list */
 .form-status .tech-details { margin-top: 8px; }
 .wb-problem .tech-details { margin: 0 0 14px; }
 .activity-detail .tech-details { margin: 4px 0; }

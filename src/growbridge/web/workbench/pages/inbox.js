@@ -145,7 +145,7 @@ function itemDetails(ctx, item) {
   const key = STAGE_KINDS.has(item.kind) ? own.stage : own[item.kind];
   const row = key ? { ...item, id: undefined, [key]: item.id } : item;
   if (item.kind === "compute_stuck") row.task_id = d.task_id;
-  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...detailEntries(ctx, item, d)]);
+  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...unknownCode(ctx.t, "inbox.kind", item.kind), ...detailEntries(ctx, item, d)]);
 }
 
 // "Waiting 3 h 20 min", or the full time when the clock says the item is from the future.
@@ -209,6 +209,7 @@ export function groupView(ctx, group) {
       "header",
       { class: "inbox-group-head" },
       h("h2", { attrs: { id: headingId }, text: labelOr(ctx.t, "inbox.kind", group.kind) }),
+      techDetails(ctx.t, unknownCode(ctx.t, "inbox.kind", group.kind)),
       h("span", { class: "inbox-group-count", text: String(count) }),
     ),
     h("ul", { class: "inbox-list" }, group.items.map((item) => itemView(ctx, item))),

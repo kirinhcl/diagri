@@ -287,3 +287,13 @@ test("the waiting time counts whole seconds, never tenths", () => {
   const view = groupView(ctx, { kind: "alert", hidden: 0, items: [{ kind: "alert", id: "a1", since: NOW - 75.6, detail: { message: "m", alert_kind: "data_gap" } }] });
   assert.match(visibleText(view), /已等待 76 秒/);
 });
+
+test("an inbox item of an unknown kind keeps its kind code in its details", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = groupView(ctx, { kind: "warp_event", hidden: 0, items: [{ kind: "warp_event", id: "w1", since: NOW, detail: {} }] });
+  assert.ok(!visibleText(view).includes("warp_event"));
+  const heading = findAll(view, (n) => n.localName === "h2")[0];
+  assert.match(visibleTextIncludingDetails(heading.parentNode), /代码 warp_event/);
+  const item = findAll(view, (n) => n.localName === "li" && n.getAttribute("data-key"))[0];
+  assert.match(visibleTextIncludingDetails(item), /代码 warp_event/);
+});

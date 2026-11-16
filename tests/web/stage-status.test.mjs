@@ -162,3 +162,28 @@ test("an approval of another run sheet than the one reviewed keeps both digests 
   assert.ok(visibleTextIncludingDetails(approval).includes(approved));
   assert.match(visibleText(approval), /指纹 b2b2b2b2…/);
 });
+
+test("the title pill keeps an open unknown-state fold open across polls", async () => {
+  const { renderPage } = await import("./support/render-page.mjs");
+  const foldsIn = (node) => [...(node.localName === "details" ? [node] : []), ...[...(node.children || [])].flatMap(foldsIn)];
+  const stageId = FIXTURES["stage.json"].stage_id;
+  const { element, ctx, refresh } = await renderPage("stage", { stageId }, { fixtures: { "stage.json": { ...FIXTURES["stage.json"], state: "mystery" } } });
+  const holder = (node) => {
+    const pill = (n) => (n.getAttribute?.("class") || "") === "stage-pill" ? [n] : [...(n.children || [])].flatMap(pill);
+    return pill(node)[0];
+  };
+  const slot = holder(element);
+  const [fold] = foldsIn(slot);
+  assert.ok(fold, "an unknown state has a fold");
+  fold.setAttribute("open", "");
+  await refresh();
+  assert.equal(foldsIn(holder(element))[0], fold);
+  assert.ok(fold.hasAttribute("open"));
+  const get = ctx.api.get;
+  ctx.api.get = async (path, ...rest) => {
+    const answer = await get(path, ...rest);
+    return /\/stages\/[^/]+$/.test(path.split("?")[0]) ? { ...answer, state: "enigma" } : answer;
+  };
+  await refresh();
+  assert.notEqual(foldsIn(holder(element))[0], fold);
+});

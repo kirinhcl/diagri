@@ -500,7 +500,7 @@
 ### 6.2 其他留到后面的事项
 
 - 草稿运行单的 JSON 编辑器没有被泄漏测试检查（编辑器里本来就是 JSON）；改成结构化表单是第三批（C8）。
-- 对话框（确认框、重新认证框）仍不被泄漏测试渲染。带名字的确认文字有单元测试：停止和接管阶段的确认框写阶段名、不写 id（`stage-status.test.mjs`「the stop and take-over dialogs name the stage and never its id」）；其余确认文字没有逐条的测试。
+- 对话框（确认框、重新认证框）仍不被泄漏测试渲染。带名字的确认文字有单元测试：停止和接管阶段的确认框写阶段名、不写 id（`stage-status.test.mjs`「the stop and take-over dialogs name the stage and never its id」）；轮次中止的问句有测试（`round-report.test.mjs`「the abort question names the round, not its id」），安全审批对话框的变化行也有（`config-pages.test.mjs`「dialog lines write durations, levels, frozen limits and gaps as words」）；其余确认文字没有逐条的测试。
 - `visibleText` 跳过隐藏的 textarea 内容，所以文本框里的预填文字（如 JSON 骨架）不在检查范围内。
 - `main.js` 在导入时就启动，测试无法导入它；页面清单 `PAGES` 因此放在 `router.js` 并导出，`main.js` 引用它。“页面无法加载”的视图没有直接测试（FRM-03）。
 

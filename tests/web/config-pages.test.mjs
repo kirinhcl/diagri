@@ -212,3 +212,19 @@ test("a rule's duration and validity say the exact seconds when the words round 
   assert.match(ruleSentence(makeT("zh"), HEAT), /持续 5 分钟[^（]/);
   assert.match(ruleSentence(makeT("zh"), { ...HEAT, duration_seconds: undefined }), /持续 —/);
 });
+
+test("the frozen threshold and the longest gap say the exact seconds when the words round them", async () => {
+  const { renderPage, FIXTURES } = await import("./support/render-page.mjs");
+  const { visibleText } = await import("./support/leaks.mjs");
+  const shown = async (seconds) => {
+    const base = FIXTURES["safety.json"];
+    const safety = { ...base.safety, frozen: { minutes: { temp: seconds / 60 }, max_gap_seconds: seconds } };
+    const { element } = await renderPage("safety", {}, { fixtures: { "safety.json": { ...base, safety } } });
+    const text = visibleText(element);
+    return { exact: text.match(new RegExp(`${seconds} 秒`, "g")) || [] };
+  };
+  const rounded = await shown(150);
+  assert.equal(rounded.exact.length, 2, "the threshold line and the longest gap both carry the seconds");
+  const whole = await shown(120);
+  assert.equal(whole.exact.length, 0);
+});
