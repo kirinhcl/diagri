@@ -159,3 +159,47 @@ test("a planned 2.5 s irrigation asks to run the pump 2.5 s, and 0.4 s is not 0 
   assert.match(said(0.4), /0\.4 秒/);
   assert.doesNotMatch(said(0.4), /(^|[^.\d])0 秒/);
 });
+
+const partialRecord = (fields) => ({ ...RECORD, outcome: "partial", irrigation_request_id: "planned-aa-1", ...fields });
+const partialView = (record, lang = "zh") => {
+  const ctx = { ...testCtx({ lang, now: NOW }), notify: () => {} };
+  const env = { ctx, stage: { stage_id: "stage-1" }, onChanged: async () => {} };
+  return tasksView(env, body({ occurrences: [row({ task_id: "irrigate-daily", seconds: 600, status: "partial", record })] }));
+};
+
+test("a partial irrigation says how long the pump ran and why it stopped", () => {
+  const record = partialRecord({ ran_seconds: 90, ended_early_code: "pump_off_interlock", ended_early_params: {}, ended_early: "pump off by interlock" });
+  const element = partialView(record);
+  const text = visibleText(element);
+  assert.match(text, /水泵运行了 90 秒/);
+  assert.match(text, /联锁关了水泵，浇水提前结束。/);
+  assert.match(text, /查一下联锁为什么动作。/);
+  assert.doesNotMatch(text, /pump off by interlock/);
+  assert.match(visibleTextIncludingDetails(element), /pump off by interlock/);
+  assert.equal(elements(element, "details").filter((d) => (d.getAttribute("class") || "").includes("tech-details")).length, 1);
+  assertNoLeaks(element);
+});
+
+test("an old partial record without a code reads as 'ended early' and keeps its English in the details", () => {
+  const record = partialRecord({ ran_seconds: 30, ended_early: "stopped by operator" });
+  const element = partialView(record);
+  assert.match(visibleText(element), /浇水提前结束。/);
+  assert.doesNotMatch(visibleText(element), /stopped by operator/);
+  assert.match(visibleTextIncludingDetails(element), /stopped by operator/);
+});
+
+test("a partial irrigation whose pump run is unconfirmed says so", () => {
+  const element = partialView(partialRecord({ ended_early_code: "not_confirmed", ended_early_params: { action_state: "failed" } }));
+  assert.match(visibleText(element), /水泵运行未得到确认/);
+  assert.match(visibleText(element), /浇水没有确认完成/);
+});
+
+test("irrigation notices name the task, not the request", async () => {
+  const notices = [];
+  const ctx = { ...testCtx({ lang: "zh", now: NOW }), notify: (message, tone) => notices.push({ message, tone }) };
+  ctx.api = { post: async () => ({ task: { status: "done" }, action: { request_id: "wb-77" } }), get: async () => ({}) };
+  const env = { ctx, stage: { stage_id: "stage-1" }, log: { track: () => {} }, onChanged: async () => {} };
+  await plannedIrrigation(env, row({ task_id: "irrigate-daily", seconds: 600 }));
+  assert.match(notices[0].message, /^已浇水并记录：浇水（.+ 到期）$/);
+  assert.ok(!notices[0].message.includes("wb-77"));
+});
