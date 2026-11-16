@@ -158,7 +158,7 @@ test("an approval of another run sheet than the one reviewed keeps both digests 
   assert.deepEqual(notices.map(([, tone]) => tone), ["error"]);
   const [mismatch, approval] = elements(log.element, "li");
   const folded = visibleTextIncludingDetails(mismatch);
-  assert.ok(folded.includes(`服务器批准的摘要 ${approved}`) && folded.includes(`你审阅的摘要 ${reviewed}`), folded);
+  assert.ok(folded.includes(`服务器批准的指纹 ${approved}`) && folded.includes(`你审阅的指纹 ${reviewed}`), folded);
   assert.ok(visibleTextIncludingDetails(approval).includes(approved));
   assert.match(visibleText(approval), /指纹 b2b2b2b2…/);
 });

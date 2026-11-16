@@ -169,7 +169,7 @@ export default {
   "history.field.channel": "通道",
   "history.field.confirmed": "已确认",
   "history.field.differences": "差异",
-  "history.field.digest": "运行单摘要",
+  "history.field.digest": "运行单指纹",
   "history.field.failed": "失败次数",
   "history.field.level": "档位",
   "history.field.note": "备注",

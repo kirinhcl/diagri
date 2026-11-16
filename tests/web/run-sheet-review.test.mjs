@@ -107,3 +107,18 @@ test("a page refreshed with a running stage rearranges its regions", async () =>
   const t = ctx.t;
   assert.ok(order.indexOf(t("stage.readings")) < order.indexOf(t("stage.controls")), order.join("|"));
 });
+
+// --- final review: the run sheet's hash has one name, fingerprint (F10) -------------------------
+import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
+
+test("every label of the run sheet's hash calls it a fingerprint, never a digest", () => {
+  const keys = ["stage.review.fingerprint", "stage.review.digest", "stage.approve.digestApproved", "stage.approve.digestReviewed", "history.field.digest"];
+  const zh = makeT("zh");
+  const en = makeT("en");
+  for (const key of keys) {
+    assert.match(zh(key), /指纹/, key);
+    assert.doesNotMatch(zh(key), /摘要/, key);
+    assert.match(en(key), /fingerprint/i, key);
+    assert.doesNotMatch(en(key), /digest/i, key);
+  }
+});

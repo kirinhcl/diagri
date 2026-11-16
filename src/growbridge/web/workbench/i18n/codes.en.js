@@ -169,7 +169,7 @@ export default {
   "history.field.channel": "Channel",
   "history.field.confirmed": "Confirmed",
   "history.field.differences": "Differences",
-  "history.field.digest": "Run sheet digest",
+  "history.field.digest": "Run sheet fingerprint",
   "history.field.failed": "Failed writes",
   "history.field.level": "Level",
   "history.field.note": "Note",
