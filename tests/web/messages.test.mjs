@@ -120,6 +120,21 @@ test("a time param is a date and time in the site's zone", () => {
   assert.equal(format(utc, "x", {}), "—");
 });
 
+// Params shown as a label the console writes title-cased ("Air temperature", "Light", "Measurement",
+// "Planner", "Paused", "Result unknown") or as a whole sentence (a history event).
+const TITLE_CASED = ["sensor", "channel", "state", "task_kind", "role", "action_state", "source_kind", "event"];
+
+test("an English text puts a title-cased label first or after a colon, never mid-sentence", () => {
+  const mid = [];
+  for (const [key, text] of Object.entries(en).filter(([k]) => k.startsWith("msg."))) {
+    for (const match of text.matchAll(PLACEHOLDER)) {
+      const before = text.slice(0, match.index);
+      if (TITLE_CASED.includes(match[1]) && before !== "" && !/[:.] $/.test(before)) mid.push(`${key}: ${text}`);
+    }
+  }
+  assert.deepEqual(mid, []);
+});
+
 test("a treatment problem whose level or other level is not a number shows a dash", () => {
   const ctx = testCtx({ lang: "en" });
   const problems = (list) => formatterFor("problems")(ctx, list, {});

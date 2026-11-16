@@ -133,7 +133,7 @@ test("each finding reads as a sentence and its group says how to fix it once", (
   const node = findingsList(ctx, SENTENCE_FINDINGS);
   const text = visibleText(node);
   assert.match(text, /Someone must be on site every day at 09:00 to start a/);
-  assert.match(text, /Someone must be on site every day at 10:00 for a .* task/);
+  assert.match(text, /Photo task: someone must be on site every day at 10:00\./);
   assert.ok(!text.includes("irrigate-daily") && !text.includes("manual irrigation"));
   assert.equal(text.split(ctx.t("stage.review.howToFix")).length - 1, 1);
   assert.match(text, /How to fix:/);

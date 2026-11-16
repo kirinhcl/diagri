@@ -1,7 +1,7 @@
 // Texts for the messages the server sends as a code plus params: msg.<family>.<code> and
 // msg.<family>.<code>.action (the next step). Placeholders are the params named in W/messages.js.
 export default {
-  "msg.alert.data_gap": "There is no usable {sensor} data, so its threshold alerts are paused.",
+  "msg.alert.data_gap": "{sensor}: there is no usable data, so its threshold alerts are paused.",
   "msg.alert.data_gap.action":
     "Check the sensor and its connection; the alerts resume once data returns.",
   "msg.alert.threshold": "{sensor} {op} {value} for {duration_seconds} (rule {rule}).",
@@ -14,7 +14,7 @@ export default {
   "msg.alert.frozen_reading": "{sensor} has reported the same reading, {value}, without change.",
   "msg.alert.frozen_reading.action":
     "Check whether the sensor is stuck or has come loose; if it is a protection sensor, the stage may be paused.",
-  "msg.alert.task_missed": "The {task_kind} task was due at {due_at} and has no record.",
+  "msg.alert.task_missed": "{task_kind} task: it was due at {due_at} and has no record.",
   "msg.alert.task_missed.action": "Record the task as done or skipped.",
   "msg.alert.measurement_missing":
     "The task was recorded done, but no measurement is dated between {window_start} and {window_end}.",
@@ -70,7 +70,7 @@ export default {
     "A manual intervention could not be copied to the archive.",
   "msg.alert.intervention_mirror.action":
     "Tell an administrator; if the server log shows the intervention was lost, enter it again.",
-  "msg.alert.stage_waiting": "A stage stopped by itself ({state}) after {event}.",
+  "msg.alert.stage_waiting": "A stage stopped by itself. Cause: {event}. State now: {state}.",
   "msg.alert.stage_waiting.action":
     "Open the stage page, deal with the reason shown, then continue the stage.",
   "msg.alert.task_deadline": "A research task is past its deadline and needs attention.",
@@ -84,10 +84,10 @@ export default {
   "msg.alert.backup": "The latest database backup failed.",
   "msg.alert.backup.action":
     "Check the disk space and the backup folder; the server tries again later by itself.",
-  "msg.alert.agent_task_failed": "A task for the {role} failed to run.",
+  "msg.alert.agent_task_failed": "{role}: a task failed to run.",
   "msg.alert.agent_task_failed.action":
     "Open the task and read the error in the technical details, then retry it or close it.",
-  "msg.alert.agent_task_attention": "A task for the {role} stopped and needs attention.",
+  "msg.alert.agent_task_attention": "{role}: a task stopped and needs attention.",
   "msg.alert.agent_task_attention.action": "Open the task, then answer it or close it.",
   "msg.alert.audit_task_failed": "An audit of a stage failed to run.",
   "msg.alert.audit_task_failed.action":
@@ -105,15 +105,15 @@ export default {
   "msg.alert.audit_finding.action":
     "Read the note, decide whether the stage needs a change, then mark the alert as read.",
   "msg.finding.device_owned_write":
-    "{source_kind} {source} writes {channel}, which the device runs itself in this run sheet.",
+    "{source_kind} {source} writes a channel the device runs itself in this run sheet: {channel}.",
   "msg.finding.device_owned_write.action":
-    "Let the host control {channel} in the run sheet, or delete this step.",
+    "{channel}: let the host control it in the run sheet, or delete this step.",
   "msg.finding.pump_action":
     "{source_kind} {source} would start the pump automatically; no automatic step may.",
   "msg.finding.pump_action.action":
     "Delete the automatic pump step and add a manual watering task that states the seconds; someone on site starts it from the stage page.",
   "msg.finding.level_range":
-    "{source_kind} {source} sets {channel} to {level}, outside the range the device accepts ({min} to {max}).",
+    "{source_kind} {source} sets a level the device does not accept. {channel}: {level}, outside the range {min} to {max}.",
   "msg.finding.level_range.action":
     "Change it to a level inside that range.",
   "msg.finding.pump_device_owned":
@@ -121,11 +121,11 @@ export default {
   "msg.finding.pump_device_owned.action":
     "Plan the pump as host-controlled in the run sheet.",
   "msg.finding.unknown_sensor":
-    "Rule {rule} uses {sensor}, which the device does not report.",
+    "Rule {rule} uses a sensor the device does not report: {sensor}.",
   "msg.finding.unknown_sensor.action":
     "Pick a sensor the device reports.",
   "msg.finding.unit_mismatch":
-    "Rule {rule} reads {sensor} in {rule_unit}, but the device reports it in {device_unit}.",
+    "Rule {rule} uses another unit than the device. {sensor}: the rule reads {rule_unit}, the device reports {device_unit}.",
   "msg.finding.unit_mismatch.action":
     "Change the rule to the device's unit.",
   "msg.finding.humidity_exhaust_only":
@@ -133,11 +133,11 @@ export default {
   "msg.finding.humidity_exhaust_only.action":
     "A humidity rule may only move the exhaust; change its channel.",
   "msg.finding.rule_conflict":
-    "Rules {rule_a} and {rule_b} set {channel} to different levels at the same priority ({priority}).",
+    "Rules {rule_a} and {rule_b} have the same priority ({priority}) but set different levels on one channel: {channel}.",
   "msg.finding.rule_conflict.action":
     "Change the priority or level of one of the two rules.",
   "msg.finding.safety_conflict":
-    "Rule {rule} can set {channel} to {level} while protection {protection} sets it to {protection_level}.",
+    "Rule {rule} and protection {protection} disagree. {channel}: the rule can set {level}, the protection sets {protection_level}.",
   "msg.finding.safety_conflict.action":
     "Change the level so it no longer conflicts with the protection.",
   "msg.finding.sampling.validity":
@@ -169,11 +169,11 @@ export default {
   "msg.finding.wait.action":
     "Enter a longest wait above zero.",
   "msg.finding.missing_tolerance":
-    "No longest tolerated outage is given for {channel}.",
+    "{channel}: no longest tolerated outage is given.",
   "msg.finding.missing_tolerance.action":
-    "State how long {channel} may be out of host control.",
+    "{channel}: state how long it may be out of host control.",
   "msg.finding.manual_task":
-    "Someone must be on site every day at {at_local} for a {task_kind} task.",
+    "{task_kind} task: someone must be on site every day at {at_local}.",
   "msg.finding.manual_task.action":
     "Make sure someone is there at that time.",
   "msg.finding.manual_task.irrigation":
@@ -243,7 +243,7 @@ export default {
   "msg.receipt.link_broke.action":
     "Check the device on site, then record an on-site check.",
   "msg.receipt.readback_level":
-    "The device did not read back {expected} on {channel}.",
+    "{channel}: the device did not read back {expected}.",
   "msg.receipt.readback_level.action": "Check the device on site.",
   "msg.receipt.readback_unavailable":
     "The device state could not be read back, so the result is not known.",
@@ -261,8 +261,8 @@ export default {
     "The server stopped before the command was sent, so it did not run.",
   "msg.receipt.void_restart.action": "Submit it again if it is still needed.",
   "msg.receipt.void_superseded":
-    "A safety write on {channel} took its place, so the command did not run.",
-  "msg.receipt.void_superseded.action": "Check that the safety write left {channel} as you need it; submit again if needed.",
+    "{channel}: a safety write took its place, so the command did not run.",
+  "msg.receipt.void_superseded.action": "{channel}: check that the safety write left it as you need it; submit again if needed.",
   "msg.receipt.void_denied": "The command was refused, so it did not run.",
   "msg.receipt.void_denied.action": "The reason is in the technical details.",
   "msg.receipt.internal_error":
@@ -275,13 +275,13 @@ export default {
   "msg.receipt.pump_off_unconfirmed": "The pump was not confirmed off.",
   "msg.receipt.pump_off_unconfirmed.action": "Switch the pump off by hand on site.",
   "msg.receipt.settled_applied":
-    "A read-back confirmed that {channel} is at {level}, so the command took effect.",
+    "{channel}: a read-back confirmed it is at {level}, so the command took effect.",
   "msg.receipt.settled_not_applied":
-    "A read-back found {channel} at {level} in mode {mode}, so the command did not take effect.",
+    "{channel}: a read-back found it at {level} in mode {mode}, so the command did not take effect.",
   "msg.receipt.settled_not_applied.action": "Submit it again if it is still needed.",
   "msg.task_end.handover": "Control was handed over, so the irrigation ended early.",
   "msg.task_end.protection_write":
-    "A safety protection took over {channel}, so the irrigation ended early.",
+    "{channel}: a safety protection took over, so the irrigation ended early.",
   "msg.task_end.protection_write.action": "Find out why the protection acted.",
   "msg.task_end.pump_off_interlock": "The interlock switched the pump off, so the irrigation ended early.",
   "msg.task_end.pump_off_interlock.action": "Find out why the interlock acted.",
