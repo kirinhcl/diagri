@@ -98,3 +98,18 @@ test("a level is written against its scale", () => {
   const { lines } = detailLines(ctx, { type: "transition", event: "end_actions", detail: { channel: "light", level: 50 } });
   assert.ok(lines.some((l) => l.includes("50 %")));
 });
+
+test("the operator's note and a named rule are shown in the body", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const view = historyView(ctx, {
+    history: [
+      { at: 10, from: "recovery_check", to: "running", event: "onsite_check", detail: { note: "水泵已检查", by: "op_9d38ffa4ca3049948194e0b60315c650" } },
+      { at: 11, from: "running", to: "paused", event: "rule_pause", detail: { rule: "Soil too dry" } },
+    ],
+  });
+  const text = visibleText(view);
+  assert.match(text, /备注：水泵已检查/);
+  assert.match(text, /规则：Soil too dry/);
+  assertNoLeaks(view);
+  assert.ok(detailLines(ctx, { type: "transition", event: "onsite_check", detail: { note: "x", by: "op_1" } }).raw.some(([, v]) => v === "op_1"));
+});

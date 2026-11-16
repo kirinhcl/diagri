@@ -52,7 +52,8 @@ function valueLine(ctx, key, value, detail) {
   if (key === "reason") return isKnown(t, "history.reason", value) ? labelOr(t, "history.reason", value) : null;
   if (key in CODE_FIELDS) return typeof value === "string" ? labelOr(t, CODE_FIELDS[key], value) : null;
   if (key === "level") return typeof value === "number" ? levelText(t, detail.channel, value) : null;
-  if (key === "rule") return typeof value === "string" && FROZEN_RULE.test(value) ? labelOr(t, "metric", value.match(FROZEN_RULE)[1]) : null;
+  if (key === "rule" && typeof value === "string") return FROZEN_RULE.test(value) ? labelOr(t, "metric", value.match(FROZEN_RULE)[1]) : value; // else a rule name
+  if (key === "note") return typeof value === "string" && value ? value : null; // the operator's own words
   if (key === "digest") return typeof value === "string" ? shortDigest(value) : null;
   if (/seconds$/.test(key)) return typeof value === "number" ? formatDuration(t, value) : null;
   if (/_at$/.test(key)) return typeof value === "number" ? timeText(ctx, value) : null;
