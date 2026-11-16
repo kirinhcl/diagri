@@ -5,6 +5,8 @@ import test from "node:test";
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { isNotMounted } from "../../src/growbridge/web/workbench/pages/not-mounted.js";
 import { baselineChanged, diffLines, formatValue, visibleChanges } from "../../src/growbridge/web/workbench/pages/safety-diff.js";
+import { ruleSentence } from "../../src/growbridge/web/workbench/pages/safety.js";
+import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { safetySkeleton } from "../../src/growbridge/web/workbench/pages/safety-skeleton.js";
 
 const MODELS = new URL("../../src/growbridge/archive/models.py", import.meta.url);
@@ -108,4 +110,59 @@ test("isNotMounted is true only for a plain 404 without a refusal code", () => {
   assert.equal(isNotMounted(new ApiError(404, "state", "unknown")), false);
   assert.equal(isNotMounted(new ApiError(403, null, "HTTP 403")), false);
   assert.equal(isNotMounted(new Error("x")), false);
+});
+
+const HEAT = { id: "heat-cut", sensor: "temp", unit: "°C", trigger: { op: ">", value: 30 }, duration_seconds: 300, validity_seconds: 600, action: { channel: "fan", level: 0 } };
+
+test("a rule reads as one sentence", () => {
+  const s = ruleSentence(makeT("zh"), HEAT);
+  assert.match(s, /高于 30 °C 持续 5 分钟/);
+  assert.match(s, /10 分钟/);
+  assert.doesNotMatch(s, /heat-cut|gt|300|600|>/);
+});
+
+test("a rule unit C is shown as °C and the English sentence reads too", () => {
+  assert.match(ruleSentence(makeT("zh"), { ...HEAT, unit: "C" }), /30 °C/);
+  const en = ruleSentence(makeT("en"), HEAT);
+  assert.match(en, /above 30 °C for 5 min/);
+  assert.doesNotMatch(en, /heat-cut|300|600/);
+});
+
+test("the approval dialog describes changes by rule and unit", () => {
+  const before = { rules: [{ id: "heat-cut", unit: "°C", trigger: { value: 30 } }] };
+  const after = { rules: [{ id: "heat-cut", unit: "°C", trigger: { value: 35 } }] };
+  const zh = makeT("zh");
+  assert.deepEqual(diffLines([{ path: "rules.0.trigger.value", before: 30, after: 35 }], zh, { before, after }), ["规则 heat-cut：触发值 30 °C → 35 °C"]);
+});
+
+test("dialog lines write durations, levels, frozen limits and gaps as words", () => {
+  const zh = makeT("zh");
+  const before = { rules: [HEAT] };
+  const after = { rules: [{ ...HEAT, duration_seconds: 600, action: { channel: "fan", level: 3 } }] };
+  const lines = diffLines(
+    [
+      { path: "rules.0.duration_seconds", before: 300, after: 600 },
+      { path: "rules.0.action.level", before: 0, after: 3 },
+      { path: "frozen.minutes.temp", before: 120, after: 60 },
+      { path: "frozen.max_gap_seconds", before: 600, after: undefined },
+    ],
+    zh,
+    { before, after },
+  );
+  assert.deepEqual(lines, [
+    "规则 heat-cut：持续时间 5 分钟 → 10 分钟",
+    "规则 heat-cut：动作档位 0 / 10 → 3 / 10",
+    "空气温度 冻结判定：2 小时 → 60 分钟",
+    "最长空档：10 分钟 → （无）",
+  ]);
+});
+
+test("an unknown path is still listed", () => {
+  const zh = makeT("zh");
+  const lines = diffLines([{ path: "extra.flag", before: undefined, after: "x" }, { path: "rules.0.mystery", before: 1, after: 2 }], zh, {
+    before: { rules: [HEAT] },
+    after: { rules: [HEAT] },
+  });
+  assert.match(lines[0], /extra\.flag/);
+  assert.match(lines[1], /rules\.0\.mystery/);
 });

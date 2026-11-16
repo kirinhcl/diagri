@@ -1,41 +1,45 @@
 // The approved safety limits and an editor to approve a new set. Approval lists every change first.
 import { ApiError } from "../api.js";
+import { formatDuration } from "../format.js";
+import { hasLabel } from "../i18n.js";
 import { configDiff } from "../diff.js";
 import { confirmAction } from "../ui/dialog.js";
 import { clear, h } from "../ui/dom.js";
 import { errorLines, jsonEditor } from "../ui/forms.js";
-import { keyValues, note, pageHead, section, timeText } from "../ui/section.js";
-import { table } from "../ui/table.js";
+import { keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
 import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
+import { frozenLine, ruleSentence } from "./safety-text.js";
+
+export { ruleSentence, unitText } from "./safety-text.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
 
-function rulesTable(ctx, rules) {
-  const columns = [
-    { label: ctx.t("col.id"), cell: (row) => h("code", { text: row.id }) },
-    { label: ctx.t("safety.sensor"), cell: (row) => `${row.sensor} (${row.unit})` },
-    { label: ctx.t("safety.trigger"), cell: (row) => `${row.trigger.op} ${row.trigger.value}` },
-    { label: ctx.t("safety.duration"), cell: (row) => String(row.duration_seconds) },
-    { label: ctx.t("safety.validity"), cell: (row) => String(row.validity_seconds) },
-    { label: ctx.t("safety.action"), cell: (row) => `${row.action.channel} → ${row.action.level}` },
-  ];
-  return table(columns, rules, { label: ctx.t("safety.rules") });
+function ruleItem(ctx, rule) {
+  const { t } = ctx;
+  const details = techDetails(t, [
+    [t("col.id"), rule?.id],
+    [t("safety.sensor"), rule?.sensor],
+    [t("safety.trigger"), rule?.trigger?.op],
+    [t("safety.action"), rule?.action?.channel],
+  ]);
+  return h("li", { class: "safety-rule" }, h("p", { text: ruleSentence(t, rule) }), details);
+}
+
+function rulesList(ctx, rules) {
+  return h("ul", { class: "safety-rules", attrs: { "aria-label": ctx.t("safety.rules") } }, rules.map((rule) => ruleItem(ctx, rule)));
 }
 
 function frozenView(ctx, frozen) {
   const rows = frozenRows(frozen);
   const seconds = frozen?.max_gap_seconds;
-  const gap = keyValues([[ctx.t("safety.frozenGap"), seconds === undefined || seconds === null ? null : String(seconds)]]);
-  const columns = [
-    { label: ctx.t("safety.sensor"), cell: (row) => row[0] },
-    { label: ctx.t("safety.frozenMinutes"), cell: (row) => String(row[1]) },
-  ];
+  const gap = keyValues([[ctx.t("safety.frozenGap"), formatDuration(ctx.t, seconds)]]);
   const list = rows.length
-    ? table(columns, rows, { label: ctx.t("safety.frozen") })
+    ? h("ul", { class: "safety-frozen" }, rows.map(([sensor, minutes]) => h("li", { text: frozenLine(ctx.t, sensor, minutes) })))
     : note(ctx.t("safety.frozenNone"));
-  return h("div", { class: "frozen" }, h("h3", { text: ctx.t("safety.frozen") }), gap, list);
+  const unknown = rows.filter(([sensor]) => !hasLabel(ctx.t, "metric", sensor)).map(([sensor]) => [ctx.t("safety.sensor"), sensor]);
+  return h("div", { class: "frozen" }, h("h3", { text: ctx.t("safety.frozen") }), gap, list, techDetails(ctx.t, unknown));
 }
 
 function currentView(ctx, config) {
@@ -46,7 +50,7 @@ function currentView(ctx, config) {
     [ctx.t("safety.approvedAt"), timeText(ctx, config.approved_at)],
   ]);
   const rules = array(config.rules);
-  const ruleList = rules.length ? rulesTable(ctx, rules) : note(ctx.t("safety.noRules"));
+  const ruleList = rules.length ? rulesList(ctx, rules) : note(ctx.t("safety.noRules"));
   return h("div", { class: "review" }, facts, ruleList, frozenView(ctx, config.frozen));
 }
 
@@ -75,15 +79,16 @@ function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
     outcome.refused = false;
     await readCurrent();
     const baseline = state.current;
-    const lines = diffLines(visibleChanges(configDiff(baseline || safetySkeleton(), edited)), ctx.t);
+    const start = baseline || safetySkeleton();
+    const lines = diffLines(visibleChanges(configDiff(start, edited)), ctx.t, { before: start, after: edited });
     const shown = lines.length ? lines : [ctx.t("safety.noChanges")];
     if (!(await confirmAction(ctx.t, { title: ctx.t("safety.confirmTitle"), lines: shown, confirmLabel: label }))) {
       throw notApproved(ctx, outcome, "safety.cancelled");
     }
     await readCurrent();
     if (baselineChanged(baseline, state.current)) throw notApproved(ctx, outcome, "safety.changedMeanwhile");
-    const done = await ctx.api.post("/safety/approve", { config: edited }, { action: label });
-    outcome.text = ctx.t("safety.approved", { right: done.protection_right });
+    await ctx.api.post("/safety/approve", { config: edited }, { action: label });
+    outcome.text = ctx.t("safety.approved");
     await refreshCurrent(); // the approval itself has succeeded; a failed re-read is only a notice
   };
 }
