@@ -149,6 +149,7 @@ export default {
   "chat.role.orchestrator": "Orchestrator",
   "chat.role.planner": "Planner",
   "chat.role.researcher": "Researcher",
+  "chat.role.auditor": "Auditor",
   "chat.role.other": "System",
   "chat.toolFailed": "(error)",
   "chat.toolInput": "Input",

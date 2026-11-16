@@ -322,6 +322,7 @@ code {
 .chat-role { font-weight: 650; color: var(--green-dark); }
 .chat-role-planner { color: var(--amber); }
 .chat-role-researcher { color: var(--ink); }
+.chat-role-auditor { color: var(--red); }
 .chat-tool details { font-size: 13px; }
 .chat-tool summary { cursor: pointer; color: var(--muted-strong); }
 .chat-tool summary code { font-size: 12px; }

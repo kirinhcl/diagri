@@ -36,3 +36,13 @@ test("every conversation string exists in both languages", () => {
   assert.deepEqual(keys(zh).sort(), keys(en).sort());
   assert.ok(keys(en).length > 10);
 });
+
+// Fills {placeholders} the way the console's translator does, so labels can be read in each language.
+const tFor = (table) => (key, vars) => (table[key] ?? key).replace(/\{(\w+)\}/g, (_, name) => vars[name]);
+
+test("an auditor entry is labelled as the auditor in both languages, not as system", () => {
+  const followUp = { role: "auditor", text: "follow_up", detail: {} };
+  assert.match(statusText({ t: tFor(en) }, followUp), /^Auditor /);
+  assert.match(statusText({ t: tFor(zh) }, followUp), /^监察 Agent/);
+  assert.doesNotMatch(statusText({ t: tFor(zh) }, followUp), /系统/);
+});
