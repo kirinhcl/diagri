@@ -245,4 +245,13 @@ export default {
   "probe.offsite_backup": "异地备份",
   "heartbeat.host": "主机",
   "heartbeat.run": "运行",
+  "findingSource.timed_action": "定时动作",
+  "findingSource.feedback_rule": "反馈规则",
+  "findingSource.feedback_release": "反馈规则的解除动作",
+  "findingSource.care_step": "照护步骤",
+  "findingSource.end_action": "结束动作",
+  "findingSource.protection_rule": "保护规则",
+  "findingProblem.not_host": "{channel}不由主机控制",
+  "findingProblem.no_action": "没有定时动作把{channel}设为{level}",
+  "findingProblem.other_levels": "{channel}还会被设为{other}",
 };

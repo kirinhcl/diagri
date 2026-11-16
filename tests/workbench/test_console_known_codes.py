@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import get_args
 
 import growbridge
+import growbridge.planning.treatment as treatment_module
 import growbridge.planning.validate as validate_module
 import growbridge.workflow.service as service_module
 from growbridge.agents.tools import ROLE_TOOLS
@@ -17,6 +18,7 @@ from growbridge.compute.phases import Phase
 from growbridge.control.device import SENSORS
 from growbridge.observer.alerts import Severity
 from growbridge.observer.health import PROBE_NAMES
+from growbridge.planning.findings import SOURCE_ENGLISH
 from growbridge.planning.manual_tasks import Status
 from growbridge.ports import Difference, StageEventKind
 from growbridge.research.analysis import AnalysisRun, Conclusion, RunStatus
@@ -106,6 +108,17 @@ def test_console_lists_every_finding_code():
     assert findings <= known()["finding"]
 
 
+def yielded_source_kinds(tree: ast.Module, name: str) -> set[str]:
+    """The first element of each tuple the generator ``name`` yields."""
+    return {
+        node.value.elts[0].value
+        for node in ast.walk(method(tree, name))
+        if isinstance(node, ast.Yield)
+        and isinstance(node.value, ast.Tuple)
+        and isinstance(node.value.elts[0], ast.Constant)
+    }
+
+
 def method(tree: ast.Module, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
@@ -137,3 +150,14 @@ def test_console_lists_every_tick_step_probe_and_heartbeat():
     assert steps <= codes["tickStep"]
     assert set(PROBE_NAMES) <= codes["probe"]
     assert signals <= codes["heartbeat"]
+
+
+def test_console_lists_every_finding_source_and_problem_kind():
+    tree = ast.parse(Path(validate_module.__file__).read_text(encoding="utf-8"))
+    sources = yielded_source_kinds(tree, "_actions") | yielded_source_kinds(tree, "_evidence_refs")
+    problems = strings(calls([Path(treatment_module.__file__)]), "_problem", 0)
+    assert sources == set(SOURCE_ENGLISH)  # every kind the checks yield has English wording
+    assert problems == {"not_host", "no_action", "other_levels"}
+    codes = known()
+    assert sources <= codes["findingSource"] and set(SOURCE_ENGLISH) <= codes["findingSource"]
+    assert problems <= codes["findingProblem"]

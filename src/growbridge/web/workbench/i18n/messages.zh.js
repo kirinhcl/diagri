@@ -76,4 +76,132 @@ export default {
   "msg.alert.model_client.action": "请检查服务器上的模型密钥和软件包；修好前 AI 助手都不工作。",
   "msg.alert.audit_finding": "监察 Agent 对这个阶段有一条备注。",
   "msg.alert.audit_finding.action": "请读备注，决定这个阶段要不要改，再把这条告警标为已读。",
+  "msg.finding.device_owned_write":
+    "{source_kind}{source}要写{channel}，但这份运行单里{channel}由设备自己控制。",
+  "msg.finding.device_owned_write.action":
+    "让主机控制{channel}，或者删掉这条动作。",
+  "msg.finding.pump_action":
+    "{source_kind}{source}会自动开泵，自动步骤不允许这样做。",
+  "msg.finding.pump_action.action":
+    "删掉自动开泵的步骤，改成写明秒数的人工浇水任务，由现场的人在阶段页启动。",
+  "msg.finding.level_range":
+    "{source_kind}{source}把{channel}设为{level}，超出设备接受的范围（{min}到{max}）。",
+  "msg.finding.level_range.action":
+    "改成这个范围内的档位。",
+  "msg.finding.pump_device_owned":
+    "运行单把水泵留给设备的定时器，或者没写水泵，但水泵必须由主机控制。",
+  "msg.finding.pump_device_owned.action":
+    "在运行单里把水泵规划为主机控制。",
+  "msg.finding.unknown_sensor":
+    "规则{rule}用了{sensor}，设备不报告这个传感器。",
+  "msg.finding.unknown_sensor.action":
+    "选一个设备会报告的传感器。",
+  "msg.finding.unit_mismatch":
+    "规则{rule}读{sensor}用的单位是{rule_unit}，设备报告的是{device_unit}。",
+  "msg.finding.unit_mismatch.action":
+    "把规则改成设备的单位。",
+  "msg.finding.humidity_exhaust_only":
+    "湿度规则{rule}动了排风以外的通道。",
+  "msg.finding.humidity_exhaust_only.action":
+    "湿度规则只能动排风，请改掉它的通道。",
+  "msg.finding.rule_conflict":
+    "规则{rule_a}和{rule_b}在同一优先级（{priority}）下把{channel}设成了不同档位。",
+  "msg.finding.rule_conflict.action":
+    "调整其中一条规则的优先级或档位。",
+  "msg.finding.safety_conflict":
+    "规则{rule}可能把{channel}设为{level}，而保护规则{protection}会设为{protection_level}。",
+  "msg.finding.safety_conflict.action":
+    "改档位，让它不和保护规则冲突。",
+  "msg.finding.sampling.validity":
+    "规则{rule}：读数的有效期是{validity_seconds}，短于采样间隔{interval_seconds}。",
+  "msg.finding.sampling.validity.action":
+    "让有效期长于采样间隔。",
+  "msg.finding.sampling.interval":
+    "采样间隔是{interval_seconds}，不大于 0。",
+  "msg.finding.sampling.interval.action":
+    "把采样间隔设成大于 0。",
+  "msg.finding.sampling.max_gap":
+    "最长允许的空档（{max_gap_seconds}）短于采样间隔。",
+  "msg.finding.sampling.max_gap.action":
+    "让最长空档不短于采样间隔。",
+  "msg.finding.duration.rule":
+    "规则{rule}的持续时长是{duration_seconds}，最短切换间隔是{min_switch_seconds}，这样行不通。",
+  "msg.finding.duration.rule.action":
+    "持续时长要大于 0，切换间隔不能为负。",
+  "msg.finding.duration.protection":
+    "保护规则{protection}的持续时长是{duration_seconds}，不大于 0。",
+  "msg.finding.duration.protection.action":
+    "填一个大于 0 的持续时长。",
+  "msg.finding.duration.run":
+    "运行时长是{duration_seconds}，不大于 0。",
+  "msg.finding.duration.run.action":
+    "填一个大于 0 的运行时长。",
+  "msg.finding.wait":
+    "最长等待是{max_wait_seconds}，不大于 0。",
+  "msg.finding.wait.action":
+    "填一个大于 0 的最长等待。",
+  "msg.finding.missing_tolerance":
+    "没有写明{channel}能容忍多久失去主机控制。",
+  "msg.finding.missing_tolerance.action":
+    "写明{channel}能容忍的缺失时长。",
+  "msg.finding.manual_task":
+    "每天{at_local}要有人到场，做一次{task_kind}任务。",
+  "msg.finding.manual_task.action":
+    "确保那个时间有人在场。",
+  "msg.finding.manual_task.irrigation":
+    "每天{at_local}要有人到场，启动一次{seconds}的浇水。",
+  "msg.finding.manual_task.irrigation.action":
+    "确保那个时间有人在场，在阶段页启动它。",
+  "msg.finding.no_evidence":
+    "{source_kind}{source}没有证据卡，也没有用户输入作依据。",
+  "msg.finding.no_evidence.action":
+    "为这一步附上证据卡。",
+  "msg.finding.unverified_source":
+    "{source_kind}{source}依据的证据卡还没有核验。",
+  "msg.finding.unverified_source.action":
+    "先核验这张证据卡。",
+  "msg.finding.uncalibrated":
+    "{source_kind}{source}依据的证据卡，其测量没有校准。",
+  "msg.finding.uncalibrated.action":
+    "先校准这张证据卡依据的测量。",
+  "msg.finding.unknown_treatment":
+    "分配里用了协议没有定义的处理：{treatments}。",
+  "msg.finding.unknown_treatment.action":
+    "只用协议里有的处理。",
+  "msg.finding.missing_control.undefined":
+    "对照{control}不是协议里定义的处理。",
+  "msg.finding.missing_control.undefined.action":
+    "在协议里定义对照。",
+  "msg.finding.missing_control.unallocated":
+    "对照{control}从未被分进任何区组。",
+  "msg.finding.missing_control.unallocated.action":
+    "把对照分进区组。",
+  "msg.finding.no_replication":
+    "这些处理的单元不足两个：{treatments}。",
+  "msg.finding.no_replication.action":
+    "每个处理至少重复两次。",
+  "msg.finding.unbalanced_block":
+    "区组{block}里各处理出现的次数不一样。",
+  "msg.finding.unbalanced_block.action":
+    "让这个区组里每个处理各出现一次。",
+  "msg.finding.confounded_with_time":
+    "每个处理各占一段连续的轮次，处理和时间无法区分。",
+  "msg.finding.confounded_with_time.action":
+    "每一段轮次里都要混合不同处理。",
+  "msg.finding.seed_mismatch.unreproducible":
+    "记录的随机种子无法复现分配。",
+  "msg.finding.seed_mismatch.unreproducible.action":
+    "请重新生成分配。",
+  "msg.finding.seed_mismatch.differs":
+    "分配和记录的随机种子给出的不同。",
+  "msg.finding.seed_mismatch.differs.action":
+    "请用种子重新生成分配。",
+  "msg.finding.treatment_not_applied":
+    "第{round}轮分到的处理是{treatment}，但运行单没有实现它：{problems}。",
+  "msg.finding.treatment_not_applied.action":
+    "为处理的每个档位加上定时动作。",
+  "msg.finding.treatment_not_applied.none":
+    "运行单没有实现协议里的任何一个处理（{treatments}）。",
+  "msg.finding.treatment_not_applied.none.action":
+    "为这一轮需要的处理的每个档位加上定时动作。",
 };

@@ -77,7 +77,7 @@ def test_every_class_of_unverified_card_is_flagged():
 def test_uncalibrated_card_is_flagged():
     findings = check_evidence(sheet_with_evidence("card-1"), {"card-1": card(calibrated=False)})
     assert set(codes(findings)) == {"uncalibrated"}
-    assert "未校准" in findings[0].message
+    assert "uncalibrated" in findings[0].message and "未校准" not in findings[0].message
 
 
 def test_unverified_and_uncalibrated_both_reported():

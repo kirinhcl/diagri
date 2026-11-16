@@ -199,7 +199,228 @@
       "action": true
     }
   },
-  "finding": {},
+  "finding": {
+    "device_owned_write": {
+      "params": [
+        "source_kind",
+        "source",
+        "channel"
+      ],
+      "action": true
+    },
+    "pump_action": {
+      "params": [
+        "source_kind",
+        "source"
+      ],
+      "action": true
+    },
+    "level_range": {
+      "params": [
+        "source_kind",
+        "source",
+        "channel",
+        "level",
+        "min",
+        "max"
+      ],
+      "action": true
+    },
+    "pump_device_owned": {
+      "params": [],
+      "action": true
+    },
+    "unknown_sensor": {
+      "params": [
+        "rule",
+        "sensor"
+      ],
+      "action": true
+    },
+    "unit_mismatch": {
+      "params": [
+        "rule",
+        "sensor",
+        "device_unit",
+        "rule_unit"
+      ],
+      "action": true
+    },
+    "humidity_exhaust_only": {
+      "params": [
+        "rule"
+      ],
+      "action": true
+    },
+    "rule_conflict": {
+      "params": [
+        "rule_a",
+        "rule_b",
+        "channel",
+        "priority"
+      ],
+      "action": true
+    },
+    "safety_conflict": {
+      "params": [
+        "rule",
+        "protection",
+        "channel",
+        "level",
+        "protection_level"
+      ],
+      "action": true
+    },
+    "sampling.validity": {
+      "params": [
+        "rule",
+        "validity_seconds",
+        "interval_seconds"
+      ],
+      "action": true
+    },
+    "sampling.interval": {
+      "params": [
+        "interval_seconds"
+      ],
+      "action": true
+    },
+    "sampling.max_gap": {
+      "params": [
+        "max_gap_seconds"
+      ],
+      "action": true
+    },
+    "duration.rule": {
+      "params": [
+        "rule",
+        "duration_seconds",
+        "min_switch_seconds"
+      ],
+      "action": true
+    },
+    "duration.protection": {
+      "params": [
+        "protection",
+        "duration_seconds"
+      ],
+      "action": true
+    },
+    "duration.run": {
+      "params": [
+        "duration_seconds"
+      ],
+      "action": true
+    },
+    "wait": {
+      "params": [
+        "max_wait_seconds"
+      ],
+      "action": true
+    },
+    "missing_tolerance": {
+      "params": [
+        "channel"
+      ],
+      "action": true
+    },
+    "manual_task": {
+      "params": [
+        "task_kind",
+        "task_id",
+        "at_local"
+      ],
+      "action": true
+    },
+    "manual_task.irrigation": {
+      "params": [
+        "task_id",
+        "at_local",
+        "seconds"
+      ],
+      "action": true
+    },
+    "no_evidence": {
+      "params": [
+        "source_kind",
+        "source"
+      ],
+      "action": true
+    },
+    "unverified_source": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id"
+      ],
+      "action": true
+    },
+    "uncalibrated": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id"
+      ],
+      "action": true
+    },
+    "unknown_treatment": {
+      "params": [
+        "treatments"
+      ],
+      "action": true
+    },
+    "missing_control.undefined": {
+      "params": [
+        "control"
+      ],
+      "action": true
+    },
+    "missing_control.unallocated": {
+      "params": [
+        "control"
+      ],
+      "action": true
+    },
+    "no_replication": {
+      "params": [
+        "treatments"
+      ],
+      "action": true
+    },
+    "unbalanced_block": {
+      "params": [
+        "block"
+      ],
+      "action": true
+    },
+    "confounded_with_time": {
+      "params": [],
+      "action": true
+    },
+    "seed_mismatch.unreproducible": {
+      "params": [],
+      "action": true
+    },
+    "seed_mismatch.differs": {
+      "params": [],
+      "action": true
+    },
+    "treatment_not_applied": {
+      "params": [
+        "round",
+        "treatment",
+        "problems"
+      ],
+      "action": true
+    },
+    "treatment_not_applied.none": {
+      "params": [
+        "round",
+        "treatments"
+      ],
+      "action": true
+    }
+  },
   "receipt": {},
   "task_end": {},
   "compute_error": {},

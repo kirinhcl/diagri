@@ -245,4 +245,13 @@ export default {
   "probe.offsite_backup": "off-site backup",
   "heartbeat.host": "host",
   "heartbeat.run": "run",
+  "findingSource.timed_action": "Timed action",
+  "findingSource.feedback_rule": "Feedback rule",
+  "findingSource.feedback_release": "Feedback rule release",
+  "findingSource.care_step": "Care step",
+  "findingSource.end_action": "End action",
+  "findingSource.protection_rule": "Protection rule",
+  "findingProblem.not_host": "{channel} is not host-controlled",
+  "findingProblem.no_action": "no timed action sets {channel} to {level}",
+  "findingProblem.other_levels": "{channel} is also set to {other}",
 };

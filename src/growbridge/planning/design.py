@@ -9,13 +9,11 @@ from statistics import NormalDist
 from typing import Literal
 
 from growbridge.archive.models import Allocation, ResearchProtocol
+from growbridge.planning.findings import block as _block
+from growbridge.planning.findings import hint as _hint
 from growbridge.ports import Finding
 
 MIN_SAMPLE_SIZE = 2
-
-
-def _block(code: str, message: str) -> Finding:
-    return Finding(code=code, message=message, blocking=True)
 
 
 def _check_treatments(treatment_ids: Sequence[str]) -> None:
@@ -88,12 +86,19 @@ def _check_membership(protocol: ResearchProtocol, counts: Counter[str]) -> list[
     unknown = sorted({a.treatment_id for a in protocol.allocations} - known)
     if unknown:
         findings.append(
-            _block("unknown_treatment", f"allocations use unknown treatments {unknown}")
+            _block(
+                "unknown_treatment",
+                f"allocations use unknown treatments {unknown}",
+                treatments=unknown,
+            )
         )
-    if protocol.control_treatment_id not in known:
-        findings.append(_block("missing_control", "control treatment is not a defined treatment"))
-    elif counts[protocol.control_treatment_id] == 0:
-        findings.append(_block("missing_control", "control treatment is never allocated"))
+    control = protocol.control_treatment_id
+    if control not in known:
+        message = "control treatment is not a defined treatment"
+        findings.append(_block("missing_control", message, variant="undefined", control=control))
+    elif counts[control] == 0:
+        message = "control treatment is never allocated"
+        findings.append(_block("missing_control", message, variant="unallocated", control=control))
     return findings
 
 
@@ -101,7 +106,8 @@ def _check_replication(protocol: ResearchProtocol, counts: Counter[str]) -> list
     thin = [t.id for t in protocol.treatments if counts[t.id] < 2]
     if not thin:
         return []
-    return [_block("no_replication", f"treatments without two or more units: {thin}")]
+    message = f"treatments without two or more units: {thin}"
+    return [_block("no_replication", message, treatments=thin)]
 
 
 def _check_blocks(protocol: ResearchProtocol) -> list[Finding]:
@@ -110,7 +116,8 @@ def _check_blocks(protocol: ResearchProtocol) -> list[Finding]:
     for block in sorted({a.block for a in protocol.allocations}):
         counts = Counter(a.treatment_id for a in protocol.allocations if a.block == block)
         if len({counts[treatment] for treatment in known}) > 1:
-            findings.append(_block("unbalanced_block", f"block {block} is not balanced"))
+            message = f"block {block} is not balanced"
+            findings.append(_block("unbalanced_block", message, block=str(block)))
     return findings
 
 
@@ -128,8 +135,8 @@ def _check_time_confounding(protocol: ResearchProtocol) -> list[Finding]:
     return []
 
 
-def _seed_finding(message: str) -> Finding:
-    return Finding(code="seed_mismatch", message=message, blocking=False)
+def _seed_finding(message: str, variant: str) -> Finding:
+    return _hint("seed_mismatch", message, variant=variant)
 
 
 def _check_seed(protocol: ResearchProtocol) -> list[Finding]:
@@ -144,12 +151,12 @@ def _check_seed(protocol: ResearchProtocol) -> list[Finding]:
         else:
             expected = randomize_tents(ids, units, protocol.rounds, seed)
     except ValueError:
-        return [_seed_finding("allocations cannot be regenerated from the seed")]
+        return [_seed_finding("allocations cannot be regenerated from the seed", "unreproducible")]
     last_round = max(a.round for a in expected)
     planned = {a for a in protocol.allocations if a.round <= last_round}  # skip make-up rounds
     if planned == set(expected):
         return []
-    return [_seed_finding("allocations do not follow from the recorded seed")]
+    return [_seed_finding("allocations do not follow from the recorded seed", "differs")]
 
 
 def check_experimental_design(

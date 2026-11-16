@@ -104,4 +104,132 @@ export default {
   "msg.alert.audit_finding": "The audit assistant left a note about this stage.",
   "msg.alert.audit_finding.action":
     "Read the note, decide whether the stage needs a change, then mark the alert as read.",
+  "msg.finding.device_owned_write":
+    "{source_kind} {source} writes {channel}, which the device runs itself in this run sheet.",
+  "msg.finding.device_owned_write.action":
+    "Let the host control {channel} in the run sheet, or delete this step.",
+  "msg.finding.pump_action":
+    "{source_kind} {source} would start the pump automatically; no automatic step may.",
+  "msg.finding.pump_action.action":
+    "Delete the automatic pump step and add a manual watering task that states the seconds; someone on site starts it from the stage page.",
+  "msg.finding.level_range":
+    "{source_kind} {source} sets {channel} to {level}, outside the range the device accepts ({min} to {max}).",
+  "msg.finding.level_range.action":
+    "Change it to a level inside that range.",
+  "msg.finding.pump_device_owned":
+    "The run sheet leaves the pump to the device timer or leaves it out, but the pump must be host-controlled.",
+  "msg.finding.pump_device_owned.action":
+    "Plan the pump as host-controlled in the run sheet.",
+  "msg.finding.unknown_sensor":
+    "Rule {rule} uses {sensor}, which the device does not report.",
+  "msg.finding.unknown_sensor.action":
+    "Pick a sensor the device reports.",
+  "msg.finding.unit_mismatch":
+    "Rule {rule} reads {sensor} in {rule_unit}, but the device reports it in {device_unit}.",
+  "msg.finding.unit_mismatch.action":
+    "Change the rule to the device's unit.",
+  "msg.finding.humidity_exhaust_only":
+    "Humidity rule {rule} moves a channel other than the exhaust.",
+  "msg.finding.humidity_exhaust_only.action":
+    "A humidity rule may only move the exhaust; change its channel.",
+  "msg.finding.rule_conflict":
+    "Rules {rule_a} and {rule_b} set {channel} to different levels at the same priority ({priority}).",
+  "msg.finding.rule_conflict.action":
+    "Change the priority or level of one of the two rules.",
+  "msg.finding.safety_conflict":
+    "Rule {rule} can set {channel} to {level} while protection {protection} sets it to {protection_level}.",
+  "msg.finding.safety_conflict.action":
+    "Change the level so it no longer conflicts with the protection.",
+  "msg.finding.sampling.validity":
+    "Rule {rule}: a reading stays valid for {validity_seconds}, less than the sampling interval of {interval_seconds}.",
+  "msg.finding.sampling.validity.action":
+    "Make the validity period longer than the sampling interval.",
+  "msg.finding.sampling.interval":
+    "The sampling interval is {interval_seconds}, which is not above zero.",
+  "msg.finding.sampling.interval.action":
+    "Set a sampling interval above zero.",
+  "msg.finding.sampling.max_gap":
+    "The longest allowed gap ({max_gap_seconds}) is shorter than the sampling interval.",
+  "msg.finding.sampling.max_gap.action":
+    "Make the longest gap at least as long as the sampling interval.",
+  "msg.finding.duration.rule":
+    "Rule {rule} has a duration of {duration_seconds} and a minimum switch interval of {min_switch_seconds}, which cannot work.",
+  "msg.finding.duration.rule.action":
+    "Give the rule a duration above zero and a switch interval of zero or more.",
+  "msg.finding.duration.protection":
+    "Protection {protection} has a duration of {duration_seconds}, which is not above zero.",
+  "msg.finding.duration.protection.action":
+    "Enter a duration above zero.",
+  "msg.finding.duration.run":
+    "The run duration is {duration_seconds}, which is not above zero.",
+  "msg.finding.duration.run.action":
+    "Enter a run duration above zero.",
+  "msg.finding.wait":
+    "The longest wait is {max_wait_seconds}, which is not above zero.",
+  "msg.finding.wait.action":
+    "Enter a longest wait above zero.",
+  "msg.finding.missing_tolerance":
+    "No longest tolerated outage is given for {channel}.",
+  "msg.finding.missing_tolerance.action":
+    "State how long {channel} may be out of host control.",
+  "msg.finding.manual_task":
+    "Someone must be on site every day at {at_local} for a {task_kind} task.",
+  "msg.finding.manual_task.action":
+    "Make sure someone is there at that time.",
+  "msg.finding.manual_task.irrigation":
+    "Someone must be on site every day at {at_local} to start a {seconds} watering run.",
+  "msg.finding.manual_task.irrigation.action":
+    "Make sure someone is there at that time to start it from the stage page.",
+  "msg.finding.no_evidence":
+    "{source_kind} {source} has no evidence card or user input behind it.",
+  "msg.finding.no_evidence.action":
+    "Attach an evidence card to this step.",
+  "msg.finding.unverified_source":
+    "{source_kind} {source} rests on an evidence card that has not been verified.",
+  "msg.finding.unverified_source.action":
+    "Verify the card first.",
+  "msg.finding.uncalibrated":
+    "{source_kind} {source} rests on an evidence card whose measurement is not calibrated.",
+  "msg.finding.uncalibrated.action":
+    "Calibrate the measurement the card relies on first.",
+  "msg.finding.unknown_treatment":
+    "The allocations use treatments the protocol does not define: {treatments}.",
+  "msg.finding.unknown_treatment.action":
+    "Use only treatments the protocol defines.",
+  "msg.finding.missing_control.undefined":
+    "The control {control} is not a treatment the protocol defines.",
+  "msg.finding.missing_control.undefined.action":
+    "Define the control in the protocol.",
+  "msg.finding.missing_control.unallocated":
+    "The control {control} is never allocated to a block.",
+  "msg.finding.missing_control.unallocated.action":
+    "Allocate the control to the blocks.",
+  "msg.finding.no_replication":
+    "These treatments have fewer than two units: {treatments}.",
+  "msg.finding.no_replication.action":
+    "Repeat every treatment at least twice.",
+  "msg.finding.unbalanced_block":
+    "Block {block} does not hold every treatment equally often.",
+  "msg.finding.unbalanced_block.action":
+    "Make each treatment appear once in this block.",
+  "msg.finding.confounded_with_time":
+    "Each treatment occupies one unbroken stretch of rounds, so treatment and time cannot be told apart.",
+  "msg.finding.confounded_with_time.action":
+    "Mix different treatments within each stretch of rounds.",
+  "msg.finding.seed_mismatch.unreproducible":
+    "The recorded random seed cannot reproduce the allocations.",
+  "msg.finding.seed_mismatch.unreproducible.action":
+    "Generate the allocations again.",
+  "msg.finding.seed_mismatch.differs":
+    "The allocations differ from what the recorded random seed gives.",
+  "msg.finding.seed_mismatch.differs.action":
+    "Generate the allocations again from the seed.",
+  "msg.finding.treatment_not_applied":
+    "Round {round} is allocated treatment {treatment}, but the run sheet does not apply it: {problems}.",
+  "msg.finding.treatment_not_applied.action":
+    "Add a timed action for each level the treatment sets.",
+  "msg.finding.treatment_not_applied.none":
+    "The run sheet applies none of the protocol's treatments ({treatments}).",
+  "msg.finding.treatment_not_applied.none.action":
+    "Add timed actions for the levels of the treatment this round needs.",
 };

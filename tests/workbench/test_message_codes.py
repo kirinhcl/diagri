@@ -154,3 +154,40 @@ def test_the_alert_codes_the_runtime_picks_by_outcome_are_registered() -> None:
     for family in ("agent_task", "audit_task"):
         assert {f"{family}_failed", f"{family}_attention"} <= set(CODES["alert"])
     assert len(CODES["alert"]) == 33
+
+
+def literal_text(node: ast.expr | None) -> str | None:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return None
+
+
+def finding_message_codes(root: Path) -> set[str]:
+    """The message code of each _block/_hint call (and of _seed_finding, which picks its variant
+    from its second argument) under ``root``; a computed code or variant fails the scan."""
+    found: set[str] = set()
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None)
+            if name in {"_block", "_hint"}:
+                code = literal_text(node.args[0])
+                variant = next((k.value for k in node.keywords if k.arg == "variant"), None)
+                if name == "_hint" and code == "seed_mismatch" and variant is not None:
+                    continue  # _seed_finding passes its own variant on; counted at its callers
+                assert code is not None, f"{path}:{node.lineno}: computed finding code"
+                text = "" if variant is None else literal_text(variant)
+                assert text is not None, f"{path}:{node.lineno}: computed finding variant"
+                found.add(f"{code}.{text}" if text else code)
+            elif name == "_seed_finding":
+                found.add(f"seed_mismatch.{literal_text(node.args[1])}")
+    return found
+
+
+def test_every_finding_names_a_registered_message_code() -> None:
+    emitted = finding_message_codes(REPO / "src" / "growbridge" / "planning")
+    assert emitted <= set(CODES["finding"]), emitted - set(CODES["finding"])
+    # and the registry lists nothing the server never sends
+    assert set(CODES["finding"]) <= emitted, set(CODES["finding"]) - emitted
+    assert len(CODES["finding"]) == 32

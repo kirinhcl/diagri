@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from growbridge.archive.models import Channel, Ownership, ResearchProtocol, RunSheet, Treatment
+from growbridge.planning.findings import block as _block
 from growbridge.ports import Finding
 
 OFF = 0
@@ -41,24 +42,45 @@ def allocated(protocol: ResearchProtocol, round_number: int | None) -> Treatment
     return next((t for t in protocol.treatments if t.id == treatment_id), None)
 
 
-def _problems(sheet: RunSheet, channel: Channel, level: int) -> list[str]:
+Problem = dict[str, object]  # {kind, channel, level, other}: what the console words per kind
+
+
+def _problem(kind: str, channel: Channel, level: int | None, other: int | None = None) -> Problem:
+    return {"kind": kind, "channel": channel.value, "level": level, "other": other}
+
+
+def _problems(sheet: RunSheet, channel: Channel, level: int) -> list[Problem]:
     plan = sheet.plan(channel)
     if plan is None or plan.ownership is not Ownership.HOST:
-        return [f"{channel.value} is not host-controlled"]
+        return [_problem("not_host", channel, None)]
     written = [t.level for t in sheet.timed_actions if t.channel is channel]
     if level not in written:
-        return [f"no timed action sets {channel.value} to {level}"]
+        return [_problem("no_action", channel, level)]
     other = sorted({w for w in written if w not in (level, OFF)})
-    if other:
-        return [f"timed actions also set {channel.value} to {other}"]
-    return []
+    return [_problem("other_levels", channel, level, w) for w in other]
 
 
-def applies(sheet: RunSheet, treatment: Treatment) -> list[str]:
+def applies(sheet: RunSheet, treatment: Treatment) -> list[Problem]:
     """Why ``sheet`` does not apply ``treatment``; empty when it does."""
     return [
         p for channel, level in levels(treatment).items() for p in _problems(sheet, channel, level)
     ]
+
+
+def _problem_texts(problems: list[Problem]) -> list[str]:
+    """The English wording; other levels of one channel read as one list, as before."""
+    texts: list[str] = []
+    others: dict[object, list[object]] = {}
+    for problem in problems:
+        channel, level = problem["channel"], problem["level"]
+        if problem["kind"] == "not_host":
+            texts.append(f"{channel} is not host-controlled")
+        elif problem["kind"] == "no_action":
+            texts.append(f"no timed action sets {channel} to {level}")
+        else:
+            others.setdefault(channel, []).append(problem["other"])
+    texts += [f"timed actions also set {channel} to {levels}" for channel, levels in others.items()]
+    return texts
 
 
 def _describe(treatment: Treatment) -> str:
@@ -81,14 +103,28 @@ def check_treatment(
             return ()
         message = (
             f"protocol round {round_number} is allocated treatment {_describe(expected)}: "
-            + "; ".join(problems)
+            + "; ".join(_problem_texts(problems))
         )
-        return (Finding(code="treatment_not_applied", message=message, blocking=True),)
+        finding = _block(
+            "treatment_not_applied",
+            message,
+            round=round_number,
+            treatment=expected.id,
+            problems=problems,
+        )
+        return (finding,)
     if any(not applies(sheet, t) for t in checkable):
         return ()
     names = ", ".join(_describe(t) for t in checkable)
     message = f"the sheet applies none of the protocol's treatments: {names}"
-    return (Finding(code="treatment_not_applied", message=message, blocking=True),)
+    none = _block(
+        "treatment_not_applied",
+        message,
+        variant="none",
+        round=round_number,
+        treatments=[t.id for t in checkable],
+    )
+    return (none,)
 
 
 # --- what the device recorded ------------------------------------------------------------------
