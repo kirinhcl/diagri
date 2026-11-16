@@ -118,7 +118,7 @@ test("a live refresh keeps open folds open and closed ones closed", async () => 
   const { element, refresh } = await renderPage("environment", {}, { lang: "en" });
   const folds = (node, out = []) => {
     if (node.localName === "details" && node.getAttribute("data-fold")) out.push(node);
-    node.children.forEach((child) => folds(child, out));
+    [...node.children].forEach((child) => folds(child, out));
     return out;
   };
   const byKey = () => Object.fromEntries(folds(element).map((d) => [d.getAttribute("data-fold"), d]));

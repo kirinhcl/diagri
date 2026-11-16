@@ -58,7 +58,7 @@ test("pending review puts the run sheet before the controls; running puts readin
   assert.deepEqual(sectionOrder("ended"), ["status", "controls", "readings", "runSheet", "tasks", "measurements", "history"]);
 });
 
-const headings = (node) => [...(node.localName === "h2" ? [node.textContent] : []), ...(node.children || []).flatMap(headings)];
+const headings = (node) => [...(node.localName === "h2" ? [node.textContent] : []), ...[...(node.children || [])].flatMap(headings)];
 
 test("the pending stage page lists the run sheet before the controls", async () => {
   for (const lang of ["zh", "en"]) {
@@ -76,7 +76,7 @@ test("the run sheet has its own fold, before the findings, and the id fold does 
   const folds = [];
   const walk = (node) => {
     if (node.localName === "details") folds.push(node);
-    (node.children || []).forEach(walk);
+    [...(node.children || [])].forEach(walk);
   };
   walk(view);
   const summary = (fold) => fold.children[0].textContent;
@@ -89,7 +89,7 @@ test("the run sheet has its own fold, before the findings, and the id fold does 
   const all = [];
   const order = (node) => {
     all.push(node);
-    (node.children || []).forEach(order);
+    [...(node.children || [])].forEach(order);
   };
   order(view);
   assert.ok(all.indexOf(folds[0]) < all.findIndex((n) => (n.getAttribute && n.getAttribute("class")) === "finding-group"));

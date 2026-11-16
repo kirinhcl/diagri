@@ -197,10 +197,10 @@ export function openChartFolds(root) {
   const saved = new Map();
   const visit = (node) => {
     if (node.localName === "details" && node.getAttribute("data-fold") && node.hasAttribute("open")) {
-      const wrap = node.children.find((child) => (child.getAttribute("class") || "").split(/\s+/).includes("table-wrap"));
+      const wrap = [...node.children].find((child) => (child.getAttribute("class") || "").split(/\s+/).includes("table-wrap"));
       saved.set(node.getAttribute("data-fold"), wrap ? wrap.scrollTop : 0);
     }
-    node.children.forEach(visit);
+    [...node.children].forEach(visit);
   };
   visit(root);
   return saved;
@@ -211,10 +211,10 @@ export function restoreChartFolds(root, saved) {
     const key = node.localName === "details" ? node.getAttribute("data-fold") : null;
     if (key && saved.has(key)) {
       node.setAttribute("open", "");
-      const wrap = node.children.find((child) => (child.getAttribute("class") || "").split(/\s+/).includes("table-wrap"));
+      const wrap = [...node.children].find((child) => (child.getAttribute("class") || "").split(/\s+/).includes("table-wrap"));
       if (wrap) wrap.scrollTop = saved.get(key);
     }
-    node.children.forEach(visit);
+    [...node.children].forEach(visit);
   };
   visit(root);
 }

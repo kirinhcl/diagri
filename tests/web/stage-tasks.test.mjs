@@ -51,7 +51,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function elements(node, name) {
   const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 
 const RECORD = { id: "taskrec_124f46e5ac284c2dbbb91a237e29bd1f", outcome: "done", done_at: NOW - 600, operator: "dev", irrigation_request_id: "planned-0123456789abcdef0123456789abcdef-1" };

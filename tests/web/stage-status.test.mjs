@@ -35,7 +35,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function elements(node, name) {
   const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 
 test("a level is written against its full scale", () => {
@@ -50,7 +50,7 @@ test("the manual form sends the level and the log heading carries the scale", as
   ctx.api = { post: async (path, body) => (sent.push([path, body]), { request_id: "wb-1", created_at: 1000, state: "pending" }) };
   const tracked = [];
   const env = { ctx, stage, log: { track: (heading, record) => tracked.push([heading, record]) }, onChanged: async () => {} };
-  const form = manualGroup(env).children.find((child) => child.tagName && child.tagName.toLowerCase() === "form");
+  const form = [...manualGroup(env).children].find((child) => child.tagName && child.tagName.toLowerCase() === "form");
   elements(form, "select")[0].value = "fan";
   const level = elements(form, "input").find((input) => input.getAttribute("name") === "level");
   level.value = "3";
@@ -90,7 +90,7 @@ test("a resent write is said so in a line under the heading, not in it", async (
   ctx.api = { post: async () => { if (++n === 1) throw Object.assign(new Error("network"), { status: 0 }); return { request_id: "wb-3", created_at: 1000, state: "pending" }; } };
   const calls = [];
   const env = { ctx, stage, log: { track: (heading, record, opts) => calls.push([heading, opts]) }, onChanged: async () => {} };
-  const form = manualGroup(env).children.find((child) => child.tagName && child.tagName.toLowerCase() === "form");
+  const form = [...manualGroup(env).children].find((child) => child.tagName && child.tagName.toLowerCase() === "form");
   elements(form, "select")[0].value = "light";
   elements(form, "input").find((i) => i.getAttribute("name") === "level").value = "50";
   for (let i = 0; i < 2; i += 1) {

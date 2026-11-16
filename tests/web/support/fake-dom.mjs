@@ -10,6 +10,18 @@ const FRAGMENT_NODE = 11;
 
 const documentOf = (node) => node.ownerDocument || node;
 
+// What browsers return for children (HTMLCollection) and childNodes (NodeList): indexable, with a
+// length, item(i) and iteration, but none of the Array methods (NodeList alone adds forEach).
+export class FakeCollection {
+  constructor(items, { withForEach = false } = {}) {
+    items.forEach((item, index) => Object.defineProperty(this, index, { value: item, enumerable: true }));
+    Object.defineProperty(this, "length", { value: items.length });
+    Object.defineProperty(this, "item", { value: (index) => items[index] ?? null });
+    Object.defineProperty(this, Symbol.iterator, { value: () => items[Symbol.iterator]() });
+    if (withForEach) Object.defineProperty(this, "forEach", { value: (callback, thisArg) => items.forEach(callback, thisArg) });
+  }
+}
+
 class FakeNode extends EventTarget {
   #kids = [];
 
@@ -22,6 +34,11 @@ class FakeNode extends EventTarget {
   }
 
   get childNodes() {
+    return new FakeCollection(this.#kids, { withForEach: true });
+  }
+
+  // The children as a real array, for this fake's own bookkeeping (never exposed to pages).
+  kidList() {
     return [...this.#kids];
   }
 
@@ -38,11 +55,11 @@ class FakeNode extends EventTarget {
   }
 
   get nextSibling() {
-    return this.parentNode ? (this.parentNode.childNodes[this.parentNode.childNodes.indexOf(this) + 1] ?? null) : null;
+    return this.parentNode ? (this.parentNode.kidList()[this.parentNode.kidList().indexOf(this) + 1] ?? null) : null;
   }
 
   get previousSibling() {
-    return this.parentNode ? (this.parentNode.childNodes[this.parentNode.childNodes.indexOf(this) - 1] ?? null) : null;
+    return this.parentNode ? (this.parentNode.kidList()[this.parentNode.kidList().indexOf(this) - 1] ?? null) : null;
   }
 
   get isConnected() {
@@ -199,7 +216,7 @@ class FakeElement extends FakeNode {
   }
 
   get children() {
-    return this.childNodes.filter((node) => node.nodeType === ELEMENT_NODE);
+    return new FakeCollection(this.kidList().filter((node) => node.nodeType === ELEMENT_NODE));
   }
 
   get classList() {
@@ -266,7 +283,7 @@ for (const [property, attribute] of Object.entries(BOOLEAN_PROPERTIES)) {
 }
 
 function optionsOf(element) {
-  return element.children.flatMap((child) => (child.localName === "option" ? [child] : optionsOf(child)));
+  return [...element.children].flatMap((child) => (child.localName === "option" ? [child] : optionsOf(child)));
 }
 
 class FakeDocument extends FakeNode {

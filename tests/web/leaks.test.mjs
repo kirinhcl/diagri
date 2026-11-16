@@ -211,7 +211,21 @@ test("no Batch 1 page leaks internal text", async (t) => {
 
 test("a stage read from before stages had names is called an unnamed stage", async () => {
   const { element, ctx } = await renderPage("stage", PARAMS.stage, { fixtures: { "stage.json": OLD_STAGE } });
-  const headings = (node) => [...(node.localName === "h1" ? [node] : []), ...node.children.flatMap(headings)];
+  const headings = (node) => [...(node.localName === "h1" ? [node] : []), ...[...node.children].flatMap(headings)];
   assert.deepEqual(headings(element).map((h1) => h1.textContent), ["未命名阶段"]);
   assert.deepEqual(ctx.crumbs.map((crumb) => crumb.label), ["项目", "未命名项目", "未命名轮次", "未命名阶段"]);
+});
+
+test("the fake DOM's children and childNodes behave like the browser's collections", () => {
+  const parent = document.createElement("div");
+  parent.append(document.createElement("a"), "text", document.createElement("b"));
+  assert.equal(parent.children.find, undefined);
+  assert.equal(parent.children.map, undefined);
+  assert.equal(parent.childNodes.find, undefined);
+  assert.equal(typeof parent.childNodes.forEach, "function");
+  assert.equal(parent.children.length, 2);
+  assert.equal(parent.children.item(1).localName, "b");
+  assert.equal(parent.children[0].localName, "a");
+  assert.deepEqual([...parent.children].map((el) => el.localName), ["a", "b"]);
+  assert.equal([...parent.childNodes].length, 3);
 });

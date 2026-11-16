@@ -92,7 +92,7 @@ import { findLeaks, visibleText } from "./support/leaks.mjs";
 import { testCtx } from "./support/render-page.mjs";
 
 const NOW = 1_800_000_000;
-const findAll = (node, test) => [...(test(node) ? [node] : []), ...(node.children || []).flatMap((child) => findAll(child, test))];
+const findAll = (node, test) => [...(test(node) ? [node] : []), ...[...(node.children || [])].flatMap((child) => findAll(child, test))];
 const withClass = (name) => (node) => (node.getAttribute?.("class") || "").split(/\s+/).includes(name);
 const queryOne = (node, selector) => {
   const [cls, tag] = selector.replace(/^\./, "").split(" ");

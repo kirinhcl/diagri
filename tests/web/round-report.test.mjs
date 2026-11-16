@@ -19,7 +19,7 @@ const ANALYSIS = FIXTURES["analysis.json"];
 
 function elements(node, name) {
   const own = node.localName === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 const hasClass = (node, name) => (node.getAttribute("class") || "").split(/\s+/).includes(name);
 const techFolds = (node) => elements(node, "details").filter((details) => hasClass(details, "tech-details"));

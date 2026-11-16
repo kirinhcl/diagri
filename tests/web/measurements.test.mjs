@@ -17,14 +17,14 @@ const METRIC = RECORDED[0].metric; // an operator-chosen name, shown as recorded
 
 function elements(node, name) {
   const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 
 // The buttons a row offers, without the copy buttons of its technical details.
 function rowButtons(node) {
   if ((node.getAttribute && node.getAttribute("class")) === "tech-details") return [];
   const own = node.tagName && node.tagName.toLowerCase() === "button" ? [node.textContent] : [];
-  return [...own, ...(node.children || []).flatMap(rowButtons)];
+  return [...own, ...[...(node.children || [])].flatMap(rowButtons)];
 }
 
 const input = (node, name) => elements(node, "input").find((element) => element.getAttribute("name") === name);

@@ -16,7 +16,7 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 function elements(node, name) {
   const own = node.localName === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 
 const hasClass = (node, name) => (node.getAttribute("class") || "").split(/\s+/).includes(name);

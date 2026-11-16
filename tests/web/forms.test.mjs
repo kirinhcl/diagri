@@ -102,7 +102,7 @@ test("a form started fresh keeps its values only when they changed", () => {
 // --- hidden fields, suggestions and filling a form in ---------------------------------------------
 function elements(node, name) {
   const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 
 function sampleForm(sent) {

@@ -67,13 +67,13 @@ export function visibleTextIncludingDetails(node) {
 // The pills (class "pill") inside node, the node itself included.
 export function countPills(node) {
   const isPill = node.nodeType === ELEMENT_NODE && (node.getAttribute("class") || "").split(/\s+/).includes("pill");
-  return (isPill ? 1 : 0) + node.childNodes.reduce((sum, child) => sum + countPills(child), 0);
+  return (isPill ? 1 : 0) + [...node.childNodes].reduce((sum, child) => sum + countPills(child), 0);
 }
 
 // The buttons inside node, the node itself included.
 export function countButtons(node) {
   const own = node.nodeType === ELEMENT_NODE && node.localName === "button" ? 1 : 0;
-  return own + node.childNodes.reduce((sum, child) => sum + countButtons(child), 0);
+  return own + [...node.childNodes].reduce((sum, child) => sum + countButtons(child), 0);
 }
 
 // Each exempt string is cut out (longest first, leaving a space) before the patterns are applied.

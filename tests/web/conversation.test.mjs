@@ -61,7 +61,7 @@ test("an auditor entry is labelled as the auditor in both languages, not as syst
 
 function elements(node, name) {
   const own = node.localName === name ? [node] : [];
-  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
 }
 const hasClass = (node, name) => (node.getAttribute("class") || "").split(/\s+/).includes(name);
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -169,15 +169,15 @@ test("a tool call that arrives after a tool group joins that group", async () =>
   const batches = [[reply(1), tool(2, "query_evidence")], [tool(3, "validate_run_sheet"), tool(4, "save_plan_draft")], [tool(5, "query_evidence")], [reply(6), tool(7, "query_evidence")]];
   const { chat, log, reads } = chatWith(batches);
   await chat.refresh();
-  assert.deepEqual(log.children.map(kindOf), ["reply", "tools:1"]);
+  assert.deepEqual([...log.children].map(kindOf), ["reply", "tools:1"]);
   await chat.refresh();
-  assert.deepEqual(log.children.map(kindOf), ["reply", "tools:3"]);
+  assert.deepEqual([...log.children].map(kindOf), ["reply", "tools:3"]);
   log.children[1].firstChild.open = true; // the reader opened the group
   await chat.refresh();
-  assert.deepEqual(log.children.map(kindOf), ["reply", "tools:4"]);
+  assert.deepEqual([...log.children].map(kindOf), ["reply", "tools:4"]);
   assert.equal(log.children[1].firstChild.open, true);
   await chat.refresh();
-  assert.deepEqual(log.children.map(kindOf), ["reply", "tools:4", "reply", "tools:1"]);
+  assert.deepEqual([...log.children].map(kindOf), ["reply", "tools:4", "reply", "tools:1"]);
   assert.deepEqual(reads.map((path) => path.split("after=")[1]), ["0", "2", "4", "5"]);
 });
 
@@ -188,18 +188,18 @@ test("a sent message shows a pending line until its own task answers", async () 
   const { chat, log, send } = chatWith(batches, () => answered);
   await chat.refresh();
   await send("Please check the data.");
-  assert.deepEqual(log.children.map(kindOf), ["pending"]);
+  assert.deepEqual([...log.children].map(kindOf), ["pending"]);
   assert.equal(visibleText(log.children[0]), "已发送，编排 Agent 稍后接手。");
   await chat.refresh(); // a poll while the goal is on its way brings another task's call
-  assert.deepEqual(log.children.map(kindOf), ["tools:1", "pending"]);
+  assert.deepEqual([...log.children].map(kindOf), ["tools:1", "pending"]);
   answer({ task_id: "task_new" });
   await settle();
   await settle();
-  assert.deepEqual(log.children.map(kindOf), ["tools:1", "message", "pending"]);
+  assert.deepEqual([...log.children].map(kindOf), ["tools:1", "message", "pending"]);
   await chat.refresh(); // another task is still working
-  assert.deepEqual(log.children.map(kindOf), ["tools:1", "message", "tools:1", "pending"]);
+  assert.deepEqual([...log.children].map(kindOf), ["tools:1", "message", "tools:1", "pending"]);
   await chat.refresh(); // the orchestrator takes up the new goal
-  assert.deepEqual(log.children.map(kindOf), ["tools:1", "message", "tools:1", "reply"]);
+  assert.deepEqual([...log.children].map(kindOf), ["tools:1", "message", "tools:1", "reply"]);
 });
 
 test("tool calls join an open group in place, keeping open folds open", async () => {
@@ -222,7 +222,7 @@ test("tool calls join an open group in place, keeping open folds open", async ()
   assert.equal(elements(group, "details")[0], fold);
   assert.ok(fold.open && first.open && second.open);
   assert.equal(elements(fold, "summary")[0].textContent, "计划 Agent · 用了 3 个工具");
-  assert.deepEqual(log.children.map(kindOf), ["tools:3"]);
+  assert.deepEqual([...log.children].map(kindOf), ["tools:3"]);
 });
 
 test("a group that gets a call from another role names the role on each call", () => {
@@ -236,7 +236,7 @@ test("two reads that overlap show each entry once", async () => {
   const same = [reply(1), tool(2, "query_evidence")];
   const { chat, log } = chatWith([same, same]);
   await Promise.all([chat.refresh(), chat.refresh()]);
-  assert.deepEqual(log.children.map(kindOf), ["reply", "tools:1"]);
+  assert.deepEqual([...log.children].map(kindOf), ["reply", "tools:1"]);
 });
 
 test("a refused message takes its pending line away and says why", async () => {
@@ -247,7 +247,7 @@ test("a refused message takes its pending line away and says why", async () => {
   await chat.refresh();
   await send("Please check the data.");
   await settle();
-  assert.deepEqual(log.children.map(kindOf), ["reply"]);
+  assert.deepEqual([...log.children].map(kindOf), ["reply"]);
   const problem = elements(chat.element, "div").find((node) => hasClass(node, "form-status-error"));
   assert.equal(problem.hidden, false);
   assert.equal(elements(chat.element, "textarea")[0].value, "Please check the data.");
