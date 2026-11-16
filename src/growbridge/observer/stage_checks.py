@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from growbridge.archive.clock import Clock
 from growbridge.archive.snapshot import outside_window
 from growbridge.archive.store import Archive
-from growbridge.observer.alerts import AlertBook
+from growbridge.observer.alerts import AlertBook, Scope
 from growbridge.planning import manual_tasks
 from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS as WINDOW_GRACE_SECONDS
 from growbridge.planning.window import data_window
@@ -55,14 +55,11 @@ class StageChecks:
     def _close_other_stages(self, active_id: str | None) -> None:
         """Resolve the stage alerts of every stage but the active one: nothing re-evaluates them
         once their stage is no longer active, so they would stay open for ever."""
-        own_audit = None if active_id is None else audit_task_key(active_id)
+        own = None if active_id is None else ("stage", active_id)
         for alert in self.book.open():
-            if alert.kind in STAGE_KINDS:
-                stale = not _of_stage(alert.key, active_id)
-            else:
-                stale = alert.kind == AUDIT_TASK and alert.key != own_audit
-            if stale:
-                self.book.resolve(alert.kind, alert.key)
+            ours = alert.kind in STAGE_KINDS or alert.kind == AUDIT_TASK
+            if ours and alert.scope != own:  # by its recorded stage, never by its key
+                self.book.resolve(alert.kind, alert.key, alert.scope)
 
     def _check_tasks(self, stage: StageRuntime, start: float, end: float) -> None:
         now = self.clock.now()
@@ -74,10 +71,11 @@ class StageChecks:
             if item.due_at > now:
                 continue
             slot = f"{stage.stage_id}:{item.task_id}:{int(item.due_at)}"
-            self._set(state == "missed", TASK_MISSED, slot, self._missed_text(item))
+            scope = ("stage", stage.stage_id)
+            self._set(state == "missed", TASK_MISSED, slot, self._missed_text(item), scope)
             gap = self._unmeasured(item, record, current, now, end)
             text = "" if gap is None else self._lacks_text(item, gap, stage.run_sheet.timezone)
-            self._set(gap is not None, MEASUREMENT_MISSING, slot, text)
+            self._set(gap is not None, MEASUREMENT_MISSING, slot, text, scope)
 
     @staticmethod
     def _unmeasured(item, record, current, now: float, end: float) -> tuple[float, float] | None:
@@ -113,18 +111,18 @@ class StageChecks:
                 "and will not be in its snapshot. Enter it again with the time it was taken, "
                 "or record a correction."
             )
-            self.book.raise_alert(OUTSIDE_WINDOW, f"{stage.stage_id}:{mid}", SEVERITY, text)
-        prefix = f"{stage.stage_id}:"
-        for alert in self.book.open():
-            if alert.kind == OUTSIDE_WINDOW and alert.key.startswith(prefix):
-                if alert.key[len(prefix) :] not in outside:
-                    self.book.resolve(OUTSIDE_WINDOW, alert.key)
+            key = f"{stage.stage_id}:{mid}"
+            self.book.raise_alert(OUTSIDE_WINDOW, key, SEVERITY, text, ("stage", stage.stage_id))
+        prefix, scope = f"{stage.stage_id}:", ("stage", stage.stage_id)
+        for alert in self.book.open_for_scope({OUTSIDE_WINDOW}, scope):
+            if alert.key[len(prefix) :] not in outside:
+                self.book.resolve(OUTSIDE_WINDOW, alert.key, scope)
 
-    def _set(self, active: bool, kind: str, key: str, message: str) -> None:
+    def _set(self, active: bool, kind: str, key: str, message: str, scope: Scope) -> None:
         if active:
-            self.book.raise_alert(kind, key, SEVERITY, message)
+            self.book.raise_alert(kind, key, SEVERITY, message, scope)
         else:
-            self.book.resolve(kind, key)
+            self.book.resolve(kind, key, scope)
 
     @staticmethod
     def _missed_text(item) -> str:
@@ -147,9 +145,3 @@ class StageChecks:
 def audit_task_key(stage_id: str) -> str:
     """The key of a stage's failed-audit warning; one per stage, however many runs failed."""
     return f"audit:{stage_id}"
-
-
-def _of_stage(key: str, stage_id: str | None) -> bool:
-    """Whether a stage alert's key names this stage. Matches the whole id, not the part before
-    the first colon: a stage id may itself contain one."""
-    return stage_id is not None and (key == stage_id or key.startswith(f"{stage_id}:"))

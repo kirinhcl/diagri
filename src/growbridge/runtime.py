@@ -62,6 +62,7 @@ from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
+from growbridge.runtime_alerts import expire_tasks, stage_alerts
 from growbridge.runtime_backup import Backups
 from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
 from growbridge.service import Bridge
@@ -167,21 +168,6 @@ def default_channels() -> dict[str, NotifyChannel]:
     if mails and os.environ.get(SMTP_HOST_ENV):
         found["email"] = EmailChannel(mails)
     return found
-
-
-STAGE_ALERT = "stage_waiting"
-OPERATOR_PAUSE = "pause"  # the history event of a pause that an operator asked for
-
-
-def waiting_message(item: Mapping[str, Any]) -> str:
-    """Why a stage waits: its state, the event that put it there and what the event carried."""
-    detail = {
-        name: value
-        for name, value in item["detail"].items()
-        if name != "right_number" and value != item["event"]
-    }
-    text = f"Stage {item['stage_id']} is {item['state']} after {item['event']}"
-    return f"{text}: {json.dumps(detail, sort_keys=True)}" if detail else text
 
 
 MIRROR_NAMESPACE = "runtime_mirror"
@@ -330,9 +316,9 @@ class Runtime:
 
     # --- model roles (never called from tick) --------------------------------------------------
 
-    def alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> None:
+    def alert(self, kind: str, key: str, message: str, severity: Any = "critical", scope=None):
         """Raise an alert, critical by default (and queue its notification); never raises."""
-        self._alert(kind, key, message, severity)
+        self._alert(kind, key, message, severity, scope)
 
     def role_tools(self) -> dict[str, list[Tool]]:
         return role_tools(self, private_dir(self.settings.data_dir / "agent_work"))
@@ -402,19 +388,19 @@ class Runtime:
             return False
         return True
 
-    def _alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> bool:
+    def _alert(self, kind: str, key: str, message: str, severity: Any = "critical", scope=None):
         """Raise an alert and queue its notification; never raises. True when it was stored."""
         try:
-            alert = self.book.raise_alert(kind, key, severity, message)
+            alert = self.book.raise_alert(kind, key, severity, message, scope)
         except Exception:
             log.exception("could not record a runtime alert")
             return False
         self._safely(lambda: self._announce(alert))  # a lost notification is logged
         return True
 
-    def resolve_alert(self, kind: str, key: str) -> bool:
+    def resolve_alert(self, kind: str, key: str, scope=None) -> bool:
         """Close an open alert (a no-op when none is open); never raises. False when not stored."""
-        return self._safely(lambda: self.book.resolve(kind, key))
+        return self._safely(lambda: self.book.resolve(kind, key, scope))
 
     def _announce(self, alert: Alert) -> None:
         if alert.count != 1:
@@ -460,32 +446,13 @@ class Runtime:
             raise failures[0]  # the tick reports it as a failing step
 
     def _stage_alerts(self) -> None:
-        """One open alert per stage that stopped by itself, for as long as it waits.
-
-        The key names the history entry, so a new cause is a new alert and a new notification.
-        A pause that an operator asked for raises none.
-        """
-        waiting = {
-            f"{item['stage_id']}:{item['entry']}": item
-            for item in self.workflow.waiting_stages()
-            if item["event"] != OPERATOR_PAUSE
-        }
-        known = {alert.key for alert in self.book.open() if alert.kind == STAGE_ALERT}
-        for key in known - set(waiting):
-            self.book.resolve(STAGE_ALERT, key)
-        for key, item in waiting.items():
-            if key not in known:
-                checking = item["state"] == StageState.RECOVERY_CHECK.value
-                severity = "critical" if checking else "warning"
-                self._alert(STAGE_ALERT, key, waiting_message(item), severity)
+        stage_alerts(self)
 
     async def _deliver(self) -> None:
         await self.outbox.deliver(self.channels)
 
     def _expire(self) -> None:
-        for task in self.tasks.expire(self.clock.now()):
-            message = f"Research task {task.id} is past its deadline and needs attention"
-            self._alert("task_deadline", task.id, message, "warning")
+        expire_tasks(self)
 
     async def _recover_compute(self) -> None:
         if self.compute is not None:  # rate-limited inside: reconciles what nobody answered
@@ -657,7 +624,7 @@ def build_runtime(
     )
     storage = StorageGuard(data_dir, STORAGE_LOW_BYTES, STORAGE_CRITICAL_BYTES, shutil.disk_usage)
     executor = ExecutorEngine(control, flow, clock, storage.allows)
-    book = AlertBook(dbs["observer"], clock)
+    book = AlertBook(dbs["observer"], clock, settings.device)
     outbox = Outbox(dbs["observer"], clock, OUTBOX_BASE_SECONDS, OUTBOX_CAP_SECONDS)
     selected = default_channels() if channels is None else dict(channels)
     # only channels that have a sender: a notification queued for any other name is never sent

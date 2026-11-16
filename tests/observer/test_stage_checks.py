@@ -226,13 +226,15 @@ STAGE_KINDS = ("task_missed", "measurement_missing", "measurement_outside_window
 
 def _raise_for(rig, stage_id: str) -> None:
     for kind in STAGE_KINDS:
-        rig.book.raise_alert(kind, f"{stage_id}:x", "warning", "left over")
+        rig.book.raise_alert(kind, f"{stage_id}:x", "warning", "left over", ("stage", stage_id))
 
 
 async def test_alerts_of_a_stage_that_is_no_longer_active_are_resolved(rig):
     _raise_for(rig, "st0")
     _raise_for(rig, "st10")  # shares the active stage's prefix, is another stage
-    rig.book.raise_alert(AUDIT_FINDING, f"{STAGE}:abc", "warning", "this stage's finding")
+    rig.book.raise_alert(
+        AUDIT_FINDING, f"{STAGE}:abc", "warning", "this stage's finding", ("stage", STAGE)
+    )
     rig.book.raise_alert("stage_gap", "st0:x", "warning", "another kind is left alone")
     rig.at(DAY_START + 60)
 
@@ -257,7 +259,9 @@ async def test_a_stage_not_yet_started_keeps_its_own_alerts_and_closes_older_one
 ):
     rig = Rig(db, clock, tmp_path, FakeStages(started_at=None, state=StageState.PENDING_REVIEW))
     _raise_for(rig, "st0")
-    rig.book.raise_alert(AUDIT_FINDING, f"{STAGE}:abc", "info", "this stage's finding")
+    rig.book.raise_alert(
+        AUDIT_FINDING, f"{STAGE}:abc", "info", "this stage's finding", ("stage", STAGE)
+    )
     rig.at(DAY_START + 60)
 
     await rig.checks.tick()
@@ -280,9 +284,15 @@ async def test_a_stage_id_with_a_colon_keeps_its_own_alerts(db, clock, tmp_path)
 
 async def test_a_failed_audit_warning_closes_once_its_stage_is_no_longer_active(rig):
     # raised by the runtime when an auditor run fails, keyed "audit:<stage id>"
-    rig.book.raise_alert("audit_task", "audit:st0", "warning", "an older stage's audit failed")
-    rig.book.raise_alert("audit_task", "audit:st10", "warning", "shares the prefix, other stage")
-    rig.book.raise_alert("audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed")
+    rig.book.raise_alert(
+        "audit_task", "audit:st0", "warning", "an older stage's audit failed", ("stage", "st0")
+    )
+    rig.book.raise_alert(
+        "audit_task", "audit:st10", "warning", "shares the prefix", ("stage", "st10")
+    )
+    rig.book.raise_alert(
+        "audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed", ("stage", STAGE)
+    )
     rig.at(DAY_START + 60)
 
     await rig.checks.tick()
@@ -291,7 +301,9 @@ async def test_a_failed_audit_warning_closes_once_its_stage_is_no_longer_active(
 
 
 async def test_with_no_active_stage_a_failed_audit_warning_is_resolved(rig):
-    rig.book.raise_alert("audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed")
+    rig.book.raise_alert(
+        "audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed", ("stage", STAGE)
+    )
     rig.stages.active = False
     rig.at(DAY_START + 60)
 
@@ -333,3 +345,12 @@ async def test_a_measurement_outside_an_on_time_tasks_window_does_not_count(rig)
     await rig.checks.tick()
     (alert,) = _missing(rig)
     assert alert.key == f"{STAGE}:measure:{int(MEASURE_DUE)}"
+
+
+async def test_an_unscoped_stage_alert_from_before_scopes_is_resolved(rig):
+    # stored before alerts had owners: nothing can say which stage it was for, so it closes
+    rig.book.raise_alert("task_missed", f"{STAGE}:legacy", "warning", "old")
+
+    await rig.checks.tick()
+
+    assert ("task_missed", f"{STAGE}:legacy") not in set(rig.open_alerts())

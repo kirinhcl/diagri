@@ -126,16 +126,26 @@ def _report_failure(runtime: Any, task: ResearchTask, message: str) -> None:
     so the alert is what keeps a round from stalling silently: critical. An audit is advisory and
     repeats every stage day, so its failures merge into one warning per stage."""
     if task.owner_role != AUDIT_ROLE:
-        runtime.alert("agent_task", task.id, message)
+        runtime.alert("agent_task", task.id, message, "critical", ("project", task.project_id))
         return
-    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning")
+    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning", _audit_scope(task))
+
+
+def _audit_stage(task: ResearchTask) -> str | None:
+    stages = (ref[len(STAGE_REF) :] for ref in task.input_refs if ref.startswith(STAGE_REF))
+    return next(stages, None)
 
 
 def _audit_key(task: ResearchTask) -> str:
     """The failed-audit warning an audit task reports to: its stage's, or its own when it names
     no stage."""
-    stages = (ref[len(STAGE_REF) :] for ref in task.input_refs if ref.startswith(STAGE_REF))
-    return audit_task_key(next(stages, task.id))
+    return audit_task_key(_audit_stage(task) or task.id)
+
+
+def _audit_scope(task: ResearchTask) -> tuple[str, str]:
+    """The stage the audit was for, or its project when it names no stage."""
+    stage = _audit_stage(task)
+    return ("stage", stage) if stage is not None else ("project", task.project_id)
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:
@@ -162,5 +172,5 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             _report_failure(runtime, task, f"model task {task.id} needs attention")
         elif state is TaskState.DONE and task.owner_role == AUDIT_ROLE:
             # an audit that finished shows the stage's audits work again
-            runtime.resolve_alert(AUDIT_TASK, _audit_key(task))
+            runtime.resolve_alert(AUDIT_TASK, _audit_key(task), _audit_scope(task))
     return finished

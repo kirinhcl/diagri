@@ -117,11 +117,11 @@ def _open_alerts(deps: Deps, stage_id: str, kept_ids: set[str]) -> list[dict]:
     one about a measurement that is not in ``kept_ids`` (a held-out outcome) is left out."""
     if deps.alerts is None:
         return []
-    prefix = f"{stage_id}:"
+    prefix, scope = f"{stage_id}:", ("stage", stage_id)
     return [
         {"kind": a.kind, "key": a.key, "severity": a.severity, "message": clip(a.message, 600)}
         for a in deps.alerts.open()
-        if (a.key == stage_id or a.key.startswith(prefix))
+        if a.scope == scope  # by the stage it was raised for, never by a key prefix
         and (a.kind != OUTSIDE_WINDOW or a.key[len(prefix) :] in kept_ids)
     ]
 
@@ -157,7 +157,8 @@ def raise_finding(deps: Deps, data: FindingInput) -> dict:
         raise Denied("state", "no alert book is available; the finding cannot be recorded")
     key = f"{data.stage_id}:{sha256(data.summary.encode()).hexdigest()[:12]}"
     message = "\n".join((data.summary, *data.evidence))
-    alert = deps.alerts.raise_alert(AUDIT_FINDING, key, data.severity, message)
+    scope = ("stage", data.stage_id)
+    alert = deps.alerts.raise_alert(AUDIT_FINDING, key, data.severity, message, scope)
     return {"raised": True, "kind": AUDIT_FINDING, "key": key, "event_id": alert.event_id}
 
 
