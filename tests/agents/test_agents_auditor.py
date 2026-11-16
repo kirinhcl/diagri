@@ -15,6 +15,7 @@ from growbridge.agents.tools import build_toolset
 from growbridge.archive.db import Database
 from growbridge.archive.models import ManualMeasurement, ManualTask
 from growbridge.observer.alerts import AlertBook
+from growbridge.research.holdout import HoldoutRegistry
 from growbridge.sim.clock import START, FakeClock
 from growbridge.sim.control import FakeControl
 
@@ -51,23 +52,30 @@ def _body(outcome) -> dict:
     return json.loads(outcome.content)
 
 
-def _measure(env, mid: str, measured_at: float, metric: str = "height") -> None:
+def _measure(env, mid: str, measured_at: float, metric="height", batch="b", value=3.0) -> None:
     env.archive.add_measurement(
         ManualMeasurement(
             id=mid,
             experiment_id="experiment-stage-1",
-            batch="b",
+            batch=batch,
             plant_id="p1",
             layout_version="v1",
             measured_at=measured_at,
             position="t1",
             method="ruler",
             metric=metric,
-            value=3.0,
+            value=value,
             unit="cm",
             operator="op-1",
         )
     )
+
+
+def _held_out_deps(env):
+    """Deps with a holdout of batch ``batch-h``'s ``yield`` outcomes registered."""
+    registry = HoldoutRegistry(env.db, env.clock)
+    registry.register(env.project_id, "hold-1", ["batch-h"], ["yield"], ["d-1", "d-2", "d-3"])
+    return env.make_deps(alerts=env.book, holdout=registry)
 
 
 async def test_get_stage_records_lists_tasks_measurements_and_open_alerts(env):
@@ -106,6 +114,37 @@ async def test_get_stage_records_counts_an_earlier_stages_measurements_without_l
     ]
     assert body["measurements_before_stage"] == 1
     assert "m-earlier" not in json.dumps(body)
+
+
+async def test_get_stage_records_leaves_a_held_out_outcome_out(env):
+    deps = _held_out_deps(env)
+    await _start(env)
+    _measure(env, "m-in", START + 1)
+    _measure(env, "m-hold", START + 2, metric="yield", batch="batch-h", value=987.5)
+    _measure(env, "m-hold-early", START - 60, metric="yield", batch="batch-h", value=986.5)
+
+    outcome = await _call(env, "get_stage_records", deps, stage_id="stage-1")
+
+    body = _body(outcome)
+    assert [m["id"] for m in body["measurements"]] == ["m-in"]
+    assert body["measurements_left_out"] == 0 and body["measurements_before_stage"] == 0
+    assert "m-hold" not in outcome.content and "98" not in outcome.content
+
+
+async def test_get_stage_records_hides_the_outside_window_alert_of_a_held_out_outcome(env):
+    deps = _held_out_deps(env)
+    await _start(env)
+    late = START + 10 + 3 * 3600
+    _measure(env, "m-late", late)
+    _measure(env, "m-hold", late, metric="yield", batch="batch-h", value=987.5)
+    for mid, metric in (("m-late", "height"), ("m-hold", "yield")):
+        text = f"Measurement {mid} ({metric}) is dated outside the stage's data window"
+        env.book.raise_alert("measurement_outside_window", f"stage-1:{mid}", "warning", text)
+
+    outcome = await _call(env, "get_stage_records", deps, stage_id="stage-1")
+
+    assert [a["key"] for a in _body(outcome)["open_alerts"]] == ["stage-1:m-late"]
+    assert "m-hold" not in outcome.content and "yield" not in outcome.content
 
 
 async def test_auditor_tools_refuse_another_project_and_an_unbound_run(env):

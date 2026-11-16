@@ -21,7 +21,7 @@ from growbridge.agents.handlers_common import (
 from growbridge.agents.handlers_orchestrator import build_orchestrator_tools
 from growbridge.agents.handlers_researcher import InspectInput, stage_preview
 from growbridge.agents.tools import Tool
-from growbridge.observer.stage_checks import AUDIT_FINDING
+from growbridge.observer.stage_checks import AUDIT_FINDING, OUTSIDE_WINDOW
 from growbridge.planning import manual_tasks
 from growbridge.planning.window import MEASUREMENT_GRACE_SECONDS, data_window
 from growbridge.ports import Denied
@@ -88,12 +88,16 @@ def _task_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict],
     return rows, len(due) - len(rows)
 
 
-def _measurement_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict], int, int]:
+def _kept_measurements(deps: Deps, stage) -> list:
+    """The experiment's current measurements, without the held-out outcomes."""
+    keep = None if deps.holdout is None else deps.holdout.development_filter(stage.project_id)
+    return [m for m in deps.archive.measurements(stage.experiment_id) if keep is None or keep(m)]
+
+
+def _measurement_rows(kept: list, start: float, end: float) -> tuple[list[dict], int, int]:
     """``(rows, left out by the list limit, timed before the stage)``. Every stage of a round
     shares one experiment, so a measurement timed before this stage started is an earlier
     stage's: it is counted, not listed."""
-    keep = None if deps.holdout is None else deps.holdout.development_filter(stage.project_id)
-    kept = [m for m in deps.archive.measurements(stage.experiment_id) if keep is None or keep(m)]
     found = sorted((m for m in kept if m.measured_at >= start), key=lambda m: m.measured_at)
     rows = [
         {
@@ -108,13 +112,17 @@ def _measurement_rows(deps: Deps, stage, start: float, end: float) -> tuple[list
     return rows, len(found) - len(rows), len(kept) - len(found)
 
 
-def _open_alerts(deps: Deps, stage_id: str) -> list[dict]:
+def _open_alerts(deps: Deps, stage_id: str, kept_ids: set[str]) -> list[dict]:
+    """The stage's open alerts. An outside-window alert names its measurement and metric, so
+    one about a measurement that is not in ``kept_ids`` (a held-out outcome) is left out."""
     if deps.alerts is None:
         return []
+    prefix = f"{stage_id}:"
     return [
         {"kind": a.kind, "key": a.key, "severity": a.severity, "message": clip(a.message, 600)}
         for a in deps.alerts.open()
-        if a.key == stage_id or a.key.startswith(f"{stage_id}:")
+        if (a.key == stage_id or a.key.startswith(prefix))
+        and (a.kind != OUTSIDE_WINDOW or a.key[len(prefix) :] in kept_ids)
     ]
 
 
@@ -122,7 +130,8 @@ def stage_records(deps: Deps, data: StageInput) -> dict:
     stage = _started_stage(deps, data.task_id, data.stage_id)
     start, end = data_window(stage)
     tasks, tasks_left_out = _task_rows(deps, stage, start, end)
-    measurements, measurements_left_out, before = _measurement_rows(deps, stage, start, end)
+    kept = _kept_measurements(deps, stage)
+    measurements, measurements_left_out, before = _measurement_rows(kept, start, end)
     return {
         "stage": {
             "id": stage.stage_id,
@@ -137,7 +146,7 @@ def stage_records(deps: Deps, data: StageInput) -> dict:
         "measurements": measurements,
         "measurements_left_out": measurements_left_out,
         "measurements_before_stage": before,
-        "open_alerts": _open_alerts(deps, stage.stage_id),
+        "open_alerts": _open_alerts(deps, stage.stage_id, {m.id for m in kept}),
     }
 
 
