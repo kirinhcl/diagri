@@ -5,6 +5,7 @@ import { afterWrite, errorBox, note, section, showErrors, techDetails, timeText 
 import { shortDigest } from "../format.js";
 import { displayName } from "../ui/names.js";
 import { statePill } from "../ui/status.js";
+import { stuckSentences } from "./compute-stuck.js";
 import { table } from "../ui/table.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
@@ -69,12 +70,18 @@ function jobsTable(ctx, jobs) {
   return table(columns, jobs, { label: ctx.t("compute.open") });
 }
 
+// What happened and what to do next, with every technical detail in one fold.
+function whyCell(ctx, row) {
+  const { lines, entries } = stuckSentences(ctx, row);
+  return h("div", { class: "cell-stack" }, lines.map((line) => h("p", { text: line })), techDetails(ctx.t, entries));
+}
+
 function stuckTable(ctx, stuck) {
   const columns = [
     { label: ctx.t("compute.attempt"), cell: (row) => attemptCell(ctx, row) },
     { label: ctx.t("compute.task"), cell: (row) => taskLabel(ctx, row.task_id) },
     { label: ctx.t("compute.phase"), cell: (row) => statePill(ctx.t, row.phase) },
-    { label: ctx.t("compute.why"), cell: (row) => row.reason },
+    { label: ctx.t("compute.why"), cell: (row) => whyCell(ctx, row) },
     { label: ctx.t("compute.since"), cell: (row) => timeText(ctx, row.since) },
     { label: ctx.t("compute.settleColumn"), cell: (row) => settleControl(ctx, row) },
   ];

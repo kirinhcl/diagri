@@ -36,6 +36,7 @@ from growbridge.compute.backend import (
     RemoteJob,
     SubmitRejected,
 )
+from growbridge.compute.errors import CLEARED, Problem, coded, is_output_limit
 from growbridge.compute.overview import build_overview
 from growbridge.compute.phases import (
     FETCHABLE,
@@ -56,7 +57,6 @@ REMOTE_PHASE = {
     "failed": "failed", "cancelled": "cancelled",
 }  # fmt: skip
 BYTES_PER_GB = 10**9  # storage is reserved in decimal gigabytes
-OUTPUT_LIMIT_MARK = "output limit:"  # how an oversized fetch is written on the attempt
 MAX_TEXT_CHARS = 1000  # no text parameter is longer, whatever its template says
 STEPS = [
     "CREATE TABLE compute_attempts(id TEXT PRIMARY KEY, task_id TEXT NOT NULL,"
@@ -77,6 +77,8 @@ STEPS = [
     "ALTER TABLE compute_attempts ADD COLUMN settled_by TEXT",
     "ALTER TABLE compute_attempts ADD COLUMN settle_reason TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE compute_attempts ADD COLUMN storage_limit_gb REAL",
+    "ALTER TABLE compute_attempts ADD COLUMN error_code TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE compute_attempts ADD COLUMN error_params TEXT NOT NULL DEFAULT '{}'",
 ]
 
 
@@ -104,6 +106,8 @@ class Attempt(Model):
     root_id: str
     checksums: dict[str, str] = {}
     error: str = ""
+    error_code: str = ""  # a compute_error code for ``error``; '' on an attempt from before codes
+    error_params: dict[str, Any] = {}
     settled_by: str | None = None  # the operator who settled it by hand, if one did
     settle_reason: str = ""
     storage_limit_gb: float | None = None  # the template's max_storage_gb when it was reserved
@@ -185,6 +189,12 @@ def _require_amount(value: Any, what: str) -> None:
     ok = isinstance(value, int | float) and not isinstance(value, bool)
     if not ok or not math.isfinite(value) or value < 0:
         raise Denied("param", f"{what} must be a finite, non-negative number")
+
+
+def _limit_columns(error: OutputTooLarge) -> dict[str, str]:
+    """The code and params of a refused fetch, from the numbers the backend measured."""
+    params = {"limit_kind": error.limit_kind, "bytes": error.size, "limit": error.limit}
+    return coded("output_limit", params)
 
 
 def _describe(error: BaseException) -> str:
@@ -290,7 +300,7 @@ class ComputeService:
             raise Denied("state", f"unknown attempt {attempt_id}")
         data = dict(row)
         data.pop("settled_at")
-        for key in ("params", "inputs", "checksums"):
+        for key in ("params", "inputs", "checksums", "error_params"):
             data[key] = json.loads(data[key])
         return Attempt(**data)
 
@@ -353,6 +363,8 @@ class ComputeService:
             "used_storage": used_storage,
             "settled_at": self.clock.now(),
             "error": error,
+            "error_code": "",
+            "error_params": "{}",
             **more,
         }
         if job is not None:
@@ -384,7 +396,7 @@ class ComputeService:
         phase = REMOTE_PHASE[job.state]
         if phase in POLLED:
             return self._update(  # a poll that works clears an error an earlier one left
-                attempt_id, LIVE, unsettled=True, phase=phase, remote_job_id=job.job_id, error=""
+                attempt_id, LIVE, unsettled=True, phase=phase, remote_job_id=job.job_id, **CLEARED
             )
         return self._settle(attempt_id, phase, job)
 
@@ -477,9 +489,14 @@ class ComputeService:
         try:
             job_id = await self.backend.submit(attempt.job_name, template, attempt.params, local)
         except SubmitRejected as error:
-            self._settle(attempt.id, "failed", None, error=str(error), allowed=("prepared",))
+            self._settle(attempt.id, "failed", None, error=str(error), allowed=("prepared",),
+                         **coded("submit_rejected"))  # fmt: skip
         except Exception as error:  # noqa: BLE001  receipt lost: the job may exist remotely
-            if not self._update(attempt.id, ("prepared",), phase="reconcile", error=repr(error)):
+            lost = self._update(
+                attempt.id, ("prepared",), phase="reconcile", error=repr(error),
+                **coded("submit_failed"),
+            )  # fmt: skip
+            if not lost:
                 await self._cancel_orphan(attempt, None)
         else:
             adopted = self._update(
@@ -500,10 +517,12 @@ class ComputeService:
             if job_id is not None:
                 await self.backend.cancel(job_id)
         except Exception as error:  # noqa: BLE001  keep the evidence on the cancelled attempt
-            self._update(attempt.id, error=f"orphan remote job not cancelled: {error!r}")
+            self._update(attempt.id, error=f"orphan remote job not cancelled: {error!r}",
+                         **coded("orphan_not_cancelled"))  # fmt: skip
             return
         if job_id is not None:
-            self._update(attempt.id, remote_job_id=job_id, error="late remote job cancelled")
+            self._update(attempt.id, remote_job_id=job_id, error="late remote job cancelled",
+                         **coded("late_cancelled"))  # fmt: skip
 
     # -- query and reconcile --------------------------------------------------------------
     async def get_compute_job(self, attempt_id: str, submitter: str) -> Attempt:
@@ -537,14 +556,15 @@ class ComputeService:
             job_id = found.job_id if found else None
         if job_id is None:  # nothing to cancel was found: it may yet have run, so it is charged
             self._settle(attempt_id, "cancelled", None, "cancelled; no remote job was found",
-                         unknown=True)  # fmt: skip
+                         unknown=True, **coded("cancelled_no_job"))  # fmt: skip
             return
         await self.backend.cancel(job_id)
         try:
             job = await self.backend.status(job_id)
         except Exception as error:  # noqa: BLE001  gone from the listing: the state is unknown
             note = f"cancel requested; the remote state is unknown ({_describe(error)})"
-            self._settle(attempt_id, "failed", None, note, unknown=True, remote_job_id=job_id)
+            self._settle(attempt_id, "failed", None, note, unknown=True, remote_job_id=job_id,
+                         **coded("cancel_unknown"))  # fmt: skip
             return
         self._settle(attempt_id, "cancelled", job)
 
@@ -564,7 +584,7 @@ class ComputeService:
             try:
                 await self.reconcile(attempt_id)
             except Exception as error:  # noqa: BLE001  one bad attempt must not stop the rest
-                self._update(attempt_id, error=_describe(error))
+                self._update(attempt_id, error=_describe(error), **coded("backend_error"))
 
     def _due(self) -> list[str]:
         now = self.clock.now()
@@ -580,26 +600,30 @@ class ComputeService:
         """No job was found for an attempt that was submitted (or may have been): it may have
         run, so it is charged its whole reservation; its files are cleaned up if possible."""
         note = f"outcome unknown: {why}; charged the full reservation"
-        if self._settle(attempt.id, "failed", None, note, unknown=True):
+        if self._settle(attempt.id, "failed", None, note, unknown=True,
+                        **coded("outcome_unknown")):  # fmt: skip
             await self._remote_cleanup(attempt, cancel=False)
 
     async def _remote_cleanup(self, attempt: Attempt, cancel: bool) -> None:
         """Best effort: stop the job and remove its directory; what fails is written down."""
         notes: list[str] = []
+        columns: list[dict[str, str]] = []
         if cancel and attempt.remote_job_id:
             try:
                 await self.backend.cancel(attempt.remote_job_id)
             except Exception as error:  # noqa: BLE001
                 notes.append(f"remote cancel failed ({_describe(error)})")
+                columns.append(coded("cancel_failed"))
         try:
             await self.backend.cleanup_by_name(attempt.job_name)
         except Exception as error:  # noqa: BLE001
             notes.append(f"cleanup failed ({_describe(error)})")
-        if notes:
+            columns.append(coded("cleanup_failed"))
+        if notes:  # what needs an administrator wins over the code the attempt had
             self.db.execute(
                 "UPDATE compute_attempts SET error = CASE WHEN error = '' THEN ?"
-                " ELSE error || '; ' || ? END WHERE id = ?",
-                ("; ".join(notes), "; ".join(notes), attempt.id),
+                " ELSE error || '; ' || ? END, error_code = ?, error_params = '{}' WHERE id = ?",
+                ("; ".join(notes), "; ".join(notes), columns[0]["error_code"], attempt.id),
             )
 
     async def settle_attempt(self, attempt_id: str, actor: str, reason: str) -> Attempt:
@@ -612,12 +636,22 @@ class ComputeService:
         attempt = self._load(attempt_id)
         who = {"settled_by": actor, "settle_reason": reason}
         note = f"settled by an operator: {reason}"
+        settled_code = coded("settled_by_operator")
         if attempt.phase in LIVE:
-            done = self._settle(attempt_id, "failed", None, note, unknown=True, **who)
+            done = self._settle(
+                attempt_id,
+                "failed",
+                None,
+                note,
+                unknown=True,
+                **who,
+                **coded("settled_by_operator"),
+            )
         elif attempt.phase in ("fetching", "needs_review"):
             done = self._update(
-                attempt_id, ("fetching", "needs_review"), phase="failed", error=note, **who
-            )
+                attempt_id, ("fetching", "needs_review"), phase="failed", error=note, **who,
+                **settled_code,
+            )  # fmt: skip
         else:
             raise Denied("state", f"an attempt in phase {attempt.phase} is already final")
         if not done:
@@ -638,20 +672,25 @@ class ComputeService:
         try:
             reported = await self.backend.fetch(attempt.remote_job_id, out_dir, limit)
         except OutputTooLarge as error:  # visible (stuck) and final until an operator settles it
-            self._record_fetch(attempt_id, phase="needs_review", error=str(error))
+            self._record_fetch(
+                attempt_id, phase="needs_review", error=str(error), **_limit_columns(error)
+            )
             raise
         except BackendError as error:  # visible too, but a retry may work
-            self._record_fetch(attempt_id, error=_describe(error))
+            self._record_fetch(attempt_id, error=_describe(error), **coded("backend_error"))
             raise
         problems = await asyncio.to_thread(self._verify, out_dir, reported)  # hashes the files
         if problems:
             phase = "failed" if attempt.phase == "failed" else "needs_review"
-            self._record_fetch(attempt_id, phase=phase, error="; ".join(problems))
-            raise ArtifactMismatch("; ".join(problems))
+            said = "; ".join(problem.text for problem in problems)
+            self._record_fetch(
+                attempt_id, phase=phase, error=said, **coded(problems[0].code, problems[0].params)
+            )
+            raise ArtifactMismatch(said)
         await self.backend.cleanup(attempt.remote_job_id)
         phase = "failed" if attempt.phase == "failed" else "done"
         recorded = self._record_fetch(
-            attempt_id, phase=phase, checksums=json.dumps(reported), error=""
+            attempt_id, phase=phase, checksums=json.dumps(reported), **CLEARED
         )
         if not recorded and self._load(attempt_id).settled_by:  # not a parallel fetch's win
             await self._discard(out_dir, reported)  # unrecorded files are not left behind
@@ -680,7 +719,7 @@ class ComputeService:
 
     def _output_limit(self, attempt: Attempt) -> int:
         """The most bytes a fetch may bring home: the storage the attempt reserved."""
-        if attempt.error.startswith(OUTPUT_LIMIT_MARK) and attempt.phase == "needs_review":
+        if is_output_limit(attempt.error, attempt.error_code) and attempt.phase == "needs_review":
             raise Denied("state", "the outputs are over the limit: an operator has to settle it")
         gigabytes = attempt.storage_limit_gb
         if gigabytes is None:  # an attempt from before the limit was stored
@@ -691,16 +730,18 @@ class ComputeService:
         return int(gigabytes * BYTES_PER_GB)
 
     @staticmethod
-    def _verify(out_dir: Path, reported: Mapping[str, str]) -> list[str]:
+    def _verify(out_dir: Path, reported: Mapping[str, str]) -> list[Problem]:
         if not reported:
-            return ["no artifacts returned"]
+            return [Problem("no artifacts returned", "no_artifacts", {})]
         root, problems = out_dir.resolve(), []
         for name, expected in reported.items():
             path = (out_dir / name).resolve()
             if not path.is_relative_to(root) or not path.is_file():
-                problems.append(f"{name}: missing or outside the output directory")
+                text = f"{name}: missing or outside the output directory"
+                problems.append(Problem(text, "artifact_missing", {"name": name}))
             elif file_digest(path) != expected:
-                problems.append(f"{name}: checksum mismatch")
+                problems.append(Problem(f"{name}: checksum mismatch", "artifact_mismatch",
+                                        {"name": name}))  # fmt: skip
         return problems
 
     async def retry(self, attempt_id: str, adjustments: dict[str, Any]) -> tuple[Attempt, bool]:

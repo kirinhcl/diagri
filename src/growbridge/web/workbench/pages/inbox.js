@@ -8,6 +8,7 @@ import { deviceName, displayName, nameDetails, roleLabel } from "../ui/names.js"
 import { errorParts, foldedText, replaceParts, techDetails, timeText } from "../ui/section.js";
 import { severityPill, statePill, unknownCode } from "../ui/status.js";
 import { alertSentences } from "./alert-text.js";
+import { stuckSentences } from "./compute-stuck.js";
 
 const POLL_SECONDS = 15;
 // Most urgent first: on-site checks and alerts, then decisions waiting on a person, then the rest.
@@ -113,7 +114,7 @@ export const DESCRIBERS = {
   compute_stuck: (ctx, item, d) => ({
     title: ctx.t("inbox.title.stuck", { phase: labelOr(ctx.t, "state", d.phase) }),
     pill: statePill(ctx.t, d.phase, BARE),
-    lines: [d.reason],
+    lines: stuckSentences(ctx, d).lines,
     meta: [],
   }),
   task: (ctx, item, d) => ({
@@ -137,7 +138,7 @@ export function describe(ctx, item) {
 function detailEntries(ctx, item, d) {
   if (item.kind === "round_choice") return [[ctx.t("tech.id.stage_id"), d.awaiting_choice]];
   if (item.kind === "alert") return [...alertSentences(ctx, d, ctx.t("inbox.tech.alertKind")).entries, ...unknownCode(ctx.t, "severity", d.severity)];
-  if (item.kind === "compute_stuck") return unknownCode(ctx.t, "state", d.phase);
+  if (item.kind === "compute_stuck") return [...unknownCode(ctx.t, "state", d.phase), ...stuckSentences(ctx, d).entries];
   const device = STAGE_KINDS.has(item.kind) ? [[ctx.t("stage.review.device"), d.device_id]] : [];
   return [...device, ...unknownCode(ctx.t, "state", d.state)];
 }

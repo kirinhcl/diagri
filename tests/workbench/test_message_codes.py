@@ -244,3 +244,38 @@ def test_every_receipt_and_task_end_code_is_registered() -> None:
     assert set(CODES["receipt"]) <= receipt, set(CODES["receipt"]) - receipt
     assert set(CODES["task_end"]) <= task_end, set(CODES["task_end"]) - task_end
     assert len(CODES["receipt"]) == 17 and len(CODES["task_end"]) == 6
+
+
+def compute_codes(root: Path) -> tuple[set[str], set[str]]:
+    """(compute_error codes, compute_stuck codes) written as literals under ``root``: the first
+    argument of ``coded(...)``, the code (second argument) of ``Problem(...)``, and the second
+    element of what ``_why_stuck`` returns."""
+    errors: set[str] = set()
+    stuck: set[str] = set()
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, "id", getattr(node.func, "attr", None))
+                at = {"coded": 0, "Problem": 1}.get(name or "")
+                if at is not None and len(node.args) > at:
+                    arg = node.args[at]
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        errors.add(arg.value)
+            elif isinstance(node, ast.FunctionDef) and node.name == "_why_stuck":
+                for ret in ast.walk(node):
+                    if isinstance(ret, ast.Return) and isinstance(ret.value, ast.Tuple):
+                        code = ret.value.elts[1]
+                        assert isinstance(code, ast.Constant), "a stuck code must be a literal"
+                        stuck.add(code.value)
+    return errors, stuck
+
+
+def test_every_compute_error_and_stuck_code_is_registered() -> None:
+    errors, stuck = compute_codes(REPO / "src" / "growbridge" / "compute")
+    assert errors == set(CODES["compute_error"]), errors ^ set(CODES["compute_error"])
+    assert stuck == set(CODES["compute_stuck"]), stuck ^ set(CODES["compute_stuck"])
+    assert {code for code, spec in CODES["compute_error"].items() if not spec.action} == {
+        "late_cancelled",
+        "cancelled_no_job",
+        "settled_by_operator",
+    }

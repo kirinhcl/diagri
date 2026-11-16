@@ -326,3 +326,34 @@ test("an inbox alert keeps the server's message and its code in one fold", async
   assert.match(folds[0].textContent, /is paused after disconnect_affects/);
   assert.match(folds[0].textContent, /stage_waiting/);
 });
+
+// --- a stuck compute item says why and what to do (CMP-04) --------------------------------------
+
+const STUCK_ITEMS = () => FIXTURES["inbox.json"].items.filter((item) => item.kind === "compute_stuck");
+
+test("a stuck attempt in the inbox says why and what to do; the server's words are in the details", () => {
+  const ctx = testCtx({ now: NOW });
+  const [wait, , limit] = STUCK_ITEMS();
+  const lines = (item) => describe(ctx, item).lines.join(" ");
+  assert.match(lines(wait), /已等了90 分钟，仍在核对/);
+  assert.match(lines(wait), /确定不会有结果时再结算/);
+  assert.match(lines(limit), /这次计算出错了.*输出超过了上限.*结算它/);
+  assert.ok(!lines(wait).includes("waiting for reconciliation"));
+  const view = groupView(ctx, { kind: "compute_stuck", items: [wait], hidden: 0 });
+  const details = visibleTextIncludingDetails(view);
+  assert.match(details, /waiting for reconciliation: the outcome of the submit is unknown/);
+  assert.equal(findAll(view, (n) => n.localName === "details").length, 1);
+});
+
+test("an old stuck attempt in the inbox shows a generic line", () => {
+  const ctx = testCtx({ now: NOW });
+  const old = STUCK_ITEMS().find((item) => item.detail.reason_code === undefined);
+  assert.deepEqual(describe(ctx, old).lines, ["这次计算卡住了，原因见技术详情。"]);
+  assert.match(visibleTextIncludingDetails(groupView(ctx, { kind: "compute_stuck", items: [old], hidden: 0 })), /No result after 2 h on the cluster/);
+});
+
+test("a stuck error without a known error code says unknown", () => {
+  const ctx = testCtx({ now: NOW });
+  const item = STUCK_ITEMS().find((entry) => entry.detail.reason_code === "error" && entry.detail.error_code === "");
+  assert.match(describe(ctx, item).lines.join(" "), /未知（技术详情）/);
+});

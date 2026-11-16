@@ -109,6 +109,91 @@
         "state": "pending_review",
         "device_id": "SIMULATED"
       }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796588800.0,
+      "detail": {
+        "attempt_id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "reconcile",
+        "reason": "waiting for reconciliation: the outcome of the submit is unknown",
+        "reason_code": "reconcile_wait",
+        "reason_params": {
+          "age_seconds": 5400
+        }
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_2b4d6f8a0c2e4a6c8e0a2c4e6a8c0e2a",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796585200.0,
+      "detail": {
+        "attempt_id": "att_2b4d6f8a0c2e4a6c8e0a2c4e6a8c0e2a",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "queued",
+        "reason": "not refreshed for 7200 seconds",
+        "reason_code": "not_refreshed",
+        "reason_params": {
+          "age_seconds": 7200
+        }
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796587000.0,
+      "detail": {
+        "attempt_id": "att_3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "needs_review",
+        "reason": "error: output limit: the outputs total 9000000000 bytes, over the limit of 5000000000",
+        "reason_code": "error",
+        "reason_params": {},
+        "error_code": "output_limit",
+        "error_params": {
+          "limit_kind": "total",
+          "bytes": 9000000000,
+          "limit": 5000000000
+        }
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_4d6f8a0b2e4a6c8e0a2c4e6a8c0e2a4d",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796586000.0,
+      "detail": {
+        "attempt_id": "att_4d6f8a0b2e4a6c8e0a2c4e6a8c0e2a4d",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "fetching",
+        "reason": "error: scheduler unreachable",
+        "reason_code": "error",
+        "reason_params": {},
+        "error_code": "",
+        "error_params": {}
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_5e7a9b1c3f5a7c9e1b3d5f7a9c1e3b5e",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796584000.0,
+      "detail": {
+        "attempt_id": "att_5e7a9b1c3f5a7c9e1b3d5f7a9c1e3b5e",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "running",
+        "reason": "No result after 2 h on the cluster"
+      }
     }
   ],
   "truncated": {}

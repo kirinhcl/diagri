@@ -32,6 +32,13 @@ same data, at commit 134e8c3, with the dev workbench started without model roles
 computed on every read, so they now carry the server's `variant` and `params`. Nothing else in the
 two files changed (checked by comparing them without `findings`).
 
+Task 12 of batch 2a (CMP-04) converted the stuck attempts in `compute.json` by hand and added
+five `compute_stuck` items to `inbox.json` (their `detail` is the same row, as the server copies it).
+Each carries the server's new `reason_code` and `reason_params`; a row whose reason is an error
+also carries `error_code` and `error_params` (one with a code, `output_limit`, and one without, as
+from before codes). `reason` is unchanged. One row of each file has no `reason_code`, as stored
+before codes. These are synthetic, written to the shape of `src/growbridge/compute/overview.py`.
+
 `known-codes.json` is not an API answer: it lists, per catalog prefix, the codes the server can
 send, and says in `_sources` where each list was found. `tests/web/catalog.test.mjs` checks that
 each code has text in both catalogs; `tests/workbench/test_console_known_codes.py` checks the lists

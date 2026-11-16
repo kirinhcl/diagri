@@ -117,3 +117,32 @@ test("the verify and enter notices name the card by its claim, cut to 40 charact
   assert.equal(notices[1], "证据卡“Short claim”已录入并核实。");
   for (const message of notices) assert.ok(!message.includes("card_") && !message.includes("undefined"), message);
 });
+
+// --- stuck compute attempts say why and what to do (CMP-04) -------------------------------------
+
+test("a stuck attempt says why and what to do; the server's words are in the details", async () => {
+  const { element } = await renderPage("compute", {}, { now: NOW });
+  const text = visibleText(element);
+  assert.match(text, /集群还没有确认这次计算是否提交成功，已等了90 分钟，仍在核对/);
+  assert.match(text, /可以再等一等；确定不会有结果时再结算/);
+  assert.match(text, /这次计算已有2 小时没有刷新/);
+  assert.match(text, /这次计算出错了（具体错误见下一行）/);
+  assert.match(text, /输出超过了上限（9,000,000,000 字节，上限 5,000,000,000 字节）/);
+  assert.match(text, /结算它；按未知用量计费/);
+  assert.doesNotMatch(text, /waiting for reconciliation|not refreshed for|output limit:|scheduler unreachable/);
+  const all = visibleTextIncludingDetails(element);
+  assert.match(all, /waiting for reconciliation: the outcome of the submit is unknown/);
+  assert.match(all, /output_limit/);
+});
+
+test("a stuck error without a known error code says unknown and keeps the English in the details", async () => {
+  const { element } = await renderPage("compute", {}, { now: NOW });
+  assert.match(visibleText(element), /未知（技术详情）/);
+  assert.match(visibleTextIncludingDetails(element), /error: scheduler unreachable/);
+});
+
+test("an old stuck attempt without a code shows a generic line", async () => {
+  const { element } = await renderPage("compute", {}, { now: NOW });
+  assert.match(visibleText(element), /这次计算卡住了，原因见技术详情。/);
+  assert.match(visibleTextIncludingDetails(element), /No result after 2 h on the cluster/);
+});

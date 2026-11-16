@@ -79,6 +79,8 @@ def add_compute_routes(
             "settled_by": attempt.settled_by,
             "settle_reason": attempt.settle_reason,
             "error": attempt.error,
+            "error_code": attempt.error_code,
+            "error_params": attempt.error_params,
         }
 
     @router.get("/compute")

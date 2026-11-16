@@ -537,8 +537,94 @@
       "action": true
     }
   },
-  "compute_error": {},
-  "compute_stuck": {},
+  "compute_error": {
+    "submit_rejected": {
+      "params": [],
+      "action": true
+    },
+    "submit_failed": {
+      "params": [],
+      "action": true
+    },
+    "orphan_not_cancelled": {
+      "params": [],
+      "action": true
+    },
+    "late_cancelled": {
+      "params": [],
+      "action": false
+    },
+    "backend_error": {
+      "params": [],
+      "action": true
+    },
+    "cancelled_no_job": {
+      "params": [],
+      "action": false
+    },
+    "cancel_unknown": {
+      "params": [],
+      "action": true
+    },
+    "outcome_unknown": {
+      "params": [],
+      "action": true
+    },
+    "cancel_failed": {
+      "params": [],
+      "action": true
+    },
+    "cleanup_failed": {
+      "params": [],
+      "action": true
+    },
+    "settled_by_operator": {
+      "params": [],
+      "action": false
+    },
+    "output_limit": {
+      "params": [
+        "limit_kind",
+        "bytes",
+        "limit"
+      ],
+      "action": true
+    },
+    "artifact_missing": {
+      "params": [
+        "name"
+      ],
+      "action": true
+    },
+    "artifact_mismatch": {
+      "params": [
+        "name"
+      ],
+      "action": true
+    },
+    "no_artifacts": {
+      "params": [],
+      "action": true
+    }
+  },
+  "compute_stuck": {
+    "reconcile_wait": {
+      "params": [
+        "age_seconds"
+      ],
+      "action": true
+    },
+    "not_refreshed": {
+      "params": [
+        "age_seconds"
+      ],
+      "action": true
+    },
+    "error": {
+      "params": [],
+      "action": false
+    }
+  },
   "chat_end": {},
   "estimate": {}
 }

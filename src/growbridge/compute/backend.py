@@ -23,7 +23,25 @@ class SubmitRejected(BackendError):
 
 
 class OutputTooLarge(BackendError):
-    """A job's outputs are over a limit; nothing of them was kept locally."""
+    """A job's outputs are over a limit; nothing of them was kept locally.
+
+    ``limit_kind`` says which limit ("files": too many files, "total": the outputs together,
+    "file": one listed file, "download": a transfer that grew past what was left). ``size`` and
+    ``limit`` are byte counts, or None where the limit is not a byte count.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        limit_kind: str = "total",
+        size: int | None = None,
+        limit: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.limit_kind = limit_kind
+        self.size = size
+        self.limit = limit
 
 
 class BackendUnavailable(RuntimeError):
