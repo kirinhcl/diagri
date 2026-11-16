@@ -193,12 +193,13 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 | `stage_checks`（键 `check`） | 阶段检查本身出错。严重。 | 看日志。一次检查完整结束后解决。其他告警规则照常运行。 |
 | `audit_finding` | 监察 Agent 发现了需要人处理的事。信息或警告级，不会暂停任何东西，消息里写明内容。 | 读这条发现，以及项目对话里监察 Agent 的说明，必要时自己处理阶段。 |
 | `audit_schedule`（键 `schedule`） | 安排监察时出错。其他模型任务照常运行。 | 看日志。调度恢复后监察继续。 |
+| `audit_task`（键 `audit:stage`） | 一次监察运行失败，或者结束时需要处理。警告，每个阶段一条：同一阶段之后再失败的监察只累加次数。不会暂停任何东西，阶段执行不受影响。 | 看日志和消息里点名的任务，检查 SDK 和凭据。该阶段有一次监察以 `done` 结束，或者该阶段不再是当前阶段时，告警解决。 |
 | `stage_waiting` | 系统暂停了某个阶段，或把它送进了恢复待核对。消息里写明事件和事件携带的内容。 | 按事件名到上面对应的小节处理。阶段离开这个状态时告警自动解除。 |
 | `backup`、`backup_unconfigured` | 备份失败，或者没有配置 `backup_dir`。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `notify_unconfigured` | 没有配置任何通知渠道。告警会记录，但不会发出。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `monitor_unconfigured` | 两个心跳 URL 都没有设，主机或运行停了也没有人会被通知。 | 设置 `GROWBRIDGE_HEARTBEAT_HOST_URL` 和 `GROWBRIDGE_HEARTBEAT_RUN_URL`；见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `external_monitor`（键为 `host` 或 `run`） | 心跳或失败信号没有送达。 | 检查监控 URL 和网络；见同一页。 |
-| `model_client`、`agent_task`、`task_deadline` | 模型角色没启用，或者某个模型任务失败、超期。阶段执行不受影响。 | 检查 SDK 和凭据。处理任务**无路由**。 |
+| `model_client`、`agent_task`、`task_deadline` | 模型角色没启用，或者某个模型任务失败、超期（监察失败是上面的 `audit_task`）。阶段执行不受影响。 | 检查 SDK 和凭据。处理任务**无路由**。 |
 
 **锁存的看门狗告警。** 只要原因还在，`pump_unreadable` 和 `pump_watchdog` 就每 5 分钟重新写入一次。已读标记会保留；但原因还在时手动关掉（在数据库里解决）的告警，会在 5 分钟内作为一条新告警回来，并再发一次通知。应当消除原因，告警随后会自行解决。见[控制与安全模型](Control-and-Safety-Model.md)。
 

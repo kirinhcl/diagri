@@ -330,7 +330,7 @@ The request is refused before the sandbox starts, in this order:
 
 A report is analysed under the protocol version its data was collected under, read from the rounds of the snapshots it cites; snapshots of more than one version are refused with `param`. While a script is frozen for that version, the researcher's `publish_research_report` is refused with `state` as long as the run of any snapshot it cites is `none` or `running`. If every run has ended, the report is published: it can be confirmatory when all runs succeeded and nothing else lowers the label, and it is exploratory when one run failed. Without a frozen script nothing changes: the report is exploratory.
 
-There is **no route** to read the report, to read or list research tasks, or to settle a task in `needs_review` or `needs_attention`. An alert of kind `agent_task` in `GET /wb/alerts` tells you that a model task failed or needs attention.
+There is **no route** to read the report, to read or list research tasks, or to settle a task in `needs_review` or `needs_attention`. An alert of kind `agent_task` in `GET /wb/alerts` tells you that a model task failed or needs attention; for an audit it is `audit_task`, a warning, one per stage.
 
 ## Steps with no route or command today
 

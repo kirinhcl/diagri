@@ -330,7 +330,7 @@ curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
 
 报告按它的数据被收集时所在的协议版本来分析，这个版本从它引用的快照所属的轮次读出；快照来自不止一个版本，就以 `param` 被拒绝。那个版本已经冻结脚本时，只要研究 Agent 的 `publish_research_report` 引用的快照里有任何一份的运行状态是 `none` 或 `running`，它就以 `state` 被拒绝。所有运行都结束后，报告才会发布：所有运行都成功、也没有别的原因压低标签时，它可以是确认性的；有一次运行失败，它就是探索性的。没有冻结脚本时一切照旧：报告是探索性的。
 
-读取报告、读取或列出研究任务、处理 `needs_review` 或 `needs_attention` 的任务，都**无路由**。`GET /wb/alerts` 里类型为 `agent_task` 的告警，说明某个模型任务失败了或者需要处理。
+读取报告、读取或列出研究任务、处理 `needs_review` 或 `needs_attention` 的任务，都**无路由**。`GET /wb/alerts` 里类型为 `agent_task` 的告警，说明某个模型任务失败了或者需要处理；监察任务对应的是 `audit_task`，警告级，每个阶段一条。
 
 ## 目前没有路由或命令的步骤
 
