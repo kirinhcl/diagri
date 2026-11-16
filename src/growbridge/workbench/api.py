@@ -32,6 +32,7 @@ from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry
+from growbridge.workbench.admin import add_admin_routes
 from growbridge.workbench.analysis import add_analysis_routes
 from growbridge.workbench.auth import (
     SESSION_SECONDS,
@@ -43,6 +44,7 @@ from growbridge.workbench.auth import (
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
+from growbridge.workbench.greenhouses import add_greenhouse_routes
 from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
@@ -248,6 +250,10 @@ class Workbench:
             add_holdout_routes(self.router, self.operator, self.fresh, workflow, holdout, access)
         if compute is not None and tasks is not None:
             add_compute_routes(self.router, self.operator, self.fresh, compute, tasks, access)
+        if access is not None and locks is not None:
+            add_greenhouse_routes(self.router, self.operator, self.fresh, locks, access)
+            routes = (self.router, self.operator, self.fresh, operators, locks, workflow.store)
+            add_admin_routes(*routes, access)
 
     # --- who is calling ------------------------------------------------------------------------
 
@@ -362,6 +368,9 @@ class Workbench:
                 "entry": actor.entry.value if actor.entry else None,
                 "reauth_at": actor.reauth_at,
                 "timezone": self.settings.report_timezone,
+                "multi_user": self.access is not None,
+                "role": actor.role,
+                "greenhouses": [] if self.locks is None else list(self.locks.held_by(actor.id)),
             }
 
     # --- stages --------------------------------------------------------------------------------

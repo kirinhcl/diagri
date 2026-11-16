@@ -33,4 +33,7 @@ READ_RULES: dict[str, str] = {
     "/wb/stages/{stage_id}/measurements": "stage",
     "/wb/stages/{stage_id}/readings": "stage",
     "/wb/stages/{stage_id}/run-sheet": "stage",
+    "/wb/greenhouses": "self",
+    "/wb/admin/operators": "admin",
+    "/wb/admin/locks": "admin",
 }

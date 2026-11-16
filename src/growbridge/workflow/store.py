@@ -370,6 +370,15 @@ class WorkflowStore:
     def project_unfinished(self, project_id: str) -> bool:
         return self._unfinished("project_id", project_id)
 
+    def unfinished_stages_of_owner(self, owner: str) -> int:
+        done = [state.value for state in FINISHED_STATES]
+        row = self.db.one(
+            "SELECT COUNT(*) AS n FROM wf_stages s JOIN wf_projects p ON p.id = s.project_id"
+            f" WHERE p.owner = ? AND s.state NOT IN ({_marks(len(done))})",
+            (owner, *done),
+        )
+        return row["n"] if row else 0
+
     def care_holder(self, device_id: str) -> StageRow | None:
         row = self.db.one(
             "SELECT * FROM wf_stages WHERE device_id = ? AND care_right IS NOT NULL"

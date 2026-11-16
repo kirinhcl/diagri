@@ -61,6 +61,7 @@ from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
+from growbridge.runtime_access import AccessParts, build_access, workbench_access
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_alerts import expire_tasks, stage_alerts
 from growbridge.runtime_backup import Backups
@@ -262,6 +263,7 @@ class Runtime:
     failing: set[str] = field(default_factory=set)
     stopped: bool = False
     last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
+    access_parts: AccessParts | None = None  # multi-user locks and rules; None when off
 
     # --- life cycle ----------------------------------------------------------------------------
 
@@ -300,7 +302,8 @@ class Runtime:
     def workbench(self, role_tokens: Mapping[str, str] | None = None) -> APIRouter:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
-        return create_workbench(*args, role_tokens or {}, *more, conversation=self.conversation)
+        extra = {"conversation": self.conversation, **workbench_access(self.access_parts)}
+        return create_workbench(*args, role_tokens or {}, *more, **extra)
 
     @property
     def _device(self) -> str:
@@ -622,6 +625,7 @@ def build_runtime(
         validate=lambda sheet: validate_run_sheet(sheet, control.capabilities(), control.safety()),
         on_intervention=mirror,
     )
+    parts = build_access(settings, dbs["workflow"], clock, flow, control)
     storage = StorageGuard(data_dir, STORAGE_LOW_BYTES, STORAGE_CRITICAL_BYTES, shutil.disk_usage)
     executor = ExecutorEngine(control, flow, clock, storage.allows)
     book = AlertBook(dbs["observer"], clock, settings.device)
@@ -685,6 +689,7 @@ def build_runtime(
         conversation=ConversationLog(dbs["agents"], clock),
         backups=backups,
         databases=tuple(dbs.values()),
+        access_parts=parts,
     )
     mirror.alert = runtime._alert
     executor.watchdog.alert = runtime._alert
