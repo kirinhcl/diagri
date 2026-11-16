@@ -26,6 +26,7 @@ AUDIT_MAX_CALLS = 6
 AUDIT_DAY_SECONDS = 86400.0
 AUDIT_DEADLINE_SECONDS = 86400.0
 AUDIT_ROLE = "auditor"
+STAGE_REF = "stage:"  # an audit task's input reference to its stage
 
 
 def role_tools(runtime: Any, work_root: Path) -> dict[str, list[Tool]]:
@@ -77,10 +78,10 @@ def _audit_trigger(stage: StageRuntime, now: float) -> tuple[str, str] | None:
 
 def _has_budget(runtime: Any, project_id: str) -> bool:
     try:
-        calls, _cost = runtime.budget.remaining(project_id)
+        calls, cost = runtime.budget.remaining(project_id)
     except Denied:
         return False
-    return calls > 0
+    return calls > 0 and cost > 0  # with either spent the first model call would be refused
 
 
 def schedule_audits(runtime: Any) -> int:
@@ -112,11 +113,22 @@ def schedule_audits(runtime: Any) -> int:
         budget=Budget(max_calls=AUDIT_MAX_CALLS, max_cost=1.0),
         trigger_event_id=trigger,
         correlation_id=new_id("audit"),
-        input_refs=(f"stage:{stage.stage_id}",),
+        input_refs=(f"{STAGE_REF}{stage.stage_id}",),
         deadline=now + AUDIT_DEADLINE_SECONDS,
     )
     stored = runtime.tasks.create(task)
     return int(stored.id == task.id)
+
+
+def _report_failure(runtime: Any, task: ResearchTask, message: str) -> None:
+    """Alert on a model task that failed or needs attention. A top-level task gets no follow-up,
+    so the alert is what keeps a round from stalling silently: critical. An audit is advisory and
+    repeats every stage day, so its failures merge into one warning per stage."""
+    if task.owner_role != AUDIT_ROLE:
+        runtime.alert("agent_task", task.id, message)
+        return
+    stages = (ref[len(STAGE_REF) :] for ref in task.input_refs if ref.startswith(STAGE_REF))
+    runtime.alert("audit_task", f"audit:{next(stages, task.id)}", message, "warning")
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:
@@ -134,11 +146,10 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             run = await dispatcher.run_task(task.id)
         except Exception as error:
             log.exception("agent task %s failed", task.id)
-            runtime.alert("agent_task", task.id, f"{task.id}: {type(error).__name__}: {error}")
+            _report_failure(runtime, task, f"{task.id}: {type(error).__name__}: {error}")
             continue
         finished += run is not None
-        # whether the run raised, was refused or ended without delivering: a top-level task gets
-        # no follow-up, so the alert is what keeps the round from stalling silently
+        # whether the run was refused or ended without delivering
         if runtime.tasks.get(task.id).state is TaskState.NEEDS_ATTENTION:
-            runtime.alert("agent_task", task.id, f"model task {task.id} needs attention")
+            _report_failure(runtime, task, f"model task {task.id} needs attention")
     return finished

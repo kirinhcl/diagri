@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from dispatch_helpers import make_task
 
 from growbridge import runtime_agents
 from growbridge.agents.budget import CallBudget
@@ -64,7 +65,9 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         budget=calls,
         clock=clock,
         book=book,
-        alert=lambda kind, key, message: book.raise_alert(kind, key, "critical", message),
+        alert=lambda kind, key, message, severity="critical": book.raise_alert(
+            kind, key, severity, message
+        ),
     )
 
 
@@ -145,6 +148,24 @@ def test_no_audit_for_a_project_without_a_call_budget(db):
     assert audits(runtime) == ()
 
 
+def test_no_audit_once_the_cost_budget_is_spent(db):
+    runtime = rig(db)
+    runtime.budget.charge(PROJECT, 100.0)
+    runtime.clock.wall += 2 * AUDIT_DAY_SECONDS
+
+    assert schedule_audits(runtime) == 0
+    assert audits(runtime) == ()
+
+
+def test_no_audit_once_no_call_is_left(db):
+    runtime = rig(db)
+    runtime.budget.reserve(PROJECT, 50)
+    runtime.clock.wall += 2 * AUDIT_DAY_SECONDS
+
+    assert schedule_audits(runtime) == 0
+    assert audits(runtime) == ()
+
+
 def test_no_audit_for_a_stage_not_started(db):
     runtime = rig(db, started=False)
     runtime.clock.wall += 2 * AUDIT_DAY_SECONDS
@@ -194,3 +215,62 @@ async def test_the_schedule_alert_resolves_after_a_scheduling_that_did_not_raise
     assert await run_agents(runtime, dispatcher=None) == 0
 
     assert open_alerts(runtime) == {}
+
+
+class NeedsAttention:
+    """A dispatcher whose every run ends in needs-attention, as a refused model call does."""
+
+    def __init__(self, board):
+        self.board = board
+
+    async def run_task(self, task_id):
+        self.board.transition(task_id, TaskState.NEEDS_ATTENTION, f"refused-{task_id}", "refused")
+        return None
+
+
+class Raises:
+    async def run_task(self, task_id):
+        raise RuntimeError("model unreachable")
+
+
+async def test_an_audit_that_fails_on_two_stage_days_is_one_warning(db):
+    runtime = rig(db)
+    dispatcher = NeedsAttention(runtime.tasks)
+    for _day in range(2):
+        runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+        await run_agents(runtime, dispatcher)
+
+    assert len(audits(runtime)) == 2
+    (alert,) = runtime.book.open()
+    assert (alert.kind, alert.key) == ("audit_task", f"audit:{STAGE}")
+    assert (alert.severity, alert.count) == ("warning", 2)
+
+
+async def test_an_audit_run_that_raises_is_a_warning_not_a_critical_alert(db):
+    runtime = rig(db)
+    runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+
+    await run_agents(runtime, Raises())
+
+    (alert,) = runtime.book.open()
+    assert (alert.kind, alert.key, alert.severity) == ("audit_task", f"audit:{STAGE}", "warning")
+
+
+async def test_an_audit_task_without_a_stage_reference_is_keyed_by_its_task(db):
+    runtime = rig(db, started=False)
+    task = runtime.tasks.create(make_task("auditor", "ev-loose", project_id=PROJECT))
+
+    await run_agents(runtime, Raises())
+
+    (alert,) = runtime.book.open()
+    assert (alert.kind, alert.key, alert.severity) == ("audit_task", f"audit:{task.id}", "warning")
+
+
+async def test_another_roles_failing_task_is_still_a_critical_agent_task_alert(db):
+    runtime = rig(db, started=False)
+    task = runtime.tasks.create(make_task("planner", "ev-plan", project_id=PROJECT))
+
+    await run_agents(runtime, NeedsAttention(runtime.tasks))
+
+    (alert,) = runtime.book.open()
+    assert (alert.kind, alert.key, alert.severity) == ("agent_task", task.id, "critical")

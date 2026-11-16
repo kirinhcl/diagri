@@ -330,9 +330,9 @@ class Runtime:
 
     # --- model roles (never called from tick) --------------------------------------------------
 
-    def alert(self, kind: str, key: str, message: str) -> None:
-        """Raise a critical alert (and queue its notification); never raises."""
-        self._alert(kind, key, message)
+    def alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> None:
+        """Raise an alert, critical by default (and queue its notification); never raises."""
+        self._alert(kind, key, message, severity)
 
     def role_tools(self) -> dict[str, list[Tool]]:
         return role_tools(self, private_dir(self.settings.data_dir / "agent_work"))
