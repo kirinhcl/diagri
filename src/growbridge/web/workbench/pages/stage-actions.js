@@ -396,8 +396,10 @@ export function logItem(ctx, title, record) {
       pill.className = RECEIPT_TONE[status];
       pill.textContent = labelOr(ctx.t, "receipt", status);
     }
-    // a failed receipt brings its own fold (with the request id); the item keeps just the one
-    if (status === "failed" && details) details.remove();
+    // a failed receipt, and an unknown one with a code, brings its own fold (with the request id);
+    // the item keeps just the one
+    const ownFold = status === "failed" || (status === "unknown" && lines.some(isFold));
+    if (ownFold && details) details.remove();
     replaceParts(detail, lines.filter(Boolean).map((line) => (typeof line === "string" ? h("p", { text: line }) : line)));
   };
   return { element, show };
@@ -410,12 +412,23 @@ export function checkParts(ctx, error) {
   return [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }), errorFold(ctx, error)];
 }
 
+// The entries of a settled receipt's own fold: the request id and the server's English.
+const receiptExtra = (ctx, record) => [[ctx.t("receipt.requestId"), record.request_id], [ctx.t("tech.serverMessage"), record.error]];
+const isFold = (line) => Boolean(line) && typeof line === "object" && line.localName === "details";
+
 // A failed write: its code through the catalog; the server's English and the request id in one fold.
 function failedLines(ctx, record) {
   if (!record) return [null];
-  const extra = [[ctx.t("receipt.requestId"), record.request_id], [ctx.t("tech.serverMessage"), record.error]];
+  const extra = receiptExtra(ctx, record);
   if (record.error_code) return messageView(ctx, "receipt", record.error_code, record.error_params, { extra });
   return [ctx.t("receipt.failedUnknown"), techDetails(ctx.t, extra)];
+}
+
+// A write whose result is unknown: its code through the catalog, with the same one fold as a failed
+// write; a record without a code (written before codes) has the general note.
+function unknownLines(ctx, record) {
+  if (!record || !record.error_code) return [ctx.t("receipt.unknownNote")];
+  return messageView(ctx, "receipt", record.error_code, record.error_params, { extra: receiptExtra(ctx, record) });
 }
 
 export function outcomeLines(ctx, { outcome, record, error }, channel) {
@@ -424,7 +437,7 @@ export function outcomeLines(ctx, { outcome, record, error }, channel) {
     const level = record && record.confirmed_level;
     return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level: levelText(ctx.t, channel, level) })];
   }
-  if (outcome === "unknown") return [ctx.t("receipt.unknownNote")];
+  if (outcome === "unknown") return unknownLines(ctx, record);
   if (outcome === "failed") return failedLines(ctx, record);
   return [ctx.t("receipt.unsettledNote", { duration: formatDuration(ctx.t, RECEIPT_LIMIT_MS / 1000) }), ...problem];
 }

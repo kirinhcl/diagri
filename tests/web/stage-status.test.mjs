@@ -244,3 +244,30 @@ test("a failed receipt in the activity log has one fold", () => {
   assert.equal(foldCount(item.element), 1);
   assert.match(visibleTextIncludingDetails(item.element), /wb-9/);
 });
+
+test("an unknown receipt with a code says what happened and what to do, in an item with one fold", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", created_at: 1000, error_code: "no_receipt", error_params: {}, error: "no receipt: timed out" };
+  const item = logItem(ctx, "风扇调到 3 / 10", record);
+  item.show("unknown", outcomeLines(ctx, { outcome: "unknown", record }, "fan"));
+  const text = visibleText(item.element);
+  assert.match(text, /没有收到设备的回执，结果不明。/);
+  assert.match(text, /到现场核对设备，并记一次现场检查。/);
+  assert.ok(!text.includes(ctx.t("receipt.unknownNote")));
+  assert.doesNotMatch(text, /no receipt: timed out|wb-9/);
+  const all = visibleTextIncludingDetails(item.element);
+  assert.match(all, /no receipt: timed out/);
+  assert.match(all, /wb-9/);
+  assert.equal(foldCount(item.element), 1);
+  assertNoLeaks(item.element);
+});
+
+test("an unknown receipt without a code keeps the general note and its request id fold", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", created_at: 1000, error: "no receipt: timed out" };
+  const item = logItem(ctx, "风扇调到 3 / 10", record);
+  item.show("unknown", outcomeLines(ctx, { outcome: "unknown", record }, "fan"));
+  assert.ok(visibleText(item.element).includes(ctx.t("receipt.unknownNote")));
+  assert.equal(foldCount(item.element), 1);
+  assert.match(visibleTextIncludingDetails(item.element), /wb-9/);
+});
