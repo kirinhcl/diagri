@@ -37,6 +37,7 @@
 
 | 方面 | 状态 | 说明 | 去哪里核对 |
 | --- | --- | --- | --- |
+| 多用户（`multi_user`） | 只在测试中验证 | 账号、温室锁定、项目所有者和按人可见，在模拟的 AC5 上和工作台路由上测过，没有真实用户或设备验证。一个进程仍只驱动一台 AC5：其余登记的温室可以锁定，但在多设备接入完成前不能运行阶段。释放温室时设备保持当前设置。共享令牌的桥接路由（`/status`、`/history*`、`/activity`）、命令行 `status`/`dashboard` 和 MCP 读取工具，仍向持有令牌的人显示全部设备数据。协议和运行单的编号是全局的：猜中别人的编号能知道它存在。下一个阶段启动前，新样本仍记在已释放阶段的实验名下。通知发给配置的接收方，不按人区分。 | [`workflow/access.py`](../../../src/growbridge/workflow/access.py)、[适配说明](../../multi-user-adaptation.md) |
 | DiAGRI 模式连接实体 AC5 | 未验证 | 从未运行过。包括阶段执行中途蓝牙中断、主机或 AC5 断电，以及长时间无人值守运行。 | [VALIDATION.md](../../../VALIDATION.md) |
 | 水泵插座读回 | 未验证 | 看门狗依赖设备状态里水泵插座的 `on` 读回。这在模拟的 AC5 上测过，没有在真机上核对过：插座读回的格式、更新的时机，以及面板开泵后多久能读到，都没有实测。读不出来时只发警告，看门狗不会动手。 | [`executor/watchdog.py`](../../../src/growbridge/executor/watchdog.py)、[`control/device.py`](../../../src/growbridge/control/device.py) |
 | 树莓派与 Linux 蓝牙 | 未验证 | `BleakTransport`（BlueZ 上的 Bleak）只在测试里对着假客户端跑过。没有在实体树莓派上运行的记录。 | [`transport.py`](../../../src/growbridge/transport.py)、[`tests/transport/`](../../../tests/transport/) |

@@ -36,6 +36,8 @@
 | `fan_outlet` | 整数 | `3` | 1 到 5 | 循环风扇接在哪个插座。 | 否 |
 | `retention_days` | 整数 | `30` | 1 到 365 | 守护进程的样本库保留多少天的样本。在 DiAGRI 模式下，只删除已经复制到项目档案的样本。 | 否 |
 | `auto_research` | 布尔 | `false` | `true`、`false` | 把守护进程切换到 DiAGRI 模式：启动运行时和工作台路由，三个桥接写入路由返回 403，MCP 服务只提供读取工具。 | 它就是开关 |
+| `multi_user` | 布尔 | `false` | `true`、`false` | 与 `auto_research` 一起打开工作台的多用户：带角色的账号、温室锁定、项目所有者、每人只看自己的（见[多用户](#多用户)）。关闭时工作台与以前一样。 | 是 |
+| `greenhouses` | 表的列表 | `[]` | 每项 `{id, name, device_id}`；`id` 形如 `[a-z0-9][a-z0-9-]{0,31}`；编号与设备各不重复；`device` 必须在其中 | 操作员可以锁定的温室。为空时只有一个温室 `gh-01`，对应 `device`。 | 是 |
 | `lan_hosts` | 字符串列表 | `[]` | 主机名或地址；端口部分会被忽略 | 局域网入口的地址。它们会加入受信任主机和允许的浏览器来源。 | 是 |
 | `overlay_hosts` | 字符串列表 | `[]` | 主机名或地址；端口部分会被忽略 | 覆盖网络入口的地址。它们会加入受信任主机和允许的浏览器来源（按 `https://`）。 | 是 |
 | `lan_bind` | 字符串 | `""` | 本机的一个地址 | 局域网监听绑定的地址。只有 `lan_bind` 和 `lan_port` 都设置了，这个监听才会启动。 | 是 |
@@ -164,6 +166,19 @@
 | 计算服务（`ComputeService`） | 由 `compute_templates_dir`、`compute_member` 和七个 `FIRECREST_*` 环境变量设置，要么全配、要么都不配。全配：`serve` 在 `FirecrestBackend` 上创建计算服务。都不配：没有计算服务。配了一部分：没有计算服务，日志里警告缺了哪些名字。模板有错、没装 `pyfirecrest`，或 `FIRECREST_SYSTEM`、`FIRECREST_ACCOUNT`、`FIRECREST_WORKDIR` 无效，都会让 `serve` 启动失败。没有对真实的 CSC 服务验证过；见[状态与已知限制](Status-and-Known-Limitations.md)。 |
 | 告警规则 | `Settings` 里没有字段。`runtime.py` 的 `DEFAULT_ALERT_RULES` 是空的。 |
 | 操作员账号 | 由 `growbridge operator add` 存进 `data_dir`，不在配置文件里。 |
+
+## 多用户
+
+`multi_user = true`（且 `auto_research = true`）时，每个操作员有一个角色：`user` 或 `admin`（第一个管理员用 `growbridge operator add --admin` 创建）。操作员在控制台的「温室」页锁定温室；项目归创建它的人；动一个阶段既要是项目所有者，又要锁着这个阶段的温室。操作员只看到自己的项目、阶段、告警和回执；管理员看到全部，紧急时可以暂停或停止任何阶段，管理账号、强制释放温室，并把无人负责的项目转给别人。释放温室时交还养护规则，设备保持当前设置。设计见 [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md)。
+
+```toml
+multi_user = true
+
+[[greenhouses]]
+id = "gh-01"
+name = "温室 1"
+device_id = "SF-GGS-PS5"
+```
 
 ## 示例
 
