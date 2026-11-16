@@ -8,6 +8,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import get_args
 
+import growbridge
 import growbridge.planning.validate as validate_module
 import growbridge.workflow.service as service_module
 from growbridge.agents.tools import ROLE_TOOLS
@@ -22,6 +23,11 @@ from growbridge.workbench.reads import STAGE_KINDS
 from growbridge.workflow.states import RoundState, StageState, TaskState
 
 REPO = Path(__file__).resolve().parents[2]
+# The lists are checked against the code this checkout ships, not another install of growbridge
+# (a shared virtualenv may import another checkout's older code and pass against it).
+assert Path(growbridge.__file__).resolve().is_relative_to(REPO / "src"), (
+    f"imported growbridge from {growbridge.__file__}, not {REPO / 'src'}: run with PYTHONPATH=src"
+)
 KNOWN_CODES = REPO / "tests" / "web" / "fixtures" / "known-codes.json"
 WORKFLOW = Path(service_module.__file__).parent
 PLANNING = Path(validate_module.__file__).parent
