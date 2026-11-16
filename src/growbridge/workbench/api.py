@@ -47,6 +47,8 @@ from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
+from growbridge.workflow.access import Access
+from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
 from growbridge.workflow.service import WorkflowService
@@ -187,7 +189,11 @@ class Workbench:
         holdout: HoldoutRegistry | None = None,
         compute: ComputeService | None = None,
         conversation: ConversationLog | None = None,
+        access: Access | None = None,
+        locks: GreenhouseLocks | None = None,
     ):
+        self.access = access  # multi-user rules; None when multi_user is off
+        self.locks = locks
         self.workflow = workflow
         self.control = control
         self.archive = archive
@@ -539,6 +545,8 @@ def create_workbench(
     holdout: HoldoutRegistry | None = None,
     compute: ComputeService | None = None,
     conversation: ConversationLog | None = None,
+    access: Access | None = None,
+    locks: GreenhouseLocks | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
     ``tasks`` and ``budget`` together add the call budget and research goal routes; ``runner``
@@ -547,4 +555,4 @@ def create_workbench(
     the goal routes) records each goal and adds the project conversation read."""
     args = (workflow, control, archive, operators, settings, role_tokens)
     more = (alerts, tasks, budget, runner, holdout, compute, conversation)
-    return Workbench(*args, *more).router
+    return Workbench(*args, *more, access=access, locks=locks).router

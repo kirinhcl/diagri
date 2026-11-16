@@ -21,7 +21,7 @@ from growbridge.archive.models import (
     TimedAction,
 )
 from growbridge.archive.store import Archive
-from growbridge.config import Settings
+from growbridge.config import Greenhouse, Settings
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -32,6 +32,8 @@ from growbridge.sim.control import FakeControl
 from growbridge.sim.fixtures import make_protocol, make_run_sheet
 from growbridge.workbench.api import create_workbench
 from growbridge.workbench.auth import Operators
+from growbridge.workflow.access import Access
+from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.tasks import TaskBoard
 
@@ -45,6 +47,11 @@ ROLE_TOKENS = {
     "analyst": "fake-analyst-token-0000000000000000",
 }
 FAST_SCRYPT = 2**10  # keep the tests quick; production uses the module default
+GREENHOUSES = [
+    Greenhouse(id="gh-01", name="Greenhouse 1", device_id="SIMULATED"),  # the fixture device
+    Greenhouse(id="gh-02", name="Greenhouse 2", device_id="AC5-2"),
+    Greenhouse(id="gh-03", name="Greenhouse 3", device_id="AC5-3"),
+]
 
 
 class RecordingControl(FakeControl):
@@ -112,7 +119,11 @@ class Bench:
         lan_port: int | None = LAN_PORT,
         compute_factory=None,
         check_treatments: bool = False,
+        multi_user: bool = False,
     ):
+        self.tmp_path = tmp_path
+        self.flags = {"lan_port": lan_port, "compute_factory": compute_factory}
+        self.flags |= {"check_treatments": check_treatments, "multi_user": multi_user}
         self.clock = FakeClock()
         self.db = Database(tmp_path / "workbench.db")
         self.control = RecordingControl(self.clock)
@@ -143,7 +154,17 @@ class Bench:
             auto_research=True,
             lan_hosts=[LAN_HOST],
             overlay_hosts=[OVERLAY_HOST],
+            multi_user=multi_user,
+            greenhouses=GREENHOUSES if multi_user else [],
         )
+        self.locks: GreenhouseLocks | None = None
+        self.access: Access | None = None
+        if multi_user:
+            registry = self.settings.greenhouse_registry()
+            store = self.workflow.store
+            self.locks = GreenhouseLocks(self.db, self.clock, registry, store, self.control)
+            self.access = Access(store, self.locks, self.settings.device)
+            self.workflow.access = self.access
         self.router = create_workbench(
             self.workflow,
             self.control,
@@ -158,12 +179,74 @@ class Bench:
             holdout=self.holdout,
             compute=self.compute,
             conversation=self.conversation,
+            access=self.access,
+            locks=self.locks,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)
         self.lan = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")
         self.overlay = TestClient(self.app, base_url=f"https://{OVERLAY_HOST}:{MAIN_PORT}")
         self.project_id = ""
         self.round_id = ""
+
+    # --- multi-user helpers ---------------------------------------------------------------------
+
+    @classmethod
+    def full(cls, tmp_path) -> "Bench":
+        """Multi-user, with every optional service mounted (compute included)."""
+        return cls(tmp_path, compute_factory=default_compute, multi_user=True)
+
+    def absent_twin(self) -> "Bench":
+        """The same set-up and accounts in a fresh directory, without any project or stage: what
+        a request for an id answers when the object does not exist at all."""
+        directory = self.tmp_path / "absent-twin"
+        directory.mkdir(exist_ok=True)
+        twin = Bench(directory, **self.flags)
+        for row in self.operators.listing():
+            twin.operators.add(row["name"], SECRET, row["role"])
+        return twin
+
+    def wb_routes(self) -> set[tuple[str, str]]:
+        """Every (method, path) the workbench router serves, e.g. ("GET", "/wb/projects")."""
+        return {
+            (method, route.path)
+            for route in self.router.routes
+            for method in getattr(route, "methods", ())
+        }
+
+    def user(self, name: str, role: str = "user") -> TestClient:
+        """A signed-in client (LAN entry) of ``name``, made an operator on first use."""
+        if self.operators.role(name) is None:
+            self.operators.add(name, SECRET, role)
+        client = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")
+        assert self.login(client, name).status_code == 200
+        return client
+
+    def actor(self, name: str) -> Actor:
+        role = self.operators.role(name) or "user"
+        return Actor(kind="operator", id=name, role=role, reauth_at=self.clock.now())
+
+    def lock(self, name: str, *ids: str) -> None:
+        assert self.locks is not None
+        self.locks.lock(name, ids or ("gh-01",))
+
+    def seed_round_as(self, name: str, protocol_id: str = "protocol-1") -> str:
+        """A project of ``name`` with one round (the project and round become the bench's)."""
+        owner = self.actor(name)
+        self.project_id = self.workflow.create_project(f"{name}'s series", owner)
+        protocol = make_protocol(project_id=self.project_id, stages=("vegetative",), id=protocol_id)
+        self.workflow.save_protocol(protocol, owner)
+        self.round_id = self.workflow.create_round(self.project_id, protocol.id, owner)
+        return self.round_id
+
+    def pending_as(self, name: str, stage_id: str = "stage-1") -> str:
+        """A stage of ``name``'s project waiting for review, on gh-01 (locked for them)."""
+        assert self.locks is not None
+        if "gh-01" not in self.locks.held_by(name):
+            self.lock(name, "gh-01")
+        if not self.round_id:
+            self.seed_round_as(name)
+        self.workflow.submit_run_sheet(self.round_id, self.sheet(stage_id), self.actor(name))
+        return stage_id
 
     # --- http helpers --------------------------------------------------------------------------
 
@@ -229,3 +312,28 @@ class Bench:
     @staticmethod
     def run(coroutine):
         return asyncio.run(coroutine)
+
+
+def default_compute(bench: Bench):
+    """A compute service over the bench's database with one reviewed template."""
+    from growbridge.compute.backend import JobTemplate, ParamSpec
+    from growbridge.compute.service import ComputeService
+    from growbridge.sim.compute import FakeBackend
+
+    template = JobTemplate(
+        id="segment",
+        version=1,
+        script="#!/bin/bash\n",
+        parameters={"epochs": ParamSpec(kind="int", minimum=1, maximum=100)},
+        max_cpu_hours=10.0,
+        max_storage_gb=5.0,
+    )
+    return ComputeService(
+        bench.db,
+        bench.clock,
+        FakeBackend(),
+        [template],
+        {"researcher": "csc_robot"},
+        service_cpu_cap=1000.0,
+        service_storage_cap=100.0,
+    )
