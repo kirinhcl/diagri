@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 
 import en from "../../../src/growbridge/web/workbench/i18n/en.js";
+import { richText } from "../../../src/growbridge/web/workbench/ui/rich-text.js";
+import { FOLDED_CHARS } from "../../../src/growbridge/web/workbench/ui/section.js";
 import { EXEMPTIONS } from "./leak-exemptions.mjs";
 import { FIXTURES } from "./render-page.mjs";
 
@@ -103,8 +105,16 @@ export function assertNoLeaks(node, exempt = []) {
   assert.fail(`${leaks.length} piece(s) of internal text shown:\n${lines.join("\n")}`);
 }
 
-// Path syntax: "a.b" and "a[*].b" only; "[*]" takes every item of an array.
-const SEGMENT = /^([^.[\]]*)(\[\*\])?$/;
+// Path syntax: "a.b", "a[*].b" and "a[k=v].b": "[*]" takes every item of an array, "[k=v]" the
+// items whose field k is v.
+const SEGMENT = /^([^.[\]]*)(?:\[(\*|[A-Za-z_]+=[^\]]+)\])?$/;
+
+function itemsOf(values, selector) {
+  const items = values.flatMap((value) => (Array.isArray(value) ? value : []));
+  if (selector === "*") return items;
+  const [field, wanted] = selector.split("=");
+  return items.filter((item) => item !== null && typeof item === "object" && String(item[field]) === wanted);
+}
 
 function valuesAt(root, path) {
   return String(path)
@@ -113,23 +123,37 @@ function valuesAt(root, path) {
       (values, segment) => {
         const parsed = SEGMENT.exec(segment);
         if (!parsed || (!parsed[1] && !parsed[2])) throw new Error(`unsupported exemption path: ${path}`);
-        const [, key, every] = parsed;
+        const [, key, selector] = parsed;
         const owned = (value) => (value !== null && typeof value === "object" && Object.hasOwn(value, key) ? [value[key]] : []);
         const stepped = key ? values.flatMap(owned) : values;
-        return every ? stepped.flatMap((value) => (Array.isArray(value) ? value : [])) : stepped;
+        return selector ? itemsOf(stepped, selector) : stepped;
       },
       [root],
     );
 }
 
-// The fixture strings that `exemptions` let `page` show.
+// How a page shows a value it does not show as it is (an exemption's `shown`): rendered from the
+// model's little Markdown, or folded after its start, which is then shown on its own as well.
+const SHOWN = {
+  asIs: (value) => [value],
+  richText: (value) => [visibleText(richText(value))],
+  folded: (value) => [value, value.slice(0, FOLDED_CHARS).trimEnd()],
+};
+
+// The fixture strings that `exemptions` let `page` show, as visibleText writes them (white space
+// collapsed).
 export function exemptStrings(page, fixtures = FIXTURES, exemptions = EXEMPTIONS) {
   const found = exemptions
     .filter((entry) => entry.page === page)
     .flatMap((entry) => {
       if (!Object.hasOwn(fixtures, entry.fixture)) throw new Error(`exemption for ${page}: no fixture ${entry.fixture}`);
-      return valuesAt(fixtures[entry.fixture], entry.path);
+      const form = entry.shown ?? "asIs";
+      if (!Object.hasOwn(SHOWN, form)) throw new Error(`exemption for ${page}: unknown shown form ${form}`);
+      const shown = SHOWN[form];
+      return valuesAt(fixtures[entry.fixture], entry.path)
+        .filter((value) => typeof value === "string")
+        .flatMap(shown);
     })
-    .filter((value) => typeof value === "string");
+    .map((value) => value.replace(/\s+/g, " ").trim());
   return [...new Set(found)];
 }

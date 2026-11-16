@@ -60,7 +60,7 @@ function choiceForm(ctx, round) {
   const onSubmit = async ({ choice }) => {
     if (choice === "abort" && !(await askAbort(ctx, round))) return;
     await ctx.api.post(`/rounds/${encodeURIComponent(round.round_id)}/choice`, { choice }, { action: submitLabel });
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("round.chosen", { choice: ctx.t(`round.choice.${choice}`) }));
   };
   const form = simpleForm({ fields: [field], submitLabel, onSubmit, draftKey: `choice:${round.round_id}`, ctx });
   const stopped = stagesOf(round).find((row) => row.stage_id === round.awaiting_choice);
@@ -70,7 +70,7 @@ function choiceForm(ctx, round) {
 function abortButton(ctx, round) {
   const run = async () => {
     await ctx.api.post(`/rounds/${encodeURIComponent(round.round_id)}/abort`, {}, { action: ctx.t("round.abort") });
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("round.aborted"));
   };
   return confirmedButton(ctx, { label: ctx.t("round.abort"), title: ctx.t("round.abortTitle"), lines: abortLines(ctx, round), tone: "danger", run });
 }

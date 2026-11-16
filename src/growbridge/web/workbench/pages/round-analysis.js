@@ -72,7 +72,7 @@ function freezeEditor(ctx, round) {
   const onSubmit = async (body) => {
     await ctx.api.post(`/protocols/${encodeURIComponent(round.protocol_id)}/analysis`, body, { action: submitLabel });
     frozenFor = round.round_id;
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("analysis.frozen"));
   };
   const value = { project_id: round.project_id, script: "" };
   const label = ctx.t("analysis.freezeJson");
@@ -91,7 +91,7 @@ function runForm(ctx, round, analysis) {
     const body = { project_id: round.project_id, protocol_id: round.protocol_id, snapshot_id: snapshotId };
     const run = await ctx.api.post("/analysis/runs", body, { action: submitLabel });
     lastRun = { roundId: round.round_id, run };
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("analysis.ran"));
   };
   return simpleForm({ fields: [field], submitLabel, onSubmit, draftKey: `run:${round.round_id}`, ctx });
 }

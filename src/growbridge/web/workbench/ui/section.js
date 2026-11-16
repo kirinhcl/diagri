@@ -67,6 +67,20 @@ export function codeBlock(text) {
   return h("pre", { class: "code-block", text });
 }
 
+export const FOLDED_CHARS = 240; // a follow-up task's question carries the whole summary of the task before it
+
+// A long text shows its start; the rest opens on request. A short one is the text itself.
+export function foldedText(ctx, text, chars = FOLDED_CHARS) {
+  const full = String(text || "");
+  if (full.length <= chars) return full;
+  return h(
+    "details",
+    { class: "folded-text" },
+    h("summary", { text: `${full.slice(0, chars).trimEnd()}… ${ctx.t("common.showAll")}` }),
+    h("p", { class: "folded-text-full", text: full }),
+  );
+}
+
 // After a successful write: say so, then read the page again (nothing is shown before the server agrees).
 export function afterWrite(ctx, message) {
   ctx.notify(message || ctx.t("form.done"), "ok");

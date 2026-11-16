@@ -28,7 +28,7 @@ function balanceForm(ctx) {
   ];
   const onSubmit = async (values) => {
     await ctx.api.post("/compute/balance", values, { action: submitLabel });
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("compute.balance.saved"));
   };
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: "compute-balance", ctx });
 }
@@ -62,7 +62,7 @@ function budgetForm(ctx) {
   ];
   const onSubmit = async ({ task_id: taskId, ...limits }) => {
     await ctx.api.post(`/compute/tasks/${encodeURIComponent(taskId)}/budget`, limits, { action: submitLabel });
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("compute.budget.saved"));
   };
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: "compute-budget", ctx });
 }

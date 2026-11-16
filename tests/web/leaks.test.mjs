@@ -12,12 +12,35 @@ import { FIXTURES, installFakeDom, renderPage, testCtx } from "./support/render-
 const NAMES = new Set(["stage_index", "round_number", "project_name", "phase"]);
 const OLD_STAGE = Object.fromEntries(Object.entries(FIXTURES["stage.json"]).filter(([key]) => !NAMES.has(key)));
 
+// The project pages in states the captured reads lack: rounds from before rounds had numbers, one of
+// them waiting for a choice, and a registered holdout that was read once.
+const unnumbered = (round) => Object.fromEntries(Object.entries(round).filter(([key]) => key !== "round_number"));
+const PROJECT = FIXTURES["project.json"];
+const OLD_PROJECTS = { projects: FIXTURES["projects.json"].projects.map((row) => ({ ...row, latest_round: unnumbered(row.latest_round) })) };
+const WAITING_ROUND = { ...unnumbered(PROJECT.rounds[0]), state: "running", awaiting_choice: `stage-${PROJECT.rounds[0].round_id}-1` };
+const READ_ONCE = { reader: "dev", at: 1796594710, label: "confirmatory", model_sha: "" };
+const HOLDOUT = {
+  holdout_id: "holdout_5c987768a8b544ad80c4af4c0af9a962",
+  project_id: PROJECT.project_id,
+  batch_ids: ["batch-3"],
+  development_batch_ids: ["batch-1", "batch-2"],
+  outcome_fields: ["canopy_area_growth"],
+  registered_at: 1796594700,
+  registered_by: "dev",
+  reads: [READ_ONCE],
+};
+const BUSY_PROJECT = { "project.json": { ...PROJECT, rounds: [WAITING_ROUND] }, "holdouts.json": { holdouts: [HOLDOUT] } };
+
 // Each page task adds its pages here: { page, params, fixtures? }; `fixtures` overrides files by name.
 const PAGES_CHECKED = [
   { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id } },
   { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id } },
   { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id }, fixtures: { "stage.json": OLD_STAGE } },
   { page: "round", params: { roundId: FIXTURES["round.json"].round_id } },
+  { page: "projects" },
+  { page: "projects", fixtures: { "projects.json": OLD_PROJECTS } },
+  { page: "project", params: { projectId: PROJECT.project_id } },
+  { page: "project", params: { projectId: PROJECT.project_id }, fixtures: BUSY_PROJECT },
 ];
 
 const BATCH_1_PAGES = ["inbox", "projects", "project", "round", "stage", "environment", "safety", "alerts", "evidence", "compute"];
@@ -76,6 +99,22 @@ test("visibleText skips what a textarea holds, like any other input value", () =
 test("exemptStrings reads strings at a fixture path", () => {
   assert.deepEqual(exemptStrings("p", { "a.json": { rows: [{ m: "x_y" }, { m: "z" }] } }, [{ page: "p", fixture: "a.json", path: "rows[*].m" }]), ["x_y", "z"]);
   assert.deepEqual(exemptStrings("q", { "a.json": { rows: [{ m: "x_y" }] } }, [{ page: "p", fixture: "a.json", path: "rows[*].m" }]), []);
+});
+
+test("exemptStrings picks items by a field and gives each value as the page shows it", () => {
+  const dom = installFakeDom();
+  try {
+    const conversation = { entries: [{ kind: "reply", text: "See `a_b`\n\n- **x_y** here" }, { kind: "tool", text: "c_d" }] };
+    const replies = [{ page: "p", fixture: "c.json", path: "entries[kind=reply].text", shown: "richText" }];
+    assert.deepEqual(exemptStrings("p", { "c.json": conversation }, replies), ["See a_b x_y here"]);
+    const long = `${"word ".repeat(60)}x_y`;
+    const folded = [{ page: "p", fixture: "t.json", path: "tasks[*].question", shown: "folded" }];
+    assert.deepEqual(exemptStrings("p", { "t.json": { tasks: [{ question: long }] } }, folded), [long, long.slice(0, 240).trimEnd()]);
+    assert.deepEqual(exemptStrings("p", { "a.json": { m: "a\n\n  b_c " } }, [{ page: "p", fixture: "a.json", path: "m" }]), ["a b_c"]);
+    assert.throws(() => exemptStrings("p", { "a.json": { m: "x" } }, [{ page: "p", fixture: "a.json", path: "m", shown: "nope" }]), /shown/);
+  } finally {
+    dom.restore();
+  }
 });
 
 test("assertNoLeaks names every leak it finds", () => {

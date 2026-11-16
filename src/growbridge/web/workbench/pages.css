@@ -344,6 +344,15 @@ code {
 .row-form summary:hover { color: var(--green-dark); }
 .row-form[open] summary { margin-bottom: 10px; }
 .row-form .form { max-width: none; }
+.edit-fold > summary {
+  width: fit-content;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--green);
+}
+.edit-fold > summary:hover { color: var(--green-dark); }
+.edit-fold[open] > summary { margin-bottom: 10px; }
 .inline-control { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .inline-control .input { flex: 1 1 160px; min-width: 0; }
 .safety-current { display: grid; gap: 14px; }
@@ -380,13 +389,13 @@ code {
 .chat-role-planner { color: var(--amber); }
 .chat-role-researcher { color: var(--ink); }
 .chat-role-auditor { color: var(--muted-strong); }
-.chat-tool details { font-size: 13px; }
-.chat-tool summary { cursor: pointer; color: var(--muted-strong); }
-.chat-tool summary code { font-size: 12px; }
+.chat-tool-line { margin: 0; font-size: 13px; color: var(--muted-strong); overflow-wrap: anywhere; }
+.chat-tools { font-size: 13px; }
+.chat-tools > summary { cursor: pointer; color: var(--muted-strong); }
+.chat-tools[open] > summary { margin-bottom: 6px; }
+.chat-tool-list { display: grid; gap: 6px; margin: 0; padding: 0 0 0 14px; list-style: none; }
+.chat-tool-item { display: grid; gap: 2px; min-width: 0; }
 .chat-tool-failed { color: var(--red); }
-.chat-tool-part { margin-top: 6px; }
-.chat-tool-label { margin: 0 0 2px; font-size: 12px; color: var(--muted-strong); }
-.chat-tool .code-block { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-status p {
   margin: 0;
   padding: 4px 10px;
@@ -444,9 +453,9 @@ code {
 .env-bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
 .env-windows { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .env-window[aria-pressed="true"] { background: var(--pale); color: var(--green-dark); font-weight: 650; }
-.task-question summary { cursor: pointer; }
-.task-question summary:hover { color: var(--green-dark); }
-.task-question-full { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.folded-text summary { cursor: pointer; }
+.folded-text summary:hover { color: var(--green-dark); }
+.folded-text-full { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* --- round page: the published report ---------------------------------------------------------- */
 .report { display: grid; gap: 10px; }

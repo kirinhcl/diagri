@@ -2,23 +2,29 @@
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
-import { note, pageHead, section, timeText } from "../ui/section.js";
+import { displayName, nameDetails } from "../ui/names.js";
+import { note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 
 function latestRound(ctx, project) {
   const latest = project.latest_round;
   if (!latest) return "—";
-  const link = h("a", { class: "text-link", attrs: { href: hrefFor("round", { roundId: latest.round_id }) }, text: latest.round_id });
+  const link = h("a", { class: "text-link", attrs: { href: hrefFor("round", { roundId: latest.round_id }) }, text: displayName(ctx, "round", latest) });
   return h("span", { class: "cell-stack" }, link, statePill(ctx.t, latest.state));
 }
 
+// The project by name; its id and its latest round's id in the row's details.
+function nameCell(ctx, project) {
+  const href = hrefFor("project", { projectId: project.project_id });
+  const link = h("a", { class: "text-link", attrs: { href }, text: displayName(ctx, "project", project) });
+  const ids = [...nameDetails(project, ctx.t), ...nameDetails({ round_id: project.latest_round?.round_id }, ctx.t)];
+  return h("span", { class: "cell-stack" }, link, techDetails(ctx.t, ids));
+}
+
 function columns(ctx) {
-  const link = (project) =>
-    h("a", { class: "text-link", attrs: { href: hrefFor("project", { projectId: project.project_id }) }, text: project.name });
   return [
-    { label: ctx.t("projects.name"), cell: link },
-    { label: ctx.t("col.id"), cell: (project) => h("code", { text: project.project_id }) },
+    { label: ctx.t("projects.name"), cell: (project) => nameCell(ctx, project) },
     { label: ctx.t("projects.rounds"), cell: (project) => String(project.round_count) },
     { label: ctx.t("projects.latest"), cell: (project) => latestRound(ctx, project) },
     { label: ctx.t("col.created"), cell: (project) => timeText(ctx, project.created_at) },
@@ -27,8 +33,8 @@ function columns(ctx) {
 
 function createForm(ctx) {
   const onSubmit = async ({ name }) => {
-    const made = await ctx.api.post("/projects", { name }, { action: ctx.t("projects.create") });
-    ctx.notify(ctx.t("projects.madeNotice", { id: made.project_id }), "ok");
+    await ctx.api.post("/projects", { name }, { action: ctx.t("projects.create") });
+    ctx.notify(ctx.t("projects.madeNotice", { name }), "ok");
     ctx.reload();
   };
   const fields = [{ name: "name", label: ctx.t("projects.newName"), type: "text", required: true }];
