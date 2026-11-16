@@ -50,6 +50,7 @@ from growbridge.workflow.states import RoundState, TaskState
 ROLE = "researcher"
 NO_RUN_NOTE = note("no_confirmatory_run")
 HOLDOUT_NOTE = note("holdout_read")
+UNCHECKED_NOTE = note("manual_tasks_unchecked")
 
 
 class SnapshotRound(ToolInput):
@@ -229,8 +230,13 @@ class ManualCheck:
     deviated: frozenset[str]  # experiment ids whose share not done in time is over the limit
     details: tuple[dict, ...]
 
+    @property
+    def complete(self) -> bool:
+        """Whether every planned occurrence was settled when its snapshot was frozen."""
+        return not any(d["unsettled"] for d in self.details)
+
     def notes(self) -> list[Note]:
-        return [
+        missed = [
             note(
                 "manual_tasks_missed",
                 round=d["round"],
@@ -241,6 +247,17 @@ class ManualCheck:
             for d in self.details
             if d["missed"]
         ]
+        unchecked = [
+            note(
+                "manual_tasks_unsettled",
+                round=d["round"],
+                open=d["unsettled"],
+                planned=d["planned"],
+            )
+            for d in self.details
+            if d["unsettled"]
+        ]
+        return missed + unchecked
 
 
 def _rows(deps: Deps, snap: Snapshot, name: str) -> list[str]:
@@ -249,7 +266,8 @@ def _rows(deps: Deps, snap: Snapshot, name: str) -> list[str]:
 
 
 def _manual_check(deps: Deps, frozen: Frozen) -> ManualCheck:
-    """Judge each snapshot's manual tasks from its own files, at the end of its window.
+    """Judge each snapshot's manual tasks from its own files, at the time it was frozen (its
+    records are the ones present then); occurrences not yet settled then are left out.
 
     A snapshot frozen before manual tasks were frozen with it has neither file and is left out.
     """
@@ -265,11 +283,23 @@ def _manual_check(deps: Deps, frozen: Frozen) -> ManualCheck:
             TaskRecord.model_validate_json(x) for x in _rows(deps, snap, "task_records.jsonl")
         ]
         manifest = json.loads(_rows(deps, snap, snapshots.MANIFEST)[0])
-        missed, total, by_kind = manual_tasks.missed(items, records, manifest["window"][1])
-        if not total:
+        judged_at = manifest.get("manual_tasks_judged_at", manifest["created_at"])
+        end = manifest["window"][1]
+        missed, total, by_kind = manual_tasks.missed(items, records, end, judged_at)
+        if not items:
             continue
         number = frozen.round_of[snap.experiment_id]
-        details.append({"round": number, "missed": missed, "total": total, "by_kind": by_kind})
+        open_ = manual_tasks.unsettled(items, records, end, judged_at)
+        details.append(
+            {
+                "round": number,
+                "missed": missed,
+                "total": total,
+                "by_kind": by_kind,
+                "unsettled": open_,
+                "planned": len(items),
+            }
+        )
         if manual_tasks.deviates(missed, total):
             deviated.add(snap.experiment_id)
     return ManualCheck(frozenset(deviated), tuple(details))
@@ -427,6 +457,8 @@ def publish(deps: Deps, data: PublishInput) -> dict:
     if data.holdout_id is not None and data.model_sha is not None:
         read = deps.holdout.evaluate(data.holdout_id, ROLE, data.model_sha)
         decision = decision if read == "confirmatory" else _capped(decision, HOLDOUT_NOTE)
+    if not manual.complete:  # a check that saw only some tasks cannot back a confirmatory claim
+        decision = _capped(decision, UNCHECKED_NOTE)
     estimate = paired_block_estimate(table.values, protocol.control_treatment_id, data.treatment_id)
     notes = [note("unallocated_measurements", count=len(table.dropped))] if table.dropped else []
     notes += check.notes() + manual.notes()

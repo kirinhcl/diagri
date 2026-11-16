@@ -74,6 +74,20 @@ def test_status_of_an_occurrence():
     assert mt.status(photo, record(photo, done_at=end - 1), end, end) == "done"
 
 
+def test_a_record_entered_more_than_a_day_after_the_deadline_is_late():
+    """A stated done time alone cannot make an entry made long afterwards count as on time."""
+    water, photo = mt.occurrences(sheet(), START, START + DAY)
+    end = START + DAY
+    deadline = water.due_at + mt.ON_TIME_SECONDS
+    in_time = record(water, recorded_at=deadline + mt.LATE_ENTRY_SECONDS)
+    a_month_later = record(water, recorded_at=water.due_at + 30 * DAY)
+    made_up = record(photo, done_at=end - 1, recorded_at=end + mt.ON_TIME_SECONDS + DAY + 1)
+
+    assert mt.status(water, in_time, end, end) == "done"
+    assert mt.status(water, a_month_later, end, end) == "late"
+    assert mt.status(photo, made_up, end, end) == "late"
+
+
 def test_the_latest_record_of_an_occurrence_counts():
     (water, _) = mt.occurrences(sheet(), START, START + DAY)
     skipped = record(water, "skipped", recorded_at=water.due_at + 10)
@@ -88,12 +102,48 @@ def test_missed_counts_everything_not_done_in_time_and_the_limit():
     records = [record(i) for i in items if i.task_id == "photo"]
     records += [record(i) for i in items if i.task_id == "water"][:9]  # one watering missing
 
-    missed, total, by_kind = mt.missed(items, records, end)
+    missed, total, by_kind = mt.missed(items, records, end, judged_at=end + mt.ON_TIME_SECONDS)
 
     assert (missed, total, by_kind) == (1, 20, {"irrigation": 1})
     assert not mt.deviates(missed, total)  # 5 % is within the limit
     assert mt.deviates(3, 20) and not mt.deviates(0, 0)
     assert mt.by_kind_text({"irrigation": 2, "photo": 1}) == "irrigation 2, photo 1"
+
+
+def _daily_photo_week():
+    """A 7-day stage from 08:00 with a photo at 07:30: the last one is due 30 min before the end."""
+    photo = (ManualTask(id="photo", kind="photo", at="07:30"),)
+    items = mt.occurrences(
+        make_run_sheet(timezone="Europe/Helsinki", manual_tasks=photo), START, START + 7 * DAY
+    )
+    return items, START + 7 * DAY
+
+
+def test_a_task_still_in_its_window_when_frozen_at_the_stage_end_is_not_counted():
+    items, end = _daily_photo_week()
+    records = [record(i) for i in items[:-1]]  # the last photo is still within its two hours
+
+    assert len(items) == 7
+    assert mt.missed(items, records, end, judged_at=end)[:2] == (0, 6)
+    # judged after its deadline without a record, it is missed
+    assert mt.missed(items, records, end, judged_at=end + mt.ON_TIME_SECONDS)[:2] == (1, 7)
+
+
+def test_a_snapshot_frozen_mid_stage_counts_only_the_tasks_already_due():
+    items, end = _daily_photo_week()
+    day_three = START + 2 * DAY + 4 * 3600  # two photos are past their deadline, one done
+    records = [record(items[0])]
+
+    missed, total, by_kind = mt.missed(items, records, end, judged_at=day_three)
+
+    assert (missed, total, by_kind) == (1, 2, {"photo": 1})
+
+
+def test_a_task_done_before_its_deadline_counts_even_when_frozen_in_its_window():
+    items, end = _daily_photo_week()
+    records = [record(i) for i in items]
+
+    assert mt.missed(items, records, end, judged_at=end)[:2] == (0, 7)
 
 
 def test_only_an_irrigation_has_a_pump_time_and_it_is_bounded():
@@ -122,3 +172,15 @@ def test_a_task_record_needs_a_time_only_when_done():
         record(water, "skipped", done_at=water.due_at)
     with pytest.raises(ValidationError):
         TaskRecord(**{**record(water).model_dump(), "done_at": None})
+
+
+def test_a_partial_run_says_why_and_is_never_done_in_time():
+    (water, _) = mt.occurrences(sheet(), START, START + DAY)
+    cut = record(water, "partial", done_at=water.due_at, ran_seconds=2.0, ended_early="hand-over")
+
+    assert mt.status(water, cut, START + DAY, START + DAY) == "partial"
+    assert mt.missed([water], [cut], START + DAY, judged_at=START + DAY)[:2] == (1, 1)
+    with pytest.raises(ValidationError):  # a partial record says why it ended early
+        record(water, "partial", done_at=water.due_at, ran_seconds=2.0)
+    with pytest.raises(ValidationError):  # and only a partial one does
+        record(water, ended_early="hand-over")

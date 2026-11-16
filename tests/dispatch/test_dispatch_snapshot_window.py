@@ -1,0 +1,80 @@
+"""The snapshot window of a stage: device data up to the moment the stage actually ended (the
+executor ends it on the tick after its planned end), manual measurements up to two hours later
+(a harvest weight is taken when the stage ends), and what is left out is listed, not hidden."""
+
+import json
+
+from test_dispatch_researcher import (
+    _inspect,
+    _measurement,
+    _payload,
+    _running_stage,
+    _samples,
+    _task_id,
+)
+
+from growbridge.archive import snapshot as snapshots
+from growbridge.sim.clock import START
+from growbridge.workflow.states import StageState
+
+PLANNED_END = START + 10  # _running_stage plans a 10 s stage
+LATE_TICK = 128  # the stage ended this long after its planned end (one fast-forward step)
+GRACE = 2 * 3600
+
+
+def _ended(env) -> float:
+    store = env.workflow.store
+    end = PLANNED_END + LATE_TICK
+    store.update_stage(store.find_stage("stage-1"), state=StageState.ENDED, state_at=end)
+    return end
+
+
+def _rows(env, snapshot_id: str, name: str) -> list[dict]:
+    path = env.archive.root / "snapshots" / snapshot_id / name
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+
+
+async def _freeze(env) -> dict:
+    fields = {"task_id": _task_id(env), "stage_id": "stage-1"}
+    return _payload(await env.invoke("researcher", "freeze_dataset", None, **fields))
+
+
+async def test_device_data_runs_to_the_actual_end_and_no_further(env):
+    await _running_stage(env)
+    end = _ended(env)
+    _samples(env, "experiment-stage-1", seconds=(100, LATE_TICK + 10 + 60))  # before, after end
+
+    shot = await _freeze(env)
+
+    manifest = _rows(env, shot["snapshot_id"], snapshots.MANIFEST)[0]
+    assert manifest["window"] == [START, end]
+    kept = {row["id"] for row in _rows(env, shot["snapshot_id"], "samples.jsonl")}
+    assert "s-experiment-stage-1-100" in kept
+    assert f"s-experiment-stage-1-{LATE_TICK + 10 + 60}" not in kept
+
+
+async def test_a_measurement_up_to_two_hours_after_the_end_belongs_to_the_stage(env):
+    await _running_stage(env)
+    end = _ended(env)
+    for ident, at in (("m-at-end", end), ("m-harvest", end + GRACE), ("m-later", end + GRACE + 1)):
+        env.archive.add_measurement(_measurement("experiment-stage-1", 3.0, ident, measured_at=at))
+
+    shot = await _freeze(env)
+
+    kept = {row["id"] for row in _rows(env, shot["snapshot_id"], "measurements.jsonl")}
+    assert kept == {"m-at-end", "m-harvest"}
+    manifest = _rows(env, shot["snapshot_id"], snapshots.MANIFEST)[0]
+    assert manifest["measurement_grace_seconds"] == GRACE
+
+
+async def test_inspect_lists_the_measurements_left_outside_the_window(env):
+    await _running_stage(env)
+    end = _ended(env)
+    late = _measurement("experiment-stage-1", 3.0, "m-later", measured_at=end + GRACE + 60)
+    env.archive.add_measurement(late)
+
+    body = _payload(await _inspect(env))
+
+    assert body["measurements_outside_window"] == [
+        {"id": "m-later", "metric": "canopy_area_growth", "measured_at": end + GRACE + 60}
+    ]

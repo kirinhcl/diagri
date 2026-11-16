@@ -83,8 +83,10 @@ class World:
             await runtime.stop()
 
     def sheet(self, project_id: str, **fields) -> RunSheet:
-        """A short stage: light 60 % from 06:00, the light off when the stage ends."""
+        """A short stage: light at round 1's 70 % from 06:00 (the workflow checks the round's
+        treatment), the light off when the stage ends."""
         defaults = {
+            "timed_actions": HIGH_LIGHT,
             "id": f"sheet-{STAGE}",
             "project_id": project_id,
             "experiment_id": f"experiment-{STAGE}",

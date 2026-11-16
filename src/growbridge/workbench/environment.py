@@ -3,8 +3,8 @@
 It answers from the archive, never by asking the device: the newest sample gives the current
 readings and channel levels, and recent samples, across stages and outside them, give the trends.
 A running stage adds what its run sheet expects each channel to be at now, so a channel that is
-not where the sheet wants it shows at a glance (a treatment that was never applied, a manual
-takeover, a device that ignored a write).
+not where the sheet wants it shows at a glance (a treatment that was never applied, a device that
+ignored a write). A stage in any other state expects nothing: the run sheet is not in force.
 """
 
 import json
@@ -19,6 +19,7 @@ from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import Actor, ControlPort
 from growbridge.workflow.service import WorkflowService
+from growbridge.workflow.states import StageState
 
 DEFAULT_WINDOW = 6 * 3600
 MIN_WINDOW, MAX_WINDOW = 300, 7 * 86400
@@ -70,12 +71,14 @@ def latest_reading(archive: Archive, outlets: dict[Channel, int], now: float) ->
 
 
 def active_stage(workflow: WorkflowService, now: float) -> dict | None:
-    """The running stage, and what its run sheet expects of each channel now."""
+    """The active stage, and what its run sheet expects of each channel now. Only a running stage
+    follows the run sheet; paused, under takeover, in recovery check or ended, it expects
+    nothing, so the page shows no difference from the run sheet."""
     stage = workflow.active_stage()
     if stage is None:
         return None
     sheet = stage.run_sheet
-    expected = sheet.expected_levels(now)
+    expected = sheet.expected_levels(now) if stage.state is StageState.RUNNING else {}
     return {
         "stage_id": stage.stage_id,
         "state": stage.state.value,

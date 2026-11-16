@@ -129,9 +129,9 @@ async def test_workflow_only_operators_resume_stop_and_take_over(world, kind):
     assert world.state() == "paused"
 
 
-async def test_workflow_model_may_submit_a_draft_but_not_create_a_project(world):
+async def test_the_planner_model_may_submit_a_draft_but_not_create_a_project(world):
     await world.design()
-    model = world.actor("model")
+    model = Actor(kind="model", id="planner")
     findings = world.svc.submit_run_sheet(world.round_id, world.sheet(), model)
     assert findings == ()
     with pytest.raises(Denied) as caught:

@@ -22,8 +22,27 @@ DEVICE = "SIMULATED"
 TIMEZONE = "Europe/Helsinki"
 
 
+HIGH_LIGHT = 70  # make_protocol's treatment "high", allocated to rounds 1 and 4
+
+
+def light_day(level: int) -> tuple[TimedAction, ...]:
+    """Light at ``level`` % from 06:00 to 22:00, exhaust 30 % all day."""
+    return (
+        TimedAction(id="light-on", channel=Channel.LIGHT, at="06:00", level=level),
+        TimedAction(id="light-off", channel=Channel.LIGHT, at="22:00", level=0),
+        TimedAction(id="exhaust-base", channel=Channel.EXHAUST, at="00:00", level=30),
+    )
+
+
+def treated_run_sheet(**overrides) -> RunSheet:
+    """``make_run_sheet`` with the light at round 1's treatment ("high", 70 %) of
+    ``make_protocol``, as the workflow requires of a sheet filed for that round."""
+    return make_run_sheet(**{"timed_actions": light_day(HIGH_LIGHT), **overrides})
+
+
 def make_run_sheet(**overrides) -> RunSheet:
-    """Light 60 % from 06:00 to 22:00, exhaust 30 % all day; every channel host-controlled."""
+    """Light 60 % from 06:00 to 22:00, exhaust 30 % all day; every channel host-controlled.
+    60 % is neither of ``make_protocol``'s treatments: see ``treated_run_sheet``."""
     fields = {
         "id": "sheet-1",
         "project_id": "project-1",
@@ -43,11 +62,7 @@ def make_run_sheet(**overrides) -> RunSheet:
         "duration_seconds": 7 * 86400,
         "sampling": SamplingPlan(interval_seconds=1, max_gap_seconds=120),
         "max_wait_seconds": 6 * 3600,
-        "timed_actions": (
-            TimedAction(id="light-on", channel=Channel.LIGHT, at="06:00", level=60),
-            TimedAction(id="light-off", channel=Channel.LIGHT, at="22:00", level=0),
-            TimedAction(id="exhaust-base", channel=Channel.EXHAUST, at="00:00", level=30),
-        ),
+        "timed_actions": light_day(60),
     }
     return RunSheet(**{**fields, **overrides})
 
@@ -96,7 +111,7 @@ def make_protocol(**overrides) -> ResearchProtocol:
         "batch": "batch-1",
         "treatments": (
             Treatment(id="control", name="light 40 %", factors={"light": 40}),
-            Treatment(id="high", name="light 70 %", factors={"light": 70}),
+            Treatment(id="high", name=f"light {HIGH_LIGHT} %", factors={"light": HIGH_LIGHT}),
         ),
         "control_treatment_id": "control",
         "allocations": (

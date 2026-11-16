@@ -5,8 +5,17 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from growbridge.archive.models import Channel, ManualTask, RuleAction
+from growbridge.archive.models import (
+    ActionRecord,
+    ActionState,
+    Channel,
+    ManualTask,
+    RightKind,
+    RuleAction,
+)
+from growbridge.planning.manual_tasks import ON_TIME_SECONDS
 from growbridge.sim.fixtures import make_run_sheet
+from growbridge.workbench.manual_tasks import planned_request_id
 from growbridge.workflow.states import StageState
 
 ZONE = ZoneInfo("Europe/Helsinki")
@@ -47,9 +56,13 @@ def done(bench, client, task_id="water", due_at=WATER_DUE, **fields):
     return bench.post(client, PATH, body)
 
 
-def irrigate(bench, client, request_id="planned-0001", due_at=WATER_DUE, **fields):
-    body = {"task_id": "water", "due_at": due_at, "request_id": request_id, **fields}
+def irrigate(bench, client, due_at=WATER_DUE, **fields):
+    body = {"task_id": "water", "due_at": due_at, **fields}
     return bench.post(client, f"{PATH}/irrigate", body)
+
+
+def run_id(attempt=1, due_at=WATER_DUE):
+    return planned_request_id("stage-1", "water", due_at, attempt)
 
 
 def test_the_list_shows_each_occurrence_with_its_state(bench, operator):
@@ -151,11 +164,12 @@ def test_a_planned_irrigation_runs_under_the_stage_right_and_is_recorded(bench, 
     assert request.right_number == 7 and request.stage_id == "stage-1"
     task = response.json()["task"]
     assert task["status"] == "done"
-    assert task["record"]["irrigation_request_id"] == "planned-0001"
+    assert task["record"]["irrigation_request_id"] == request.request_id == run_id()
+    assert task["record"]["ran_seconds"] == 5
     assert bench.state() == "running"  # no takeover, no intervention
     assert bench.workflow.interventions("experiment-stage-1") == ()
 
-    again = irrigate(bench, operator, request_id="planned-0002")
+    again = irrigate(bench, operator)
     assert detail(again)["code"] == "state" and len(bench.control.irrigated) == 1
 
 
@@ -176,10 +190,151 @@ def test_only_a_planned_irrigation_of_a_running_stage_can_be_started(bench, oper
     photo = bench.post(
         operator,
         f"{PATH}/irrigate",
-        {"task_id": "photo", "due_at": PHOTO_DUE, "request_id": "planned-0001"},
+        {"task_id": "photo", "due_at": PHOTO_DUE},
     )
     paused = irrigate(bench, operator)
 
     assert detail(photo)["code"] == "scope"
     assert detail(paused)["code"] == "state"
     assert bench.control.irrigated == []
+
+
+def test_a_planned_irrigation_runs_the_pump_once_per_occurrence_even_after_a_skip(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    assert irrigate(bench, operator).status_code == 200
+    skipped = {"task_id": "water", "due_at": WATER_DUE, "outcome": "skipped"}
+    assert bench.post(operator, PATH, skipped).status_code == 200  # the latest record counts
+
+    again = irrigate(bench, operator)
+
+    assert detail(again)["code"] == "state"
+    assert len(bench.control.irrigated) == 1
+
+
+@pytest.mark.parametrize("late", [ON_TIME_SECONDS + 1, 30 * 3600])
+def test_a_planned_irrigation_past_its_deadline_does_not_run(bench, operator, late):
+    running(bench)
+    bench.clock.wall = WATER_DUE + late
+
+    response = irrigate(bench, operator)
+
+    assert detail(response)["code"] == "state"
+    assert bench.control.irrigated == []
+
+
+def test_a_planned_irrigation_runs_up_to_its_deadline(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + ON_TIME_SECONDS
+
+    response = irrigate(bench, operator)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["task"]["status"] == "done"
+
+
+def test_a_planned_irrigation_cut_short_is_recorded_as_partial(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    bench.control.irrigation_update = {"ran_seconds": 2.0, "ended_early": "hand-over: paused"}
+
+    task = irrigate(bench, operator).json()["task"]
+
+    assert task["status"] == "partial"
+    assert task["record"]["outcome"] == "partial"
+    assert task["record"]["ran_seconds"] == 2.0
+    assert task["record"]["ended_early"] == "hand-over: paused"
+    assert detail(irrigate(bench, operator))["code"] == "state"
+    assert len(bench.control.irrigated) == 1
+
+
+def test_an_unconfirmed_planned_irrigation_is_partial(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    unknown = {"state": ActionState.UNKNOWN, "error": "read-back unavailable", "ran_seconds": None}
+    bench.control.irrigation_update = unknown
+
+    record = irrigate(bench, operator).json()["task"]["record"]
+
+    assert record["outcome"] == "partial" and record["ran_seconds"] is None
+    assert record["ended_early"] == "the run was not confirmed (unknown): read-back unavailable"
+
+
+def _left_behind(bench, attempt, state):
+    """A run of an earlier request whose answer never came back (the request was cut off)."""
+    bench.control.receipts[run_id(attempt)] = ActionRecord(
+        request_id=run_id(attempt),
+        state=state,
+        channel=Channel.PUMP,
+        planned_level=1,
+        right_number=7,
+        right_kind=RightKind.STAGE,
+        trigger="planned irrigation water",
+        created_at=WATER_DUE,
+        sent_at=WATER_DUE,
+    )
+
+
+def test_a_retry_after_a_lost_answer_records_the_first_run_and_does_not_water_again(
+    bench, operator
+):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    _left_behind(bench, 1, ActionState.MAYBE_SENT)
+
+    response = irrigate(bench, operator)
+
+    assert bench.control.irrigated == []
+    assert response.json()["action"]["request_id"] == run_id(1)
+    assert response.json()["task"]["record"]["outcome"] == "partial"
+
+
+def test_an_attempt_that_never_reached_the_pump_makes_way_for_the_next(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    _left_behind(bench, 1, ActionState.VOID)
+
+    response = irrigate(bench, operator)
+
+    ((request, _, _),) = bench.control.irrigated
+    assert request.request_id == run_id(2)
+    assert response.json()["task"]["status"] == "done"
+
+
+def test_a_run_that_was_never_sent_is_not_recorded_and_may_be_tried_again(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    bench.control.irrigation_update = {"state": ActionState.FAILED, "error": "not sent: offline"}
+
+    first = irrigate(bench, operator)
+    bench.control.irrigation_update = {}
+    again = irrigate(bench, operator)
+
+    assert first.status_code == 200 and first.json()["task"] is None
+    assert again.json()["task"]["status"] == "done"
+    assert [r.request_id for r, *_ in bench.control.irrigated] == [run_id(1), run_id(2)]
+
+
+def test_a_run_whose_read_back_failed_may_have_watered_and_is_partial(bench, operator):
+    running(bench)
+    bench.clock.wall = WATER_DUE + 60
+    failed = {"state": ActionState.FAILED, "error": "read-back level differs from 1"}
+    bench.control.irrigation_update = failed
+
+    record = irrigate(bench, operator).json()["task"]["record"]
+
+    assert record["outcome"] == "partial"
+    assert detail(irrigate(bench, operator))["code"] == "state"
+    assert len(bench.control.irrigated) == 1
+
+
+def test_a_stage_stopped_early_lists_no_task_due_after_the_stop(bench, operator):
+    """The list uses the stage's actual window, as a snapshot of it does."""
+    running(bench, state=StageState.STOPPED, right_number=None)
+    store = bench.workflow.store
+    store.update_stage(store.find_stage("stage-1"), state_at=WATER_DUE + 3600)  # stopped 10:00
+    bench.clock.wall = WATER_DUE + 4 * 3600
+
+    rows = operator.get(PATH).json()["occurrences"]
+
+    assert [(row["task_id"], row["due_at"]) for row in rows] == [("water", WATER_DUE)]

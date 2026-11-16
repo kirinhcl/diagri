@@ -83,11 +83,11 @@
 | `POST` | `/wb/stages/{stage_id}/takeover` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、授予类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/handback` | 操作员 | 局域网、覆盖网络 | 否 | `state`、`not_connected`、授予类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/onsite-check` | 操作员 | 局域网、覆盖网络 | 否 | `state`、授予类拒绝码 |
-| `POST` | `/wb/drafts/run-sheet` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
+| `POST` | `/wb/drafts/run-sheet` | 操作员、planner 的角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state`，其他角色的令牌得到 `model_role` |
 | `POST` | `/wb/manual/{channel}` | 操作员 | 局域网、覆盖网络 | 否 | `pump_on_forbidden`、`state`、写入类拒绝码 |
 | `POST` | `/wb/irrigation` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`state`、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `scope`（没有这次任务）、`state`（阶段未开始，或离到期还有一小时以上）、`param`（`done_at`） |
-| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`scope`（不是计划内浇水）、`state`（阶段不在 `running`、未到期、已完成）、`cooldown`、写入类拒绝码 |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`scope`（不是计划内浇水）、`state`（阶段不在 `running`、未到期、已过截止时间、已完成，或这次任务已经开过泵）、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `scope` |
 | `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
@@ -148,7 +148,7 @@
 | `POST` | `/wb/drafts/run-sheet` | `round_id`（1 到 100）、`run_sheet`（一个 `RunSheet`） | `stage_id` 和 `findings`（由 `code`、`message`、`blocking` 组成的列表） |
 | `POST` | `/wb/manual/{channel}` | 路径参数 `channel`：`light`、`exhaust`、`fan` 或 `pump`；请求体 `stage_id`、`request_id`、`level`（整数：灯和排风 0 到 100，风扇 0 到 10，水泵只能是 0）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | `task_id`、`due_at`（指明哪一次任务，用列表给出的值）、`outcome`（`done` 或 `skipped`）、可选 `done_at`（UTC 秒，默认现在；只用于 `done`，不能晚于现在，也不能早于 `due_at` 一小时以上）、可选 `note`（最长 200）。追加一条记录，以最新的为准。 | 这次任务，格式同列表 |
-| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | `task_id`、`due_at`、`request_id`、可选 `note`。在阶段写入权下让水泵运行该任务的 `seconds`，阶段继续运行（见[控制与安全模型](Control-and-Safety-Model.md)）；得到确认的运行记为已完成。 | `action`（`ActionRecord`）和 `task`（这次任务；运行没有得到确认时为 `null`） |
+| `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | `task_id`、`due_at`、可选 `note`；请求号由这次任务推导（请求体里的 `request_id` 会被忽略），所以重试只返回第一次运行，不会再开一次泵。在阶段写入权下让水泵运行该任务的 `seconds`，阶段继续运行（见[控制与安全模型](Control-and-Safety-Model.md)）；完整且得到确认的运行记为已完成，被截断或没有得到确认的运行记为 `partial`，带 `ran_seconds` 和 `ended_early`。 | `action`（`ActionRecord`，带 `ran_seconds` 和 `ended_early`）和 `task`（这次任务；运行没有到达设备时为 `null`） |
 | `POST` | `/wb/irrigation` | `stage_id`、`request_id`、`seconds`（大于 0，不超过 60，且不超过 `max_pump_seconds`）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值） | `protection_right` |
@@ -183,7 +183,7 @@
 | `GET` | `/wb/projects` | 无 | `projects`：每个项目的摘要，最多 200 个 |
 | `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前）和 `protocols`（每个协议的最新版本）、`budget`（`calls_left` 和 `cost_left`，没有设置预算时为 `null`）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
 | `GET` | `/wb/stages/{stage_id}/readings` | 查询参数 `points`（2 到 2000，默认 600） | `samples`（由 `timestamp`、`data`、`quality`、`clock_synced`、`flagged` 组成的列表）、`window`（`start`、`end`、`bucket_seconds`，阶段尚未开始时为 `null`）、`total_samples`、`flagged_total` 和 `downsampled`。每个时间桶保留最新的一条样本；`flagged` 是该桶里质量不是 `ok` 或时钟未同步的样本数。`points` 超出范围时返回 422。 |
-| `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是运行中的阶段，包括每个通道的 `ownership` 和运行单此刻要求的档位 `expected`，没有时为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
+| `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是当前阶段，包括它的 `state`、每个通道的 `ownership`，以及仅在阶段处于 `running` 时运行单此刻要求的档位 `expected`（其他状态为 `null`）；没有当前阶段时 `stage` 为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | 无 | `stage_id`、`stage_state`、`timezone`、`on_time_seconds`、`early_seconds`、`now`，以及 `occurrences`：运行单的人工任务在阶段时间窗内的每一次（`task_id`、`kind`、`due_at`、`make_up_allowed`、`seconds`），带 `status`（`upcoming`、`open`、`done`、`late`、`skipped`、`missed`）和起作用的那条 `record`（没有时为 `null`）；阶段开始前为空 |
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |

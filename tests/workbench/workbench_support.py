@@ -55,6 +55,7 @@ class RecordingControl(FakeControl):
         self.submitted: list[ActionRequest] = []
         self.irrigated: list[tuple[ActionRequest, float]] = []
         self.receipts: dict[str, ActionRecord] = {}
+        self.irrigation_update: dict = {}  # how the next pump run settles (e.g. cut short)
 
     def _record(self, request: ActionRequest) -> ActionRecord:
         record = ActionRecord(
@@ -81,7 +82,10 @@ class RecordingControl(FakeControl):
         self, request: ActionRequest, seconds: float, planned: bool = False
     ) -> ActionRecord:
         self.irrigated.append((request, seconds) if not planned else (request, seconds, "planned"))
-        return self._record(request)
+        settled = {"ran_seconds": seconds, **self.irrigation_update}
+        record = self._record(request).model_copy(update=settled)
+        self.receipts[request.request_id] = record
+        return record
 
     def receipt(self, request_id: str) -> ActionRecord | None:
         return self.receipts.get(request_id)
@@ -102,11 +106,20 @@ class ScriptedSandbox:
 class Bench:
     """One database, one clock, the services and an app with the workbench mounted."""
 
-    def __init__(self, tmp_path, lan_port: int | None = LAN_PORT, compute_factory=None):
+    def __init__(
+        self,
+        tmp_path,
+        lan_port: int | None = LAN_PORT,
+        compute_factory=None,
+        check_treatments: bool = False,
+    ):
         self.clock = FakeClock()
         self.db = Database(tmp_path / "workbench.db")
         self.control = RecordingControl(self.clock)
-        self.workflow = WorkflowService(self.db, self.clock, self.control)
+        # fixture sheets run light 60, not the fixture protocol's 40/70 treatments
+        self.workflow = WorkflowService(
+            self.db, self.clock, self.control, check_treatments=check_treatments
+        )
         self.archive = Archive(self.db, tmp_path / "archive", self.clock)
         self.alerts = AlertBook(self.db, self.clock)
         self.tasks = TaskBoard(self.db, self.clock)

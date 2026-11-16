@@ -79,11 +79,11 @@
 分析必须跑在不会再变的数据上。[`archive/snapshot.py`](../../../src/growbridge/archive/snapshot.py) 的 `freeze()` 把一次分析的输入写进一个目录，并记下每个文件的指纹。
 
 1. **时钟不可信就拒绝。** 时钟未同步时，`freeze()` 抛出 `Denied("clock_unsynced")`。
-2. **时间窗取自运行单。** 研究 Agent 调用 `freeze_dataset` 时，时间窗从阶段启动时刻算起，长度是 `duration_seconds`；采样间隔和允许的最大缺口也取自运行单。模型不能自己指定这些值（[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)）。
+2. **时间窗取自阶段。** 研究 Agent 调用 `freeze_dataset` 时，时间窗从阶段启动时刻算起，到阶段实际结束或被停止的时刻为止（执行器在计划结束后的下一个周期才结束阶段）；阶段仍在运行时，到启动时刻加 `duration_seconds`。人工测量在这个结束时刻之后再宽限两小时（清单里的 `measurement_grace_seconds`），所以阶段结束时测的值（例如收获时的鲜重）会被保留；`inspect_stage_data` 会列出落在时间窗外的测量。采样间隔和允许的最大缺口也取自运行单。模型不能自己指定这些值（[`agents/handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)）。
 3. **样本分成两份。** 同时满足 `clock_synced`、质量为 `ok`、来源为 `planned` 的样本是可信样本，写入 `samples.jsonl`。其余样本写入 `samples_untrusted.jsonl`：留着备查，不参与任何计算。
 4. **写入其他文件。** `actions.jsonl`、`measurements.jsonl` 和 `interventions.jsonl` 保存时间窗内的相应记录。`frozen_periods.jsonl` 列出与时间窗有重叠的、传感器读数一直不变的时段（还没关闭的时段，`last_at`、`closed_at` 和 `close_reason` 为空）。研究 Agent 用 `freeze_dataset` 冻结时，还会写入 `manual_tasks.jsonl`（运行单在时间窗内计划的人工任务）和 `task_records.jsonl`（操作员对这些任务的记录：已完成或已跳过，只追加，以最新的为准）。每行是一个键已排序的 JSON 对象。
 5. **覆盖率按时长算，不按条数算。** 相邻两条可信样本的间隔不超过允许的缺口时，中间这段时间算作已覆盖。间隔更长时，前一条样本只记一个采样间隔，其余部分列为缺口。覆盖率不低于 0.9（`DEFAULT_MIN_COVERAGE`）的快照才标为 `complete`。
-6. **写清单。** `manifest.json` 包含 ID、实验、版本、时间窗、覆盖率、`complete`、缺口、`min_coverage`、`measurements_excluded`，以及 `files`：每个文件由 `file_digest` 算出的 SHA-256。档案里保存一条 `Snapshot` 记录，带同样的文件列表，另有 `manifest_sha256`，也就是清单文件本身的摘要。
+6. **写清单。** `manifest.json` 包含 ID、实验、版本、时间窗、`measurement_grace_seconds`、覆盖率、`complete`、缺口、`min_coverage`、`measurements_excluded`、`manual_tasks_judged_at`（快照含人工任务时），以及 `files`：每个文件由 `file_digest` 算出的 SHA-256。档案里保存一条 `Snapshot` 记录，带同样的文件列表，另有 `manifest_sha256`，也就是清单文件本身的摘要。
 
 重新冻结不会改动已有的快照，而是新建一个目录，版本号加一。
 

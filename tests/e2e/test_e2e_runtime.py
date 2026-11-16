@@ -3,7 +3,7 @@
 import sys
 
 import pytest
-from e2e_support import STAGE
+from e2e_support import ROUND_LIGHT, STAGE
 
 from growbridge.archive.models import Channel
 from growbridge.ports import ActionRequest, Denied
@@ -17,7 +17,7 @@ async def test_approved_stage_keeps_executing_without_any_model_client(world, mo
     _project, round_id = await world.approved_stage(runtime)
 
     await world.beat(runtime, 30)
-    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == 60
+    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == ROUND_LIGHT[1]
     assert runtime.workflow.stage(STAGE).state is StageState.RUNNING
 
     await world.run_until_ended(runtime)
@@ -175,4 +175,4 @@ async def test_failing_tick_step_raises_an_alert_and_later_steps_still_run(
     assert [a.key for a in alerts] == [broken]
     assert "synthetic failure" in alerts[0].message
     assert {"tick", "deliver", "expire"} <= set(calls)
-    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == 60
+    assert (await runtime.control.read_state()).levels[Channel.LIGHT] == ROUND_LIGHT[1]

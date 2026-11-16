@@ -74,6 +74,7 @@ class ControlService:
         self.device = DeviceIO(bridge)
         self.gate = PriorityGate()
         self._cycle: asyncio.Event | None = None  # set while an irrigation cycle is in flight
+        self._cycle_ended: str | None = None  # why the running cycle was ended before its time
         self._last_cycle_end: float | None = None
         self._last_pump_off_id: str | None = None
         self.ready = False  # False until ``startup`` has finished: ordinary writes are blocked
@@ -179,7 +180,7 @@ class ControlService:
 
     async def handover(self, number: int, reason: str) -> None:
         now = self.clock.now()
-        self._end_cycle()
+        self._end_cycle(f"hand-over: {reason}")
         with self.db.transaction():
             self.ledger.revoke(number, now)
             voided = self._void_queued(f"hand-over: {reason}", right_number=number)
@@ -358,7 +359,8 @@ class ControlService:
             return known
         right = self._authorize(request)
         if right.kind is RightKind.PROTECTION:
-            self._end_cycle()  # a protection write must not wait for a pump run to finish
+            # a protection write must not wait for a pump run to finish
+            self._end_cycle(f"protection write: {request.trigger}")
             self._supersede_queued(request.channel)
         record = rights.intent(request, right, request.level, self.clock.now())
         self._save(record, fingerprint)
@@ -497,9 +499,22 @@ class ControlService:
 
     # --- pump (7.6, 7.8) ----------------------------------------------------------------------
 
-    def _end_cycle(self) -> None:
-        if self._cycle is not None:
+    def _end_cycle(self, reason: str) -> None:
+        if self._cycle is not None and not self._cycle.is_set():
+            self._cycle_ended = reason
             self._cycle.set()
+
+    async def _hold(self, cycle: asyncio.Event, seconds: float) -> dict[str, Any]:
+        """Keep the pump on for ``seconds`` or until the cycle is ended. The length is measured
+        on the event loop's clock, the one the wait runs on."""
+        loop = asyncio.get_running_loop()
+        began = loop.time()
+        try:
+            await asyncio.wait_for(cycle.wait(), timeout=seconds)
+        except TimeoutError:
+            return {"ran_seconds": seconds, "ended_early": None}
+        ran = min(seconds, loop.time() - began)
+        return {"ran_seconds": ran, "ended_early": self._cycle_ended or "ended early"}
 
     async def _run_cycle(
         self, record: ActionRecord, request: ActionRequest, seconds: float, planned: bool = False
@@ -512,14 +527,12 @@ class ControlService:
                 now = self.clock.now()
                 self.ledger.set_meta(META_LAST_IRRIGATION, str(now))
                 cycle = self._cycle = asyncio.Event()
+                self._cycle_ended = None
                 update = {"state": ActionState.MAYBE_SENT, "sent_at": now}
                 sent = self._save(record.model_copy(update=update))
                 on = await self._write(Channel.PUMP, 1)
             if on.state is ActionState.CONFIRMED:
-                try:
-                    await asyncio.wait_for(cycle.wait(), timeout=seconds)
-                except TimeoutError:
-                    pass
+                sent = sent.model_copy(update=await self._hold(cycle, seconds))
         finally:
             if cycle is not None:
                 off = Outcome(ActionState.UNKNOWN, "pump off did not run")
@@ -557,7 +570,7 @@ class ControlService:
         self._require_host()
         if not self.bridge.connected:
             return False
-        self._end_cycle()
+        self._end_cycle(f"pump switched off ({trigger})")
         now = self.clock.now()
         pending = [item for item in self.ledger.unsettled() if item.channel is Channel.PUMP]
         record = ActionRecord(

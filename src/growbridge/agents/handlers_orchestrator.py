@@ -86,8 +86,12 @@ _SAME_TASK_FIELDS = {"owner_role", "question", "constraints", "input_refs", "par
 # model that waits for it (polling its status) waits for nothing.
 STARTS_LATER = (
     "This task starts after your run ends; it cannot progress while you wait. Do not poll it or "
-    "do its work. End your turn now with a short reply to the user; when the task ends you get "
-    "a follow-up task that tells you how it went."
+    "do its work. End your turn now with a short reply to the user; "
+)
+REPORTED_BACK = "when the task ends you get a follow-up task that tells you how it went."
+NOT_REPORTED = (
+    "it is a top-level task, so you are not told when it ends (the operator is alerted when it "
+    "needs attention)."
 )
 TASK_REF = "task:"
 
@@ -110,7 +114,7 @@ def _stored(deps: Deps, task: ResearchTask) -> dict:
         "task_id": stored.id,
         "state": stored.state.value,
         "reused": reused,
-        "next": STARTS_LATER,
+        "next": STARTS_LATER + (NOT_REPORTED if stored.parent_task_id is None else REPORTED_BACK),
     }
 
 
@@ -160,9 +164,9 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         return _stored(deps, task)
 
     def delegate(data: DelegateInput) -> dict:
-        require_project(deps, data.project_id)
+        running = require_project(deps, data.project_id)
         if data.parent_task_id is not None:
-            require_bound(deps, data.parent_task_id)  # a handoff hangs under the running task
+            require_bound(deps, data.parent_task_id)
         task = ResearchTask(
             id=new_id("task"),
             project_id=data.project_id,
@@ -174,7 +178,9 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             constraints=data.constraints,
             input_refs=data.evidence_refs,
             expected_artifacts=data.expected_artifacts,
-            parent_task_id=data.parent_task_id,
+            # a handoff always hangs under the running task, named or not: only then does the
+            # dispatcher hand its end back as the follow-up the tool result promises
+            parent_task_id=running.id,
         )
         return _stored(deps, task)
 
@@ -214,10 +220,10 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "delegate_task",
-            "Delegate a task under your own (parent_task_id) with a full handoff; when it ends "
-            "you get a follow-up task. The planner designs experiments and run sheets; the "
-            "researcher analyses frozen data and writes reports. trigger_event_id must be a new "
-            "id for this task, never the id of your own task.",
+            "Delegate a task under your own (parent_task_id, your task's id if given) with a full "
+            "handoff; when it ends you get a follow-up task. The planner designs experiments and "
+            "run sheets; the researcher analyses frozen data and writes reports. trigger_event_id "
+            "must be a new id for this task, never the id of your own task.",
             DelegateInput,
             delegate,
             writes=True,

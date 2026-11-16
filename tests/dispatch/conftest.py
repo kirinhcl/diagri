@@ -38,6 +38,8 @@ class Env:
             validate=lambda sheet: validate_run_sheet(
                 sheet, control.capabilities(), control.safety()
             ),
+            # fixture sheets run light 60; the planner tools still run the treatment check
+            check_treatments=False,
         )
         self.archive = Archive(db, archive_root, clock)
         self.tasks = TaskBoard(db, clock)

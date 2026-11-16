@@ -892,10 +892,11 @@ async def test_server_notes_are_stored_with_their_code_in_both_languages(env):
     assert _payload(outcome)["server_notes"][0].keys() == {"en", "zh"}
 
 
-def _with_tasks(env, number: int, done: int, planned: int = 4) -> dict:
-    """A frozen round whose snapshot holds ``planned`` watering occurrences, ``done`` recorded."""
+def _with_tasks(env, number: int, done: int, planned: int = 4, frozen_at=None) -> dict:
+    """A frozen round whose snapshot holds ``planned`` watering occurrences, ``done`` recorded.
+    It is frozen at ``frozen_at``, by default once every occurrence is past its deadline."""
     from growbridge.archive.models import TaskRecord
-    from growbridge.planning.manual_tasks import Occurrence
+    from growbridge.planning.manual_tasks import ON_TIME_SECONDS, Occurrence
 
     name = f"e{number}"
     env.stage_for(name)
@@ -919,6 +920,7 @@ def _with_tasks(env, number: int, done: int, planned: int = 4) -> dict:
                 recorded_at=item.due_at,
             )
         )
+    env.clock.wall = START + 10 + ON_TIME_SECONDS + 1 if frozen_at is None else frozen_at
     shot = snapshots.freeze(env.archive, name, env.clock, START, START + 10, 1, 2, schedule=items)
     return {"snapshot_id": shot.id, "round": number}
 
@@ -938,6 +940,41 @@ async def test_manual_tasks_not_done_in_time_are_a_deviation(env, tmp_path):
     assert missed["text"]["en"] == (
         "Round 2: 3 of 4 planned manual tasks were not done on time (irrigation 3)"
     )
+
+
+async def test_tasks_still_in_their_window_when_frozen_are_unchecked_not_missed(env, tmp_path):
+    """Frozen at the window end, round 2's three unrecorded tasks may still be done on time: no
+    deviation, but the check is incomplete, so the result cannot be confirmatory."""
+    task = env.task("researcher")
+    end = START + 10
+    rounds = [_with_tasks(env, n, done=4 if n != 2 else 1, frozen_at=end) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    outcome = await _publish(env, task.id, rounds, deps)
+
+    body = _payload(outcome)
+    check = {
+        d["round"]: (d["missed"], d["total"], d["unsettled"]) for d in body["manual_task_check"]
+    }
+    assert check == {1: (0, 4, 0), 2: (0, 1, 3), 3: (0, 4, 0), 4: (0, 4, 0)}
+    assert body["label"] == "exploratory"
+    notes = {n["code"]: n for n in _report(env, outcome)["notes"]}
+    assert notes["manual_tasks_unsettled"]["kind"] == "limitation"
+    assert notes["manual_tasks_unsettled"]["params"] == {"round": 2, "open": 3, "planned": 4}
+    assert notes["manual_tasks_unchecked"]["kind"] == "reason"
+    manifest = env.archive.root / "snapshots" / rounds[1]["snapshot_id"] / snapshots.MANIFEST
+    assert json.loads(manifest.read_text())["manual_tasks_judged_at"] == end
+
+
+async def test_tasks_all_done_before_a_freeze_at_the_window_end_are_fully_checked(env, tmp_path):
+    task = env.task("researcher")
+    rounds = [_with_tasks(env, n, done=4, frozen_at=START + 10) for n in (1, 2, 3, 4)]
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path)
+
+    body = _payload(await _publish(env, task.id, rounds, deps))
+
+    assert body["label"] == "confirmatory"
+    assert all(d["unsettled"] == 0 for d in body["manual_task_check"])
 
 
 async def test_manual_tasks_all_done_keep_the_result_confirmatory(env, tmp_path):
@@ -968,7 +1005,8 @@ async def test_the_freeze_tool_holds_the_planned_tasks_and_their_records(env):
     assert body["manual_tasks"] == {
         "planned": 1,
         "by_kind": {"irrigation": {"open": 1}},
-        "not_done_in_time": 1,
+        "judged": 0,  # still within its two hours: not yet missed
+        "not_done_in_time": 0,
     }
     files = env.archive.snapshot(shot["snapshot_id"]).files
     assert {"manual_tasks.jsonl", "task_records.jsonl"} <= set(files)

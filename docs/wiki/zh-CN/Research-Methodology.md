@@ -139,7 +139,7 @@ n = ((z(1 - alpha/2) + z(power)) × sd / effect)²
 
 描述性优先于探索性，所有降级原因都写进报告。发布路径上还有三道上限，会把确认性降为探索性（[`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`research/report.py`](../../../src/growbridge/research/report.py)）：不是每份快照都有成功的确认性运行；快照不完整；留出数据已经被读过一次。
 
-**人工任务。** 快照里保存运行单在阶段时间窗内计划的人工任务，以及操作员在阶段页上做的记录（[`planning/manual_tasks.py`](../../../src/growbridge/planning/manual_tasks.py)）。某次任务的最新记录为"已完成"，且完成时间不晚于到期后两小时（`ON_TIME_SECONDS`），就算按时完成；`make_up_allowed` 的任务只要在阶段结束前完成即可。延迟、跳过和没有记录的都算没完成。有这类任务的轮次会在报告局限里写一条说明，超过 10%（`MAX_MISSED_SHARE`）的轮次算作偏离。在人工任务随快照冻结之前冻结的旧快照不参与这项核对。
+**人工任务。** 快照里保存运行单在阶段时间窗内计划的人工任务，以及操作员在阶段页上做的记录（[`planning/manual_tasks.py`](../../../src/growbridge/planning/manual_tasks.py)）。某次任务的最新记录为"已完成"，且完成时间不晚于到期后两小时（`ON_TIME_SECONDS`），就算按时完成；`make_up_allowed` 的任务只要在阶段结束前完成即可；而且这条记录必须在截止时间后一天内录入（`LATE_ENTRY_SECONDS`），事后很久填写的完成时间不能让它算作按时。延迟、跳过和没有记录的都算没完成。每个快照按它冻结的那一刻、用当时已有的记录来判断（清单里的 `manual_tasks_judged_at`）：还没到期或仍在时限内的任务不计入，所以在阶段结束时或阶段中途冻结的快照不会显示尚未发生的偏离。但这些任务并没有被核对：报告会按轮次注明（`manual_tasks_unsettled`），并把结论标签最高限为探索性（`manual_tasks_unchecked`）；要完整核对，请在最后一次任务的截止时间之后重新冻结。有这类任务的轮次会在报告局限里写一条说明，超过 10%（`MAX_MISSED_SHARE`）的轮次算作偏离。在人工任务随快照冻结之前冻结的旧快照不参与这项核对。
 
 **说明的语言。** 服务器加进报告的每条原因和局限都是一条带代码的说明（[`research/notes.py`](../../../src/growbridge/research/notes.py)），同时有英文和中文。报告把它们存在 `notes` 里，每条有 `code`、`kind`（`reason` 或 `limitation`）、`params` 和 `text`（`en`、`zh`），模型自己写的局限另存在 `model_limitations`。轮次页按控制台当前语言显示。纯文本字段 `reasons`、`limitations`、`conclusion_text` 仍保存中文，旧的读取方式看到的内容不变。
 

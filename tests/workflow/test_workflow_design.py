@@ -57,7 +57,9 @@ async def test_round_designing_to_stage_review_when_first_run_sheet_is_submitted
 async def test_design_blocking_finding_keeps_the_round_in_designing(db, clock, control, world):
     blocking = Finding(code="rule_conflict", message="two rules fight over exhaust")
     warning = Finding(code="note", message="long stage", blocking=False)
-    world.svc = WorkflowService(db, clock, control, validate=lambda sheet: (warning, blocking))
+    world.svc = WorkflowService(
+        db, clock, control, validate=lambda sheet: (warning, blocking), check_treatments=False
+    )
     await world.design()
     findings = world.svc.submit_run_sheet(world.round_id, world.sheet(), world.op)
     assert findings == (warning, blocking)
@@ -68,7 +70,9 @@ async def test_design_blocking_finding_keeps_the_round_in_designing(db, clock, c
 
 async def test_design_non_blocking_findings_do_not_stop_review(db, clock, control, world):
     warning = Finding(code="note", message="long stage", blocking=False)
-    world.svc = WorkflowService(db, clock, control, validate=lambda sheet: (warning,))
+    world.svc = WorkflowService(
+        db, clock, control, validate=lambda sheet: (warning,), check_treatments=False
+    )
     await world.design()
     assert world.svc.submit_run_sheet(world.round_id, world.sheet(), world.op) == (warning,)
     assert world.round_state() == "stage_review"
@@ -76,7 +80,9 @@ async def test_design_non_blocking_findings_do_not_stop_review(db, clock, contro
 
 async def test_design_validator_sees_the_submitted_run_sheet(db, clock, control, world):
     seen: list[RunSheet] = []
-    world.svc = WorkflowService(db, clock, control, validate=lambda s: seen.append(s) or ())
+    world.svc = WorkflowService(
+        db, clock, control, validate=lambda s: seen.append(s) or (), check_treatments=False
+    )
     await world.design()
     sheet = world.sheet()
     world.svc.submit_run_sheet(world.round_id, sheet, world.op)

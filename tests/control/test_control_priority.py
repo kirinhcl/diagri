@@ -81,7 +81,7 @@ async def test_irrigation_pump_off_overtakes_queued_writes(rig):
     await wait_for(lambda: all(rig.service.receipt(n) is not None for n in "bc"))
     await wait_for(lambda: len(rig.service.gate._waiters) == 2)  # b and c wait behind a
     assert rig.service.irrigating()
-    rig.service._end_cycle()  # the run ends, as its timer would: the pump-off is requested
+    rig.service._end_cycle("test")  # the run ends, as its timer would: pump-off is requested
     await wait_for(lambda: len(rig.service.gate._waiters) == 3)
     release.set()
     await asyncio.gather(irrigation, first, *queued)
