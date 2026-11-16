@@ -4,6 +4,7 @@ import { describeDenial } from "../denials.js";
 import { saveDraft, stripSecrets, takeDraft } from "../drafts.js";
 import { formatTime, zonedToEpoch } from "../format.js";
 import { clear, h } from "./dom.js";
+import { techDetails } from "./section.js";
 
 // A datetime-local value may carry zero seconds ("…T16:00:00"); zonedToEpoch takes minutes only.
 const ZERO_SECONDS = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):00(?:\.0+)?$/;
@@ -52,21 +53,47 @@ export function saveAllDrafts() {
   return draftSavers.size;
 }
 
-// [explanation, advice, the server's own message] for a denial (the message only when it says more
-// than the code); [title, message] for a code without a translation.
+// The console's own refusal (stage and safety approval): its message is catalog text, not the server's.
+const OWN_REFUSAL = "not_approved";
+
+// At most two plain lines; what the server said in its own words is in errorDetail. No answer at all
+// is one line; a known code is [explanation, advice]; a 404 without a code is "not found".
 export function errorLines(error, lang, t) {
   const code = error instanceof ApiError ? error.code : null;
+  if (code === "network") return [t("error.network")];
+  if (code === OWN_REFUSAL && error.message) return [t("error.title"), String(error.message)];
   const known = code ? describeDenial(code, lang) : null;
-  const message = error && error.message ? String(error.message) : "";
-  if (known) return message && message !== code ? [known.text, known.advice, message] : [known.text, known.advice];
-  return message ? [t("error.title"), message] : [t("error.title")];
+  if (known) return [known.text, known.advice];
+  if (error instanceof ApiError && error.status === 404 && !code) return [t("error.notFound")];
+  return [t("error.title")];
 }
 
-function showStatus(status, lines, kind) {
+// [label, value] pairs for the technical details: HTTP status, code and the message as it came (a
+// message that only repeats the code is left out). The labels use t, else the bound page's.
+export function errorDetail(error, t = bound.t) {
+  if (!error) return [];
+  const isApi = error instanceof ApiError;
+  const message = typeof error === "object" ? String(error.message || "") : String(error); // a thrown string too
+  const fromServer = isApi && error.status > 0;
+  const entries = [
+    [t("tech.httpStatus"), isApi ? error.status : null],
+    [t("tech.code"), isApi ? error.code : null],
+    [t(fromServer ? "tech.serverMessage" : "tech.message"), isApi && message === error.code ? null : message],
+  ];
+  return entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
+}
+
+// Plain lines, then (for a refusal) the folded technical details.
+function showStatus(status, lines, kind, details = null) {
   clear(status);
   status.className = `form-status form-status-${kind}`;
-  status.hidden = lines.length === 0;
+  status.hidden = lines.length === 0 && !details;
   for (const line of lines) status.append(h("p", { text: line }));
+  if (details) status.append(details);
+}
+
+function showRefusal(status, error, t, lines) {
+  showStatus(status, lines, "error", techDetails(t, errorDetail(error, t)));
 }
 
 // The form, its status line and its submit button; run() goes through singleFlight.
@@ -86,7 +113,10 @@ function formFrame(submitLabel, children, run, getCtx) {
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    guarded().catch((error) => showStatus(status, errorLines(error, getCtx().lang, getCtx().t), "error"));
+    guarded().catch((error) => {
+      const { lang, t } = getCtx();
+      showRefusal(status, error, t, errorLines(error, lang, t));
+    });
   });
   return { form, status };
 }
@@ -96,10 +126,10 @@ function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
   const lines = errorLines(error, ctx.lang, ctx.t);
   const code = error instanceof ApiError ? error.code : null;
   if (code === "validation") {
-    showStatus(status, [...lines, ...showValidation(error.fields)], "error");
+    showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields)]);
     return;
   }
-  showStatus(status, lines, "error");
+  showRefusal(status, error, ctx.t, lines);
   if (code === "session") keepDraft();
   if (code === "state") {
     // The object may just have been changed by someone else: say so and read the page again.

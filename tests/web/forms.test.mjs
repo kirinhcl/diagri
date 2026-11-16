@@ -5,6 +5,7 @@ import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { describeDenial } from "../../src/growbridge/web/workbench/denials.js";
 import {
   dropDetachedDraftSavers,
+  errorDetail,
   errorLines,
   registerDraftSaver,
   saveAllDrafts,
@@ -13,22 +14,33 @@ import {
 
 const t = (key) => `t:${key}`;
 
-test("a known refusal keeps the server's own explanation as a third line", () => {
+test("a known refusal shows its explanation and advice; the server's own words go to the details", () => {
   const error = new ApiError(409, "state", "stage stage-1 is paused; nothing to approve");
   const { text, advice } = describeDenial("state", "en");
-  assert.deepEqual(errorLines(error, "en", t), [text, advice, "stage stage-1 is paused; nothing to approve"]);
+  assert.deepEqual(errorLines(error, "en", t), [text, advice]);
+  assert.deepEqual(errorDetail(error, t), [
+    ["t:tech.httpStatus", 409],
+    ["t:tech.code", "state"],
+    ["t:tech.serverMessage", "stage stage-1 is paused; nothing to approve"],
+  ]);
 });
 
-test("no extra line when the message only repeats the code or is missing", () => {
+test("the same two lines when the message only repeats the code or is missing", () => {
   const { text, advice } = describeDenial("validation", "zh");
   assert.deepEqual(errorLines(new ApiError(422, "validation", "validation"), "zh", t), [text, advice]);
   assert.deepEqual(errorLines(new ApiError(403, "scope", ""), "zh", t).length, 2);
 });
 
-test("an unknown code or a plain error shows the title and the message", () => {
-  assert.deepEqual(errorLines(new ApiError(0, "not_approved", "changed"), "en", t), ["t:error.title", "changed"]);
-  assert.deepEqual(errorLines(new Error("boom"), "en", t), ["t:error.title", "boom"]);
+test("an unknown code or a plain error shows only the title; its message is a detail", () => {
+  assert.deepEqual(errorLines(new ApiError(409, "brand_new", "changed"), "en", t), ["t:error.title"]);
+  assert.deepEqual(errorLines(new Error("boom"), "en", t), ["t:error.title"]);
+  assert.deepEqual(errorDetail(new Error("boom"), t), [["t:tech.message", "boom"]]);
+  assert.deepEqual(errorDetail("thrown as text", t), [["t:tech.message", "thrown as text"]]);
   assert.deepEqual(errorLines(null, "en", t), ["t:error.title"]);
+});
+
+test("the console's own refusal keeps its catalog line as the second line", () => {
+  assert.deepEqual(errorLines(new ApiError(0, "not_approved", "changed"), "en", t), ["t:error.title", "changed"]);
 });
 
 test("a lost session saves the draft of every form still on the page", () => {

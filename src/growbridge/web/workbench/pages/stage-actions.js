@@ -153,7 +153,7 @@ function draftGroup(env) {
     const list = Array.isArray(answer && answer.findings) ? answer.findings : [];
     findings.replaceChildren(findingsList(ctx, list));
     findings.hidden = list.length === 0;
-    if (list.some((finding) => finding.blocking)) throw new Error(ctx.t("stage.draft.refused"));
+    if (list.some((finding) => finding.blocking)) throw new ApiError(0, "not_approved", ctx.t("stage.draft.refused"));
     await accepted(env, submitLabel);
   };
   const value = { round_id: env.roundId, run_sheet: review.run_sheet };

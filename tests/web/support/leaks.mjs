@@ -31,23 +31,38 @@ export const LEAK_PATTERNS = Object.freeze({
 
 const isTechDetails = (node) => node.localName === "details" && (node.getAttribute("class") || "").split(/\s+/).includes("tech-details");
 
-function collect(node, parts) {
+function collect(node, parts, withDetails) {
   if (node.nodeType === TEXT_NODE) {
     parts.push(node.textContent);
     return;
   }
   const isElement = node.nodeType === ELEMENT_NODE;
-  if (isElement && isTechDetails(node)) return;
+  if (isElement && !withDetails && isTechDetails(node)) return;
   parts.push(" ", (isElement && node.getAttribute("aria-label")) || "");
-  for (const child of node.childNodes) collect(child, parts);
+  for (const child of node.childNodes) collect(child, parts, withDetails);
   parts.push(" ");
+}
+
+function textOf(node, withDetails) {
+  const parts = [];
+  collect(node, parts, withDetails);
+  return parts.join("").replace(/\s+/g, " ").trim();
 }
 
 // Text nodes and aria-labels, a space between elements; never title attributes or technical details.
 export function visibleText(node) {
-  const parts = [];
-  collect(node, parts);
-  return parts.join("").replace(/\s+/g, " ").trim();
+  return textOf(node, false);
+}
+
+// The same, with every technical-details block opened.
+export function visibleTextIncludingDetails(node) {
+  return textOf(node, true);
+}
+
+// The buttons inside node, the node itself included.
+export function countButtons(node) {
+  const own = node.nodeType === ELEMENT_NODE && node.localName === "button" ? 1 : 0;
+  return own + node.childNodes.reduce((sum, child) => sum + countButtons(child), 0);
 }
 
 // Each exempt string is cut out (longest first, leaving a space) before the patterns are applied.
