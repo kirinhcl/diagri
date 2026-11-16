@@ -252,3 +252,17 @@ test("the simulator reads as a simulated device; any device id stays in the item
   const en = groupView(testCtx({ lang: "en", now: NOW }), { kind: "stage_paused", hidden: 0, items: [stageItem("SIMULATED")] });
   assert.match(visibleText(en), /Device: Simulated device/);
 });
+
+// --- final review: an unknown state's code sits in the item's details, not inside its link (F3) ---
+test("an inbox item with an unknown state keeps the code in its details and no fold inside its link", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = groupView(ctx, { kind: "stage_paused", hidden: 0, items: [{ kind: "stage_paused", id: "s1", since: NOW, detail: { state: "warp_drive" } }] });
+  assert.match(visibleText(view), /未知（技术详情）/);
+  assert.ok(!visibleText(view).includes("warp_drive"));
+  assert.match(visibleTextIncludingDetails(view), /代码 warp_drive/);
+  const link = findAll(view, (n) => n.localName === "a" && withClass("inbox-item")(n))[0];
+  assert.ok(link, "the row is a link");
+  assert.equal(findAll(link, (n) => n.localName === "details").length, 0);
+  const alert = groupView(ctx, { kind: "alert", hidden: 0, items: [{ kind: "alert", id: "a1", since: NOW, detail: { message: "m", alert_kind: "data_gap", severity: "warp_level" } }] });
+  assert.match(visibleTextIncludingDetails(alert), /代码 warp_level/);
+});

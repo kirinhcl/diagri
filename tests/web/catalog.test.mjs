@@ -11,6 +11,7 @@ import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
 import { labelOr, makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { severityPill, stateGroup, statePill } from "../../src/growbridge/web/workbench/ui/status.js";
 import { installFakeDom } from "./support/render-page.mjs";
+import { visibleText } from "./support/leaks.mjs";
 
 const KNOWN = JSON.parse(readFileSync(new URL("./fixtures/known-codes.json", import.meta.url), "utf8"));
 const ROOT = fileURLToPath(new URL("../../src/growbridge/web/workbench", import.meta.url));
@@ -96,9 +97,9 @@ test("a pill for a state or severity the catalog lacks says unknown, not the cod
   const dom = installFakeDom();
   try {
     const t = makeT("zh");
-    assert.equal(statePill(t, "brand_new_state").textContent, "未知（技术详情）");
+    assert.equal(visibleText(statePill(t, "brand_new_state")), "未知（技术详情）");
     assert.equal(statePill(t, "failed").textContent, "失败");
-    assert.equal(severityPill(t, "fatal").textContent, "未知（技术详情）");
+    assert.equal(visibleText(severityPill(t, "fatal")), "未知（技术详情）");
   } finally {
     dom.restore();
   }

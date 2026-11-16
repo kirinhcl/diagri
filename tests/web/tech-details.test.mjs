@@ -210,3 +210,42 @@ test("a form's refusal shows the plain lines with the technical details under th
   assert.match(visibleTextIncludingDetails(status), /stage st_91c2 is recovery_check/);
   assert.deepEqual(notices, [`${text} ${advice}`]);
 });
+
+// --- final review: "unknown (technical details)" has the code in a fold right there (F3) ----------
+import { codeLabel, severityPill, statePill } from "../../src/growbridge/web/workbench/ui/status.js";
+import { makeT as catalogT } from "../../src/growbridge/web/workbench/i18n.js";
+
+const UNKNOWN = "warp_drive";
+
+test("a known state or severity is a bare pill; an unknown one keeps its code in a fold beside it", () => {
+  installFakeDom();
+  const t = catalogT("zh");
+  assert.equal(visibleTextIncludingDetails(statePill(t, "running")), "运行中");
+  assert.equal(visibleTextIncludingDetails(severityPill(t, "critical")), visibleText(severityPill(t, "critical")));
+  for (const node of [statePill(t, UNKNOWN), severityPill(t, UNKNOWN), codeLabel(t, "alert.kind", UNKNOWN)]) {
+    assert.match(visibleText(node), /未知（技术详情）/);
+    assert.ok(!visibleText(node).includes(UNKNOWN));
+    assert.match(visibleTextIncludingDetails(node), /代码 warp_drive/);
+  }
+  assert.equal(codeLabel(t, "alert.kind", "data_gap"), "数据空档");
+  assert.equal(visibleText(statePill(t, null)), "—");
+  assert.equal(visibleTextIncludingDetails(statePill(t, null)), "—");
+});
+
+test("the stage, round and alerts pages keep an unknown state or kind's code in the details", async () => {
+  const stageId = FIXTURES["stage.json"].stage_id;
+  const roundId = FIXTURES["round.json"].round_id;
+  const [first, ...rest] = FIXTURES["alerts.json"].alerts;
+  const pages = [
+    ["stage", { stageId }, { "stage.json": { ...FIXTURES["stage.json"], state: UNKNOWN, prior_state: "warp_prior" } }, ["warp_drive", "warp_prior"]],
+    ["round", { roundId }, { "round.json": { ...FIXTURES["round.json"], state: UNKNOWN } }, ["warp_drive"]],
+    ["alerts", {}, { "alerts.json": { alerts: [{ ...first, kind: UNKNOWN, severity: "warp_level" }, ...rest] } }, ["warp_drive", "warp_level"]],
+  ];
+  for (const [page, params, fixtures, codes] of pages) {
+    const { element } = await renderPage(page, params, { fixtures });
+    for (const code of codes) {
+      assert.ok(!visibleText(element).includes(code), `${page}: ${code} in view`);
+      assert.ok(visibleTextIncludingDetails(element).includes(`代码 ${code}`), `${page}: ${code} not in a fold`);
+    }
+  }
+});

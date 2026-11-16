@@ -1,8 +1,7 @@
 // Open alerts: how bad, how often, since when, and who has read them.
-import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { errorBox, note, pageHead, section, showErrors, timeCell, timeText } from "../ui/section.js";
-import { severityPill } from "../ui/status.js";
+import { codeLabel, severityPill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { isNotMounted } from "./not-mounted.js";
 
@@ -70,7 +69,7 @@ function readCell(ctx, alert) {
 function alertsTable(ctx, alerts, focus) {
   const columns = [
     { label: ctx.t("alerts.severity"), cell: (row) => severityPill(ctx.t, row.severity) },
-    { label: ctx.t("alerts.kind"), cell: (row) => labelOr(ctx.t, "alert.kind", row.kind) },
+    { label: ctx.t("alerts.kind"), cell: (row) => codeLabel(ctx.t, "alert.kind", row.kind) },
     { label: ctx.t("alerts.message"), cell: (row) => messageCell(row.message) },
     { label: ctx.t("alerts.count"), cell: (row) => String(row.count) },
     { label: ctx.t("alerts.first"), cell: (row) => timeCell(ctx, row.first_at) },

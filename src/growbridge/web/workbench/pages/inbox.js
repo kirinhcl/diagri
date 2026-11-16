@@ -6,7 +6,7 @@ import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
 import { deviceName, displayName, nameDetails, roleLabel } from "../ui/names.js";
 import { errorParts, foldedText, replaceParts, techDetails, timeText } from "../ui/section.js";
-import { severityPill, statePill } from "../ui/status.js";
+import { severityPill, statePill, unknownCode } from "../ui/status.js";
 
 const POLL_SECONDS = 15;
 // Most urgent first: on-site checks and alerts, then decisions waiting on a person, then the rest.
@@ -71,6 +71,9 @@ function where(ctx, item) {
   return [ctx.t("inbox.project", { name: project }), round];
 }
 
+// A row may be a link, which cannot hold a fold: an unknown state's code goes to the item's details.
+const BARE = { fold: false };
+
 export const DESCRIBERS = {
   stage: (ctx, item, d) => {
     const stage = displayName(ctx, "stage", item);
@@ -80,13 +83,13 @@ export const DESCRIBERS = {
       : ctx.t("inbox.title.stage", { stage, state: labelOr(ctx.t, "state", d.state) });
     return {
       title,
-      pill: statePill(ctx.t, d.state),
+      pill: statePill(ctx.t, d.state, BARE),
       meta: [say(ctx.t, "inbox.device", { device: deviceName(ctx.t, d.device_id) }), ...(review ? [] : where(ctx, item))],
     };
   },
   round_choice: (ctx, item, d) => ({
     title: ctx.t("inbox.title.choice", { project: displayName(ctx, "project", item), round: displayName(ctx, "round", item) }),
-    pill: statePill(ctx.t, "awaiting_choice"),
+    pill: statePill(ctx.t, "awaiting_choice", BARE),
     lines: [
       d.awaiting_choice ? ctx.t("inbox.roundChoice") : null,
       d.since_from === "round_created" ? ctx.t("inbox.sinceRoundCreated") : null,
@@ -96,7 +99,7 @@ export const DESCRIBERS = {
   alert: (ctx, item, d) => ({
     title: foldedText(ctx, d.message || ""),
     plain: d.message || "",
-    pill: severityPill(ctx.t, d.severity),
+    pill: severityPill(ctx.t, d.severity, BARE),
     meta: [
       labelOr(ctx.t, "alert.kind", d.alert_kind),
       say(ctx.t, "inbox.alertCount", { count: d.count }),
@@ -105,14 +108,14 @@ export const DESCRIBERS = {
   }),
   compute_stuck: (ctx, item, d) => ({
     title: ctx.t("inbox.title.stuck", { phase: labelOr(ctx.t, "state", d.phase) }),
-    pill: statePill(ctx.t, d.phase),
+    pill: statePill(ctx.t, d.phase, BARE),
     lines: [d.reason],
     meta: [],
   }),
   task: (ctx, item, d) => ({
     title: d.question ? foldedText(ctx, d.question) : displayName(ctx, "researchTask", d),
     plain: d.question || "",
-    pill: statePill(ctx.t, d.state),
+    pill: statePill(ctx.t, d.state, BARE),
     meta: [d.owner_role ? ctx.t("inbox.owner", { role: roleLabel(ctx.t, d.owner_role) }) : null, ...where(ctx, item)],
   }),
 };
@@ -126,11 +129,13 @@ export function describe(ctx, item) {
 }
 
 // What an item's detail carries that only its technical details show: the stopped stage of a round
-// choice, the device of a stage, the raw alert code.
+// choice, the device of a stage, the raw alert code, the code of an unknown state or severity.
 function detailEntries(ctx, item, d) {
   if (item.kind === "round_choice") return [[ctx.t("tech.id.stage_id"), d.awaiting_choice]];
-  if (item.kind === "alert") return [[ctx.t("inbox.tech.alertKind"), d.alert_kind]];
-  return STAGE_KINDS.has(item.kind) ? [[ctx.t("stage.review.device"), d.device_id]] : [];
+  if (item.kind === "alert") return [[ctx.t("inbox.tech.alertKind"), d.alert_kind], ...unknownCode(ctx.t, "severity", d.severity)];
+  if (item.kind === "compute_stuck") return unknownCode(ctx.t, "state", d.phase);
+  const device = STAGE_KINDS.has(item.kind) ? [[ctx.t("stage.review.device"), d.device_id]] : [];
+  return [...device, ...unknownCode(ctx.t, "state", d.state)];
 }
 
 // The item's own ids and detailEntries, for its technical details.
