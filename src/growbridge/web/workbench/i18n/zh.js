@@ -673,4 +673,10 @@ export default {
   "admin.event.lock": "锁定",
   "admin.event.release": "释放",
   "admin.event.force": "强制释放",
+  "admin.projects": "项目转移",
+  "admin.transfer": "转移项目",
+  "admin.projectId": "项目编号",
+  "admin.newOwner": "新所有者",
+  "admin.transferLead": "打开多用户之前建的项目没有所有者，只有管理员能看到；所有者被停用的项目也无人能操作。项目没有未结束的阶段时，可以在这里把它转给一个在用的账号（项目编号见「项目」页）。",
+  "admin.transferred": "已把项目转给 {owner}。",
 };

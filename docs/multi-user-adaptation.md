@@ -6,6 +6,9 @@ Branch `feat/multi-user-locks`. Design: [`docs/superpowers/specs/2026-11-16-mult
 
 The layer is off unless `auto_research = true` and `multi_user = true`. Off, `WorkflowService.access` is `None` and every check is a no-op, so existing deployments, tests, `growbridge simulate` and `scripts/dev_workbench.py` behave as before. Three defects it fixed are on regardless: a replacement run sheet must keep its stage's project, experiment and device; a measurement correction must stay in its experiment; `get_project_state` names only its own project's active stage. Two more: `TaskBoard.create` refuses a trigger id that belongs to another project, and a stage command no longer hands over a right after its stage changed under it (a late hand-over ended the device's irrigation cycle).
 
+
+Upgrading an existing installation: create the first administrator with `growbridge operator add --admin`; existing projects have no owner until an administrator hands them over (Administration page or `POST /wb/admin/projects/{project_id}/owner`); alerts open at the upgrade have no owner and show to administrators only.
+
 What new code needs to do:
 
 1. **A new GET route under `/wb`** — add it to `READ_RULES` in `workbench/visibility.py` (the test fails otherwise) and filter it: `project_read` / `stage_read` from `workbench/scope.py`, answering a hidden object exactly as a missing id.
@@ -21,6 +24,9 @@ What new code needs to do:
 ## 中文
 
 只有 `auto_research = true` 且 `multi_user = true` 时才启用。关闭时 `WorkflowService.access` 为 `None`，所有检查都不做，现有部署、测试、`growbridge simulate` 和 `scripts/dev_workbench.py` 行为不变。顺手修的几个缺陷不受开关影响：替换运行单不能改变阶段的项目、实验和设备；测量更正只能在本实验内；`get_project_state` 只报本项目的活动阶段；`TaskBoard.create` 拒绝属于别的项目的触发编号；阶段命令在阶段已变化后不再交还写入权（迟到的交还会结束设备的灌溉周期）。
+
+
+在已有部署上打开：先用 `growbridge operator add --admin` 创建第一个管理员；已有项目没有所有者，要由管理员转出（「管理」页或 `POST /wb/admin/projects/{project_id}/owner`）；升级时开着的告警没有归属，只给管理员看。
 
 新代码要做的事：
 

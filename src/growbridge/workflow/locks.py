@@ -153,9 +153,9 @@ class GreenhouseLocks:
     def _finish_release(self, greenhouse_id: str, actor: str, force: bool, note: str) -> None:
         with self.db.transaction():
             row = self._check_release(greenhouse_id, actor, force)
-            holder = self.store.care_holder(self.greenhouse(greenhouse_id).device_id)
-            if holder is not None:
-                self.store.update_stage(holder, care_right=None, care_released=True)
+            # every finished stage of the device, not only the one holding care now: after a
+            # restart care may be waiting to be restored to one that holds nothing yet
+            self.store.release_care_of_device(self.greenhouse(greenhouse_id).device_id)
             self.db.execute(
                 "DELETE FROM greenhouse_locks WHERE greenhouse_id = ?", (greenhouse_id,)
             )

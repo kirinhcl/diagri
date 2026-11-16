@@ -52,3 +52,22 @@ for (const page of ["environment", "safety"]) {
     assert.match(visibleText(element), /Lock a greenhouse/);
   });
 }
+
+test("the administration page can hand a project to another operator", async () => {
+  const { element, ctx } = await renderPage("admin", {}, { lang: "en" });
+  const descendants = (node) => [...(node.children || [])].flatMap((child) => [child, ...descendants(child)]);
+  const forms = descendants(element).filter((el) => el.nodeName === "FORM");
+  const transfer = forms.find((form) => /Hand over the project/.test(visibleText(form)));
+  assert.ok(transfer, "a transfer form");
+  const field = (name) => descendants(transfer).find((el) => el.getAttribute("name") === name);
+  field("project_id").value = "project-old";
+  field("owner").value = "alice";
+  field("note").value = "imported before multi-user";
+
+  transfer.dispatchEvent(Object.assign(new Event("submit"), { preventDefault() {} }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const call = ctx.api.calls.find((c) => c.method === "POST");
+  assert.equal(call.path, "/admin/projects/project-old/owner");
+  assert.deepEqual(call.body, { owner: "alice", note: "imported before multi-user" });
+});

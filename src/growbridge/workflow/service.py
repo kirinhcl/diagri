@@ -212,7 +212,9 @@ class WorkflowService(StageRecovery):
 
     def _replace_run_sheet(self, rnd: RoundRow, stage: StageRow, sheet: RunSheet) -> None:
         """A new version while waiting for review voids the approval of the old one (App. B)."""
-        if stage.round_id != rnd.id or stage.state is not S.PENDING_REVIEW:
+        if stage.round_id != rnd.id:  # another round's stage: say nothing about it
+            raise Denied("state", f"stage id {stage.stage_id} is already used")
+        if stage.state is not S.PENDING_REVIEW:
             raise Denied("state", f"stage {stage.stage_id} is {stage.state.value}; use a switch")
         bound = (stage.project_id, stage.experiment_id, stage.device_id)
         if (sheet.project_id, sheet.experiment_id, sheet.device_id) != bound:

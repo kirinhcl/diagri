@@ -212,3 +212,19 @@ async def test_access_none_unchanged(world):
     await world.running("stage-1")  # no access: operators act as before
 
     assert world.state("stage-1") == "running"
+
+
+async def test_a_stage_id_used_in_another_round_does_not_tell_its_state(world, people):
+    await people.running()  # alice's stage-1 is running
+    world.round_id = ""
+    people.locks.lock("bob", ["gh-02"])
+    round_b = people.design(people.bob, protocol_id="protocol-bob")
+    sheet = world.sheet(
+        "stage-1", protocol_id="protocol-bob", device_id="AC5-2", experiment_id="experiment-bob"
+    )
+
+    with pytest.raises(Denied) as denied:
+        world.svc.submit_run_sheet(round_b, sheet, people.bob)
+
+    assert denied.value.code == "state"
+    assert "running" not in str(denied.value) and "already used" in str(denied.value)

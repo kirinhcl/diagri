@@ -171,6 +171,8 @@ When no safety configuration has been approved, the thresholds are the defaults 
 
 With `multi_user = true` (and `auto_research = true`) every operator has a role, `user` or `admin` (`growbridge operator add --admin` makes the first administrator). An operator locks greenhouses on the console's Greenhouses page; a project belongs to the operator who created it; acting on a stage needs both the project and the lock of the stage's greenhouse. Operators see only their own projects, stages, alerts and receipts; administrators see everything, pause or stop any stage in an emergency, manage accounts, force a release and hand an abandoned project to someone else. Releasing a greenhouse hands its care rules back and leaves the device as it is. Design: [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md).
 
+**Switching it on for an existing installation.** Create the first administrator with `growbridge operator add --admin <name>`. Every project made before has no owner: only administrators see it, and nobody can act on it until an administrator hands it over (Administration page, or `POST /wb/admin/projects/{project_id}/owner`), which needs the project to have no unfinished stage. Alerts open at the upgrade have no owner either: they show to administrators only, and some come back once with an owner, so expect one round of duplicate notifications.
+
 ```toml
 multi_user = true
 

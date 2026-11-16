@@ -202,3 +202,19 @@ async def test_crash_between_handover_and_commit_restores_care(world, locks, mon
     assert locks.holder_of_device(DEVICE) == "alice"
     assert row.care_released is False
     assert row.care_right is not None and row.care_right in world.control.live(RightKind.CARE)
+
+
+async def test_release_during_recovery_keeps_care_away(world, locks):
+    """After a restart the stopped stage has no care yet (the old writes are not confirmed gone);
+    releasing then must still keep a later restore from giving that greenhouse care again."""
+    stage = await _ended_with_care(world)
+    locks.lock("alice", ["gh-01"])
+    world.control.stopped = False  # restore_care declines until the transport is confirmed stopped
+    await world.svc.on_restart()
+    assert world.svc.store.stage(stage).care_right is None
+
+    await locks.release("gh-01", "alice")
+    world.control.stopped = True
+    await world.svc.on_restart()
+
+    assert world.svc.store.stage(stage).care_right is None

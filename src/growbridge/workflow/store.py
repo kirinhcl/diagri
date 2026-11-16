@@ -379,6 +379,15 @@ class WorkflowStore:
         )
         return row["n"] if row else 0
 
+    def release_care_of_device(self, device_id: str) -> None:
+        """No finished stage of the device holds or gets care again (a greenhouse release)."""
+        done = [state.value for state in FINISHED_STATES]
+        self.db.execute(
+            "UPDATE wf_stages SET care_right = NULL, care_released = 1, rev = rev + 1"
+            f" WHERE device_id = ? AND state IN ({_marks(len(done))})",
+            (device_id, *done),
+        )
+
     def care_holder(self, device_id: str) -> StageRow | None:
         row = self.db.one(
             "SELECT * FROM wf_stages WHERE device_id = ? AND care_right IS NOT NULL"

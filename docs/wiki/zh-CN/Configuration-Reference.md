@@ -171,6 +171,8 @@
 
 `multi_user = true`（且 `auto_research = true`）时，每个操作员有一个角色：`user` 或 `admin`（第一个管理员用 `growbridge operator add --admin` 创建）。操作员在控制台的「温室」页锁定温室；项目归创建它的人；动一个阶段既要是项目所有者，又要锁着这个阶段的温室。操作员只看到自己的项目、阶段、告警和回执；管理员看到全部，紧急时可以暂停或停止任何阶段，管理账号、强制释放温室，并把无人负责的项目转给别人。释放温室时交还养护规则，设备保持当前设置。设计见 [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md)。
 
+**在已有部署上打开。** 先用 `growbridge operator add --admin <名字>` 创建第一个管理员。打开之前建的项目都没有所有者：只有管理员能看到，任何人都不能操作，直到管理员把它转出（「管理」页，或 `POST /wb/admin/projects/{project_id}/owner`）；转移要求项目没有未结束的阶段。升级时还开着的告警也没有归属：只给管理员看，其中一部分会带着归属再出现一次，所以会收到一轮重复通知。
+
 ```toml
 multi_user = true
 

@@ -59,6 +59,21 @@ function secretForm(ctx) {
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: "admin-secret", ctx });
 }
 
+// After switching multi-user on, earlier projects have no owner: an administrator hands each one over.
+function transferForm(ctx) {
+  const submitLabel = ctx.t("admin.transfer");
+  const fields = [
+    { name: "project_id", label: ctx.t("admin.projectId"), type: "text", required: true },
+    { name: "owner", label: ctx.t("admin.newOwner"), type: "text", required: true },
+    { name: "note", label: ctx.t("admin.reason"), type: "text", required: true },
+  ];
+  const onSubmit = async ({ project_id: projectId, ...body }) => {
+    await ctx.api.post(`/admin/projects/${encodeURIComponent(projectId)}/owner`, body, { action: submitLabel });
+    afterWrite(ctx, ctx.t("admin.transferred", { owner: body.owner }));
+  };
+  return simpleForm({ fields, submitLabel, onSubmit, draftKey: "admin-transfer", ctx });
+}
+
 function forceButton(ctx, row) {
   if (!row.holder) return "—";
   const submitLabel = ctx.t("admin.forceRelease");
@@ -100,6 +115,7 @@ export async function render(ctx) {
     { class: "page admin" },
     pageHead(ctx.t("nav.admin"), ctx.t("admin.lead")),
     section(ctx.t("admin.accounts"), accountsTable(ctx, operators), addForm(ctx), secretForm(ctx)),
+    section(ctx.t("admin.projects"), note(ctx.t("admin.transferLead")), transferForm(ctx)),
     section(ctx.t("admin.locks"), locksTable(ctx, locks?.locks || [])),
     section(ctx.t("admin.events"), eventsTable(ctx, locks?.events || [])),
   );
