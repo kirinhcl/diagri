@@ -38,41 +38,64 @@ const roleSpan = (ctx, role) => h("span", { class: `chat-role chat-role-${role}`
 const failedCall = (entry) => (entry.detail || {}).is_error === true;
 const failedMark = (ctx) => h("span", { class: "chat-tool-failed", text: ` ${ctx.t("chat.toolFailed")}` });
 
-// What one call did, in words; the tool's own name, its input and its result are in the details.
-function toolLine(ctx, entry, withRole) {
+// What one call did, in words (the role first when asked).
+function lineParts(ctx, entry, withRole) {
+  const role = withRole ? [roleSpan(ctx, entry.role), " · "] : [];
+  return [...role, labelOr(ctx.t, "chat.tool", entry.text), ...(failedCall(entry) ? [failedMark(ctx)] : [])];
+}
+
+// The tool's own name, its input and its result.
+function callDetails(ctx, entry) {
   const detail = entry.detail || {};
-  const line = h(
-    "p",
-    { class: "chat-tool-line" },
-    withRole ? [roleSpan(ctx, entry.role), " · "] : null,
-    labelOr(ctx.t, "chat.tool", entry.text),
-    failedCall(entry) ? failedMark(ctx) : null,
-  );
-  const fold = techDetails(ctx.t, [
+  return techDetails(ctx.t, [
     [ctx.t("chat.tech.tool"), entry.text],
     [ctx.t("chat.toolInput"), detail.input],
     [ctx.t("chat.toolResult"), detail.result],
   ]);
-  return [line, fold];
 }
 
-// Calls made one after another: a single call is one line; more are a closed fold that counts them.
-// The role is named once when one role made them all, else on each call.
-export function toolGroupView(ctx, items, { open = false } = {}) {
-  const failed = items.some(failedCall);
-  const classes = ["chat-entry", "chat-tool", failed ? "chat-tool-error" : null];
-  if (items.length === 1) return h("li", { class: classes }, toolLine(ctx, items[0], true));
-  const roles = [...new Set(items.map((entry) => entry.role))];
-  const mixed = roles.length > 1;
-  const summary = h(
-    "summary",
-    {},
-    mixed ? null : [roleSpan(ctx, roles[0]), " · "],
-    ctx.t("chat.toolGroup", { count: items.length }),
-    failed ? failedMark(ctx) : null,
-  );
-  const list = h("ol", { class: "chat-tool-list" }, items.map((entry) => h("li", { class: "chat-tool-item" }, toolLine(ctx, entry, mixed))));
-  return h("li", { class: [...classes, "chat-tool-group"] }, h("details", { class: "chat-tools", attrs: { open } }, summary, list));
+// Adjacent tool calls in the log, grown in place as calls arrive. A single call is one line; from
+// the second call on they sit in a closed fold that counts them, naming the role once when one role
+// made them all, else on each call. Each call's details are made once and kept, so a fold the
+// reader opened stays open; only the plain lines and the count are written again.
+function toolRun(ctx) {
+  const element = h("li", { class: "chat-entry chat-tool" });
+  const calls = []; // { entry, line, details }
+  let group = null; // { summary, list } from the second call on
+  const startGroup = () => {
+    const [first] = calls;
+    const summary = h("summary");
+    const list = h("ol", { class: "chat-tool-list" }, h("li", { class: "chat-tool-item" }, first.line, first.details));
+    element.append(h("details", { class: "chat-tools" }, summary, list));
+    group = { summary, list };
+  };
+  const redraw = () => {
+    const failed = calls.some((call) => failedCall(call.entry));
+    const mixed = new Set(calls.map((call) => call.entry.role)).size > 1;
+    element.setAttribute("class", ["chat-entry", "chat-tool", failed ? "chat-tool-error" : "", group ? "chat-tool-group" : ""].filter(Boolean).join(" "));
+    for (const call of calls) call.line.replaceChildren(...lineParts(ctx, call.entry, !group || mixed));
+    if (!group) return;
+    const role = mixed ? [] : [roleSpan(ctx, calls[0].entry.role), " · "];
+    group.summary.replaceChildren(...role, ctx.t("chat.toolGroup", { count: calls.length }), ...(failed ? [failedMark(ctx)] : []));
+  };
+  const add = (entry) => {
+    const call = { entry, line: h("p", { class: "chat-tool-line" }), details: callDetails(ctx, entry) };
+    calls.push(call);
+    if (calls.length === 1) element.append(call.line, ...(call.details ? [call.details] : []));
+    else {
+      if (!group) startGroup();
+      group.list.append(h("li", { class: "chat-tool-item" }, call.line, call.details));
+    }
+    redraw();
+  };
+  return { element, add };
+}
+
+// Calls made one after another, as the log shows them.
+export function toolGroupView(ctx, items) {
+  const run = toolRun(ctx);
+  for (const entry of items) run.add(entry);
+  return run.element;
 }
 
 // --- status entries ----------------------------------------------------------------------------------
@@ -123,51 +146,52 @@ export function roundPicker(ctx, project) {
 
 // --- the log and the message form ------------------------------------------------------------------
 
-// The log in order. A tool call that arrives right after the last group joins it (an open group
-// stays open). The operator's pending line stays last until it is dropped.
+// The log in order. A tool call that arrives right after the last run of calls joins it. The
+// operator's pending line stays last until the goal's own task writes something other than the
+// operator's message (its task is unknown while the goal is on its way), or it is dropped.
 function chatLog(ctx) {
   const log = h("ol", { class: "chat-log", attrs: { "aria-live": "polite", "aria-label": ctx.t("chat.title") } });
   const empty = h("p", { class: "block-note", text: ctx.t("chat.empty") });
-  let pending = null;
+  let pending = null; // { element, task }
   let lastPlaced = null;
-  let tail = null; // the last tool group: { items, element }
+  let run = null; // the last run of tool calls
   const syncEmpty = () => (empty.hidden = log.childNodes.length > 0);
   const place = (element) => {
-    log.insertBefore(element, pending);
+    log.insertBefore(element, pending && pending.element);
     lastPlaced = element;
-    return element;
   };
   const addTools = (items) => {
-    if (tail === null || lastPlaced !== tail.element) {
-      tail = { items, element: place(toolGroupView(ctx, items)) };
-      return;
+    if (run === null || lastPlaced !== run.element) {
+      run = toolRun(ctx);
+      place(run.element);
     }
-    const merged = [...tail.items, ...items];
-    const open = tail.items.length > 1 && tail.element.firstChild.open === true;
-    const element = toolGroupView(ctx, merged, { open });
-    log.insertBefore(element, tail.element);
-    tail.element.remove();
-    tail = { items: merged, element };
-    lastPlaced = element;
+    for (const entry of items) run.add(entry);
   };
+  const dropPending = () => {
+    if (pending) pending.element.remove();
+    pending = null;
+    syncEmpty();
+  };
+  const answers = (entry) => entry.kind !== "message" && (pending.task === null || entry.task_id === pending.task);
   const add = (entries) => {
+    if (pending && pending.task !== undefined && entries.some(answers)) dropPending();
     for (const item of groupToolEntries(entries)) {
       if (item.kind === "toolGroup") addTools(item.items);
       else place(entryView(ctx, item));
     }
     syncEmpty();
   };
-  const dropPending = () => {
-    if (pending) pending.remove();
-    pending = null;
-    syncEmpty();
-  };
   const showPending = () => {
     dropPending();
-    pending = log.appendChild(h("li", { class: "chat-entry chat-status chat-pending" }, h("p", { text: ctx.t("chat.pending") })));
+    const element = log.appendChild(h("li", { class: "chat-entry chat-status chat-pending" }, h("p", { text: ctx.t("chat.pending") })));
+    pending = { element, task: undefined };
     syncEmpty();
   };
-  return { log, empty, add, showPending, dropPending };
+  // The task the server made for the goal; with none named, any other writer ends the wait.
+  const pendingFor = (taskId) => {
+    if (pending) pending = { ...pending, task: taskId ?? null };
+  };
+  return { log, empty, add, showPending, pendingFor, dropPending };
 }
 
 function messageForm(ctx, project) {
@@ -194,8 +218,9 @@ async function sendGoal(ctx, { view, parts, problem, refresh, scrollToEnd }) {
   scrollToEnd();
   let taken = false;
   try {
-    await ctx.api.post("/goals", parts.body(goal), { action: ctx.t("chat.send") });
+    const made = await ctx.api.post("/goals", parts.body(goal), { action: ctx.t("chat.send") });
     taken = true;
+    view.pendingFor(made && made.task_id);
     parts.input.value = "";
     await refresh();
     scrollToEnd();
@@ -222,14 +247,13 @@ export function conversationSection(ctx, project) {
     log.scrollTop = log.scrollHeight;
     if (!log.isConnected) requestAnimationFrame(() => (log.scrollTop = log.scrollHeight));
   };
-  // The pending line goes when someone other than the operator writes: the server records the
-  // operator's own message while it takes it, so that entry alone does not end the wait.
+  // Sending reads the log outside the page's poll, so two reads can overlap: only entries newer
+  // than the last one shown are added.
   const refresh = async () => {
     const data = await ctx.api.get(`/projects/${encodeURIComponent(project.project_id)}/conversation?after=${last}`);
-    const entries = Array.isArray(data && data.entries) ? data.entries : [];
+    const entries = (Array.isArray(data && data.entries) ? data.entries : []).filter((entry) => entry.seq > last);
     if (!entries.length) return;
     const follow = !shown || log.scrollHeight - log.scrollTop - log.clientHeight < NEAR_BOTTOM_PX;
-    if (entries.some((entry) => entry.kind !== "message")) view.dropPending();
     view.add(entries);
     last = entries.reduce((most, entry) => Math.max(most, entry.seq), last);
     shown = true;

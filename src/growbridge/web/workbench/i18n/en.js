@@ -177,7 +177,7 @@ export default {
   "project.holdouts.saved": "Holdout registered",
   "project.holdouts.readsCount": "Read {n} times",
   "project.holdouts.readsOne": "Read once",
-  "project.holdouts.readsHelp": "Every read of the held-out outcomes is logged: a registered model's first evaluation on these batches is confirmatory, every later one exploratory.",
+  "project.holdouts.readsHelp": "Every read of the held-out outcomes is logged. Only the first read, by any model, is confirmatory; every later one is exploratory.",
   "round.lead": "State, stages and the confirmatory analysis of this round.",
   "round.summary": "Summary",
   "round.project": "Project",

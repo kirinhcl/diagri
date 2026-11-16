@@ -175,6 +175,8 @@ test("holdouts keep their id in the details and say how often they were read", a
   const text = visibleText(block);
   assert.ok(text.includes("已读取 2 次"), text);
   assert.ok(text.includes(zh["project.holdouts.readsHelp"]), text);
+  assert.ok(zh["project.holdouts.readsHelp"].includes("只有第一次读取（不论哪个模型）算确认性，之后都算探索性。"));
+  assert.match(en["project.holdouts.readsHelp"], /only the first read, by any model, is confirmatory/i);
   assert.ok(!text.includes(holdout.holdout_id), text);
   assert.ok(visibleTextIncludingDetails(block).includes(holdout.holdout_id));
   assert.ok(!elements(block, "th").some((th) => th.textContent === zh["col.id"]));
@@ -189,7 +191,7 @@ test("saving the budget, a goal or a holdout says what was saved", async () => {
   await submit(formIn(element, "留出批次"));
   assert.deepEqual(
     notices.map((notice) => notice.message),
-    ["已设置预算：50 次调用，费用上限 20.00", "已提交目标", "已登记保留集"],
+    ["已设置预算：50 次调用，费用上限 20.00", "已提交目标", "已登记留出批次"],
   );
   const english = await withNotices("project", PARAMS, { lang: "en" });
   await submit(formIn(english.element, en["project.budget.title"]), { max_calls: 1500, max_cost: 2.5 });

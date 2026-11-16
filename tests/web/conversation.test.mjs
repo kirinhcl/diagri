@@ -65,16 +65,18 @@ function elements(node, name) {
 }
 const hasClass = (node, name) => (node.getAttribute("class") || "").split(/\s+/).includes(name);
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const tool = (seq, name, extra = {}) => ({
+// Entries of an earlier task unless a task id is given; the goal sent in these tests becomes "task_new".
+const tool = (seq, name, extra = {}, task = "task_old") => ({
   seq,
+  task_id: task,
   role: "planner",
   kind: "tool",
   text: name,
   detail: { is_error: false, input: '{"stage_id": "stage-dev"}', result: '{"ok": true}', ...extra },
   at: 1796594700 + seq,
 });
-const reply = (seq, role = "planner") => ({ seq, role, kind: "reply", text: `reply ${seq}`, detail: { final: true }, at: 1796594700 + seq });
-const message = (seq) => ({ seq, role: "user", kind: "message", text: "Please check the data.", detail: { operator: "dev", round_id: null }, at: 1796594700 + seq });
+const reply = (seq, role = "planner", task = "task_old") => ({ seq, task_id: task, role, kind: "reply", text: `reply ${seq}`, detail: { final: true }, at: 1796594700 + seq });
+const message = (seq) => ({ seq, task_id: "task_new", role: "user", kind: "message", text: "Please check the data.", detail: { operator: "dev", round_id: null }, at: 1796594700 + seq });
 
 test("adjacent tool calls fold into one group", () => {
   const out = groupToolEntries([{ kind: "reply" }, { kind: "tool", text: "a" }, { kind: "tool", text: "b" }, { kind: "reply" }, { kind: "tool", text: "c" }]);
@@ -179,22 +181,62 @@ test("a tool call that arrives after a tool group joins that group", async () =>
   assert.deepEqual(reads.map((path) => path.split("after=")[1]), ["0", "2", "4", "5"]);
 });
 
-test("a sent message shows a pending line until the orchestrator answers", async () => {
+test("a sent message shows a pending line until its own task answers", async () => {
   let answer;
   const answered = new Promise((resolve) => (answer = resolve));
-  const { chat, log, send } = chatWith([[], [message(1)], [], [reply(2, "orchestrator")]], () => answered);
+  const batches = [[], [tool(1, "query_evidence")], [message(2)], [tool(3, "validate_run_sheet")], [reply(4, "orchestrator", "task_new")]];
+  const { chat, log, send } = chatWith(batches, () => answered);
   await chat.refresh();
   await send("Please check the data.");
   assert.deepEqual(log.children.map(kindOf), ["pending"]);
   assert.equal(visibleText(log.children[0]), "已发送，编排 Agent 稍后接手。");
+  await chat.refresh(); // a poll while the goal is on its way brings another task's call
+  assert.deepEqual(log.children.map(kindOf), ["tools:1", "pending"]);
   answer({ task_id: "task_new" });
   await settle();
   await settle();
-  assert.deepEqual(log.children.map(kindOf), ["message", "pending"]);
+  assert.deepEqual(log.children.map(kindOf), ["tools:1", "message", "pending"]);
+  await chat.refresh(); // another task is still working
+  assert.deepEqual(log.children.map(kindOf), ["tools:1", "message", "tools:1", "pending"]);
+  await chat.refresh(); // the orchestrator takes up the new goal
+  assert.deepEqual(log.children.map(kindOf), ["tools:1", "message", "tools:1", "reply"]);
+});
+
+test("tool calls join an open group in place, keeping open folds open", async () => {
+  const { chat, log } = chatWith([[tool(1, "query_evidence")], [tool(2, "validate_run_sheet")], [tool(3, "save_plan_draft")]]);
+  const techFolds = (node) => elements(node, "details").filter((details) => hasClass(details, "tech-details"));
   await chat.refresh();
-  assert.deepEqual(log.children.map(kindOf), ["message", "pending"]);
+  const first = techFolds(log.children[0])[0];
+  first.open = true; // the reader opened the single call's details
   await chat.refresh();
-  assert.deepEqual(log.children.map(kindOf), ["message", "reply"]);
+  const group = log.children[0];
+  const fold = elements(group, "details")[0];
+  assert.equal(techFolds(group)[0], first, "the first call's details are the same element");
+  assert.equal(first.open, true);
+  assert.equal(elements(fold, "summary")[0].textContent, "计划 Agent · 用了 2 个工具");
+  fold.open = true;
+  const second = techFolds(group)[1];
+  second.open = true;
+  await chat.refresh();
+  assert.equal(log.children[0], group, "the group is the same element");
+  assert.equal(elements(group, "details")[0], fold);
+  assert.ok(fold.open && first.open && second.open);
+  assert.equal(elements(fold, "summary")[0].textContent, "计划 Agent · 用了 3 个工具");
+  assert.deepEqual(log.children.map(kindOf), ["tools:3"]);
+});
+
+test("a group that gets a call from another role names the role on each call", () => {
+  const view = toolGroupView(testCtx({ lang: "zh" }), [tool(1, "query_evidence"), { ...tool(2, "delegate_task"), role: "orchestrator" }]);
+  assert.equal(elements(view, "summary").find((node) => !node.parentNode || !hasClass(node.parentNode, "tech-details")).textContent, "用了 2 个工具");
+  const lines = elements(view, "p").filter((node) => hasClass(node, "chat-tool-line")).map((node) => node.textContent);
+  assert.deepEqual(lines, ["计划 Agent · 查询证据卡", "编排 Agent · 委派任务"]);
+});
+
+test("two reads that overlap show each entry once", async () => {
+  const same = [reply(1), tool(2, "query_evidence")];
+  const { chat, log } = chatWith([same, same]);
+  await Promise.all([chat.refresh(), chat.refresh()]);
+  assert.deepEqual(log.children.map(kindOf), ["reply", "tools:1"]);
 });
 
 test("a refused message takes its pending line away and says why", async () => {
