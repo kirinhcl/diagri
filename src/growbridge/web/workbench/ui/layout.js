@@ -1,6 +1,6 @@
 // The signed-in frame: sidebar navigation, top bar with breadcrumbs, language and sign-out.
 import { singleFlight } from "../api.js";
-import { LANGS } from "../i18n.js";
+import { LANGS, labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h, svg } from "./dom.js";
 import { errorLines } from "./forms.js";
@@ -102,7 +102,7 @@ function sidebar(ctx, nav) {
       "p",
       { class: ["wb-entry", `wb-entry-${entry}`] },
       h("span", { class: "wb-entry-label", text: ctx.t("entry.label") }),
-      h("strong", { text: ctx.t(`entry.${entry}`) }),
+      h("strong", { text: labelOr(ctx.t, "entry", entry) }),
     ),
   );
 }

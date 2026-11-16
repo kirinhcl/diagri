@@ -6,6 +6,11 @@ started without model roles. `report.json` is the same round's report as saved d
 2026-11-15 (the copied data directory lacks the report file). `compute.json` is synthetic, written
 to the shape of `src/growbridge/compute/overview.py` (the dev workbench has no compute service).
 
+`known-codes.json` is not an API answer: it lists, per catalog prefix, the codes the server can
+send, and says in `_sources` where each list was found. `tests/web/catalog.test.mjs` checks that
+each code has text in both catalogs; `tests/workbench/test_console_known_codes.py` checks the lists
+against the server's enums and literals.
+
 | File | Path (pattern) |
 | --- | --- |
 | me.json | `/me` |

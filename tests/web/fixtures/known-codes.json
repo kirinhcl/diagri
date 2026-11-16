@@ -1,0 +1,84 @@
+{
+  "state": [
+    "pending_review", "running", "paused", "manual", "recovery_check", "ended", "stopped",
+    "designing", "stage_review", "stage_running", "data_verification", "analysis", "delivered", "aborted",
+    "in_progress", "remote_queued", "computing", "fetching", "reconcile", "needs_attention", "needs_review", "done",
+    "prepared", "queued", "failed", "cancelled",
+    "follow_up"
+  ],
+  "history.event": [
+    "start", "pause", "resume", "stop", "takeover", "handback", "switch_run_sheet", "revoke_approval",
+    "round_aborted", "restart", "recovery_bump", "recovery_exit", "onsite_check",
+    "disconnect_affects", "readings_stale", "external_change", "clock_anomaly", "result_unknown",
+    "pump_off_unconfirmed", "transport_unconfirmed", "end_condition_met", "end_actions", "alert_pause",
+    "rule_pause", "max_wait_expired"
+  ],
+  "history.kind": ["takeover", "accepted", "unexpected_watering"],
+  "history.field": [
+    "accepted", "alert", "by", "channel", "confirmed", "differences", "digest", "failed", "level", "note",
+    "off_confirmed", "off_confirmed_at", "on_expiry", "period", "reason", "reasons", "request_id",
+    "request_ids", "right_number", "rule", "rules", "seconds", "state_unreadable", "status_at", "version"
+  ],
+  "history.reason": ["due_action", "device_differs", "unknown_result", "gap_too_long"],
+  "alert.kind": [
+    "agent_task", "audit_finding", "audit_schedule", "audit_task", "backup", "backup_unconfigured", "data_gap",
+    "external_monitor", "frozen_reading", "frozen_watch", "intervention_mirror", "measurement_missing",
+    "measurement_outside_window", "model_client", "monitor_unconfigured", "notify_unconfigured",
+    "pump_unexpected", "pump_unreadable", "pump_watchdog", "run_health", "runtime", "source_rewound",
+    "stage_checks", "stage_waiting", "task_deadline", "task_missed", "threshold", "tick_step"
+  ],
+  "finding": [
+    "device_owned_write", "pump_action", "level_range", "pump_device_owned", "unknown_sensor", "unit_mismatch",
+    "humidity_exhaust_only", "rule_conflict", "safety_conflict", "sampling", "duration", "wait",
+    "missing_tolerance", "manual_task", "no_evidence", "unverified_source", "uncalibrated",
+    "treatment_not_applied", "unknown_treatment", "missing_control", "no_replication", "unbalanced_block",
+    "confounded_with_time", "seed_mismatch"
+  ],
+  "chat.tool": [
+    "get_project_state", "get_run_status", "create_research_task", "delegate_task", "get_task_status",
+    "read_artifact", "get_device_capabilities", "find_prior_runs", "lookup_crop_conditions",
+    "search_and_verify_sources", "check_experimental_design", "estimate_sample_size", "validate_run_sheet",
+    "save_plan_draft", "query_evidence", "propose_evidence_card", "inspect_stage_data", "freeze_dataset",
+    "run_local_analysis", "submit_compute_job", "get_compute_job", "fetch_compute_artifacts",
+    "publish_research_report", "get_stage_records", "raise_audit_finding"
+  ],
+  "chat.role": ["user", "orchestrator", "planner", "researcher", "auditor"],
+  "safety.op": [">", ">=", "<", "<="],
+  "diff.field": ["level", "mode"],
+  "channel": ["light", "exhaust", "fan", "pump"],
+  "metric": ["temp", "humi", "vpd", "co2", "ppfd", "tempSoil"],
+  "severity": ["critical", "warning", "info"],
+  "tasks.status": ["upcoming", "open", "done", "late", "skipped", "partial", "missed"],
+  "tasks.kind": ["irrigation", "measurement", "photo"],
+  "entry": ["lan", "overlay"],
+  "evidence.class": ["handbook", "paper", "local"],
+  "report.labels": ["confirmatory", "exploratory", "descriptive"],
+  "report.conclusions": ["supported", "not_supported", "uncertain"],
+  "inbox.kind": [
+    "stage_review", "stage_manual", "stage_recovery", "stage_paused", "round_choice", "alert", "compute_stuck", "task"
+  ],
+  "_sources": {
+    "_how": "Codes the console can receive from the server, gathered from src/growbridge on 2026-11-16 (branch feat/console-usability). tests/web/catalog.test.mjs checks that each one has text in en.js and zh.js; tests/workbench/test_console_known_codes.py checks that the enumerable ones are all listed here. Paths below are relative to src/growbridge.",
+    "state": "workflow/states.py: every StageState, RoundState and TaskState value. compute/phases.py: the Phase literal (prepared, queued, running, reconcile, fetching, needs_review, failed, done, cancelled). Conversation status entries: agents/dispatch.py _end records state.value (a TaskState) and 'follow_up' (grep -n '_record(task, \"status\"' agents/dispatch.py). Not listed: 'awaiting_choice', which the console makes up itself (it has text and a colour group).",
+    "history.event": "History rows are written by store.add_history (grep -rn 'add_history(' workflow/). Their event is a Plan(...) event name: literal names from grep -rn 'Plan(' workflow/service.py workflow/recovery.py workflow/store.py (start, pause, resume, stop, takeover, handback, switch_run_sheet, revoke_approval, recovery_exit, onsite_check), 'round_aborted' (workflow/store.py abort_stage), 'restart' and 'recovery_bump' (workflow/recovery.py _enter_recovery callers), and kind.value of a StageEvent for the 12 StageEventKind values (ports.py class StageEventKind; workflow/service.py _plan_event, workflow/store.py pause_plan/recovery_plan/end_actions_plan/expiry_plan).",
+    "history.kind": "Interventions are written by store.add_intervention (grep -rn 'add_intervention(\\|record_intervention(' .): 'takeover' and 'accepted' from workflow/service.py _intervention callers, 'unexpected_watering' from executor/watchdog.py INTERVENTION.",
+    "history.field": "Detail keys of history rows: Plan(detail=...) in workflow/*.py (by, accepted, differences, version, digest, note, confirmed, on_expiry), the 'reason' added in workflow/service.py _commit, and StageEvent details merged in by _commit: executor/engine.py _report callers (grep -n 'self._report(' executor/engine.py: reasons, seconds, state_unreadable, request_ids, differences, rules, confirmed, channel, level, failed, reason, plus right_number added in _report), observer/service.py _pause (rule, alert), observer/frozen_watch.py _pause_event (rule, alert, period). Intervention detail keys: differences (accepted), status_at, off_confirmed, off_confirmed_at, request_id (executor/watchdog.py). The values of 'reason' are free text or event names and the values of 'on_expiry' are 'stop' / 'stay_paused'; neither is listed as a code here.",
+    "history.reason": "executor/outage.py outage_reasons: the 'reasons' list of a disconnect_affects event (due_action, device_differs, unknown_result, gap_too_long).",
+    "alert.kind": "Every alert is stored by AlertBook.raise_alert (observer/alerts.py). Kinds found with grep -rn 'raise_alert(\\|\\.alert(\\|_alert(\\|_raise(\\|_enter(\\|self._set(' --include='*.py' . and the module constants they pass: observer/service.py (data_gap, threshold, frozen_watch, stage_checks), observer/frozen_watch.py KIND (frozen_reading), observer/stage_checks.py (task_missed, measurement_missing, measurement_outside_window, audit_finding, audit_task), agents/handlers_auditor.py (audit_finding), executor/watchdog.py (pump_unreadable, pump_unexpected, pump_watchdog), runtime.py (backup_unconfigured, notify_unconfigured, monitor_unconfigured, runtime, tick_step, source_rewound, stage_waiting, task_deadline, run_health, external_monitor, intervention_mirror), runtime_agents.py (agent_task, audit_task, audit_schedule), runtime_backup.py (backup), cli.py (model_client). The kinds are passed through hooks (runtime.alert, watchdog._raise), so the drift test cannot enumerate them; this list is by hand.",
+    "finding": "Every Finding code in the server: grep -rn 'Finding(\\|_block(\\|_hint(' planning/. The run-sheet review (workbench/rounds.py review_json) shows planning/validate.py validate_run_sheet and check_evidence; agents/handlers_common.py check_sheet adds planning/treatment.py (treatment_not_applied); planning/design.py codes come from the design check.",
+    "chat.tool": "agents/tools.py ROLE_TOOLS: every tool name of every role. A model may still call a name outside this list; it then shows as unknown.",
+    "chat.role": "agents/tools.py ROLE_TOOLS keys (the model roles, agents/dispatch.py records task.owner_role) and 'user' (workbench/rounds.py conversation.add(..., \"user\", \"message\", ...)).",
+    "safety.op": "archive/models.py Condition.op: Literal['>', '>=', '<', '<='] (the trigger of a safety rule).",
+    "diff.field": "ports.py Difference.field: Literal['level', 'mode'].",
+    "channel": "archive/models.py Channel (light, exhaust, fan, pump): Difference.channel, run-sheet channels.",
+    "metric": "control/device.py SENSORS keys (the sensors a safety rule or reading can name).",
+    "severity": "observer/alerts.py Severity literal.",
+    "tasks.status": "planning/manual_tasks.py Status literal.",
+    "tasks.kind": "archive/models.py TaskKind literal.",
+    "entry": "archive/models.py Entry (workbench/api.py /me sends entry.value, or null, which the console shows as entry.unknown).",
+    "evidence.class": "archive/models.py EvidenceCard.source_class literal.",
+    "report.labels": "archive/models.py Label literal.",
+    "report.conclusions": "research/analysis.py Conclusion literal.",
+    "inbox.kind": "workbench/reads.py: STAGE_KINDS values, and _item(\"alert\" / \"compute_stuck\" / \"round_choice\" / \"task\", ...) (grep -n '_item(' workbench/reads.py)."
+  }
+}

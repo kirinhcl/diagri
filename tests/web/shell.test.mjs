@@ -12,17 +12,17 @@ import {
 
 test("every state from the plan's table lands in its colour group", () => {
   const table = {
-    waiting: ["pending_review", "manual", "paused", "needs_attention", "needs_review", "awaiting_choice"],
-    onsite: ["recovery_check"],
+    waiting: ["pending_review", "manual", "paused", "needs_attention", "needs_review", "awaiting_choice", "prepared"],
+    onsite: ["recovery_check", "failed"],
     active: ["running", "stage_running", "designing", "stage_review", "data_verification", "analysis",
-      "in_progress", "computing", "fetching", "remote_queued", "reconcile"],
-    done: ["ended", "stopped", "delivered", "aborted", "done"],
+      "in_progress", "computing", "fetching", "remote_queued", "reconcile", "queued"],
+    done: ["ended", "stopped", "delivered", "aborted", "done", "cancelled"],
   };
   assert.deepEqual(STATE_GROUPS, table);
   for (const [group, states] of Object.entries(table)) {
     for (const state of states) assert.equal(stateGroup(state), group, state);
   }
-  assert.equal(stateGroup("prepared"), "other");
+  assert.equal(stateGroup("brand_new_state"), "other");
   assert.equal(stateGroup("constructor"), "other");
 });
 

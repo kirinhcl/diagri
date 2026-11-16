@@ -1,6 +1,7 @@
 // The project conversation: what the operator asked and what each model role answered, with the
 // tools it used, in order. Sending a message gives the orchestrator a new goal; nothing said here
 // approves anything (approval is a separate, re-authenticated action on the stage page).
+import { labelOr } from "../i18n.js";
 import { newRequestId } from "../receipts.js";
 import { clear, h } from "../ui/dom.js";
 import { errorLines } from "../ui/forms.js";
@@ -12,7 +13,7 @@ const CLOSED_ROUNDS = new Set(["delivered", "aborted"]);
 const NEAR_BOTTOM_PX = 48;
 
 function roleLabel(ctx, role) {
-  return ctx.t(`chat.role.${ROLES.has(role) ? role : "other"}`);
+  return labelOr(ctx.t, "chat.role", ROLES.has(role) ? role : "other");
 }
 
 function codeDetail(label, text) {
@@ -51,7 +52,7 @@ export function statusText(ctx, entry) {
   if (entry.text === "follow_up") return ctx.t("chat.followUp", { role });
   const detail = entry.detail || {};
   const reason = detail.reason && detail.reason !== "run finished" ? `: ${detail.reason}` : "";
-  return `${ctx.t("chat.taskEnded", { role, state: ctx.t(`state.${entry.text}`) })}${reason}`;
+  return `${ctx.t("chat.taskEnded", { role, state: labelOr(ctx.t, "state", entry.text) })}${reason}`;
 }
 
 function statusView(ctx, entry) {
@@ -76,7 +77,7 @@ function roundPicker(ctx, project) {
   const select = h("select", { class: "input chat-round", attrs: { "aria-label": ctx.t("chat.round") } });
   select.append(h("option", { attrs: { value: "" }, text: ctx.t("chat.noRound") }));
   for (const item of open) {
-    select.append(h("option", { attrs: { value: item.round_id }, text: `${item.round_id} · ${ctx.t(`state.${item.state}`)}` }));
+    select.append(h("option", { attrs: { value: item.round_id }, text: `${item.round_id} · ${labelOr(ctx.t, "state", item.state)}` }));
   }
   if (open.length) select.value = open[0].round_id;
   return select;

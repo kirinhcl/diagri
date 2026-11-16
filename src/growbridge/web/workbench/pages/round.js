@@ -1,4 +1,5 @@
 // One round: its state, stages, the choice after a stop, abort, and the confirmatory analysis.
+import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
@@ -100,8 +101,8 @@ function reportView(ctx, data) {
     "div",
     { class: "report" },
     keyValues([
-      [ctx.t("report.label"), h("span", { class: ["pill", `pill-label-${label}`], text: ctx.t(`report.labels.${label}`) })],
-      [ctx.t("report.conclusion"), ctx.t(`report.conclusions.${conclusion}`)],
+      [ctx.t("report.label"), h("span", { class: ["pill", `pill-label-${label}`], text: labelOr(ctx.t, "report.labels", label) })],
+      [ctx.t("report.conclusion"), labelOr(ctx.t, "report.conclusions", conclusion)],
       [ctx.t("report.estimateTitle"), estimateText(ctx, report.estimate)],
       [ctx.t("report.snapshot"), report.snapshot_id ? h("code", { text: report.snapshot_id }) : null],
       [ctx.t("report.digest"), h("code", { text: data.sha256 })],

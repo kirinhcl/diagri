@@ -1,6 +1,7 @@
 // The stage's manual tasks: every daily occurrence the run sheet plans, its state, and the buttons
 // that record it. A planned irrigation (an irrigation task with seconds) is started here by a
 // person on the on-site entry; the stage keeps running. Records are appended, the latest counts.
+import { labelOr } from "../i18n.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorBox, note, showErrors, timeText } from "../ui/section.js";
@@ -46,7 +47,7 @@ function partialText(ctx, record) {
 }
 
 function statusCell(ctx, row) {
-  const pill = h("span", { class: ["pill", PILL[row.status]], text: ctx.t(`tasks.status.${row.status}`) });
+  const pill = h("span", { class: ["pill", PILL[row.status]], text: labelOr(ctx.t, "tasks.status", row.status) });
   const record = row.record;
   if (!record) return pill;
   const when = record.done_at ? ctx.t("tasks.doneAt", { time: timeText(ctx, record.done_at), who: record.operator }) : ctx.t("tasks.by", { who: record.operator });
@@ -56,7 +57,7 @@ function statusCell(ctx, row) {
 }
 
 function kindCell(ctx, row) {
-  const kind = ctx.t(`tasks.kind.${row.kind}`);
+  const kind = labelOr(ctx.t, "tasks.kind", row.kind);
   return row.seconds ? ctx.t("tasks.pumpRun", { kind, seconds: row.seconds }) : kind;
 }
 

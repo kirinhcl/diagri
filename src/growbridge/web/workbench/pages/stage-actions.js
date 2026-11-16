@@ -1,6 +1,7 @@
 // Stage controls. Which ones show follows stage-rules.js; the server stays the judge and every
 // refusal is shown with its reason. Nothing is shown as done before the server answered.
 import { ApiError } from "../api.js";
+import { labelOr } from "../i18n.js";
 import { claimIntent, intentKey, resentHeading, settleIntent, settleOnFinal } from "../intents.js";
 import { answerLost, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
 import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
@@ -205,7 +206,7 @@ async function deviceWrite(env, { action, path, body, heading, label }) {
 function manualGroup(env) {
   const { ctx, stage } = env;
   const title = ctx.t("stage.manual");
-  const options = CHANNELS.map((value) => ({ value, label: ctx.t(`channel.${value}`) }));
+  const options = CHANNELS.map((value) => ({ value, label: labelOr(ctx.t, "channel", value) }));
   const fields = [
     { name: "channel", label: ctx.t("stage.manual.channel"), type: "select", options, required: true },
     { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true },
@@ -213,7 +214,7 @@ function manualGroup(env) {
   ];
   const onSubmit = async ({ channel, level, note: text }) => {
     const body = { stage_id: stage.stage_id, level, note: text || "" };
-    const heading = ctx.t("receipt.manual", { channel: ctx.t(`channel.${channel}`), level });
+    const heading = ctx.t("receipt.manual", { channel: labelOr(ctx.t, "channel", channel), level });
     await deviceWrite(env, { action: `manual:${channel}`, path: `/manual/${encodeURIComponent(channel)}`, body, heading, label: title });
   };
   const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
@@ -248,7 +249,7 @@ function differenceLines(ctx, differences) {
   if (!list.length) return [ctx.t("stage.handback.none")];
   const line = (item) =>
     ctx.t("stage.handback.difference", {
-      channel: ctx.t(`channel.${item.channel}`),
+      channel: labelOr(ctx.t, "channel", item.channel),
       field: item.field,
       expected: item.expected,
       actual: item.actual ?? "—",
@@ -326,7 +327,7 @@ function logItem(ctx, title, record) {
   const show = (status, lines) => {
     if (status) {
       pill.className = RECEIPT_TONE[status];
-      pill.textContent = ctx.t(`receipt.${status}`);
+      pill.textContent = labelOr(ctx.t, "receipt", status);
     }
     detail.replaceChildren(...lines.filter(Boolean).map((line) => h("p", { text: line })));
   };

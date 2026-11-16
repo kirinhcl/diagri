@@ -1,4 +1,5 @@
 // Open alerts: how bad, how often, since when, and who has read them.
+import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { errorBox, note, pageHead, section, showErrors, timeText } from "../ui/section.js";
 import { severityPill } from "../ui/status.js";
@@ -26,7 +27,7 @@ function readLine(ctx, alert) {
   if (SEVERITY_ORDER.indexOf(alert.severity) <= SEVERITY_ORDER.indexOf(alert.read_severity)) {
     return ctx.t("alerts.readStale", { ...read, last: timeText(ctx, alert.last_at) });
   }
-  const severity = ctx.t(`severity.${alert.severity}`);
+  const severity = labelOr(ctx.t, "severity", alert.severity);
   return ctx.t("alerts.readWorsened", { ...read, severity, last: timeText(ctx, alert.last_at) });
 }
 

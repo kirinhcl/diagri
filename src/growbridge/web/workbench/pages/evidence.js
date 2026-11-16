@@ -1,4 +1,5 @@
 // Evidence cards: every card with its source and verification, a form to enter one, and verification of a model's card.
+import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
 import { afterWrite, note, pageHead, section, timeText } from "../ui/section.js";
@@ -12,7 +13,7 @@ const yesNo = (ctx) => [
 
 // Whether a card was calibrated is recorded as the operator's own choice: no answer is preset.
 export function enterFields(ctx) {
-  const classes = SOURCE_CLASSES.map((value) => ({ value, label: ctx.t(`evidence.class.${value}`) }));
+  const classes = SOURCE_CLASSES.map((value) => ({ value, label: labelOr(ctx.t, "evidence.class", value) }));
   const calibration = [{ value: "", label: ctx.t("form.choose") }, ...yesNo(ctx)];
   return [
     { name: "source_class", label: ctx.t("evidence.sourceClass"), type: "select", required: true, options: classes },
@@ -49,7 +50,7 @@ function verifyForm(ctx, card) {
 
 function factsLine(ctx, card) {
   const hasValue = card.value !== null && card.value !== undefined;
-  const parts = [ctx.t(`evidence.class.${card.source_class}`)];
+  const parts = [labelOr(ctx.t, "evidence.class", card.source_class)];
   if (hasValue) parts.push(ctx.t("evidence.valueOf", { value: `${card.value} ${card.unit || ""}`.trim() }));
   if (!card.calibrated) parts.push(ctx.t("evidence.uncalibrated"));
   parts.push(ctx.t("evidence.entryLine", { source: card.source || "—", time: timeText(ctx, card.added_at) }));

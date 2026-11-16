@@ -1,6 +1,7 @@
 // "My inbox": everything that waits for a person, grouped by kind and refreshed every 15 seconds.
 import { singleFlight } from "../api.js";
 import { formatTime } from "../format.js";
+import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
 import { errorLines } from "../ui/forms.js";
@@ -142,7 +143,7 @@ function groupView(ctx, group) {
     h(
       "header",
       { class: "inbox-group-head" },
-      h("h2", { attrs: { id: headingId }, text: ctx.t(`inbox.kind.${group.kind}`) }),
+      h("h2", { attrs: { id: headingId }, text: labelOr(ctx.t, "inbox.kind", group.kind) }),
       h("span", { class: "inbox-group-count", text: String(count) }),
     ),
     h("ul", { class: "inbox-list" }, group.items.map((item) => itemView(ctx, item))),
