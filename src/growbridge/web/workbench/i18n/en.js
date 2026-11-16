@@ -1,7 +1,9 @@
 import codes from "./codes.en.js";
+import messages from "./messages.en.js";
 
 export default {
   ...codes,
+  ...messages,
   "app.title": "DiAGRI Workbench",
   "app.subtitle": "Workbench",
   "common.hello": "Hello, {name}",
@@ -12,6 +14,9 @@ export default {
   "common.close": "Close",
   "common.language": "Language",
   "common.unknown": "Unknown (technical details)",
+  "common.listSep": ", ",
+  "common.quoted": "“{text}”",
+  "common.bytes": "{n} bytes",
   "nav.inbox": "My inbox",
   "nav.projects": "Projects",
   "nav.alerts": "Alerts",
@@ -100,6 +105,7 @@ export default {
   "tech.httpStatus": "HTTP status",
   "tech.code": "Code",
   "tech.serverMessage": "Server message",
+  "tech.params": "Parameters",
   "tech.message": "Error message",
   "tech.recordId": "Record id",
   "common.yes": "Yes",

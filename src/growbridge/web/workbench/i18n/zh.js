@@ -1,7 +1,9 @@
 import codes from "./codes.zh.js";
+import messages from "./messages.zh.js";
 
 export default {
   ...codes,
+  ...messages,
   "app.title": "DiAGRI 工作台",
   "app.subtitle": "工作台",
   "common.hello": "你好，{name}",
@@ -12,6 +14,9 @@ export default {
   "common.close": "关闭",
   "common.language": "语言",
   "common.unknown": "未知（技术详情）",
+  "common.listSep": "、",
+  "common.quoted": "「{text}」",
+  "common.bytes": "{n} 字节",
   "nav.inbox": "待我处理",
   "nav.projects": "项目",
   "nav.alerts": "告警",
@@ -100,6 +105,7 @@ export default {
   "tech.httpStatus": "HTTP 状态",
   "tech.code": "代码",
   "tech.serverMessage": "服务器原文",
+  "tech.params": "参数",
   "tech.message": "错误信息",
   "tech.recordId": "记录 id",
   "common.yes": "是",
