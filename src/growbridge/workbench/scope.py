@@ -42,6 +42,19 @@ def project_read(access: Access | None, actor: Actor, project_id: str, hidden: H
         raise hidden()
 
 
+def visible_task(access: Access | None, actor: Actor, tasks, task_id: str) -> bool:
+    """Whether the caller may see a research task (its project's owner, or an administrator)."""
+    if access is None or access.is_admin(actor):
+        return True
+    if tasks is None:
+        return False
+    try:
+        project_id = tasks.get(task_id).project_id
+    except Denied:
+        return False
+    return access.sees_project(actor, project_id)
+
+
 def stage_read(access: Access | None, actor: Actor, stage_id: str, hidden: Hidden) -> None:
     if access is not None and not access.sees_stage(actor, stage_id):
         raise hidden()

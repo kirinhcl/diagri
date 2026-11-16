@@ -18,7 +18,7 @@ from growbridge.compute.service import ComputeService
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import PathId
-from growbridge.workbench.scope import admin_only, project_write
+from growbridge.workbench.scope import admin_only, project_write, visible_task
 from growbridge.workflow.access import Access
 from growbridge.workflow.tasks import TaskBoard
 
@@ -90,4 +90,11 @@ def add_compute_routes(
 
     @router.get("/compute")
     async def overview(actor: Operator):
-        return compute.overview()
+        found = compute.overview()
+        if access is None or access.is_admin(actor):
+            return found
+        mine = lambda row: visible_task(access, actor, tasks, row["task_id"])  # noqa: E731
+        lists = {
+            name: [row for row in found[name] if mine(row)] for name in ("tasks", "jobs", "stuck")
+        }
+        return {**found, **lists, "balance": None, "service": None}  # no project-wide figures

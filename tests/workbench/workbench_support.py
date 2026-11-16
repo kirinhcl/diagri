@@ -132,7 +132,7 @@ class Bench:
             self.db, self.clock, self.control, check_treatments=check_treatments
         )
         self.archive = Archive(self.db, tmp_path / "archive", self.clock)
-        self.alerts = AlertBook(self.db, self.clock)
+        self.alerts = AlertBook(self.db, self.clock, "SIMULATED")  # as serve: the local device
         self.tasks = TaskBoard(self.db, self.clock)
         self.budget = CallBudget(self.db, self.clock)
         self.operators = Operators(self.db, self.clock, scrypt_n=FAST_SCRYPT)

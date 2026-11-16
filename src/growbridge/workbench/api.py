@@ -564,7 +564,10 @@ class Workbench:
 
         @router.get("/alerts")
         async def alerts(actor: Annotated[Actor, Depends(self.anyone)]):
-            return {"alerts": [item.model_dump(mode="json") for item in book.open()]}
+            shown = [
+                a for a in book.open() if self.access is None or self.access.sees_alert(actor, a)
+            ]
+            return {"alerts": [item.model_dump(mode="json") for item in shown]}
 
         @router.post("/alerts/{event_id}/read")
         async def mark_read(event_id: str, actor: Annotated[Actor, Depends(self.operator)]):

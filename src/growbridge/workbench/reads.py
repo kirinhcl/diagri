@@ -19,11 +19,11 @@ from growbridge.archive.clock import Clock
 from growbridge.archive.readings import DEFAULT_POINTS, MAX_POINTS, bucketed_samples
 from growbridge.archive.store import Archive
 from growbridge.compute.service import ComputeService
-from growbridge.observer.alerts import AlertBook, awaits_reading
+from growbridge.observer.alerts import Alert, AlertBook, awaits_reading
 from growbridge.ports import Actor, ControlPort, Denied
 from growbridge.workbench.environment import add_environment_routes
 from growbridge.workbench.rounds import PathId, ProjectBudget
-from growbridge.workbench.scope import project_read, stage_read
+from growbridge.workbench.scope import project_read, stage_read, visible_task
 from growbridge.workflow.access import Access
 from growbridge.workflow.listing import (
     count_rounds_awaiting_choice,
@@ -94,11 +94,12 @@ def _cap(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, i
     return _by_age(kept), truncated
 
 
-def _stage_items(workflow: WorkflowService) -> list[dict[str, Any]]:
+def _stage_items(workflow: WorkflowService, keep: Callable[[str], bool]) -> list[dict[str, Any]]:
+    """Stages waiting for a person, of the projects ``keep`` accepts."""
     store = workflow.store
     found: list[dict[str, Any]] = []
     for state, kind in STAGE_KINDS.items():
-        for row in store.stages_in((state,)):
+        for row in (r for r in store.stages_in((state,)) if keep(r.project_id)):
             entered = store.entered(row.stage_id, state)
             since = entered["at"] if entered else row.state_at
             detail = {"state": state.value, "device_id": row.device_id}
@@ -118,9 +119,9 @@ def _choice_since(workflow: WorkflowService, row: dict[str, Any]) -> tuple[float
     return row["created_at"], "round_created"
 
 
-def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
+def _round_items(workflow: WorkflowService, owner: str | None) -> list[dict[str, Any]]:
     items = []
-    for row in rounds_awaiting_choice(workflow.store, INBOX_LIMIT):
+    for row in rounds_awaiting_choice(workflow.store, INBOX_LIMIT, only_owner=owner):
         since, since_from = _choice_since(workflow, row)
         detail = {"awaiting_choice": row["awaiting_choice"], "since_from": since_from}
         round_id = row["round_id"]
@@ -131,7 +132,9 @@ def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
     return items
 
 
-def _alert_items(alerts: AlertBook | None, now: float, trusted: bool) -> list[dict[str, Any]]:
+def _alert_items(
+    alerts: AlertBook | None, now: float, trusted: bool, keep: Callable[[Alert], bool]
+) -> list[dict[str, Any]]:
     if alerts is None:
         return []
     items = [
@@ -151,26 +154,32 @@ def _alert_items(alerts: AlertBook | None, now: float, trusted: bool) -> list[di
             },
         )
         for alert in alerts.open()
-        if awaits_reading(
+        if keep(alert)
+        and awaits_reading(
             alert, now, trusted
         )  # unread, worse than when read, or read over a day ago
     ]
     return items
 
 
-def _compute_items(compute: ComputeService | None) -> list[dict[str, Any]]:
+def _compute_items(
+    compute: ComputeService | None, keep: Callable[[str], bool]
+) -> list[dict[str, Any]]:
     if compute is None:
         return []
     return [
         _item("compute_stuck", job["attempt_id"], None, None, job["since"], dict(job))
         for job in compute.overview()["stuck"]
+        if keep(job["task_id"])
     ]
 
 
-def _task_items(tasks: TaskBoard | None, store: WorkflowStore) -> list[dict[str, Any]]:
+def _task_items(
+    tasks: TaskBoard | None, store: WorkflowStore, owner: str | None
+) -> list[dict[str, Any]]:
     if tasks is None:
         return []
-    found = tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT)
+    found = tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT, only_owner=owner)
     since = tasks.state_since([task.id for task in found])
     names = {ident: project_name(store, ident) for ident in {task.project_id for task in found}}
     return [
@@ -204,6 +213,23 @@ def _stage(workflow: WorkflowService, stage_id: str) -> StageRow:
     if row is None:
         raise Denied("state", f"unknown stage {stage_id}")
     return row
+
+
+class InboxView:
+    """What one caller's inbox keeps; everything when multi-user is off or for administrators."""
+
+    def __init__(self, access: Access | None, actor: Actor, tasks: TaskBoard | None):
+        self.access, self.actor, self.tasks = access, actor, tasks
+        self.owner = None if access is None else access.owner_filter(actor)
+
+    def project(self, project_id: str) -> bool:
+        return self.access is None or self.access.sees_project(self.actor, project_id)
+
+    def alert(self, alert: Alert) -> bool:
+        return self.access is None or self.access.sees_alert(self.actor, alert)
+
+    def task(self, task_id: str) -> bool:
+        return visible_task(self.access, self.actor, self.tasks, task_id)
 
 
 class ReadingsCache:
@@ -261,36 +287,42 @@ def add_read_routes(
     compute: ComputeService | None = None,
     access: Access | None = None,
 ) -> None:
-    _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock)
+    _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock, access)
     _project_routes(router, operator, workflow, tasks, budget, access)
     _stage_read_routes(router, operator, workflow, archive, clock, access)
-    add_environment_routes(router, operator, workflow, archive, control, clock, alerts)
+    add_environment_routes(router, operator, workflow, archive, control, clock, alerts, access)
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/safety")
     async def safety(actor: Operator):
+        if access is not None and not access.sees_device(actor, access.local_device):
+            raise Denied("not_lock_holder", "lock this greenhouse to read its safety limits")
         config = control.safety()
         return {"safety": None if config is None else config.model_dump(mode="json")}
 
 
-def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock) -> None:
+def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock, access=None) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/inbox")
     async def inbox(actor: Operator):
+        """Each kind is filtered to what the caller may see before it is capped or counted."""
+        view = InboxView(access, actor, tasks)
         kept, truncated = _cap(
-            _stage_items(workflow)
-            + _alert_items(alerts, clock.now(), clock.synced)
-            + _compute_items(compute)
+            _stage_items(workflow, view.project)
+            + _alert_items(alerts, clock.now(), clock.synced, view.alert)
+            + _compute_items(compute, view.task)
         )
         fetched = {
-            "round_choice": _round_items(workflow),
-            "task": _task_items(tasks, workflow.store),
+            "round_choice": _round_items(workflow, view.owner),
+            "task": _task_items(tasks, workflow.store, view.owner),
         }
         counts = {
-            "round_choice": count_rounds_awaiting_choice(workflow.store),
-            "task": 0 if tasks is None else tasks.count_in_states(ATTENTION_TASKS),
+            "round_choice": count_rounds_awaiting_choice(workflow.store, only_owner=view.owner),
+            "task": 0
+            if tasks is None
+            else tasks.count_in_states(ATTENTION_TASKS, only_owner=view.owner),
         }
         for kind, items in fetched.items():
             kept += items
