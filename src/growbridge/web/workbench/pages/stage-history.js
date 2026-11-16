@@ -72,6 +72,7 @@ export function detailLines(ctx, entry) {
   const raw = [];
   for (const [key, value] of Object.entries(detail)) {
     const line = isKnownKey(t, key) ? valueLine(ctx, key, value, detail) : null;
+    if (line === "") continue; // an empty list says nothing; the original detail below still holds it
     if (line !== null) lines.push(t("history.line", { label: fieldLabel(t, key), value: line }));
     else raw.push([isKnown(t, "history.field", key) ? `${fieldLabel(t, key)} (${key})` : key, value]);
   }

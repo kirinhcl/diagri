@@ -113,3 +113,18 @@ test("the operator's note and a named rule are shown in the body", () => {
   assertNoLeaks(view);
   assert.ok(detailLines(ctx, { type: "transition", event: "onsite_check", detail: { note: "x", by: "op_1" } }).raw.some(([, v]) => v === "op_1"));
 });
+
+// --- final review: an empty list says nothing rather than leave a bare label (F14) ---------------
+test("an empty list of differences or reasons gives no line; the original detail still holds it", () => {
+  for (const lang of ["zh", "en"]) {
+    const ctx = testCtx({ lang });
+    const detail = { differences: [], reasons: [], seconds: 30 };
+    const { lines, raw } = detailLines(ctx, { type: "transition", event: "disconnect_affects", detail });
+    assert.equal(lines.length, 1, lines.join(" | "));
+    assert.match(lines[0], /30/);
+    for (const line of lines) assert.doesNotMatch(line, /[:：]\s*$/);
+    assert.deepEqual(raw.find(([, value]) => value === detail)?.[1], detail);
+  }
+  const view = historyView(testCtx({ lang: "zh" }), { history: [{ at: 10, from: "running", to: "paused", event: "disconnect_affects", detail: { reasons: [] } }], interventions: [] });
+  assert.doesNotMatch(visibleText(view), /影响：/);
+});
