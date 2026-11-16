@@ -6,6 +6,7 @@ import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { renderPage, testCtx } from "./support/render-page.mjs";
 import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { versionMismatch } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
+import { stuckSentences } from "../../src/growbridge/web/workbench/pages/compute-stuck.js";
 
 const ctx = { t: (key) => `t:${key}` };
 
@@ -139,6 +140,19 @@ test("a stuck error without a known error code says unknown and keeps the Englis
   const { element } = await renderPage("compute", {}, { now: NOW });
   assert.match(visibleText(element), /未知（技术详情）/);
   assert.match(visibleTextIncludingDetails(element), /error: scheduler unreachable/);
+});
+
+test("a stuck error with an unknown or empty code keeps that code and its params in the fold", () => {
+  const zhCtx = testCtx({ lang: "zh" });
+  const row = { reason: "error: x", reason_code: "error", reason_params: {}, error_code: "brand_new_code", error_params: { n: 7 } };
+  const entry = (entries, key) => entries.find(([label]) => label === zhCtx.t(key));
+  const unknown = stuckSentences(zhCtx, row);
+  assert.ok(unknown.lines.includes(zhCtx.t("common.unknown")));
+  assert.deepEqual(entry(unknown.entries, "compute.tech.errorCode"), [zhCtx.t("compute.tech.errorCode"), "brand_new_code"]);
+  assert.deepEqual(entry(unknown.entries, "compute.tech.errorParams"), [zhCtx.t("compute.tech.errorParams"), { n: 7 }]);
+  const empty = stuckSentences(zhCtx, { ...row, error_code: "", error_params: { n: 8 } });
+  assert.ok(empty.lines.includes(zhCtx.t("common.unknown")));
+  assert.deepEqual(entry(empty.entries, "compute.tech.errorParams"), [zhCtx.t("compute.tech.errorParams"), { n: 8 }]);
 });
 
 test("an old stuck attempt without a code shows a generic line", async () => {

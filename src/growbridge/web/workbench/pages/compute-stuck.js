@@ -5,14 +5,17 @@ import { messageParts } from "../messages.js";
 const isCode = (value) => typeof value === "string" && value !== "";
 const params = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
 
+// The error's code and params under their own labels, apart from the reason's code and params.
+const errorEntries = (ctx, code, args) => [[ctx.t("compute.tech.errorCode"), code], [ctx.t("compute.tech.errorParams"), args]];
+
 // The error behind a stuck "error": its sentence and next step, or "unknown" when it has no code
-// (an attempt from before codes) or a code this console does not know.
+// (an attempt from before codes) or a code this console does not know; that code and its params
+// stay in the fold either way.
 function errorLines(ctx, row) {
   const parts = isCode(row.error_code) ? messageParts(ctx, "compute_error", row.error_code, params(row.error_params)) : null;
-  if (!parts || !parts.known) return { lines: [ctx.t("common.unknown")], entries: [] };
+  if (!parts || !parts.known) return { lines: [ctx.t("common.unknown")], entries: errorEntries(ctx, row.error_code, row.error_params) };
   const [code, args] = [parts.details[0][1], parts.details[parts.details.length - 1][1]];
-  const entries = [[ctx.t("compute.tech.errorCode"), code], [ctx.t("compute.tech.errorParams"), args]];
-  return { lines: [parts.text, parts.action].filter(Boolean), entries };
+  return { lines: [parts.text, parts.action].filter(Boolean), entries: errorEntries(ctx, code, args) };
 }
 
 // { lines, entries }: the sentences to show and the entries for the one technical-details fold.
