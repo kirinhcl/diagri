@@ -91,9 +91,7 @@ export function afterWrite(ctx, message) {
 const isEmpty = (value) => value === null || value === undefined || value === "";
 const valueText = (value) => (typeof value === "object" ? JSON.stringify(value, null, 2) : String(value));
 
-// True once the text is on the clipboard; false when there is no clipboard or it refused (the text
-// stays on the page to be selected by hand). Never throws.
-export async function copyText(text) {
+async function writeClipboard(text) {
   try {
     const clipboard = globalThis.navigator ? globalThis.navigator.clipboard : undefined;
     if (!clipboard || typeof clipboard.writeText !== "function") return false;
@@ -104,10 +102,35 @@ export async function copyText(text) {
   }
 }
 
-function copyButton(t, text, label) {
+// Selects what node shows and asks the browser to copy the selection: true only when it says it did.
+// The selection is left in place either way, so Cmd/Ctrl+C still works by hand.
+function copySelection(node) {
+  try {
+    const doc = node.ownerDocument || globalThis.document;
+    if (!doc || typeof doc.getSelection !== "function" || typeof doc.createRange !== "function") return false;
+    const selection = doc.getSelection();
+    const range = doc.createRange();
+    range.selectNodeContents(node);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return typeof doc.execCommand === "function" && doc.execCommand("copy") === true;
+  } catch {
+    return false;
+  }
+}
+
+// True once the text is on the clipboard. Where there is no Clipboard API (plain http on the site's
+// LAN) or it refused, the node holding the text is selected and copied that way; when that fails too
+// the text stays selected on the page for the person to copy. Never throws.
+export async function copyText(text, node) {
+  if (await writeClipboard(text)) return true;
+  return node ? copySelection(node) : false;
+}
+
+function copyButton(t, text, label, node) {
   const button = h("button", { class: "button button-quiet tech-copy", attrs: { type: "button" }, text: label });
   button.addEventListener("click", async () => {
-    button.textContent = t((await copyText(text)) ? "tech.copied" : "tech.copyFailed");
+    button.textContent = t((await copyText(text, node)) ? "tech.copied" : "tech.copyFailed");
   });
   return button;
 }
@@ -117,16 +140,18 @@ function copyButton(t, text, label) {
 export function techDetails(t, entries, { summary } = {}) {
   const rows = (entries || []).filter(([, value]) => !isEmpty(value)).map(([label, value]) => [String(label), valueText(value)]);
   if (rows.length === 0) return null;
-  const items = rows.map(([label, text]) =>
-    h("div", { class: "tech-row" }, h("dt", { text: label }), h("dd", {}, h("code", { text }), copyButton(t, text, t("tech.copy")))),
-  );
+  const items = rows.map(([label, text]) => {
+    const code = h("code", { text });
+    return h("div", { class: "tech-row" }, h("dt", { text: label }), h("dd", {}, code, copyButton(t, text, t("tech.copy"), code)));
+  });
   const all = rows.map(([label, text]) => `${label}: ${text}`).join("\n");
+  const list = h("dl", { class: "tech-list" }, items);
   return h(
     "details",
     { class: "tech-details" },
     h("summary", { text: summary || t("tech.title") }),
-    h("dl", { class: "tech-list" }, items),
-    copyButton(t, all, t("tech.copyAll")),
+    list,
+    copyButton(t, all, t("tech.copyAll"), list),
   );
 }
 

@@ -249,3 +249,51 @@ test("the stage, round and alerts pages keep an unknown state or kind's code in 
     }
   }
 });
+
+// --- final review: without the Clipboard API, select the value and ask the browser to copy (F8) ---
+// A stand-in for the Selection API and document.execCommand on the fake document.
+function selectionStub(document, execResult) {
+  const selection = { ranges: [], removeAllRanges() { this.ranges = []; }, addRange(range) { this.ranges.push(range); } };
+  const commands = [];
+  document.getSelection = () => selection;
+  document.createRange = () => ({ node: null, selectNodeContents(node) { this.node = node; } });
+  document.execCommand = (command) => {
+    commands.push(command);
+    if (execResult instanceof Error) throw execResult;
+    return execResult;
+  };
+  return { selection, commands, selected: () => selection.ranges.map((range) => range.node) };
+}
+
+test("on plain http a copy button selects its value and copies the selection", async () => {
+  installFakeDom({ clipboard: undefined });
+  const stub = selectionStub(globalThis.document, true);
+  const el = techDetails(makeT("zh"), [["轮次 id", "round_1"]]);
+  const [button] = elements(el, "button");
+  await click(button);
+  assert.deepEqual(stub.commands, ["copy"]);
+  assert.deepEqual(stub.selected(), [elements(el, "code")[0]]);
+  assert.equal(button.textContent, "已复制");
+});
+
+test("when the browser will not copy, the value stays selected and the button says to copy by hand", async () => {
+  for (const [clipboard, result] of [[undefined, false], [{ writeText: () => Promise.reject(new Error("NotAllowedError")) }, false], [undefined, new Error("SecurityError")]]) {
+    installFakeDom({ clipboard });
+    const stub = selectionStub(globalThis.document, result);
+    const el = techDetails(makeT("zh"), [["轮次 id", "round_1"], ["阶段 id", "stage-1"]]);
+    const [first, , all] = elements(el, "button");
+    await click(first);
+    assert.equal(first.textContent, "复制失败，请手动选择");
+    assert.deepEqual(stub.selected(), [elements(el, "code")[0]], "the value is selected for Cmd/Ctrl+C");
+    await click(all);
+    assert.equal(all.textContent, "复制失败，请手动选择");
+    assert.deepEqual(stub.selected(), [elements(el, "dl")[0]], "copy all selects the whole list");
+  }
+});
+
+test("without the Selection API a copy still fails quietly", async () => {
+  installFakeDom({ clipboard: undefined });
+  const [button] = elements(techDetails(makeT("zh"), [["轮次 id", "round_1"]]), "button");
+  await click(button);
+  assert.equal(button.textContent, "复制失败，请手动选择");
+});
