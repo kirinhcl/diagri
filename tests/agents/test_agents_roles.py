@@ -64,3 +64,11 @@ def test_handoff_renders_as_json_user_message_with_every_field():
     assert payload["trigger_event_id"] == "evt-1" and payload["correlation_id"] == "corr-1"
     assert payload["budget"]["max_calls"] == 10
     assert payload["parent_task_id"] == "task-1"
+
+
+def test_the_auditor_prompt_points_to_the_tools_that_hold_history_and_interventions():
+    lines = " ".join(AUDITOR.system.split())
+
+    assert "get_run_status for the stage's history" in lines
+    assert "inspect_stage_data for the data's coverage, gaps and intervention counts" in lines
+    assert "get_stage_records for the run sheet, the manual tasks and their records" in lines
