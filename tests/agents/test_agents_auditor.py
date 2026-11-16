@@ -193,6 +193,18 @@ async def test_raise_audit_finding_records_a_warning_that_pauses_nothing(env):
     assert env.workflow.stage("stage-1").state == before
 
 
+async def test_raise_audit_finding_refuses_a_stage_of_another_project(env):
+    env.other_project()
+    await _start(env)
+
+    outcome = await _call(
+        env, "raise_audit_finding", stage_id="stage-b", severity="warning", summary="not mine"
+    )
+
+    assert outcome.is_error and "denied (scope)" in outcome.content
+    assert env.book.open() == ()
+
+
 async def test_raise_audit_finding_is_refused_without_an_alert_book(env):
     await _start(env)
 
