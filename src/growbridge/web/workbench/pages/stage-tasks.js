@@ -47,14 +47,21 @@ function partialText(ctx, record) {
   return ctx.t("tasks.partialRan", { seconds: Math.round(record.ran_seconds * 10) / 10, why });
 }
 
+// A fold's key across the minute's redraw: the tasks' own folds by name, a row's by its occurrence.
+const foldKey = (fold, key) => {
+  if (fold) fold.setAttribute("data-fold", key);
+  return fold;
+};
+
 // The planned task's id, and the record's id and pump request once there is a record.
 function taskDetails(ctx, row) {
   const record = row.record || {};
-  return techDetails(ctx.t, [
+  const fold = techDetails(ctx.t, [
     [ctx.t("tech.id.task_id"), row.task_id],
     [ctx.t("tech.recordId"), record.id],
     [ctx.t("receipt.requestId"), record.irrigation_request_id],
   ]);
+  return foldKey(fold, `task:${row.task_id}@${row.due_at}`);
 }
 
 function recordMeta(ctx, record) {
@@ -156,8 +163,8 @@ export function tasksView(env, body) {
   const recent = rows.slice(0, SHOWN_ROWS);
   const older = rows.slice(SHOWN_ROWS);
   const more = older.length
-    ? h("details", { class: "tasks-older" }, h("summary", { text: ctx.t("tasks.older", { count: older.length }) }), table(columns, older, { label: ctx.t("tasks.list") }))
+    ? h("details", { class: "tasks-older", attrs: { "data-fold": "tasks:older" } }, h("summary", { text: ctx.t("tasks.older", { count: older.length }) }), table(columns, older, { label: ctx.t("tasks.list") }))
     : null;
-  const rules = h("details", { class: "tasks-rules" }, h("summary", { text: ctx.t("tasks.rules") }), h("p", { text: ctx.t("tasks.rulesText") }));
+  const rules = h("details", { class: "tasks-rules", attrs: { "data-fold": "tasks:rules" } }, h("summary", { text: ctx.t("tasks.rules") }), h("p", { text: ctx.t("tasks.rulesText") }));
   return h("div", { class: "tasks" }, note(ctx.t("tasks.lead")), rules, table(columns, recent, { label: ctx.t("tasks.list") }), more);
 }

@@ -5,7 +5,7 @@
 // of a finished stage are asked for again only every five minutes.
 import { formatDuration, shortDigest } from "../format.js";
 import { hrefFor } from "../router.js";
-import { readingsChart } from "../ui/chart.js";
+import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { errorDetail, errorLines } from "../ui/forms.js";
 import { deviceName, displayName, nameDetails } from "../ui/names.js";
@@ -84,13 +84,17 @@ async function loadAll(ctx, stageId, kept = null) {
 }
 
 // --- parts ------------------------------------------------------------------------------------------
+// A part drawn again only when its signature changes; folds with a data-fold key (the chart's legend
+// and data tables, the tasks' folds) that were open stay open across the redraw.
 function region(className) {
   const element = h("div", { class: className });
   let shown = null;
   const show = (signature, build) => {
     if (signature === shown) return;
     shown = signature;
+    const open = openChartFolds(element);
     clear(element).append(build());
+    restoreChartFolds(element, open);
   };
   return { element, show };
 }
