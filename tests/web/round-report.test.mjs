@@ -6,7 +6,7 @@ import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { analysisSection, analysisState, runView } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
-import { estimateText, render, reportLists, reportView } from "../../src/growbridge/web/workbench/pages/round.js";
+import { abortLines, estimateText, render, reportLists, reportView } from "../../src/growbridge/web/workbench/pages/round.js";
 import { bindFormContext } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { displayName } from "../../src/growbridge/web/workbench/ui/names.js";
 import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
@@ -25,6 +25,9 @@ const hasClass = (node, name) => (node.getAttribute("class") || "").split(/\s+/)
 const techFolds = (node) => elements(node, "details").filter((details) => hasClass(details, "tech-details"));
 const plainFolds = (node) => elements(node, "details").filter((details) => !hasClass(details, "tech-details"));
 const count = (text, part) => text.split(part).length - 1;
+// Every pending promise job, then one turn of the event loop.
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const summaryOf = (root) => elements(root, "summary")[0].textContent;
 // The <section> of a page whose heading reads `title`.
 const sectionTitled = (root, title) => elements(root, "section").find((node) => elements(node, "h2")[0]?.textContent === title);
 
@@ -57,8 +60,8 @@ test("server notes follow the console language; old reports keep their plain tex
       { code: "treatment_unverified", kind: "limitation", params: { round: 1 }, text: { en: "Round 1 …", zh: "第 1 轮…" } },
     ],
   };
-  assert.deepEqual(reportLists(report, "en"), { reasons: ["No independent replicate"], limitations: ["one cultivar", "Round 1 …"] });
-  assert.deepEqual(reportLists(report, "zh"), { reasons: ["缺少独立的处理重复"], limitations: ["one cultivar", "第 1 轮…"] });
+  assert.deepEqual(reportLists(report, "en"), { reasons: ["No independent replicate"], limitations: ["Round 1 …", "one cultivar"] });
+  assert.deepEqual(reportLists(report, "zh"), { reasons: ["缺少独立的处理重复"], limitations: ["第 1 轮…", "one cultivar"] });
   const old = { reasons: ["a"], limitations: ["b"] };
   assert.deepEqual(reportLists(old, "en"), { reasons: ["a"], limitations: ["b"] });
 });
@@ -121,6 +124,16 @@ test("limitations show three and fold the rest", () => {
   assert.equal(plainFolds(three).length, 0, "three or fewer: no fold");
 });
 
+test("the server's own limitation notes come before the model's and stay in view", () => {
+  const note = { code: "treatment_unverified", kind: "limitation", params: { round: 1 }, text: { en: "Round 1 unverified", zh: "第 1 轮未核实" } };
+  const report = { model_limitations: ["m1", "m2", "m3", "m4"], notes: [note] };
+  const view = reportView(testCtx(), { label: "descriptive", report });
+  const folded = elements(plainFolds(view)[0], "li").map((li) => li.textContent);
+  const shown = elements(view, "li").map((li) => li.textContent).filter((text) => !folded.includes(text));
+  assert.deepEqual(shown, ["第 1 轮未核实", "m1", "m2"]);
+  assert.deepEqual(folded, ["m3", "m4"]);
+});
+
 test("report items and the next round keep the model's light markup", () => {
   const report = { reasons: ["the **main** reason"], unresolved: ["see `x`"], next_round: "Two steps:\n- one\n- two" };
   const view = reportView(testCtx(), { label: "descriptive", report });
@@ -152,7 +165,16 @@ test("a report that could not be read shows the plain lines and folds the server
   assert.ok(visibleText(box).includes(zh["error.title"]));
   assert.ok(!visibleText(box).includes(words));
   assert.ok(visibleTextIncludingDetails(box).includes(words));
-  assert.equal(techFolds(box).length, 1);
+  for (const id of [ROUND.report_artifact_id, ROUND.snapshot_id]) {
+    assert.ok(!visibleText(box).includes(id), id);
+    assert.ok(visibleTextIncludingDetails(box).includes(id), id);
+  }
+});
+
+test("a report answer without its own id keeps the round's report id in the details", () => {
+  const { artifact_id: _a, ...withoutId } = REPORT;
+  const all = visibleTextIncludingDetails(reportView(testCtx(), withoutId, ROUND));
+  assert.equal(count(all, ROUND.report_artifact_id), 1);
 });
 
 // --- the round summary and stages -----------------------------------------------------------------
@@ -183,6 +205,13 @@ test("stages are linked by name, and the stopped stage is named in the choice", 
   assert.ok(text.includes("未命名阶段 已停止") && !text.includes("stage-elsewhere-9"), text);
 });
 
+test("the abort question names the round, not its id", () => {
+  const [line] = abortLines(testCtx(), ROUND);
+  assert.ok(line.startsWith("第 1 轮") && !line.includes(ROUND.round_id), line);
+  const [enLine] = abortLines(testCtx({ lang: "en" }), ROUND);
+  assert.ok(enLine.startsWith("Round 1 ") && !enLine.includes(ROUND.round_id), enLine);
+});
+
 // --- the confirmatory analysis --------------------------------------------------------------------
 
 test("the analysis block is folded by default", async () => {
@@ -190,9 +219,9 @@ test("the analysis block is folded by default", async () => {
   assert.equal(root.localName, "details");
   assert.ok(!hasClass(root, "tech-details"));
   assert.equal(root.getAttribute("open"), null);
-  assert.equal(elements(root, "summary")[0].textContent, "确认性分析（高级）");
+  assert.equal(summaryOf(root), "确认性分析（高级）· 未开始");
   const enRoot = await analysisSection(testCtx({ lang: "en" }), ROUND);
-  assert.equal(elements(enRoot, "summary")[0].textContent, "Confirmatory analysis (advanced)");
+  assert.equal(summaryOf(enRoot), "Confirmatory analysis (advanced) · Not started");
 });
 
 test("the analysis says where it stands in one word", async () => {
@@ -201,10 +230,13 @@ test("the analysis says where it stands in one word", async () => {
   assert.equal(analysisState({ ...ANALYSIS, frozen }), "locked");
   const ran = { ...ANALYSIS, frozen, snapshots: [{ ...ANALYSIS.snapshots[0], run_status: "succeeded" }] };
   assert.equal(analysisState(ran), "ran");
-  const text = visibleText(await analysisSection(testCtx(), ROUND));
-  assert.ok(text.includes("状态 未开始"), text);
-  const locked = visibleText(await analysisSection(testCtx({ fixtures: { "analysis.json": { ...ANALYSIS, frozen } } }), ROUND));
-  assert.ok(locked.includes("状态 脚本已锁定"), locked);
+  const failed = { ...ran, snapshots: [{ ...ANALYSIS.snapshots[0], run_status: "failed" }] };
+  assert.equal(analysisState(failed), "ran");
+  const running = { ...ran, snapshots: [...ran.snapshots, { ...ANALYSIS.snapshots[0], run_status: "running" }] };
+  assert.equal(analysisState(running), "running");
+  assert.equal(summaryOf(await analysisSection(testCtx({ fixtures: { "analysis.json": { ...ANALYSIS, frozen } } }), ROUND)), "确认性分析（高级）· 脚本已锁定");
+  assert.equal(summaryOf(await analysisSection(testCtx({ fixtures: { "analysis.json": running } }), ROUND)), "确认性分析（高级）· 运行中");
+  assert.equal(summaryOf(await analysisSection(testCtx({ fixtures: { "analysis.json": ran } }), ROUND)), "确认性分析（高级）· 已运行");
 });
 
 test("snapshots are named by date and completeness, their ids in the details", async () => {
@@ -253,4 +285,37 @@ test("a round planned on an older version says the analysis is not for it", asyn
   assert.ok(text.includes("本轮按第 1 版规划；第 3 版已存在。下面的分析针对第 3 版，不是本轮。"), text);
   const enText = visibleText(await analysisSection(testCtx({ lang: "en", fixtures: { "analysis.json": latest } }), ROUND));
   assert.ok(enText.includes("Data collection has started"), enText);
+});
+
+test("after a run the analysis opens again on its result, once", async () => {
+  const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
+  const c = testCtx({ fixtures: { "analysis.json": { ...ANALYSIS, frozen } } });
+  bindFormContext(c);
+  c.api.post = async () => ({ run_id: "run_5c98", status: "succeeded", exit_code: 0, timed_out: false, stdout: "", stderr: "" });
+  const first = await analysisSection(c, ROUND);
+  const form = elements(first, "form").find((node) => elements(node, "select").length);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const again = await analysisSection(c, ROUND);
+  assert.notEqual(again.getAttribute("open"), null, "open on the result");
+  assert.equal(summaryOf(again), "确认性分析（高级）· 脚本已锁定");
+  assert.ok(visibleText(again).includes(zh["analysis.runState.succeeded"]));
+  const later = await analysisSection(c, ROUND);
+  assert.equal(later.getAttribute("open"), null, "the result is shown once");
+  assert.ok(!visibleText(later).includes(zh["analysis.runState.succeeded"]));
+});
+
+test("after a freeze the analysis opens again, for that round only", async () => {
+  const c = testCtx();
+  bindFormContext(c);
+  c.api.post = async () => ({});
+  const first = await analysisSection(c, ROUND);
+  const form = elements(first, "form").find((node) => elements(node, "textarea").length);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const other = await analysisSection(c, { ...ROUND, round_id: "round_other" });
+  assert.equal(other.getAttribute("open"), null, "another round stays closed");
+  const again = await analysisSection(c, ROUND);
+  assert.notEqual(again.getAttribute("open"), null);
+  assert.equal((await analysisSection(c, ROUND)).getAttribute("open"), null, "opened once");
 });

@@ -9,9 +9,17 @@ import { afterWrite, errorParts, keyValues, note, techDetails, timeText } from "
 import { table } from "../ui/table.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
-const STATE_KEYS = { notStarted: "analysis.state.notStarted", locked: "analysis.state.locked", ran: "analysis.state.ran" };
+const STATE_KEYS = {
+  notStarted: "analysis.state.notStarted",
+  locked: "analysis.state.locked",
+  running: "analysis.state.running",
+  ran: "analysis.state.ran",
+};
+const FINISHED = new Set(["succeeded", "failed"]);
 // The last run's answer, shown once after the page reloads; never kept for another round.
 let lastRun = null;
+// The round whose script was just frozen: its block opens once after the reload.
+let frozenFor = null;
 
 async function readAnalysis(ctx, round) {
   const path = `/protocols/${encodeURIComponent(round.protocol_id)}/analysis?project_id=${encodeURIComponent(round.project_id)}`;
@@ -23,11 +31,13 @@ async function readAnalysis(ctx, round) {
   }
 }
 
-// Where the analysis stands, in one word: no script yet, a script frozen, or a run on record.
+// Where the analysis stands, in one word: no script yet, a script frozen, a run going on, or a
+// finished run on record.
 export function analysisState(analysis) {
   if (!analysis.frozen) return "notStarted";
-  const ran = array(analysis.snapshots).some((row) => row.run_status && row.run_status !== "none");
-  return ran ? "ran" : "locked";
+  const statuses = array(analysis.snapshots).map((row) => row.run_status);
+  if (statuses.includes("running")) return "running";
+  return statuses.some((status) => FINISHED.has(status)) ? "ran" : "locked";
 }
 
 // When and by whom the script was frozen; its text and fingerprint are folded away.
@@ -61,6 +71,7 @@ function freezeEditor(ctx, round) {
   const submitLabel = ctx.t("analysis.freeze");
   const onSubmit = async (body) => {
     await ctx.api.post(`/protocols/${encodeURIComponent(round.protocol_id)}/analysis`, body, { action: submitLabel });
+    frozenFor = round.round_id;
     afterWrite(ctx);
   };
   const value = { project_id: round.project_id, script: "" };
@@ -115,15 +126,24 @@ export function versionMismatch(analysis, round) {
   return analysis.version === round.protocol_version ? null : { latest: analysis.version, round: round.protocol_version };
 }
 
-// The block, closed until opened: a <details> titled like a section heading.
-function fold(ctx, ...children) {
-  const summary = h("summary", { class: "block-head" }, h("h2", { text: ctx.t("analysis.title") }));
-  return h("details", { class: "block analysis-fold" }, summary, h("div", { class: "analysis-body" }, ...children));
+// True once for the round whose script was just frozen.
+function justFrozen(round) {
+  if (frozenFor !== round.round_id) return false;
+  frozenFor = null;
+  return true;
+}
+
+// The block as a <details> titled like a section heading, with the state word when it is known.
+// Closed unless `open`: right after a freeze or a run, so their outcome is in view.
+function fold(ctx, { state = null, open = false }, ...children) {
+  const title = ctx.t("analysis.title");
+  const text = state ? ctx.t("analysis.titleState", { title, state: ctx.t(STATE_KEYS[state]) }) : title;
+  const summary = h("summary", { class: "block-head" }, h("h2", { text }));
+  return h("details", { class: "block analysis-fold", attrs: { open } }, summary, h("div", { class: "analysis-body" }, ...children));
 }
 
 function facts(ctx, round, analysis) {
   return keyValues([
-    [ctx.t("col.state"), ctx.t(STATE_KEYS[analysisState(analysis)])],
     [ctx.t("col.protocol"), ctx.t("round.protocolValue", { id: analysis.protocol_id, v: analysis.version })],
     [ctx.t("analysis.roundVersion"), ctx.t("analysis.versionValue", { v: round.protocol_version })],
     [ctx.t("analysis.started"), ctx.t(analysis.started ? "common.yes" : "common.no")],
@@ -132,17 +152,20 @@ function facts(ctx, round, analysis) {
 
 export async function analysisSection(ctx, round) {
   const { analysis, error } = await readAnalysis(ctx, round);
-  if (!analysis) return fold(ctx, h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)));
+  if (!analysis) return fold(ctx, {}, h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)));
   const mismatch = versionMismatch(analysis, round);
   const status = (text) => h("div", { class: "form-status form-status-error", attrs: { role: "status" } }, h("p", { text }));
+  const result = runResult(ctx, round);
+  const open = Boolean(result) || justFrozen(round);
   return fold(
     ctx,
+    { state: analysisState(analysis), open },
     mismatch ? status(ctx.t("analysis.otherVersion", mismatch)) : null,
     facts(ctx, round, analysis),
     frozenView(ctx, analysis),
     analysis.frozen ? note(ctx.t("analysis.frozenNote")) : freezeEditor(ctx, round),
     snapshotsView(ctx, analysis),
     runForm(ctx, round, analysis),
-    runResult(ctx, round),
+    result,
   );
 }

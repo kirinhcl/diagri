@@ -43,9 +43,13 @@ function stagesView(ctx, round) {
   return table(columns, stages, { label: ctx.t("round.stages") });
 }
 
+// What aborting does, said of the round by name.
+export function abortLines(ctx, round) {
+  return [ctx.t("round.abortLine", { round: displayName(ctx, "round", round) })];
+}
+
 function askAbort(ctx, round) {
-  const lines = [ctx.t("round.abortLine", { id: round.round_id })];
-  return confirmAction(ctx.t, { title: ctx.t("round.abortTitle"), lines, confirmLabel: ctx.t("round.abort") });
+  return confirmAction(ctx.t, { title: ctx.t("round.abortTitle"), lines: abortLines(ctx, round), confirmLabel: ctx.t("round.abort") });
 }
 
 // Only shown while a stopped stage waits for the operator; the options are the server's choices.
@@ -68,8 +72,7 @@ function abortButton(ctx, round) {
     await ctx.api.post(`/rounds/${encodeURIComponent(round.round_id)}/abort`, {}, { action: ctx.t("round.abort") });
     afterWrite(ctx);
   };
-  const lines = [ctx.t("round.abortLine", { id: round.round_id })];
-  return confirmedButton(ctx, { label: ctx.t("round.abort"), title: ctx.t("round.abortTitle"), lines, tone: "danger", run });
+  return confirmedButton(ctx, { label: ctx.t("round.abort"), title: ctx.t("round.abortTitle"), lines: abortLines(ctx, round), tone: "danger", run });
 }
 
 // --- the published report ------------------------------------------------------------------------
@@ -102,14 +105,15 @@ function labelView(ctx, label) {
   return known ? h("div", {}, pill, note(labelOr(ctx.t, "report.labelHelp", label))) : pill;
 }
 
-// The report's fold: its full fingerprint, its snapshot and its own id, and any code without text.
-function reportDetails(ctx, data, label) {
+// The report's fold: its full fingerprint, its snapshot and its own id (the round's report id when
+// the answer lacks one), and any code without text.
+function reportDetails(ctx, data, label, round) {
   const report = data.report || {};
   const unknown = (prefix, value) => (isBlank(value) || hasLabel(ctx.t, prefix, value) ? null : value);
   return techDetails(ctx.t, [
     [ctx.t("report.sha256"), data.sha256],
     [ctx.t("tech.id.snapshot_id"), report.snapshot_id],
-    [ctx.t("report.artifactId"), data.artifact_id],
+    [ctx.t("report.artifactId"), data.artifact_id || round.report_artifact_id],
     [ctx.t("report.label"), unknown("report.labels", label)],
     [ctx.t("report.conclusion"), unknown("report.conclusions", report.conclusion)],
   ]);
@@ -134,10 +138,12 @@ export function reportLists(report, lang) {
   }
   const text = (entry) => (entry.text && (entry.text[lang] || entry.text.en)) || entry.code;
   const of = (kind) => report.notes.filter((entry) => entry.kind === kind).map(text);
-  return { reasons: of("reason"), limitations: [...(report.model_limitations || []), ...of("limitation")] };
+  // The server's own findings first, so the cap on limitations never folds them under the model's text.
+  return { reasons: of("reason"), limitations: [...of("limitation"), ...(report.model_limitations || [])] };
 }
 
-export function reportView(ctx, data) {
+// `round` gives the report id when the report's answer lacks one.
+export function reportView(ctx, data, round = {}) {
   const report = data.report || {};
   const lists = reportLists(report, ctx.lang);
   const label = report.label || data.label;
@@ -152,7 +158,7 @@ export function reportView(ctx, data) {
       [ctx.t("report.estimateTitle"), estimateView(ctx, report.estimate)],
       [ctx.t("report.digest"), shortDigest(data.sha256)],
     ]),
-    reportDetails(ctx, data, label),
+    reportDetails(ctx, data, label, round),
     [sub("report.reasons"), itemList(ctx, lists.reasons)],
     [sub("report.limitations"), itemList(ctx, lists.limitations, LIMITATIONS_SHOWN)],
     [sub("report.unresolved"), itemList(ctx, report.unresolved)],
@@ -164,9 +170,14 @@ async function reportSection(ctx, round) {
   if (!round.report_artifact_id) return null;
   try {
     const data = await ctx.api.get(`/rounds/${encodeURIComponent(round.round_id)}/report`);
-    return section(ctx.t("report.title"), reportView(ctx, data));
+    return section(ctx.t("report.title"), reportView(ctx, data, round));
   } catch (error) {
-    return section(ctx.t("report.title"), h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)));
+    // The report could not be read: the error's own fold, and the round's report and snapshot ids.
+    const ids = techDetails(ctx.t, [
+      [ctx.t("report.artifactId"), round.report_artifact_id],
+      [ctx.t("tech.id.snapshot_id"), round.snapshot_id],
+    ]);
+    return section(ctx.t("report.title"), h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)), ids);
   }
 }
 
