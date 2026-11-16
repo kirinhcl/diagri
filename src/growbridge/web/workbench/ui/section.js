@@ -100,7 +100,7 @@ function copyButton(t, text, label) {
 
 // Closed by default: one row per value (label, the value as code, a copy button), then "copy all"
 // for every "label: value" line. Empty values are left out; null when nothing is left.
-export function techDetails(t, entries) {
+export function techDetails(t, entries, { summary } = {}) {
   const rows = (entries || []).filter(([, value]) => !isEmpty(value)).map(([label, value]) => [String(label), valueText(value)]);
   if (rows.length === 0) return null;
   const items = rows.map(([label, text]) =>
@@ -110,7 +110,7 @@ export function techDetails(t, entries) {
   return h(
     "details",
     { class: "tech-details" },
-    h("summary", { text: t("tech.title") }),
+    h("summary", { text: summary || t("tech.title") }),
     h("dl", { class: "tech-list" }, items),
     copyButton(t, all, t("tech.copyAll")),
   );

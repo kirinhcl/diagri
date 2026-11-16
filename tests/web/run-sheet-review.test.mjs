@@ -69,3 +69,41 @@ test("the pending stage page lists the run sheet before the controls", async () 
     assert.ok(order.indexOf(t("stage.runSheet")) < order.indexOf(t("stage.controls")), order.join("|"));
   }
 });
+
+test("the run sheet has its own fold, before the findings, and the id fold does not hold it", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const view = reviewView(ctx, FIXTURES["run-sheet-pending.json"]);
+  const folds = [];
+  const walk = (node) => {
+    if (node.localName === "details") folds.push(node);
+    (node.children || []).forEach(walk);
+  };
+  walk(view);
+  const summary = (fold) => fold.children[0].textContent;
+  assert.equal(summary(folds[0]), "运行单全文（JSON）");
+  assert.ok(folds[0].textContent.includes("protocol_id"));
+  const idFold = folds.find((fold) => summary(fold) === ctx.t("tech.title") && fold.textContent.includes(FIXTURES["run-sheet-pending.json"].run_sheet_digest));
+  assert.ok(idFold && !idFold.textContent.includes("protocol_id"));
+  const text = visibleText(view);
+  assert.ok(visibleText(view).indexOf(ctx.t("stage.review.findings")) > text.indexOf(ctx.t("stage.review.fingerprint")));
+  const all = [];
+  const order = (node) => {
+    all.push(node);
+    (node.children || []).forEach(order);
+  };
+  order(view);
+  assert.ok(all.indexOf(folds[0]) < all.findIndex((n) => (n.getAttribute && n.getAttribute("class")) === "finding-group"));
+});
+
+test("a page refreshed with a running stage rearranges its regions", async () => {
+  const { element, ctx, refresh } = await renderPage("stage", { stageId: FIXTURES["stage-pending.json"].stage_id }, { lang: "en" });
+  const get = ctx.api.get;
+  ctx.api.get = async (path, ...rest) => {
+    const answer = await get(path, ...rest);
+    return /\/stages\/[^/]+$/.test(path.split("?")[0]) ? { ...answer, state: "running" } : answer;
+  };
+  await refresh();
+  const order = headings(element);
+  const t = ctx.t;
+  assert.ok(order.indexOf(t("stage.readings")) < order.indexOf(t("stage.controls")), order.join("|"));
+});

@@ -129,5 +129,5 @@ export async function renderPage(page, params = {}, options = {}) {
   const module = await import(new URL(`${page}.js`, PAGE_DIR).href);
   const result = await module.render(ctx, params);
   if (!result || !result.element) throw new Error(`${page}: render returned no element`);
-  return { element: result.element, ctx };
+  return { element: result.element, ctx, refresh: result.refresh };
 }

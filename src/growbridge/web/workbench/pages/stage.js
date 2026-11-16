@@ -140,7 +140,7 @@ export function reviewView(ctx, review) {
   const protocol = sheet.protocol_id ? ctx.t("stage.review.protocolValue", { id: sheet.protocol_id, v: sheet.protocol_version }) : null;
   const facts = keyValues([
     [ctx.t("stage.review.version"), ctx.t("stage.review.versionValue", { n: review.run_sheet_version })],
-    [ctx.t("stage.review.fingerprint"), ctx.t("stage.review.fingerprintValue", { digest: shortDigest(review.run_sheet_digest) })],
+    [ctx.t("stage.review.fingerprint"), shortDigest(review.run_sheet_digest)],
     [ctx.t("col.protocol"), protocol],
     [ctx.t("stage.review.device"), device],
     [ctx.t("stage.review.duration"), Number.isFinite(sheet.duration_seconds) ? formatDuration(ctx.t, sheet.duration_seconds) : null],
@@ -148,11 +148,9 @@ export function reviewView(ctx, review) {
   ]);
   const blocking = review.blocking ? problemBox([ctx.t("stage.review.blocking")]) : null;
   const findingsTitle = h("h3", { class: "action-title", text: ctx.t("stage.review.findings") });
-  const tech = techDetails(ctx.t, [
-    [ctx.t("stage.review.digest"), review.run_sheet_digest],
-    [ctx.t("stage.review.json"), JSON.stringify(review.run_sheet, null, 2)],
-  ]);
-  return h("div", { class: "review" }, facts, blocking, findingsTitle, findingsList(ctx, review.findings), tech);
+  const sheetFold = techDetails(ctx.t, [[ctx.t("stage.review.json"), JSON.stringify(review.run_sheet, null, 2)]], { summary: ctx.t("stage.review.json") });
+  const tech = techDetails(ctx.t, [[ctx.t("stage.review.digest"), review.run_sheet_digest]]);
+  return h("div", { class: "review" }, facts, sheetFold, blocking, findingsTitle, findingsList(ctx, review.findings), tech);
 }
 
 // Cheap enough to compare every 15 s; a running stage's window end moves, so it redraws then.
@@ -162,9 +160,19 @@ function readingsKey(readings) {
   return JSON.stringify([readings.window, readings.total_samples, readings.flagged_total, readings.downsampled, samples.length, last]);
 }
 
+// Moves the existing region nodes (keeping forms, the log and receipt polls) when the stage's state
+// calls for another order than the one on the page.
+function arrange(page, state) {
+  const order = sectionOrder(state);
+  if (page.applied && page.applied.join() === order.join()) return;
+  page.applied = order;
+  page.container.append(...order.map((name) => page.regions[name]));
+}
+
 function draw(page, data) {
   const { ctx, parts, head } = page;
   const { stage } = data;
+  arrange(page, stage.state);
   const review = data.review.error ? null : data.review.value;
   head.pill.replaceChildren(statePill(ctx.t, stage.state));
   head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
@@ -247,7 +255,8 @@ function sections(ctx, page, stage, onRecorded) {
     measurements: section(ctx.t("stage.measurements"), parts.measurements.element, newMeasurement, measurementForm(ctx, stage, onRecorded)),
     history: section(ctx.t("stage.history"), parts.history.element),
   };
-  return [page.head.element, page.problem, ...sectionOrder(stage.state).map((name) => regions[name])];
+  page.regions = regions;
+  return [page.head.element, page.problem];
 }
 
 export async function render(shellCtx, params) {
@@ -281,6 +290,7 @@ export async function render(shellCtx, params) {
     ctx.notify(message, "ok");
     await refresh();
   };
+  page.container = element;
   element.append(...sections(ctx, page, first.stage, onRecorded));
   draw(page, first);
   return { element, refresh, pollSeconds: POLL_SECONDS };
