@@ -1,0 +1,15 @@
+{
+  "protocol_id": "protocol-lettuce-light",
+  "version": 1,
+  "started": true,
+  "frozen": null,
+  "snapshots": [
+    {
+      "snapshot_id": "snap_96efd910cbe24efda7cb33b46b9eb5be",
+      "experiment_id": "exp-round_9d38ffa4ca3049948194e0b60315c650",
+      "complete": true,
+      "run_status": "none",
+      "created_at": 1796594860.587428
+    }
+  ]
+}

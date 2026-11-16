@@ -1,0 +1,20 @@
+{
+  "stage_id": "stage-round_9d38ffa4ca3049948194e0b60315c650-1",
+  "experiment_id": "exp-round_9d38ffa4ca3049948194e0b60315c650",
+  "project_id": "project_189c5bff02eb40099b5399d16d55fbcb",
+  "state": "ended",
+  "prior_state": null,
+  "right_number": null,
+  "care_right": null,
+  "manual_right": null,
+  "started_at": 1794780227.0207338,
+  "paused_at": null,
+  "end_pending": false,
+  "ended_at": 1796594755.2374132,
+  "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
+  "state_at": 1796594755.2374132,
+  "project_name": "Lettuce light series",
+  "round_number": 1,
+  "stage_index": 1,
+  "phase": "vegetative"
+}

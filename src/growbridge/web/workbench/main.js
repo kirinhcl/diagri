@@ -5,20 +5,21 @@ import { clearOnHandOver } from "./intents.js";
 import { LANGS, initialLang, makeT } from "./i18n.js";
 import { inboxCounts } from "./pages/inbox.js";
 import * as loginPage from "./pages/login.js";
-import { hrefFor, parseHash } from "./router.js";
+import { PAGES, hrefFor, parseHash } from "./router.js";
 import { askSecret } from "./ui/dialog.js";
 import { clear, h } from "./ui/dom.js";
-import { bindFormContext, dropDetachedDraftSavers, errorLines, saveAllDrafts } from "./ui/forms.js";
+import { bindFormContext, dropDetachedDraftSavers, errorDetail, errorLines, saveAllDrafts } from "./ui/forms.js";
 import { shell } from "./ui/layout.js";
+import { techDetails } from "./ui/section.js";
 
 const LANGUAGE_KEY = "growbridge-workbench-language";
 const NOTICE_MS = 6000;
 // Each page lives in pages/<name>.js and is loaded on its first visit.
-const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
+// Until a page has read its data it shows the generic word, never the id from the address.
 const ID_CRUMBS = new Map([
-  ["project", ["projectId", "crumb.project"]],
-  ["round", ["roundId", "crumb.round"]],
-  ["stage", ["stageId", "crumb.stage"]],
+  ["project", "crumb.project"],
+  ["round", "crumb.round"],
+  ["stage", "crumb.stage"],
 ]);
 
 const app = document.getElementById("app");
@@ -115,7 +116,8 @@ function makeCtx(frame) {
 }
 
 // --- views for pages that could not be shown ------------------------------------------------------
-function problemView(lines, retry) {
+// Plain lines under the title; the error's status, code and own words folded into technical details.
+function problemView(lines, retry, details = []) {
   const title = state.t("error.title");
   const button = h("button", {
     class: "button button-primary",
@@ -128,6 +130,7 @@ function problemView(lines, retry) {
     { class: "wb-problem", attrs: { role: "alert" } },
     h("h1", { text: title }),
     lines.filter((line) => line !== title).map((line) => h("p", { text: line })),
+    techDetails(state.t, details),
     retry ? button : null,
   );
 }
@@ -144,14 +147,14 @@ function notFoundView() {
 function showFatal(error) {
   state.frame = null;
   state.at = null;
-  clear(app).append(h("main", { class: "wb-fatal" }, problemView(errorLines(error, state.lang, state.t), true)));
+  const view = problemView(errorLines(error, state.lang, state.t), true, errorDetail(error, state.t));
+  clear(app).append(h("main", { class: "wb-fatal" }, view));
 }
 
-function defaultCrumbs(page, params) {
+function defaultCrumbs(page) {
   const { t } = state;
   if (ID_CRUMBS.has(page)) {
-    const [key, text] = ID_CRUMBS.get(page);
-    return [{ label: t("nav.projects"), href: hrefFor("projects") }, { label: t(text, { id: params[key] }) }];
+    return [{ label: t("nav.projects"), href: hrefFor("projects") }, { label: t(ID_CRUMBS.get(page)) }];
   }
   return [{ label: PAGES.has(page) ? t(`nav.${page}`) : t("page.notFound") }];
 }
@@ -163,15 +166,14 @@ async function renderPage(page, ctx, params) {
   try {
     module = await import(`./pages/${page}.js`);
   } catch (error) {
-    const reason = String(error && error.message ? error.message : error);
-    return { element: problemView([state.t("page.loadFailed"), reason], true) };
+    return { element: problemView([state.t("page.loadFailed")], true, errorDetail(error, state.t)) };
   }
   try {
     const result = await module.render(ctx, params);
     if (result && result.element) return result;
     return { element: problemView([state.t("page.loadFailed")], true) };
   } catch (error) {
-    return { element: problemView(errorLines(error, state.lang, state.t), true) };
+    return { element: problemView(errorLines(error, state.lang, state.t), true, errorDetail(error, state.t)) };
   }
 }
 
@@ -189,7 +191,7 @@ async function showPage(page, params, token) {
   const firstView = state.at === null;
   state.at = location.hash;
   frame.setActive(page);
-  frame.setBreadcrumbs(defaultCrumbs(page, params));
+  frame.setBreadcrumbs(defaultCrumbs(page));
   const ctx = makeCtx(frame);
   bindFormContext(ctx);
   if (moved) {

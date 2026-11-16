@@ -2,9 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { configDiff } from "../../src/growbridge/web/workbench/diff.js";
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { isNotMounted } from "../../src/growbridge/web/workbench/pages/not-mounted.js";
 import { baselineChanged, diffLines, formatValue, visibleChanges } from "../../src/growbridge/web/workbench/pages/safety-diff.js";
+import { ruleSentence } from "../../src/growbridge/web/workbench/pages/safety.js";
+import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { safetySkeleton } from "../../src/growbridge/web/workbench/pages/safety-skeleton.js";
 
 const MODELS = new URL("../../src/growbridge/archive/models.py", import.meta.url);
@@ -108,4 +111,104 @@ test("isNotMounted is true only for a plain 404 without a refusal code", () => {
   assert.equal(isNotMounted(new ApiError(404, "state", "unknown")), false);
   assert.equal(isNotMounted(new ApiError(403, null, "HTTP 403")), false);
   assert.equal(isNotMounted(new Error("x")), false);
+});
+
+const HEAT = { id: "heat-cut", sensor: "temp", unit: "°C", trigger: { op: ">", value: 30 }, duration_seconds: 300, validity_seconds: 600, action: { channel: "fan", level: 0 } };
+
+test("a rule reads as one sentence", () => {
+  const s = ruleSentence(makeT("zh"), HEAT);
+  assert.match(s, /高于 30 °C 持续 5 分钟/);
+  assert.match(s, /10 分钟/);
+  assert.doesNotMatch(s, /heat-cut|gt|300|600|>/);
+});
+
+test("a rule unit C is shown as °C and the English sentence reads too", () => {
+  assert.match(ruleSentence(makeT("zh"), { ...HEAT, unit: "C" }), /30 °C/);
+  const en = ruleSentence(makeT("en"), HEAT);
+  assert.match(en, /above 30 °C for 5 min/);
+  assert.doesNotMatch(en, /heat-cut|300|600/);
+});
+
+const zh = makeT("zh");
+const COLD = { ...HEAT, id: "cold-cut", sensor: "humi", unit: "%" };
+const lines = (before, after, t = zh) => diffLines(visibleChanges(configDiff(before, after)), t, { before, after });
+const withRule = (patch) => ({ ...HEAT, ...patch });
+
+test("the approval dialog describes changes by rule and unit", () => {
+  const out = lines({ rules: [HEAT] }, { rules: [withRule({ trigger: { op: ">", value: 35 } })] });
+  assert.deepEqual(out, ["规则 heat-cut：触发值 30 °C → 35 °C"]);
+});
+
+test("dialog lines write durations, levels, frozen limits and gaps as words", () => {
+  const before = { rules: [HEAT], frozen: { minutes: { temp: 120 }, max_gap_seconds: 600 } };
+  const after = { rules: [withRule({ duration_seconds: 600, action: { channel: "fan", level: 3 } })], frozen: { minutes: { temp: 60 }, max_gap_seconds: 660 } };
+  assert.deepEqual(lines(before, after), [
+    "规则 heat-cut：持续时间 5 分钟 → 10 分钟",
+    "规则 heat-cut：动作档位 0 / 10 → 3 / 10",
+    "空气温度 冻结判定：2 小时 → 60 分钟",
+    "最长空档：10 分钟 → 11 分钟",
+  ]);
+});
+
+test("a rounded duration carries its exact seconds; a hidden change falls back to the raw line", () => {
+  const gap = (a, b) => lines({ frozen: { max_gap_seconds: a } }, { frozen: { max_gap_seconds: b } });
+  assert.deepEqual(gap(600, 620), ["最长空档：10 分钟 → 10 分钟（620 秒）"]);
+  assert.deepEqual(gap(600, 930), ["最长空档：10 分钟 → 16 分钟（930 秒）"]);
+  assert.deepEqual(gap(600, 600.4), ["最长空档：10 分钟 → 10 分钟（600.4 秒）"]);
+  assert.deepEqual(gap(600, "600"), ['frozen.max_gap_seconds: 600 → "600"']);
+  assert.deepEqual(gap(600, -5), ["frozen.max_gap_seconds: 600 → -5"]);
+  const frozen = lines({ frozen: { minutes: { temp: 120 } } }, { frozen: { minutes: { temp: 120.4 } } });
+  assert.match(frozen[0], /2 小时（7224 秒）/);
+  assert.deepEqual(lines({ rules: [HEAT] }, { rules: [withRule({ duration_seconds: 300.2 })] }).length, 1);
+});
+
+test("deleting or reordering rules never names the wrong rule", () => {
+  const deleted = lines({ rules: [HEAT, COLD] }, { rules: [COLD] });
+  assert.ok(deleted.length >= 1);
+  assert.ok(deleted.every((line) => !line.startsWith("规则 ")));
+  const reordered = lines({ rules: [HEAT, COLD] }, { rules: [COLD, HEAT] });
+  assert.ok(reordered.length >= 1);
+  assert.ok(reordered.every((line) => !line.startsWith("规则 ")));
+  assert.equal(new Set(reordered).size, reordered.length);
+});
+
+test("an unknown code is listed raw, and so is every path without the rules", () => {
+  assert.match(lines({ rules: [HEAT] }, { rules: [withRule({ sensor: "mystery" })] })[0], /^rules\[0\]\.sensor: /);
+  const changes = visibleChanges(configDiff({ frozen: { max_gap_seconds: 600 } }, { frozen: { max_gap_seconds: 660 } }));
+  assert.deepEqual(diffLines(changes, zh), ["frozen.max_gap_seconds: 600 → 660"]);
+});
+
+test("an unknown path is still listed", () => {
+  const out = lines({ rules: [HEAT], extra: {} }, { rules: [withRule({ mystery: 2 })], extra: { flag: "x" } });
+  assert.ok(out.some((line) => line.includes("extra.flag")));
+  assert.ok(out.some((line) => line.includes("rules[0].mystery")));
+});
+
+test("a duration in the days band shows its exact seconds when hours do not hold it", () => {
+  const rule = (n) => lines({ rules: [HEAT] }, { rules: [withRule({ validity_seconds: n })] });
+  assert.equal(rule(172800).length, 1);
+  const out = lines({ rules: [withRule({ validity_seconds: 172800 })] }, { rules: [withRule({ validity_seconds: 174600 })] });
+  assert.equal(out[0], "规则 heat-cut：读数有效期 2 天 → 2 天 1 小时（174600 秒）");
+  const gap = lines({ frozen: { max_gap_seconds: 7200 } }, { frozen: { max_gap_seconds: 171000 } });
+  assert.equal(gap[0], "最长空档：2 小时 → 2 天（171000 秒）");
+});
+
+test("changes that read the same fall back to the raw line", () => {
+  const pump = { ...HEAT, action: { channel: "pump", level: 1 } };
+  const level = lines({ rules: [pump] }, { rules: [{ ...pump, action: { channel: "pump", level: 2 } }] });
+  assert.deepEqual(level, ["rules[0].action.level: 1 → 2"]);
+  const unit = lines({ rules: [withRule({ unit: "C" })] }, { rules: [withRule({ unit: "°C" })] });
+  assert.deepEqual(unit, ["rules[0].unit: \"C\" → \"°C\""]);
+});
+
+// --- final review: a rule's durations say the exact seconds when the words round them (F5, R18) ---
+test("a rule's duration and validity say the exact seconds when the words round them", () => {
+  const s = ruleSentence(makeT("zh"), { ...HEAT, duration_seconds: 150, validity_seconds: 630 });
+  assert.match(s, /持续 3 分钟（150 秒）/);
+  assert.match(s, /11 分钟（630 秒）/);
+  const en = ruleSentence(makeT("en"), { ...HEAT, duration_seconds: 150, validity_seconds: 630 });
+  assert.match(en, /for 3 min \(150 s\)/);
+  assert.match(en, /11 min \(630 s\)/);
+  assert.match(ruleSentence(makeT("zh"), HEAT), /持续 5 分钟[^（]/);
+  assert.match(ruleSentence(makeT("zh"), { ...HEAT, duration_seconds: undefined }), /持续 —/);
 });

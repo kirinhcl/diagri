@@ -1,4 +1,6 @@
-// The change list shown before safety limits are approved: one line per change, "path: old → new".
+// The change list shown before safety limits are approved: one line per change, "path: old → new" (rules and frozen limits in words when both sides are given).
+import { describeChange } from "./safety-text.js";
+
 const SERVER_STAMPED = new Set(["approved_by", "approved_at"]);
 
 // Has the approved set changed since `before` was read? Version and approval time decide; without them the whole config does.
@@ -19,6 +21,7 @@ export function visibleChanges(changes) {
   return changes.filter((change) => !SERVER_STAMPED.has(change.path));
 }
 
-export function diffLines(changes, t) {
-  return changes.map((change) => `${change.path}: ${formatValue(change.before, t)} → ${formatValue(change.after, t)}`);
+// `sides` ({ before, after } configs) lets a rule be named; without it every line is "path: old → new".
+export function diffLines(changes, t, sides) {
+  return changes.map((change) => describeChange(change, t, sides, formatValue));
 }

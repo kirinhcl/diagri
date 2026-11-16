@@ -2,9 +2,9 @@
 import { formatNumber } from "../format.js";
 import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
-import { afterWrite, keyValues, note, pageHead, section, timeText } from "../ui/section.js";
+import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
-import { attemptSections } from "./compute-attempts.js";
+import { attemptSections, taskLabel } from "./compute-attempts.js";
 import { isNotMounted } from "./not-mounted.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
@@ -28,7 +28,7 @@ function balanceForm(ctx) {
   ];
   const onSubmit = async (values) => {
     await ctx.api.post("/compute/balance", values, { action: submitLabel });
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("compute.balance.saved"));
   };
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: "compute-balance", ctx });
 }
@@ -42,13 +42,22 @@ function serviceView(ctx, service) {
   ]);
 }
 
-function budgetsTable(ctx, tasks) {
-  const pair = (used, reserved, budget) =>
-    ctx.t("compute.budget.usage", { used: num(ctx, used), reserved: num(ctx, reserved), budget: num(ctx, budget) });
+function budgetsTable(ctx, tasks, pickTask) {
+  const usage = (key, used, reserved, budget) =>
+    ctx.t(key, { used: num(ctx, used), reserved: num(ctx, reserved), budget: num(ctx, budget) });
+  const taskCell = (row) =>
+    h("div", { class: "cell-stack" }, taskLabel(ctx, row.task_id), techDetails(ctx.t, [[ctx.t("tech.id.task_id"), row.task_id]]));
+  const change = (row) => {
+    const label = ctx.t("compute.budget.change");
+    const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
+    button.addEventListener("click", () => pickTask(row.task_id));
+    return button;
+  };
   const columns = [
-    { label: ctx.t("compute.task"), cell: (row) => row.task_id },
-    { label: ctx.t("compute.budget.cpu"), cell: (row) => pair(row.cpu_hours_used, row.cpu_hours_reserved, row.cpu_hours_budget) },
-    { label: ctx.t("compute.budget.storage"), cell: (row) => pair(row.storage_gb_used, row.storage_gb_reserved, row.storage_gb_budget) },
+    { label: ctx.t("compute.task"), cell: taskCell },
+    { label: ctx.t("compute.budget.cpu"), cell: (row) => usage("compute.budget.usage", row.cpu_hours_used, row.cpu_hours_reserved, row.cpu_hours_budget) },
+    { label: ctx.t("compute.budget.storage"), cell: (row) => usage("compute.budget.usageStorage", row.storage_gb_used, row.storage_gb_reserved, row.storage_gb_budget) },
+    { label: ctx.t("compute.budget.change"), cell: change },
   ];
   return table(columns, tasks, { label: ctx.t("compute.budget.title") });
 }
@@ -56,24 +65,37 @@ function budgetsTable(ctx, tasks) {
 function budgetForm(ctx) {
   const submitLabel = ctx.t("compute.budget.set");
   const fields = [
-    { name: "task_id", label: ctx.t("compute.task"), type: "text", required: true },
+    { name: "task_id", label: ctx.t("compute.budget.taskField"), type: "text", required: true },
     { name: "cpu_hours", label: ctx.t("compute.budget.cpuLimit"), type: "number", required: true },
     { name: "storage_gb", label: ctx.t("compute.budget.storageLimit"), type: "number", required: true },
   ];
   const onSubmit = async ({ task_id: taskId, ...limits }) => {
     await ctx.api.post(`/compute/tasks/${encodeURIComponent(taskId)}/budget`, limits, { action: submitLabel });
-    afterWrite(ctx);
+    afterWrite(ctx, ctx.t("compute.budget.saved"));
   };
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: "compute-budget", ctx });
 }
 
+const descendants = (node) => [...(node.children || [])].flatMap((child) => [child, ...descendants(child)]);
+
+// "Change budget" on a row: that task goes into the form's task field, and the cursor goes there.
+function fillTask(ctx, form, taskId, chosen) {
+  const field = descendants(form).find((el) => el.getAttribute("name") === "task_id");
+  if (!field) return;
+  field.value = taskId;
+  chosen.textContent = ctx.t("compute.budget.chosen", { task: taskLabel(ctx, taskId) });
+  field.focus();
+}
+
 function overviewPage(ctx, overview) {
   const tasks = array(overview.tasks);
-  const budgets = tasks.length ? budgetsTable(ctx, tasks) : note(ctx.t("compute.budget.none"));
+  const form = budgetForm(ctx);
+  const chosen = h("p", { class: "cell-sub", attrs: { role: "status" } });
+  const budgets = tasks.length ? budgetsTable(ctx, tasks, (taskId) => fillTask(ctx, form, taskId, chosen)) : note(ctx.t("compute.budget.none"));
   return [
     section(ctx.t("compute.balance.title"), balanceView(ctx, overview.balance), balanceForm(ctx)),
     section(ctx.t("compute.service.title"), serviceView(ctx, overview.service)),
-    section(ctx.t("compute.budget.title"), budgets, budgetForm(ctx)),
+    section(ctx.t("compute.budget.title"), budgets, form, chosen),
     ...attemptSections(ctx, overview),
   ];
 }

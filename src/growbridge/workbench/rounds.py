@@ -21,6 +21,7 @@ from growbridge.archive.store import Archive
 from growbridge.planning.validate import check_evidence
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
+from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
 from growbridge.workflow.tasks import TaskBoard
 
@@ -93,11 +94,16 @@ def round_json(workflow: WorkflowService, round_id: str) -> dict:
     store = workflow.store
     rnd = store.round(round_id)
     stages = store.stages_of_round(round_id)
+    phases = round_phases(store, rnd)
     return {
         "round_id": rnd.id,
         **rnd.model_dump(mode="json", exclude={"id"}),
+        **round_names(store, round_id),
         "stage_total": store.stage_total(rnd),
-        "stages": [{"stage_id": row.stage_id, "state": row.state.value} for row in stages],
+        "stages": [
+            {"stage_id": row.stage_id, "state": row.state.value, **stage_place(phases, index)}
+            for index, row in enumerate(stages, start=1)
+        ],
     }
 
 

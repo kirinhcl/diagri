@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METRICS, gapLimit, metricValue, seriesPoints, splitAtGaps } from "../../src/growbridge/web/workbench/chart-math.js";
+import { METRICS, MIN_SPAN, gapLimit, paddedRange, metricValue, seriesPoints, splitAtGaps } from "../../src/growbridge/web/workbench/chart-math.js";
 
 const sample = (t, temp, extra = {}) => ({
   timestamp: t,
@@ -144,4 +144,19 @@ test("gapLimit is 2.5 buckets, or 2.5 sampling intervals when those are longer",
   assert.equal(gapLimit(null, 2), 5);
   assert.equal(gapLimit(null), Infinity);
   assert.equal(gapLimit({ bucket_seconds: 0 }, Number.NaN), Infinity);
+});
+
+test("paddedRange widens a narrow range around its middle", () => {
+  assert.deepEqual(paddedRange(18.3, 22.9, 5), [18.1, 23.1]);
+  assert.deepEqual(paddedRange(10, 30, 5), [10, 30]);
+  assert.deepEqual(paddedRange(21, 21, 5), [18.5, 23.5]);
+});
+
+test("every sensor has a minimum span in its own unit", () => {
+  assert.deepEqual(MIN_SPAN, { temp: 5, humi: 20, vpd: 0.5, co2: 300, ppfd: 200, tempSoil: 5 });
+});
+
+test("a fixed domain scales a series against it", () => {
+  const { points } = seriesPoints([sample(0, 5), sample(10, 10)], "temp", { ...box, domain: [0, 20] });
+  assert.deepEqual(points.map((p) => p.y), [37.5, 25]);
 });

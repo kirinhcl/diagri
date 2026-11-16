@@ -1,0 +1,8 @@
+{
+  "kind": "operator",
+  "id": "dev",
+  "operator": "dev",
+  "entry": "lan",
+  "reauth_at": 1794821434.493769,
+  "timezone": "UTC"
+}

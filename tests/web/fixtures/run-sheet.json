@@ -1,0 +1,131 @@
+{
+  "stage_id": "stage-round_9d38ffa4ca3049948194e0b60315c650-1",
+  "state": "ended",
+  "run_sheet_version": 1,
+  "run_sheet_digest": "8bc36a6fecbfc3e7344f8a6fb741b5a27b115a31e8397e272a64f1c3c8fef37f",
+  "run_sheet": {
+    "id": "sheet-round_9d38ffa4ca3049948194e0b60315c650-1",
+    "project_id": "project_189c5bff02eb40099b5399d16d55fbcb",
+    "experiment_id": "exp-round_9d38ffa4ca3049948194e0b60315c650",
+    "stage_id": "stage-round_9d38ffa4ca3049948194e0b60315c650-1",
+    "protocol_id": "protocol-lettuce-light",
+    "protocol_version": 1,
+    "device_id": "SIMULATED",
+    "version": 1,
+    "timezone": "UTC",
+    "channels": [
+      {
+        "channel": "light",
+        "ownership": "host",
+        "retained_level": 0,
+        "max_tolerance_seconds": 600.0,
+        "onsite_handling": "If the host loses control, check by hand that the light is at 70 during 06:00-22:00 UTC and off otherwise; record it as a deviation."
+      },
+      {
+        "channel": "pump",
+        "ownership": "host",
+        "retained_level": 0,
+        "max_tolerance_seconds": 60.0,
+        "onsite_handling": "The pump runs only when a person on site starts it from the stage page (irrigation task). Make sure it is off after each run."
+      },
+      {
+        "channel": "exhaust",
+        "ownership": "device",
+        "retained_level": null,
+        "max_tolerance_seconds": null,
+        "onsite_handling": ""
+      },
+      {
+        "channel": "fan",
+        "ownership": "device",
+        "retained_level": null,
+        "max_tolerance_seconds": null,
+        "onsite_handling": ""
+      }
+    ],
+    "duration_seconds": 1814400.0,
+    "sampling": {
+      "interval_seconds": 300.0,
+      "max_gap_seconds": 900.0
+    },
+    "max_wait_seconds": 3600.0,
+    "on_expiry": "stay_paused",
+    "timed_actions": [
+      {
+        "id": "light-on",
+        "channel": "light",
+        "at": "06:00",
+        "level": 70,
+        "evidence": null
+      },
+      {
+        "id": "light-off",
+        "channel": "light",
+        "at": "22:00",
+        "level": 0,
+        "evidence": null
+      }
+    ],
+    "feedback_rules": [],
+    "care_rules": [],
+    "manual_tasks": [
+      {
+        "id": "irrigate-daily",
+        "kind": "irrigation",
+        "at": "09:00",
+        "make_up_allowed": true,
+        "seconds": 20.0
+      },
+      {
+        "id": "canopy-measure",
+        "kind": "measurement",
+        "at": "10:00",
+        "make_up_allowed": false
+      },
+      {
+        "id": "canopy-photo",
+        "kind": "photo",
+        "at": "10:00",
+        "make_up_allowed": false
+      }
+    ],
+    "end_actions": [
+      {
+        "channel": "light",
+        "level": 0
+      },
+      {
+        "channel": "pump",
+        "level": 0
+      }
+    ]
+  },
+  "findings": [
+    {
+      "code": "manual_task",
+      "message": "manual irrigation irrigate-daily needs the user at 09:00: an on-site operator starts a 20 s pump run from the stage page",
+      "blocking": false
+    },
+    {
+      "code": "manual_task",
+      "message": "manual measurement canopy-measure needs the user at 10:00",
+      "blocking": false
+    },
+    {
+      "code": "manual_task",
+      "message": "manual photo canopy-photo needs the user at 10:00",
+      "blocking": false
+    },
+    {
+      "code": "no_evidence",
+      "message": "timed action light-on: no evidence card or user input",
+      "blocking": false
+    },
+    {
+      "code": "no_evidence",
+      "message": "timed action light-off: no evidence card or user input",
+      "blocking": false
+    }
+  ],
+  "blocking": false
+}

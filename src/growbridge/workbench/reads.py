@@ -29,9 +29,10 @@ from growbridge.workflow.listing import (
     project_summaries,
     rounds_awaiting_choice,
 )
+from growbridge.workflow.naming import STAGE_NAME_KEYS, project_name, round_names, stage_names
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState, TaskState
-from growbridge.workflow.store import StageRow
+from growbridge.workflow.store import StageRow, WorkflowStore
 from growbridge.workflow.tasks import TaskBoard
 
 INBOX_LIMIT = 50
@@ -51,12 +52,14 @@ ATTENTION_TASKS = (TaskState.NEEDS_ATTENTION, TaskState.NEEDS_REVIEW)
 FINISHED_STAGES = (StageState.ENDED, StageState.STOPPED)
 
 
-def _item(kind, ident, project_id, round_id, since, detail) -> dict[str, Any]:
+def _item(kind, ident, project_id, round_id, since, detail, names=None) -> dict[str, Any]:
+    """An inbox item; ``names`` (project name, round number, ...) sit flat beside the ids."""
     return {
         "kind": kind,
         "id": ident,
         "project_id": project_id,
         "round_id": round_id,
+        **(names or {}),
         "since": since,
         "detail": detail,
     }
@@ -97,7 +100,10 @@ def _stage_items(workflow: WorkflowService) -> list[dict[str, Any]]:
             entered = store.entered(row.stage_id, state)
             since = entered["at"] if entered else row.state_at
             detail = {"state": state.value, "device_id": row.device_id}
-            found.append(_item(kind, row.stage_id, row.project_id, row.round_id, since, detail))
+            names = stage_names(store, row)
+            found.append(
+                _item(kind, row.stage_id, row.project_id, row.round_id, since, detail, names)
+            )
     return found
 
 
@@ -116,7 +122,10 @@ def _round_items(workflow: WorkflowService) -> list[dict[str, Any]]:
         since, since_from = _choice_since(workflow, row)
         detail = {"awaiting_choice": row["awaiting_choice"], "since_from": since_from}
         round_id = row["round_id"]
-        items.append(_item("round_choice", round_id, row["project_id"], round_id, since, detail))
+        names = {**dict.fromkeys(STAGE_NAME_KEYS), **round_names(workflow.store, round_id)}
+        items.append(
+            _item("round_choice", round_id, row["project_id"], round_id, since, detail, names)
+        )
     return items
 
 
@@ -156,11 +165,12 @@ def _compute_items(compute: ComputeService | None) -> list[dict[str, Any]]:
     ]
 
 
-def _task_items(tasks: TaskBoard | None) -> list[dict[str, Any]]:
+def _task_items(tasks: TaskBoard | None, store: WorkflowStore) -> list[dict[str, Any]]:
     if tasks is None:
         return []
     found = tasks.in_states(ATTENTION_TASKS, INBOX_LIMIT)
     since = tasks.state_since([task.id for task in found])
+    names = {ident: project_name(store, ident) for ident in {task.project_id for task in found}}
     return [
         _item(
             "task",
@@ -169,6 +179,7 @@ def _task_items(tasks: TaskBoard | None) -> list[dict[str, Any]]:
             None,
             since.get(task.id),
             {"question": task.question, "state": task.state.value, "owner_role": task.owner_role},
+            {"project_name": names[task.project_id]},
         )
         for task in found
     ]
@@ -270,7 +281,10 @@ def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock) -> 
             + _alert_items(alerts, clock.now(), clock.synced)
             + _compute_items(compute)
         )
-        fetched = {"round_choice": _round_items(workflow), "task": _task_items(tasks)}
+        fetched = {
+            "round_choice": _round_items(workflow),
+            "task": _task_items(tasks, workflow.store),
+        }
         counts = {
             "round_choice": count_rounds_awaiting_choice(workflow.store),
             "task": 0 if tasks is None else tasks.count_in_states(ATTENTION_TASKS),

@@ -88,6 +88,48 @@ code {
 }
 .run-result { display: grid; gap: 12px; }
 
+/* --- technical details: ids, hashes and raw values, closed until asked for ------------------ */
+.tech-details { min-width: 0; font-size: 12px; color: var(--muted-strong); }
+.tech-details summary {
+  width: fit-content;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-strong);
+  cursor: pointer;
+}
+.tech-details summary:hover { color: var(--green); }
+.tech-details[open] summary { margin-bottom: 8px; }
+.tech-list { display: grid; gap: 8px; margin: 0 0 8px; }
+.tech-row { display: grid; gap: 2px; min-width: 0; }
+.tech-row dt { font-size: 11px; font-weight: 650; letter-spacing: 0.3px; }
+.tech-row dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 10px;
+  min-width: 0;
+  margin: 0;
+}
+.tech-row code {
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-height: 16rem;
+  overflow: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tech-copy { min-height: 28px; padding: 3px 10px; font-size: 12px; user-select: none; } /* not part of a selected list */
+.form-status .tech-details { margin-top: 8px; }
+.wb-problem .tech-details { margin: 0 0 14px; }
+.activity-detail .tech-details { margin: 4px 0; }
+
 /* --- actions ---------------------------------------------------------------------------------- */
 .action { display: grid; gap: 10px; justify-items: start; }
 .action .form-status { width: 100%; max-width: 760px; }
@@ -151,23 +193,17 @@ code {
 .review { display: grid; gap: 16px; }
 .findings { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .finding {
+  margin: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 6px 10px;
   font-size: 13px;
 }
+.finding-group { display: grid; gap: 4px; }
+.finding-items { margin: 0; padding-left: 18px; display: grid; gap: 2px; font-size: 13px; }
 .finding-text { min-width: 0; overflow-wrap: anywhere; }
 .draft-findings { display: grid; gap: 8px; }
-.sheet-json summary {
-  width: fit-content;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--green);
-  cursor: pointer;
-}
-.sheet-json summary:hover { color: var(--green-dark); }
-.sheet-json[open] summary { margin-bottom: 10px; }
 
 /* --- stage page: environment curves (one small chart per reading) ------------------------------ */
 .readings { display: grid; gap: 14px; }
@@ -217,6 +253,13 @@ code {
   vector-effect: non-scaling-stroke;
 }
 .chart-flagged:hover { fill: var(--amber-soft); }
+.chart-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; align-items: stretch; }
+.chart-yticks { position: relative; min-width: 3.2em; }
+.chart-yticks .chart-tick { position: absolute; right: 0; transform: translateY(-50%); }
+.chart-xticks { display: flex; justify-content: space-between; gap: 8px; }
+.chart-tick { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.chart-fold summary { cursor: pointer; font-size: 12px; color: var(--muted-strong); }
+.chart-count { font-weight: 650; }
 .chart-empty { margin: 0; font-size: 13px; color: var(--muted-strong); }
 
 /* --- stage page: history and measurements ------------------------------------------------------ */
@@ -242,6 +285,12 @@ code {
 }
 .timeline-intervention::before { background: var(--amber); }
 .timeline-time { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.timeline-states {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .timeline-what {
   display: flex;
   flex-wrap: wrap;
@@ -253,6 +302,21 @@ code {
 }
 .timeline-detail { margin: 0; font-size: 12px; color: var(--muted-strong); overflow-wrap: anywhere; }
 .measure-new { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.measure-record { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.measure-record .button { padding: 4px 10px; }
+.measure-correcting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--amber-soft);
+}
+.measure-correcting .button { padding: 4px 10px; }
 .form-columns {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
   gap: 14px 18px;
@@ -287,6 +351,15 @@ code {
 .row-form summary:hover { color: var(--green-dark); }
 .row-form[open] summary { margin-bottom: 10px; }
 .row-form .form { max-width: none; }
+.edit-fold > summary {
+  width: fit-content;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--green);
+}
+.edit-fold > summary:hover { color: var(--green-dark); }
+.edit-fold[open] > summary { margin-bottom: 10px; }
 .inline-control { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .inline-control .input { flex: 1 1 160px; min-width: 0; }
 .safety-current { display: grid; gap: 14px; }
@@ -323,13 +396,13 @@ code {
 .chat-role-planner { color: var(--amber); }
 .chat-role-researcher { color: var(--ink); }
 .chat-role-auditor { color: var(--muted-strong); }
-.chat-tool details { font-size: 13px; }
-.chat-tool summary { cursor: pointer; color: var(--muted-strong); }
-.chat-tool summary code { font-size: 12px; }
+.chat-tool-line { margin: 0; font-size: 13px; color: var(--muted-strong); overflow-wrap: anywhere; }
+.chat-tools { font-size: 13px; }
+.chat-tools > summary { cursor: pointer; color: var(--muted-strong); }
+.chat-tools[open] > summary { margin-bottom: 6px; }
+.chat-tool-list { display: grid; gap: 6px; margin: 0; padding: 0 0 0 14px; list-style: none; }
+.chat-tool-item { display: grid; gap: 2px; min-width: 0; }
 .chat-tool-failed { color: var(--red); }
-.chat-tool-part { margin-top: 6px; }
-.chat-tool-label { margin: 0 0 2px; font-size: 12px; color: var(--muted-strong); }
-.chat-tool .code-block { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-status p {
   margin: 0;
   padding: 4px 10px;
@@ -387,9 +460,9 @@ code {
 .env-bar-fill { height: 100%; border-radius: 3px; background: var(--green); }
 .env-windows { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .env-window[aria-pressed="true"] { background: var(--pale); color: var(--green-dark); font-weight: 650; }
-.task-question summary { cursor: pointer; }
-.task-question summary:hover { color: var(--green-dark); }
-.task-question-full { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.folded-text summary { cursor: pointer; }
+.folded-text summary:hover { color: var(--green-dark); }
+.folded-text-full { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* --- round page: the published report ---------------------------------------------------------- */
 .report { display: grid; gap: 10px; }
@@ -398,6 +471,9 @@ code {
 .report-text { margin: 0; font-size: 13px; white-space: pre-wrap; }
 .pill-label-confirmatory { background: var(--pale); color: var(--green); }
 .pill-label-exploratory, .pill-label-descriptive { background: var(--amber-soft); color: var(--amber); }
+.report-more summary { width: fit-content; font-size: 13px; color: var(--muted-strong); cursor: pointer; }
+.report-more summary:hover { color: var(--green-dark); }
+.report-more[open] summary { margin-bottom: 4px; }
 .rich-text { white-space: normal; }
 .rich-text > :first-child { margin-top: 0; }
 .rich-text > :last-child { margin-bottom: 0; }
@@ -407,9 +483,19 @@ code {
 .rich-text .rich-heading { font-weight: 650; }
 .rich-text code { font-size: 0.92em; padding: 0 3px; border-radius: 4px; background: var(--muted-soft); overflow-wrap: anywhere; }
 
+/* --- round page: the confirmatory analysis, closed until asked for ----------------------------- */
+.analysis-fold > summary { width: fit-content; cursor: pointer; }
+.analysis-fold > summary h2 { display: inline; }
+.analysis-fold > summary:hover h2 { color: var(--green-dark); }
+.analysis-body { display: grid; gap: 16px; min-width: 0; }
+
 /* --- stage: manual tasks ------------------------------------------------------------------- */
 .task-actions { display: grid; gap: 6px; }
-.task-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
-.task-buttons .button { padding: 4px 10px; }
+.task-buttons { display: flex; flex-wrap: nowrap; gap: 6px; }
+.task-buttons .button { padding: 4px 10px; white-space: nowrap; }
 .task-meta { font-size: 12px; color: var(--muted); }
 .tasks-older { margin-top: 10px; }
+.tasks-rules { margin: 6px 0 12px; font-size: 13px; color: var(--muted-strong); }
+.tasks-rules summary { cursor: pointer; }
+.tasks-rules summary:hover { color: var(--green-dark); }
+.tasks-rules p { margin: 6px 0 0; }

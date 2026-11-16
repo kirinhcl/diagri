@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatNumber, formatTime, offsetMinutes, zonedToEpoch } from "../../src/growbridge/web/workbench/format.js";
+import {
+  durationIsExact,
+  formatAge,
+  formatDateTime,
+  formatDuration,
+  formatMoney,
+  formatNumber,
+  formatTime,
+  levelText,
+  offsetMinutes,
+  shortDigest,
+  zonedToEpoch,
+} from "../../src/growbridge/web/workbench/format.js";
+import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 
 const H = "Europe/Helsinki";
 
@@ -74,4 +87,89 @@ test("formatNumber applies precision", () => {
   assert.equal(formatNumber(23.14, 1, "en"), "23.1");
   assert.equal(formatNumber(0.5, 2, "en"), "0.50");
   assert.equal(formatNumber(412.6, 0, "en"), "413");
+});
+
+const tz = makeT("zh"), te = makeT("en");
+test("formatDuration picks the unit by size", () => {
+  assert.equal(formatDuration(tz, 20), "20 秒");
+  assert.equal(formatDuration(tz, 119.6), "2 分钟");
+  assert.equal(formatDuration(tz, 300), "5 分钟");
+  assert.equal(formatDuration(tz, 412.6), "7 分钟");
+  assert.equal(formatDuration(tz, 12000), "3 小时 20 分钟");
+  assert.equal(formatDuration(tz, 7200), "2 小时");
+  assert.equal(formatDuration(tz, 504 * 3600), "21 天");
+  assert.equal(formatDuration(te, 49.5 * 3600), "2 days 2 h");
+  assert.equal(formatDuration(te, 600), "10 min");
+  assert.equal(formatDuration(tz, -5), "—");
+  assert.equal(formatDuration(tz, NaN), "—");
+});
+test("formatDateTime follows the language and shows the year only when it differs", () => {
+  const at = Date.UTC(2026, 10, 20, 8, 0) / 1000; // 10:00 in Helsinki
+  const now = Date.UTC(2026, 10, 21) / 1000;
+  assert.equal(formatDateTime(at, "Europe/Helsinki", "zh", now), "11月20日 10:00");
+  assert.equal(formatDateTime(at, "Europe/Helsinki", "en", now), "20 Nov 10:00");
+  assert.equal(formatDateTime(at, "Europe/Helsinki", "zh", Date.UTC(2027, 0, 2) / 1000), "2026年11月20日 10:00");
+  assert.equal(formatDateTime(Date.UTC(2026, 11, 31, 22, 30) / 1000, "Europe/Helsinki", "en", Date.UTC(2026, 11, 1) / 1000), "1 Jan 2027 00:30");
+  assert.equal(formatDateTime(undefined, "UTC", "zh", now), "—");
+});
+test("levelText writes value over full scale", () => {
+  assert.equal(levelText(tz, "fan", 3), "3 / 10");
+  assert.equal(levelText(tz, "fan", 3, [0, 8]), "3 / 8");
+  assert.equal(levelText(tz, "light", 50), "50 %");
+  assert.equal(levelText(tz, "pump", 1), "开");
+  assert.equal(levelText(te, "pump", 0), "off");
+  assert.equal(levelText(tz, "fan", null), "—");
+});
+test("formatMoney has no float noise", () => {
+  assert.equal(formatMoney(1.8300000000000001, "en"), "1.83");
+  assert.equal(formatMoney(1234.5, "en"), "1,234.50");
+  assert.equal(formatMoney(null, "zh"), "—");
+});
+test("shortDigest keeps eight characters", () => {
+  assert.equal(shortDigest("8bc36a6f" + "0".repeat(56)), "8bc36a6f…");
+  assert.equal(shortDigest(""), "—");
+  assert.equal(shortDigest(undefined), "—");
+});
+
+test("levelText never prints undefined for an empty or null range", async () => {
+  const { levelText } = await import("../../src/growbridge/web/workbench/format.js");
+  const t = (key, vars) => (vars ? `${key}${JSON.stringify(vars)}` : key);
+  assert.equal(levelText(t, "fan", 3, null), "3");
+  assert.equal(levelText(t, "fan", 3, []), "3");
+});
+
+test("durationIsExact mirrors the bands of formatDuration", () => {
+  const exact = (n) => durationIsExact(n);
+  assert.deepEqual([119, 120, 7199, 7200, 170999, 171000, 172800, 174600].map(exact), [true, true, false, true, false, false, true, false]);
+  assert.equal(exact(59.5), true); // the seconds band keeps tenths
+  assert.equal(exact(59.55), false);
+  assert.equal(exact(-1), false);
+  assert.equal(exact("60"), false);
+});
+
+// --- final review: a planned duration keeps its tenths of a second; a clock age does not (F5) -----
+test("formatDuration keeps one decimal in the seconds band when the value is not whole", () => {
+  assert.equal(formatDuration(tz, 2.5), "2.5 秒");
+  assert.equal(formatDuration(te, 2.5), "2.5 s");
+  assert.equal(formatDuration(tz, 0.4), "0.4 秒");
+  assert.equal(formatDuration(tz, 0.3), "0.3 秒");
+  assert.equal(formatDuration(tz, 2.54), "2.5 秒");
+  assert.equal(formatDuration(tz, 20), "20 秒");
+  assert.equal(formatDuration(tz, 0), "0 秒");
+  assert.equal(formatDuration(tz, 119.4), "119.4 秒");
+  assert.equal(formatDuration(tz, 119.6), "2 分钟");
+});
+
+test("durationIsExact holds the seconds band to a tenth of a second", () => {
+  assert.deepEqual([2.5, 0.4, 0.3, 0.1, 5, 119.4].map((n) => durationIsExact(n)), [true, true, true, true, true, true]);
+  assert.deepEqual([2.54, 0.05, 119.45].map((n) => durationIsExact(n)), [false, false, false]);
+  assert.equal(durationIsExact(150), false);
+  assert.equal(durationIsExact(630), false);
+});
+
+test("formatAge counts whole seconds: a clock age has no tenths", () => {
+  assert.equal(formatAge(tz, 73.4), "73 秒");
+  assert.equal(formatAge(te, 12000.7), "3 h 20 min");
+  assert.equal(formatAge(tz, -1), "—");
+  assert.equal(formatAge(tz, undefined), "—");
 });

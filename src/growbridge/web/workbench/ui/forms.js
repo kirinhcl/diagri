@@ -4,6 +4,7 @@ import { describeDenial } from "../denials.js";
 import { saveDraft, stripSecrets, takeDraft } from "../drafts.js";
 import { formatTime, zonedToEpoch } from "../format.js";
 import { clear, h } from "./dom.js";
+import { techDetails } from "./section.js";
 
 // A datetime-local value may carry zero seconds ("…T16:00:00"); zonedToEpoch takes minutes only.
 const ZERO_SECONDS = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):00(?:\.0+)?$/;
@@ -52,21 +53,51 @@ export function saveAllDrafts() {
   return draftSavers.size;
 }
 
-// [explanation, advice, the server's own message] for a denial (the message only when it says more
-// than the code); [title, message] for a code without a translation.
+// The console's own refusal (stage and safety approval): its message is catalog text, not the server's.
+const OWN_REFUSAL = "not_approved";
+
+// At most two plain lines; what the server said in its own words is in errorDetail. No answer at all
+// is one line; a known code is [explanation, advice]; a 404 without a code is "not found".
 export function errorLines(error, lang, t) {
   const code = error instanceof ApiError ? error.code : null;
+  if (code === "network") return [t("error.network")];
+  if (code === OWN_REFUSAL && error.message) return [t("error.title"), String(error.message)];
   const known = code ? describeDenial(code, lang) : null;
-  const message = error && error.message ? String(error.message) : "";
-  if (known) return message && message !== code ? [known.text, known.advice, message] : [known.text, known.advice];
-  return message ? [t("error.title"), message] : [t("error.title")];
+  if (known) return [known.text, known.advice];
+  if (error instanceof ApiError && error.status === 404 && !code) return [t("error.notFound")];
+  return [t("error.title")];
 }
 
-function showStatus(status, lines, kind) {
+// What api.js writes itself when the server's answer had no words of its own ("HTTP 502: not JSON").
+const CONSOLE_MESSAGE = /^HTTP \d+/;
+
+// [label, value] pairs for the technical details: HTTP status, code and the message as it came (a
+// message that only repeats the code is left out). The labels use t, else the bound page's.
+export function errorDetail(error, t = bound.t) {
+  if (!error) return [];
+  const isApi = error instanceof ApiError;
+  const message = typeof error === "object" ? String(error.message || "") : String(error); // a thrown string too
+  const answered = isApi && error.status > 0; // status 0: no answer, or the console's own refusal
+  const fromServer = answered && !CONSOLE_MESSAGE.test(message);
+  const entries = [
+    [t("tech.httpStatus"), answered ? error.status : null],
+    [t("tech.code"), isApi ? error.code : null],
+    [t(fromServer ? "tech.serverMessage" : "tech.message"), isApi && message === error.code ? null : message],
+  ];
+  return entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
+}
+
+// Plain lines, then (for a refusal) the folded technical details.
+function showStatus(status, lines, kind, details = null) {
   clear(status);
   status.className = `form-status form-status-${kind}`;
-  status.hidden = lines.length === 0;
+  status.hidden = lines.length === 0 && !details;
   for (const line of lines) status.append(h("p", { text: line }));
+  if (details) status.append(details);
+}
+
+function showRefusal(status, error, t, lines) {
+  showStatus(status, lines, "error", techDetails(t, errorDetail(error, t)));
 }
 
 // The form, its status line and its submit button; run() goes through singleFlight.
@@ -86,7 +117,10 @@ function formFrame(submitLabel, children, run, getCtx) {
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    guarded().catch((error) => showStatus(status, errorLines(error, getCtx().lang, getCtx().t), "error"));
+    guarded().catch((error) => {
+      const { lang, t } = getCtx();
+      showRefusal(status, error, t, errorLines(error, lang, t));
+    });
   });
   return { form, status };
 }
@@ -96,10 +130,10 @@ function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
   const lines = errorLines(error, ctx.lang, ctx.t);
   const code = error instanceof ApiError ? error.code : null;
   if (code === "validation") {
-    showStatus(status, [...lines, ...showValidation(error.fields)], "error");
+    showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields)]);
     return;
   }
-  showStatus(status, lines, "error");
+  showRefusal(status, error, ctx.t, lines);
   if (code === "session") keepDraft();
   if (code === "state") {
     // The object may just have been changed by someone else: say so and read the page again.
@@ -128,12 +162,17 @@ function optionList(field, value) {
 function control(field, attrs, value) {
   if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs, text: value });
   if (field.type === "select") return h("select", { class: "input", attrs }, optionList(field, value));
-  const types = { number: "number", datetime: "datetime-local", password: "password" };
+  const types = { number: "number", datetime: "datetime-local", password: "password", hidden: "hidden" };
   const type = types[field.type] || "text";
   const extra = { type, value: type === "password" ? null : value };
   if (type === "number") extra.step = field.step ?? "any";
   if (type === "password") extra.autocomplete = "current-password";
   return h("input", { class: "input", attrs: { ...attrs, ...extra } });
+}
+
+// The options a text field suggests; the values are attributes only, never page text.
+function suggestionOptions(values) {
+  return (values || []).map((value) => h("option", { attrs: { value: String(value) } }));
 }
 
 function fieldRow(field, value, timeZone) {
@@ -142,18 +181,20 @@ function fieldRow(field, value, timeZone) {
   const zoneId = `${id}-zone`;
   const isTime = field.type === "datetime";
   const describedBy = isTime ? `${zoneId} ${errorId}` : errorId;
-  const attrs = { id, name: field.name, required: Boolean(field.required), "aria-describedby": describedBy };
+  const list = Array.isArray(field.suggestions) ? h("datalist", { attrs: { id: `${id}-list` } }, suggestionOptions(field.suggestions)) : null;
+  const attrs = { id, name: field.name, required: Boolean(field.required), "aria-describedby": describedBy, list: list && `${id}-list` };
   const input = control(field, attrs, value);
   const error = h("p", { class: "field-error", attrs: { id: errorId, hidden: true } });
+  if (field.type === "hidden") return { field, input, row: h("div", { attrs: { hidden: true } }, input, error), error, list };
   const zone = isTime ? h("span", { class: "field-zone", attrs: { id: zoneId }, text: timeZone }) : null;
   const row = h(
     "div",
     { class: "field" },
     h("label", { class: "field-label", attrs: { for: id }, text: field.label }),
-    h("div", { class: "field-control" }, input, zone),
+    h("div", { class: "field-control" }, input, zone, list),
     error,
   );
-  return { field, input, row, error };
+  return { field, input, row, error, list };
 }
 
 function setFieldError(entry, message) {
@@ -197,13 +238,19 @@ function convert(entries, timeZone, t) {
   return valid ? values : null;
 }
 
-// Puts each 422 error beside its field; returns the lines for errors that match no field.
+// Puts each 422 error beside its field; returns the lines for errors that match no field. A hidden
+// field's error could not be seen beside it, so it is one of those lines, under the field's label
+// (never its name), or alone when the field has none.
 function placeFieldErrors(entries, fieldErrors) {
-  const byName = new Map(entries.map((entry) => [entry.field.name, entry]));
+  const byName = (hidden) => new Map(entries.filter((entry) => (entry.field.type === "hidden") === hidden).map((entry) => [entry.field.name, entry]));
+  const shown = byName(false);
+  const unseen = byName(true);
   const rest = [];
   for (const { loc, msg } of fieldErrors) {
-    const name = loc.find((part) => byName.has(part));
-    if (name) setFieldError(byName.get(name), msg);
+    const name = loc.find((part) => shown.has(part));
+    const hidden = unseen.get(loc.find((part) => unseen.has(part)));
+    if (name) setFieldError(shown.get(name), msg);
+    else if (hidden) rest.push(hidden.field.label ? `${hidden.field.label}: ${msg}` : msg);
     else rest.push(`${loc.filter((part) => part !== "body").join(" › ")}: ${msg}`);
   }
   return rest;
@@ -233,6 +280,37 @@ function keepOnSessionLoss(form, draftKey, entries, restored) {
     const now = stripSecrets(rawValues(entries), secretNames);
     if (worthKeeping(start, now)) saveDraft(draftKey, now);
   });
+}
+
+// What the page that made a form may still do with it: read and fill fields in, change suggestions.
+const formParts = new WeakMap();
+
+function partOf(form, name) {
+  const own = formParts.get(form);
+  if (!own) throw new TypeError("not a form made by simpleForm");
+  const entry = own.entries.find((item) => item.field.name === name);
+  if (!entry) throw new RangeError(`no field ${name}`);
+  return { entry, own };
+}
+
+// set({name: value}) writes values as the form would start with them (a datetime from epoch
+// seconds; null empties the field); suggest(name, values) replaces a field's suggestions.
+export function formControls(form) {
+  const get = (name) => partOf(form, name).entry.input.value;
+  const set = (values) => {
+    for (const [name, value] of Object.entries(values)) {
+      const { entry, own } = partOf(form, name);
+      entry.input.value = initialText({ ...entry.field, value }, own.zone, own.lang);
+      setFieldError(entry, "");
+    }
+  };
+  const suggest = (name, values) => {
+    const { entry } = partOf(form, name);
+    if (!entry.list) throw new RangeError(`field ${name} has no suggestions`);
+    entry.list.replaceChildren(...suggestionOptions(values));
+  };
+  const focus = (name) => partOf(form, name).entry.input.focus();
+  return { get, set, suggest, focus };
 }
 
 export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own }) {
@@ -270,6 +348,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     }
   };
   const { form, status } = formFrame(submitLabel, entries.map((entry) => entry.row), run, getCtx);
+  formParts.set(form, { entries, zone, lang: getCtx().lang });
   if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft));
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;

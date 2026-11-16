@@ -1,0 +1,164 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { actionsView, activityLog, differenceLines, logItem, manualGroup, manualHeading, outcomeLines, plainActionLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
+import { statusView } from "../../src/growbridge/web/workbench/pages/stage.js";
+import { installFakeDom, FIXTURES, testCtx } from "./support/render-page.mjs";
+import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
+
+installFakeDom();
+
+const stage = { ...FIXTURES["stage.json"], paused_at: null, end_pending: false, right_number: 4, care_right: 2, manual_right: 1 };
+
+test("status hides empty rows and keeps write rights in the details", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const view = statusView(ctx, stage);
+  const text = visibleText(view);
+  assert.doesNotMatch(text, /暂停时间|写入权|结束条件/);
+  assert.match(text, /Lettuce light series/);
+  assert.match(text, /第 1 轮/);
+  assert.doesNotMatch(text, new RegExp(stage.experiment_id));
+  assertNoLeaks(view);
+  const all = visibleTextIncludingDetails(view);
+  assert.ok(!all.includes(stage.experiment_id), "ids stay in the page header fold");
+  assert.ok(all.includes("阶段写入权"));
+});
+
+test("a pending end shows a banner and a pause time shows its row", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const text = visibleText(statusView(ctx, { ...stage, end_pending: true, paused_at: 1000 }));
+  assert.match(text, /已到结束条件，正在确认结束动作。/);
+  assert.match(text, /暂停时间/);
+});
+
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+function elements(node, name) {
+  const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
+  return [...own, ...[...(node.children || [])].flatMap((child) => elements(child, name))];
+}
+
+test("a level is written against its full scale", () => {
+  const ctx = testCtx({ lang: "zh" });
+  assert.equal(manualHeading(ctx, "fan", 3), "风扇调到 3 / 10");
+  assert.equal(manualHeading(ctx, "light", 50), "灯光调到 50 %");
+});
+
+test("the manual form sends the level and the log heading carries the scale", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  const sent = [];
+  ctx.api = { post: async (path, body) => (sent.push([path, body]), { request_id: "wb-1", created_at: 1000, state: "pending" }) };
+  const tracked = [];
+  const env = { ctx, stage, log: { track: (heading, record) => tracked.push([heading, record]) }, onChanged: async () => {} };
+  const form = [...manualGroup(env).children].find((child) => child.tagName && child.tagName.toLowerCase() === "form");
+  elements(form, "select")[0].value = "fan";
+  const level = elements(form, "input").find((input) => input.getAttribute("name") === "level");
+  level.value = "3";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.equal(sent[0][0], "/manual/fan");
+  assert.equal(tracked[0][0], "风扇调到 3 / 10");
+});
+
+test("receipt outcomes write levels, durations and no request id", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const applied = (level) => ({ outcome: "applied", record: { confirmed_level: level } });
+  assert.match(outcomeLines(ctx, applied(3), "fan").join(" "), /3 \/ 10/);
+  assert.match(outcomeLines(ctx, applied(1), "pump").join(" "), /开/);
+  const unsettled = outcomeLines(ctx, { outcome: "timeout", record: { request_id: "wb-9" } }, "fan").join(" ");
+  assert.match(unsettled, /\d+ 秒|\d+ 分钟/);
+  assert.doesNotMatch(unsettled, /wb-|请求编号/);
+});
+
+test("the irrigation heading shows a formatted duration", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  ctx.me = { ...ctx.me, entry: "lan" };
+  ctx.api = { post: async () => ({ request_id: "wb-2", created_at: 1000, state: "pending" }) };
+  const tracked = [];
+  const env = { ctx, stage, log: { track: (heading) => tracked.push(heading) }, onChanged: async () => {} };
+  const view = actionsView({ ...env, stage: { ...stage, state: "manual" } });
+  const form = elements(view, "form").find((f) => elements(f, "input").some((i) => i.getAttribute("name") === "seconds"));
+  elements(form, "input").find((i) => i.getAttribute("name") === "seconds").value = "90";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.match(tracked[0], /浇水 1 分钟 30 秒|浇水 2 分钟|浇水 90 秒/);
+});
+
+test("a resent write is said so in a line under the heading, not in it", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  let n = 0;
+  ctx.api = { post: async () => { if (++n === 1) throw Object.assign(new Error("network"), { status: 0 }); return { request_id: "wb-3", created_at: 1000, state: "pending" }; } };
+  const calls = [];
+  const env = { ctx, stage, log: { track: (heading, record, opts) => calls.push([heading, opts]) }, onChanged: async () => {} };
+  const form = [...manualGroup(env).children].find((child) => child.tagName && child.tagName.toLowerCase() === "form");
+  elements(form, "select")[0].value = "light";
+  elements(form, "input").find((i) => i.getAttribute("name") === "level").value = "50";
+  for (let i = 0; i < 2; i += 1) {
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+  }
+  assert.equal(calls[0][0], "灯光调到 50 %");
+  assert.equal(calls.at(-1)[0], "灯光调到 50 %");
+  assert.equal(calls[0][1].lost, true);
+  assert.equal(calls.at(-1)[1].resent, true);
+});
+
+test("a log item says when it was sent and keeps the request id in the details", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const item = logItem(ctx, "灯光调到 50 %", { request_id: "wb-abc123", created_at: 1000 });
+  assert.doesNotMatch(visibleText(item.element), /wb-/);
+  assert.match(visibleText(item.element), /发送于/);
+  assert.ok(visibleTextIncludingDetails(item.element).includes("wb-abc123"));
+});
+
+test("hand-back differences use labels and units", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const lines = differenceLines(ctx, [{ channel: "light", field: "level", expected: 50, actual: 0 }]);
+  assert.ok(lines.includes("灯光档位：应为 50 %，实际 0 %"));
+});
+
+// --- final review: the stop and take-over dialogs name the stage, not its id (F2) --------------
+test("the stop and take-over dialogs name the stage and never its id", () => {
+  const named = { ...stage, stage_id: "stage-round_9d38ffa4ca3049948194e0b60315c650-1", stage_index: 1, phase: "vegetative" };
+  for (const lang of ["zh", "en"]) {
+    const ctx = testCtx({ lang });
+    for (const name of ["stop", "takeover"]) {
+      const lines = plainActionLines(ctx, name, named).join(" ");
+      assert.ok(!lines.includes(named.stage_id), `${lang} ${name}: ${lines}`);
+      assert.match(lines, lang === "zh" ? /第 1 阶段/ : /Stage 1/);
+    }
+  }
+  const zh = testCtx({ lang: "zh" });
+  assert.deepEqual(plainActionLines(zh, "stop", { stage_id: "stage-x-1" }), ["未命名阶段 将永久停止，不能再次启动。"]);
+});
+
+// --- final review: the approval gate's mismatch path (F7) --------------------------------------
+test("an approval of another run sheet than the one reviewed keeps both digests folded and sends the reviewed one", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  const reviewed = "a1".repeat(32);
+  const approved = "b2".repeat(32);
+  const pending = FIXTURES["stage-pending.json"];
+  const posts = [];
+  const notices = [];
+  ctx.api = {
+    get: async () => ({ run_sheet_digest: reviewed }),
+    post: async (path, body) => (posts.push([path, body]), { run_sheet_version: 3, run_sheet_digest: approved, approved_at: 1796594700 }),
+  };
+  ctx.notify = (message, tone) => notices.push([message, tone]);
+  const log = activityLog(ctx, { signal: new AbortController().signal, alive: () => true });
+  const view = actionsView({ ctx, stage: pending, review: { run_sheet_digest: reviewed, blocking: false }, log, onChanged: async () => {} });
+  const approveGroup = elements(view, "div").find((node) => node.getAttribute("data-action") === "approve");
+  elements(approveGroup, "button")[0].dispatchEvent(new Event("click"));
+  await settle();
+  await settle();
+  assert.deepEqual(posts, [[`/stages/${encodeURIComponent(pending.stage_id)}/approve`, { expected_digest: reviewed }]]);
+  const shown = [visibleText(log.element), visibleText(approveGroup), ...notices.map(([message]) => message)].join(" ");
+  assert.match(shown, /已审批，但不是你审阅的那份运行单/);
+  for (const digest of [reviewed, approved]) assert.ok(!shown.includes(digest), `digest ${digest.slice(0, 4)} in view`);
+  assert.deepEqual(notices.map(([, tone]) => tone), ["error"]);
+  const [mismatch, approval] = elements(log.element, "li");
+  const folded = visibleTextIncludingDetails(mismatch);
+  assert.ok(folded.includes(`服务器批准的指纹 ${approved}`) && folded.includes(`你审阅的指纹 ${reviewed}`), folded);
+  assert.ok(visibleTextIncludingDetails(approval).includes(approved));
+  assert.match(visibleText(approval), /指纹 b2b2b2b2…/);
+});

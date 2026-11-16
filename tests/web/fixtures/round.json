@@ -1,0 +1,22 @@
+{
+  "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
+  "project_id": "project_189c5bff02eb40099b5399d16d55fbcb",
+  "protocol_id": "protocol-lettuce-light",
+  "protocol_version": 1,
+  "state": "delivered",
+  "stages_done": 1,
+  "awaiting_choice": null,
+  "snapshot_id": "snap_96efd910cbe24efda7cb33b46b9eb5be",
+  "report_artifact_id": "artifact_6487a55756ba49a4913fdbb464e121a6",
+  "project_name": "Lettuce light series",
+  "round_number": 1,
+  "stage_total": 1,
+  "stages": [
+    {
+      "stage_id": "stage-round_9d38ffa4ca3049948194e0b60315c650-1",
+      "state": "ended",
+      "stage_index": 1,
+      "phase": "vegetative"
+    }
+  ]
+}

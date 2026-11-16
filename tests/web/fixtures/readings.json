@@ -1,0 +1,5052 @@
+{
+  "samples": [
+    {
+      "timestamp": 1794795228.4804769,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 572,
+          "humi": 64.7,
+          "temp": 18.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794810229.542361,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 480,
+          "humi": 61.3,
+          "temp": 22.3
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794825530.653607,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 483,
+          "humi": 56.2,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794840531.718108,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 473,
+          "humi": 56.9,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794855532.77301,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 57.7,
+          "temp": 23.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794870833.952766,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 580,
+          "humi": 65.6,
+          "temp": 19.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794885835.012863,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 574,
+          "humi": 66.6,
+          "temp": 18.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794901136.087735,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 474,
+          "humi": 59.6,
+          "temp": 22.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794916137.12756,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 466,
+          "humi": 56.6,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794931138.17999,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 56.8,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794946439.283482,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 478,
+          "humi": 58.1,
+          "temp": 23.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794961440.343466,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 570,
+          "humi": 65.3,
+          "temp": 18.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794976741.5065758,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 567,
+          "humi": 67.3,
+          "temp": 18.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1794991742.516551,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 474,
+          "humi": 59.4,
+          "temp": 23.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795006743.566269,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 469,
+          "humi": 55.6,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795022044.6327832,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 473,
+          "humi": 56.9,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795037045.711317,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 474,
+          "humi": 59.4,
+          "temp": 23.0
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795052346.8457751,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 567,
+          "humi": 66.7,
+          "temp": 18.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795067347.801764,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 576,
+          "humi": 66.1,
+          "temp": 18.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795082348.838895,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 475,
+          "humi": 57.9,
+          "temp": 23.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795097649.898595,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 56.2,
+          "temp": 24.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795112650.951506,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 474,
+          "humi": 57.6,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795127952.0743911,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 560,
+          "humi": 64.8,
+          "temp": 19.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795142953.155447,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 568,
+          "humi": 66.1,
+          "temp": 18.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795157954.239438,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 60.8,
+          "temp": 22.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795173255.3424,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 472,
+          "humi": 57.7,
+          "temp": 24.0
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795188256.383626,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 468,
+          "humi": 56.6,
+          "temp": 24.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795203557.477891,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 483,
+          "humi": 58.2,
+          "temp": 23.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795218558.525847,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 573,
+          "humi": 66.5,
+          "temp": 18.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795233559.577309,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 576,
+          "humi": 66.1,
+          "temp": 18.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795248860.673242,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 466,
+          "humi": 59.9,
+          "temp": 22.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795263861.623192,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 471,
+          "humi": 56.7,
+          "temp": 24.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795279162.69966,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 472,
+          "humi": 57.6,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795294163.808985,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 471,
+          "humi": 58.8,
+          "temp": 23.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795309164.930367,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 564,
+          "humi": 66.6,
+          "temp": 18.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795324466.037179,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 580,
+          "humi": 65.7,
+          "temp": 18.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795339467.098355,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 469,
+          "humi": 58.1,
+          "temp": 23.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795354768.323096,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 485,
+          "humi": 57.1,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795369769.39301,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 483,
+          "humi": 56.8,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795384770.425596,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 471,
+          "humi": 59.8,
+          "temp": 22.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795400071.53529,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 573,
+          "humi": 66.7,
+          "temp": 18.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795415072.558453,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 60.1,
+          "temp": 22.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795430373.625323,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 480,
+          "humi": 57.7,
+          "temp": 23.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795445374.6749802,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 56.8,
+          "temp": 24.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795460375.643394,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 57.6,
+          "temp": 23.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795475676.678966,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 577,
+          "humi": 65.6,
+          "temp": 19.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795490677.7465239,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 573,
+          "humi": 65.1,
+          "temp": 18.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795505978.8223948,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 483,
+          "humi": 59.8,
+          "temp": 22.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795520979.904778,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 468,
+          "humi": 57.9,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795535980.9736,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 465,
+          "humi": 56.1,
+          "temp": 24.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795551282.040437,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 480,
+          "humi": 58.2,
+          "temp": 23.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795566283.04304,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 581,
+          "humi": 66.9,
+          "temp": 18.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795581584.12273,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 566,
+          "humi": 65.9,
+          "temp": 18.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795596585.166472,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 482,
+          "humi": 59.4,
+          "temp": 23.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795611586.243977,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 56.2,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795626887.3144279,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 465,
+          "humi": 57.3,
+          "temp": 24.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795641888.405432,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 59.5,
+          "temp": 23.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795657189.521558,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 561,
+          "humi": 66.3,
+          "temp": 18.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795672190.556227,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 578,
+          "humi": 66.0,
+          "temp": 18.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795687191.5805042,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 478,
+          "humi": 59.1,
+          "temp": 23.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795702492.670774,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 480,
+          "humi": 57.4,
+          "temp": 24.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795717493.701072,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 478,
+          "humi": 57.7,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795732794.8209212,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 569,
+          "humi": 64.6,
+          "temp": 19.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795747795.890723,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 578,
+          "humi": 67.0,
+          "temp": 18.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795762796.994496,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 464,
+          "humi": 60.4,
+          "temp": 22.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795778098.057034,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 57.9,
+          "temp": 23.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795793099.140044,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 470,
+          "humi": 56.5,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795808400.2155688,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 483,
+          "humi": 57.3,
+          "temp": 23.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795823401.265291,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 574,
+          "humi": 65.5,
+          "temp": 18.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795838402.271293,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 586,
+          "humi": 66.6,
+          "temp": 18.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795853703.34224,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 469,
+          "humi": 58.7,
+          "temp": 22.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795868704.405386,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 57.1,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795884005.514587,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 463,
+          "humi": 56.9,
+          "temp": 24.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795899006.5779169,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 470,
+          "humi": 58.6,
+          "temp": 23.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795914007.670955,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 570,
+          "humi": 65.7,
+          "temp": 18.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795929308.7232482,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 585,
+          "humi": 65.2,
+          "temp": 19.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795944309.751287,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 477,
+          "humi": 58.3,
+          "temp": 23.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795959610.821322,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 477,
+          "humi": 56.9,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795974611.891278,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 483,
+          "humi": 58.1,
+          "temp": 24.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1795989612.947411,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 468,
+          "humi": 59.8,
+          "temp": 22.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796004914.0488691,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 571,
+          "humi": 66.4,
+          "temp": 18.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796019915.075107,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 60.5,
+          "temp": 22.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796035216.145281,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 467,
+          "humi": 57.4,
+          "temp": 23.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796050217.172191,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 478,
+          "humi": 57.0,
+          "temp": 24.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796065218.2388349,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 482,
+          "humi": 57.9,
+          "temp": 23.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796080519.308695,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 585,
+          "humi": 65.6,
+          "temp": 19.0
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796095520.37815,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 568,
+          "humi": 66.4,
+          "temp": 18.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796110821.378282,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 468,
+          "humi": 59.8,
+          "temp": 22.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796125822.4275799,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 472,
+          "humi": 57.7,
+          "temp": 24.3
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796140823.491791,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 466,
+          "humi": 56.1,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796156124.583779,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 484,
+          "humi": 59.1,
+          "temp": 23.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796171125.6430678,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 564,
+          "humi": 64.9,
+          "temp": 18.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796186426.737105,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 570,
+          "humi": 66.2,
+          "temp": 18.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796201427.81889,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 465,
+          "humi": 59.2,
+          "temp": 23.3
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796216428.896214,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 57.3,
+          "temp": 24.3
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796231729.9227269,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 470,
+          "humi": 57.1,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796246730.958169,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 463,
+          "humi": 58.9,
+          "temp": 22.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796262032.015125,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 580,
+          "humi": 66.0,
+          "temp": 18.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796277033.060122,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 571,
+          "humi": 66.0,
+          "temp": 18.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796292034.1251562,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 481,
+          "humi": 58.4,
+          "temp": 23.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796307335.217547,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 473,
+          "humi": 57.6,
+          "temp": 24.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796322336.282868,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 480,
+          "humi": 57.8,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796337637.3687801,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 561,
+          "humi": 64.9,
+          "temp": 19.3
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796352638.414418,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 572,
+          "humi": 67.0,
+          "temp": 18.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796367639.480015,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 468,
+          "humi": 60.4,
+          "temp": 22.4
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796382940.5409431,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 476,
+          "humi": 56.7,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796397941.625056,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 474,
+          "humi": 55.8,
+          "temp": 24.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796413242.649696,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 469,
+          "humi": 58.1,
+          "temp": 23.9
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796428243.718416,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 574,
+          "humi": 65.9,
+          "temp": 19.0
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796443244.6924548,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 571,
+          "humi": 66.3,
+          "temp": 18.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796458545.777615,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 473,
+          "humi": 60.0,
+          "temp": 22.8
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796473546.793538,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 477,
+          "humi": 58.4,
+          "temp": 24.3
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796488847.839898,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 477,
+          "humi": 56.0,
+          "temp": 24.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796503848.860827,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 471,
+          "humi": 58.9,
+          "temp": 23.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796518849.928282,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 566,
+          "humi": 65.8,
+          "temp": 18.7
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796534150.955671,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 577,
+          "humi": 66.7,
+          "temp": 18.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796549152.045418,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 468,
+          "humi": 58.9,
+          "temp": 23.2
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796564453.101731,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 480,
+          "humi": 56.9,
+          "temp": 24.5
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796579454.151631,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 70,
+          "on": 1
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 471,
+          "humi": 57.1,
+          "temp": 24.1
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    },
+    {
+      "timestamp": 1796594755.2343428,
+      "data": {
+        "blower": {
+          "level": 25,
+          "on": 1
+        },
+        "fan": {
+          "level": 1,
+          "on": 1
+        },
+        "light": {
+          "level": 0,
+          "on": 0
+        },
+        "outlet": {
+          "O1": {
+            "on": 1
+          },
+          "O2": {
+            "on": 1
+          },
+          "O3": {
+            "on": 1
+          },
+          "O4": {
+            "on": 0
+          },
+          "O5": {
+            "on": 0
+          }
+        },
+        "sensor": {
+          "co2": 576,
+          "humi": 64.4,
+          "temp": 19.6
+        }
+      },
+      "quality": "ok",
+      "clock_synced": true,
+      "flagged": 0
+    }
+  ],
+  "window": {
+    "start": 1794780227.0207338,
+    "end": 1796594755.2374132,
+    "bucket_seconds": 15121.068472327788
+  },
+  "total_samples": 12266,
+  "flagged_total": 0,
+  "downsampled": true
+}

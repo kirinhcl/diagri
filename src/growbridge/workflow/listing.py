@@ -11,7 +11,8 @@ from growbridge.workflow.store import WorkflowStore
 
 
 def project_summaries(store: WorkflowStore, limit: int = 200) -> list[dict[str, Any]]:
-    """Projects newest first, each with its round count and latest round."""
+    """Projects newest first, each with its round count and latest round (and that round's
+    ``round_number``, as ``WorkflowStore.round_number`` counts it)."""
     projects = store.db.query(
         "SELECT id, name, created_at FROM wf_projects ORDER BY created_at DESC, rowid DESC LIMIT ?",
         (limit,),
@@ -34,14 +35,19 @@ def project_summaries(store: WorkflowStore, limit: int = 200) -> list[dict[str, 
                 "round_count": count["n"] if count else 0,
                 "latest_round": None
                 if latest is None
-                else {"round_id": latest["id"], "state": latest["state"]},
+                else {
+                    "round_id": latest["id"],
+                    "state": latest["state"],
+                    "round_number": store.round_number(latest["id"]),
+                },
             }
         )
     return summaries
 
 
 def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | None:
-    """One project with its rounds (newest first) and latest protocol versions."""
+    """One project with its rounds (newest first, each with its ``round_number``) and latest
+    protocol versions."""
     project = store.db.one(
         "SELECT id, name, created_at FROM wf_projects WHERE id = ?", (project_id,)
     )
@@ -71,6 +77,7 @@ def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | No
                 "protocol_version": row["protocol_version"],
                 "awaiting_choice": row["awaiting_choice"],
                 "created_at": row["created_at"],
+                "round_number": store.round_number(row["id"]),
             }
             for row in rounds
         ],

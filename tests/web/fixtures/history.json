@@ -1,0 +1,34 @@
+{
+  "history": [
+    {
+      "at": 1794780227.021157,
+      "from": "pending_review",
+      "to": "running",
+      "event": "start",
+      "detail": {
+        "reason": "next stage starts"
+      }
+    },
+    {
+      "at": 1796594755.236539,
+      "from": "running",
+      "to": "running",
+      "event": "end_condition_met",
+      "detail": {
+        "right_number": 3
+      }
+    },
+    {
+      "at": 1796594755.2374132,
+      "from": "running",
+      "to": "ended",
+      "event": "end_actions",
+      "detail": {
+        "confirmed": true,
+        "reason": "stage ended",
+        "right_number": 3
+      }
+    }
+  ],
+  "interventions": []
+}

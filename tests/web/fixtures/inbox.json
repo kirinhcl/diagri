@@ -1,0 +1,65 @@
+{
+  "items": [
+    {
+      "kind": "alert",
+      "id": "alert_7cf193b0163d47c195ea273ae36f58b2",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794779648.2450318,
+      "detail": {
+        "alert_kind": "backup_unconfigured",
+        "severity": "warning",
+        "message": "No backup_dir is configured: the databases are not being backed up",
+        "count": 2,
+        "last_at": 1794821385.612114,
+        "never_read": true
+      }
+    },
+    {
+      "kind": "alert",
+      "id": "alert_a71084164435490a9d4344321ed49313",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794779648.245307,
+      "detail": {
+        "alert_kind": "notify_unconfigured",
+        "severity": "warning",
+        "message": "No notification channel is configured: alerts are not sent anywhere",
+        "count": 2,
+        "last_at": 1794821385.6131048,
+        "never_read": true
+      }
+    },
+    {
+      "kind": "alert",
+      "id": "alert_c5d2e7ef8405499989f36367965ab6d4",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794779648.2454982,
+      "detail": {
+        "alert_kind": "monitor_unconfigured",
+        "severity": "warning",
+        "message": "No external heartbeat is configured (GROWBRIDGE_HEARTBEAT_HOST_URL and GROWBRIDGE_HEARTBEAT_RUN_URL): nobody is told if this host or the run stops",
+        "count": 2,
+        "last_at": 1794821385.6133492,
+        "never_read": true
+      }
+    },
+    {
+      "kind": "stage_review",
+      "id": "stage-dev",
+      "project_id": "project_a205fd7e2f2c4cb092839dc2bef4dbe8",
+      "round_id": "round_00405e43c54b48d1902a7aa7b82f7200",
+      "project_name": "dev light stage",
+      "round_number": 1,
+      "stage_index": 1,
+      "phase": "vegetative",
+      "since": 1794821386.0544891,
+      "detail": {
+        "state": "pending_review",
+        "device_id": "SIMULATED"
+      }
+    }
+  ],
+  "truncated": {}
+}

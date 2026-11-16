@@ -1,0 +1,13 @@
+{
+  "balance": { "cpu_hours": 1250.5, "entered_by": "dev", "note": "read from MyCSC", "recorded_at": 1796590000.0 },
+  "tasks": [
+    { "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "cpu_hours_budget": 10.0, "storage_gb_budget": 5.0, "cpu_hours_used": 1.0, "storage_gb_used": 0.4, "cpu_hours_reserved": 2.0, "storage_gb_reserved": 1.0 }
+  ],
+  "service": { "cpu_hours_cap": 500.0, "storage_gb_cap": 100.0, "cpu_hours_committed": 3.0, "storage_gb_committed": 1.4 },
+  "jobs": [
+    { "attempt_id": "att_7d2e4f6a8b0c4d1e9f3a5b7c9d1e3f5a", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "template_id": "growth-curve-fit", "phase": "running", "task_state": "computing", "remote_job_id": "28471953", "created_at": 1796591200.0 }
+  ],
+  "stuck": [
+    { "attempt_id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "reconcile", "reason": "waiting for reconciliation: the outcome of the submit is unknown", "since": 1796588800.0 }
+  ]
+}

@@ -2,10 +2,11 @@
 // expects of each channel at this moment. Refreshed every few seconds; a reading that stops
 // arriving is said plainly, never shown as if it were current.
 import { LEVELS, METRICS } from "../chart-math.js";
-import { formatNumber } from "../format.js";
+import { formatAge, formatNumber, levelText } from "../format.js";
 import { hrefFor } from "../router.js";
-import { readingsChart } from "../ui/chart.js";
+import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
+import { displayName } from "../ui/names.js";
 import { note, pageHead, section, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 
@@ -58,17 +59,10 @@ export function sensorValues(env) {
   }));
 }
 
+// How old the newest reading is, in the bands of every other duration; a device clock a little
+// ahead reads as now.
 export function ageText(t, seconds) {
-  const s = Math.max(0, Math.round(seconds));
-  if (s < 60) return t("env.ageSeconds", { n: s });
-  if (s < 3600) return t("env.ageMinutes", { n: Math.round(s / 60) });
-  return t("env.ageHours", { n: Math.round(s / 3600) });
-}
-
-function levelText(ctx, key, level) {
-  const metric = LEVELS.find((m) => m.key === key);
-  const unit = metric ? metric.unit : "";
-  return `${formatNumber(level, 0, ctx.lang)} ${unit}`.trim();
+  return formatAge(t, typeof seconds === "number" ? Math.max(0, seconds) : seconds);
 }
 
 function statusLine(ctx, env) {
@@ -83,7 +77,7 @@ function statusLine(ctx, env) {
     if (env.latest.quality !== "ok") parts.push(h("span", { class: ["pill", "pill-waiting"], text: ctx.t("env.flagged") }));
   }
   if (env.stage) {
-    const link = h("a", { attrs: { href: hrefFor("stage", { stageId: env.stage.stage_id }) }, text: ctx.t("env.stage", { id: env.stage.stage_id }) });
+    const link = h("a", { attrs: { href: hrefFor("stage", { stageId: env.stage.stage_id }) }, text: ctx.t("env.stage", { name: displayName(ctx, "stage", env.stage) }) });
     parts.push(h("span", { class: "env-stage" }, link, statePill(ctx.t, env.stage.state)));
   } else parts.push(h("span", { class: "env-muted", text: ctx.t("env.noStage") }));
   const open = Object.values(env.alerts || {}).reduce((sum, n) => sum + n, 0);
@@ -101,18 +95,21 @@ function sensorTile(ctx, { metric, value }) {
   );
 }
 
-function planLine(ctx, row) {
+function planLine(ctx, env, row) {
   if (row.ownership === null) return null;
   if (row.ownership !== "host") return ctx.t("env.deviceOwned");
-  if (row.expected === null) return ctx.t("env.notPlanned");
-  return ctx.t("env.expected", { level: levelText(ctx, row.key, row.expected) });
+  if (row.expected === null) return ctx.t(row.key === "pump" ? "env.pumpNotPlanned" : "env.notPlanned");
+  return ctx.t("env.expected", { level: levelText(ctx.t, row.key, row.expected, rangeOf(env, row.key)) });
 }
 
+// The server's range for a channel, or undefined so that the default applies.
+const rangeOf = (env, key) => env.level_ranges?.[key] ?? undefined;
+
 function channelTile(ctx, env, row) {
-  const range = (env.level_ranges || {})[row.key];
+  const range = rangeOf(env, row.key);
   const isLevel = row.key !== "pump";
   let value = ctx.t("env.unknown");
-  if (isLevel && row.level !== null) value = levelText(ctx, row.key, row.level);
+  if (isLevel && row.level !== null) value = levelText(ctx.t, row.key, row.level, range);
   else if (!isLevel && row.on !== null) value = ctx.t(row.on ? "env.on" : "env.off");
   let bar = null;
   if (isLevel && row.level !== null && Array.isArray(range) && range[1] > range[0]) {
@@ -121,7 +118,7 @@ function channelTile(ctx, env, row) {
     fill.style.width = `${(share * 100).toFixed(1)}%`; // CSSOM: the CSP refuses style attributes
     bar = h("div", { class: "env-bar", attrs: { "aria-hidden": "true" } }, fill);
   }
-  const plan = planLine(ctx, row);
+  const plan = planLine(ctx, env, row);
   return h(
     "div",
     { class: ["env-tile", row.mismatch ? "env-tile-mismatch" : null] },
@@ -148,15 +145,15 @@ function nowView(ctx, env) {
 }
 
 function trendsView(ctx, env) {
-  const options = { timeZone: (ctx.me && ctx.me.timezone) || "UTC", lang: ctx.lang };
+  const options = { timeZone: (ctx.me && ctx.me.timezone) || "UTC", lang: ctx.lang, now: ctx.now };
   const sampleSeconds = env.stage ? env.stage.sampling_seconds : null;
   return h(
     "div",
     { class: "env-trends" },
     h("h3", { class: "env-sub", text: ctx.t("env.sensors") }),
-    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, empty: "env.readingsEmpty" }),
+    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, empty: "env.readingsEmpty", scope: "sensors" }),
     h("h3", { class: "env-sub", text: ctx.t("env.channels") }),
-    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty" }),
+    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty", scope: "levels" }),
   );
 }
 
@@ -186,7 +183,9 @@ export async function render(ctx) {
   const draw = () => {
     clear(status).append(statusLine(ctx, env));
     clear(now).append(nowView(ctx, env));
+    const open = openChartFolds(trends); // a poll must not close what the reader opened
     clear(trends).append(trendsView(ctx, env));
+    restoreChartFolds(trends, open);
   };
   const refresh = async () => {
     env = await load(ctx);

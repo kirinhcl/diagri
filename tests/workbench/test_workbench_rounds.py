@@ -178,7 +178,9 @@ def test_round_overview_shows_the_state_and_the_stages(bench, operator):
     assert (body["protocol_id"], body["protocol_version"]) == ("protocol-1", 1)
     assert body["state"] == "stage_review" and body["awaiting_choice"] is None
     assert (body["stages_done"], body["stage_total"]) == (0, 1)
-    assert body["stages"] == [{"stage_id": "stage-1", "state": "pending_review"}]
+    assert body["stages"] == [
+        {"stage_id": "stage-1", "state": "pending_review", "stage_index": 1, "phase": "vegetative"}
+    ]
 
 
 def test_a_blank_project_name_is_refused(bench, operator):

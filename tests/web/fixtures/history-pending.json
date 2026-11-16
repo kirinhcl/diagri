@@ -1,0 +1,33 @@
+{
+  "history": [
+    {
+      "at": 1794779648.297895,
+      "from": "pending_review",
+      "to": "recovery_check",
+      "event": "restart",
+      "detail": {}
+    },
+    {
+      "at": 1794779648.344322,
+      "from": "recovery_check",
+      "to": "pending_review",
+      "event": "recovery_exit",
+      "detail": {}
+    },
+    {
+      "at": 1794821385.669843,
+      "from": "pending_review",
+      "to": "recovery_check",
+      "event": "restart",
+      "detail": {}
+    },
+    {
+      "at": 1794821386.0544891,
+      "from": "recovery_check",
+      "to": "pending_review",
+      "event": "recovery_exit",
+      "detail": {}
+    }
+  ],
+  "interventions": []
+}

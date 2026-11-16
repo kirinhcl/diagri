@@ -5,6 +5,10 @@ export function saveDraft(key, values) {
   drafts.set(key, { ...values });
 }
 
+export function hasDraft(key) {
+  return drafts.has(key);
+}
+
 export function takeDraft(key) {
   if (!drafts.has(key)) return null;
   const values = drafts.get(key);

@@ -1,0 +1,85 @@
+{
+  "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
+  "artifact_id": "artifact_6487a55756ba49a4913fdbb464e121a6",
+  "label": "descriptive",
+  "sha256": "827ea8c5b5e173abc2ca1c35fbd708b9f64b312bcbbb54002bd7e59202d6f1b1",
+  "report": {
+    "conclusion": "uncertain",
+    "conclusion_text": "不确定",
+    "conclusion_texts": {
+      "en": "uncertain",
+      "zh": "不确定"
+    },
+    "estimate": {
+      "blocks": 0,
+      "effect": 0.0,
+      "estimable": false,
+      "note": "fewer than 2 complete blocks; no treatment effect can be estimated",
+      "p_value": null
+    },
+    "evidence_chain": [
+      "round:round_9d38ffa4ca3049948194e0b60315c650",
+      "stage:stage-round_9d38ffa4ca3049948194e0b60315c650-1",
+      "experiment:exp-round_9d38ffa4ca3049948194e0b60315c650",
+      "run_sheet:sheet-round_9d38ffa4ca3049948194e0b60315c650-1 v1",
+      "protocol:protocol-lettuce-light v1",
+      "snapshot:snap_96efd910cbe24efda7cb33b46b9eb5be v1",
+      "local_run:local_5c987768a8b544ad80c4af4c0af9a962 (exploratory, no snapshot files visible)",
+      "local_run:local_93ed8a146e2a4970af0f483214c97427 (exploratory, no snapshot files visible)",
+      "snapshot:snap_96efd910cbe24efda7cb33b46b9eb5be"
+    ],
+    "label": "descriptive",
+    "limitations": [
+      "DATA CHECK FAILED on the primary endpoint canopy_area_growth. Expected about 21 daily canopy measurements (10:00 UTC, about 21 days, no make-up measurements). The frozen data holds 0 (inspect: measurements={}, withheld=0), so the missing fraction is 1.0. The user reports 6 recorded, which would give about 0.71. Both exceed max_missing_fraction 0.2. Nothing was imputed or backfilled and no exclusion rules were added.",
+      "Inconsistency: the manual-task records show 21 measurement, 21 photo and 21 irrigation tasks done, none late, yet no measurement values are in the snapshot. Likely a recording or ingestion fault; not yet explained.",
+      "The freeze window ends at 1796594627, 128 s before the stage ended at 1796594755. Records from the final 128 s are not included.",
+      "Sensor data passes: coverage 1.0 (minimum 0.9), 0 gaps, 12,264 trusted and 0 untrusted samples, clock synced. Light level 0-70 and on 66.6% of the time, consistent with a 16 h photoperiod at 70%.",
+      "Only the 'high' treatment ran in this round. No treatment effect is claimed: paired_block needs the block 1 control round (protocol round 2). Any descriptive output is exploratory.",
+      "Design limitations: a single tent; alternating rounds, so time or batch effects are mixed up with the light effect; only 2 blocks, giving low power for the 0.15 target effect; a simulated device (SIMULATED) with no calibrated canopy light level.",
+      "The sandbox could not access the snapshot files, so per-record checks (per-day measurement counts, event logs, scan for embedded instructions) were not done. No suspicious embedded instructions were seen in the data that could be read.",
+      "缺少独立的处理重复：只能描述已观察到的差异，不能推断处理效应",
+      "缺失超过预定标准：结果只能作为探索性线索"
+    ],
+    "model_limitations": [
+      "DATA CHECK FAILED on the primary endpoint canopy_area_growth. Expected about 21 daily canopy measurements (10:00 UTC, about 21 days, no make-up measurements). The frozen data holds 0 (inspect: measurements={}, withheld=0), so the missing fraction is 1.0. The user reports 6 recorded, which would give about 0.71. Both exceed max_missing_fraction 0.2. Nothing was imputed or backfilled and no exclusion rules were added.",
+      "Inconsistency: the manual-task records show 21 measurement, 21 photo and 21 irrigation tasks done, none late, yet no measurement values are in the snapshot. Likely a recording or ingestion fault; not yet explained.",
+      "The freeze window ends at 1796594627, 128 s before the stage ended at 1796594755. Records from the final 128 s are not included.",
+      "Sensor data passes: coverage 1.0 (minimum 0.9), 0 gaps, 12,264 trusted and 0 untrusted samples, clock synced. Light level 0-70 and on 66.6% of the time, consistent with a 16 h photoperiod at 70%.",
+      "Only the 'high' treatment ran in this round. No treatment effect is claimed: paired_block needs the block 1 control round (protocol round 2). Any descriptive output is exploratory.",
+      "Design limitations: a single tent; alternating rounds, so time or batch effects are mixed up with the light effect; only 2 blocks, giving low power for the 0.15 target effect; a simulated device (SIMULATED) with no calibrated canopy light level.",
+      "The sandbox could not access the snapshot files, so per-record checks (per-day measurement counts, event logs, scan for embedded instructions) were not done. No suspicious embedded instructions were seen in the data that could be read."
+    ],
+    "next_round": "Proposal only, for the planner or a person to decide: (1) Investigate the measurement storage path and recover any canopy measurement records and photos for round 1, then freeze again as a new snapshot version and keep v1 unchanged. Never backfill values. (2) Before round 2 (block 1 control) starts, add a check that each daily canopy measurement is actually stored, not only marked done, plus a daily alert if one is missing. (3) Consider aligning the freeze window with the actual stage end. (4) Given 2 blocks and low power for the 0.15 effect, consider more blocks or replicate units. Run sheet changes are left to the planner.",
+    "notes": [
+      {
+        "code": "no_replicates",
+        "kind": "reason",
+        "params": {},
+        "text": {
+          "en": "No independent replicate of the treatments: the observed difference can be described, but no treatment effect can be inferred",
+          "zh": "缺少独立的处理重复：只能描述已观察到的差异，不能推断处理效应"
+        }
+      },
+      {
+        "code": "missing_over_limit",
+        "kind": "reason",
+        "params": {},
+        "text": {
+          "en": "More data is missing than the protocol allows: the result is only an exploratory lead",
+          "zh": "缺失超过预定标准：结果只能作为探索性线索"
+        }
+      }
+    ],
+    "reasons": [
+      "缺少独立的处理重复：只能描述已观察到的差异，不能推断处理效应",
+      "缺失超过预定标准：结果只能作为探索性线索"
+    ],
+    "snapshot_id": "snap_96efd910cbe24efda7cb33b46b9eb5be",
+    "task_id": "task_40d3a1433ed7490dacc6d96813326a4f",
+    "unresolved": [
+      "Meaning of the end-condition detail right_number=3 on the end_condition_met/end_actions events: unexplained, because the event records could not be read.",
+      "Where the 21 'done' measurement and photo tasks' data went, and the user's report of 6 canopy measurements that are absent from the frozen data.",
+      "Whether the 128 s at the end of the stage, outside the freeze window, holds any records."
+    ]
+  }
+}

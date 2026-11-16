@@ -1,9 +1,18 @@
 // Evidence cards: every card with its source and verification, a form to enter one, and verification of a model's card.
+import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
-import { afterWrite, note, pageHead, section, timeText } from "../ui/section.js";
+import { roleLabel } from "../ui/names.js";
+import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 
 const SOURCE_CLASSES = ["handbook", "paper", "local"];
+const CLAIM_CHARS = 40;
+
+// A card as a notice names it: its claim, cut to CLAIM_CHARS characters with "…".
+export function claimName(claim) {
+  const chars = [...String(claim ?? "").trim().replace(/\s+/g, " ")];
+  return chars.length > CLAIM_CHARS ? `${chars.slice(0, CLAIM_CHARS).join("")}…` : chars.join("");
+}
 
 const yesNo = (ctx) => [
   { value: "yes", label: ctx.t("common.yes") },
@@ -12,7 +21,7 @@ const yesNo = (ctx) => [
 
 // Whether a card was calibrated is recorded as the operator's own choice: no answer is preset.
 export function enterFields(ctx) {
-  const classes = SOURCE_CLASSES.map((value) => ({ value, label: ctx.t(`evidence.class.${value}`) }));
+  const classes = SOURCE_CLASSES.map((value) => ({ value, label: labelOr(ctx.t, "evidence.class", value) }));
   const calibration = [{ value: "", label: ctx.t("form.choose") }, ...yesNo(ctx)];
   return [
     { name: "source_class", label: ctx.t("evidence.sourceClass"), type: "select", required: true, options: classes },
@@ -28,7 +37,7 @@ function enterForm(ctx) {
   const submitLabel = ctx.t("evidence.enter");
   const onSubmit = async ({ calibrated, ...rest }) => {
     const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated === "yes" }, { action: submitLabel });
-    afterWrite(ctx, ctx.t("evidence.entered", { id: card.id }));
+    afterWrite(ctx, ctx.t("evidence.entered", { claim: claimName(card?.claim ?? rest.claim) }));
   };
   return simpleForm({ fields: enterFields(ctx), submitLabel, onSubmit, draftKey: "evidence:new", ctx });
 }
@@ -42,18 +51,33 @@ function verifyForm(ctx, card) {
   const onSubmit = async ({ note: text, calibrated }) => {
     const body = { note: text || "", calibrated: calibrated === "yes" };
     await ctx.api.post(`/evidence/${encodeURIComponent(card.id)}/verify`, body, { action: submitLabel });
-    afterWrite(ctx, ctx.t("evidence.verified", { id: card.id }));
+    afterWrite(ctx, ctx.t("evidence.verified", { claim: claimName(card.claim) }));
   };
   return simpleForm({ fields, submitLabel, onSubmit, draftKey: `evidence-verify:${card.id}`, ctx });
 }
 
-function factsLine(ctx, card) {
+// Who entered a card: "you" for the signed-in operator, the agent's role for the model's own cards
+// (agents/handlers_evidence.py SOURCE), any other operator name as it was recorded.
+const AGENT_SOURCES = { "model:planner": "planner" };
+
+function enteredBy(ctx, source) {
+  if (!source) return "—";
+  if (ctx.me && source === ctx.me.operator) return roleLabel(ctx.t, "user");
+  return Object.hasOwn(AGENT_SOURCES, source) ? roleLabel(ctx.t, AGENT_SOURCES[source]) : source;
+}
+
+// The value as it was entered: no fixed number of decimals (a datum is never rounded on screen).
+const exactNumber = (value, lang) => Number(value).toLocaleString(lang, { maximumFractionDigits: 20 });
+
+function facts(ctx, card) {
   const hasValue = card.value !== null && card.value !== undefined;
-  const parts = [ctx.t(`evidence.class.${card.source_class}`)];
-  if (hasValue) parts.push(ctx.t("evidence.valueOf", { value: `${card.value} ${card.unit || ""}`.trim() }));
-  if (!card.calibrated) parts.push(ctx.t("evidence.uncalibrated"));
-  parts.push(ctx.t("evidence.entryLine", { source: card.source || "—", time: timeText(ctx, card.added_at) }));
-  return parts.join(" · ");
+  return keyValues([
+    [ctx.t("evidence.fact.class"), labelOr(ctx.t, "evidence.class", card.source_class)],
+    [ctx.t("evidence.fact.value"), hasValue ? `${exactNumber(card.value, ctx.lang)} ${card.unit || ""}`.trim() : null],
+    [ctx.t("evidence.fact.calibration"), ctx.t(card.calibrated ? "evidence.calibratedYes" : "evidence.uncalibrated")],
+    [ctx.t("evidence.fact.by"), enteredBy(ctx, card.source)],
+    [ctx.t("evidence.fact.at"), timeText(ctx, card.added_at)],
+  ]);
 }
 
 function verificationBlock(ctx, card) {
@@ -74,11 +98,11 @@ function cardView(ctx, card) {
   return h(
     "li",
     { class: "evidence-card" },
-    h("div", { class: "evidence-head" }, h("code", { text: card.id }), pill),
-    h("p", { class: "evidence-claim", text: card.claim }),
+    h("div", { class: "evidence-head" }, h("h3", { class: "evidence-claim", text: card.claim }), pill),
     h("p", { class: "cell-sub", text: ctx.t("evidence.citedFrom", { citation: card.citation }) }),
-    h("p", { class: "cell-sub", text: factsLine(ctx, card) }),
+    facts(ctx, card),
     verificationBlock(ctx, card),
+    techDetails(ctx.t, [[ctx.t("tech.id.id"), card.id], [ctx.t("evidence.fact.rawValue"), card.value]]),
   );
 }
 

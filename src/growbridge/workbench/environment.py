@@ -18,6 +18,7 @@ from growbridge.archive.readings import bucketed_samples
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import Actor, ControlPort
+from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
 
@@ -73,17 +74,20 @@ def latest_reading(archive: Archive, outlets: dict[Channel, int], now: float) ->
 def active_stage(workflow: WorkflowService, now: float) -> dict | None:
     """The active stage, and what its run sheet expects of each channel now. Only a running stage
     follows the run sheet; paused, under takeover, in recovery check or ended, it expects
-    nothing, so the page shows no difference from the run sheet."""
+    nothing, so the page shows no difference from the run sheet. The stage is named as the
+    stage read names it (project name, round number, stage index, phase)."""
     stage = workflow.active_stage()
     if stage is None:
         return None
     sheet = stage.run_sheet
     expected = sheet.expected_levels(now) if stage.state is StageState.RUNNING else {}
+    row = workflow.store.find_stage(stage.stage_id)
     return {
         "stage_id": stage.stage_id,
         "state": stage.state.value,
         "experiment_id": stage.experiment_id,
         "project_id": stage.project_id,
+        **(stage_names(workflow.store, row) if row else dict.fromkeys(STAGE_NAME_KEYS)),
         "started_at": stage.started_at,
         "ends_at": None if stage.started_at is None else stage.started_at + sheet.duration_seconds,
         "sampling_seconds": sheet.sampling.interval_seconds,

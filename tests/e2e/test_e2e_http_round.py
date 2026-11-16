@@ -168,7 +168,9 @@ async def test_round_from_goal_to_delivered_through_http_routes_only(world, site
     assert await runtime.run_agents(planner) == 1
     view = await get(client, f"/wb/rounds/{round_id}")
     assert view["state"] == "stage_review"
-    assert view["stages"] == [{"stage_id": STAGE, "state": "pending_review"}]
+    assert view["stages"] == [
+        {"stage_id": STAGE, "state": "pending_review", "stage_index": 1, "phase": "vegetative"}
+    ]
     assert device_writes(world) == []
 
     # the ended planner task wakes the orchestrator, which tells the user what comes next

@@ -26,7 +26,11 @@ async def test_project_summaries_count_rounds_and_show_the_latest(world):
     await world.design()
     (summary,) = project_summaries(world.svc.store)
     assert summary["project_id"] == world.project_id and summary["round_count"] == 1
-    assert summary["latest_round"] == {"round_id": world.round_id, "state": "designing"}
+    assert summary["latest_round"] == {
+        "round_id": world.round_id,
+        "state": "designing",
+        "round_number": 1,
+    }
 
 
 def test_project_summaries_without_projects_are_empty(world):
