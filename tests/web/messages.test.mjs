@@ -120,10 +120,22 @@ test("a time param is a date and time in the site's zone", () => {
   assert.equal(format(utc, "x", {}), "—");
 });
 
+test("too many output files reads as two counts, never as dashes", () => {
+  for (const lang of ["en", "zh"]) {
+    const parts = messageParts(testCtx({ lang }), "compute_error", "too_many_files", { file_count: 1001, limit_count: 1000 });
+    assert.equal(parts.known, true, lang);
+    assert.ok(parts.text.includes("1,001") && parts.text.includes("1,000"), parts.text);
+    assert.ok(!parts.text.includes("—") && !parts.text.includes("{"), parts.text);
+    assert.ok(parts.action, lang);
+  }
+});
+
 test("formatterFor follows the contract table, and everything else is not a placeholder", () => {
   const ctx = testCtx({ lang: "en" });
   const f = (name, v, p = {}) => formatterFor(name)(ctx, v, p);
   assert.equal(f("count", 3), "3");
+  assert.equal(f("file_count", 1001), "1,001");
+  assert.equal(f("limit_count", 1000), "1,000");
   assert.equal(f("fraction", 0.256), "26%");
   assert.equal(f("name", "A"), "“A”");
   assert.equal(f("channels", ["fan", "light"]), `${f("channel", "fan")}, ${f("channel", "light")}`);

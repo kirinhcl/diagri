@@ -324,6 +324,8 @@ export default {
   "msg.compute_error.settled_by_operator": "An operator settled this attempt.",
   "msg.compute_error.output_limit": "The outputs go over the limit ({bytes} against {limit}).",
   "msg.compute_error.output_limit.action": "Settle it; it is charged as unknown use.",
+  "msg.compute_error.too_many_files": "There are too many output files ({file_count} against a limit of {limit_count}).",
+  "msg.compute_error.too_many_files.action": "Settle it; it is charged as unknown use.",
   "msg.compute_error.artifact_missing": "The output file {name} is missing or is not in the output folder.",
   "msg.compute_error.artifact_missing.action": "Settle it, then submit again.",
   "msg.compute_error.artifact_mismatch": "The output file {name} does not match its checksum.",

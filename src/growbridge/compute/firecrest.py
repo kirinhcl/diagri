@@ -404,6 +404,8 @@ class FirecrestBackend:
             raise OutputTooLarge(
                 f"output limit: {len(listed)} output files, over the limit of {MAX_OUTPUT_FILES}",
                 limit_kind="files",
+                file_count=len(listed),
+                limit_count=MAX_OUTPUT_FILES,
             )
         total = sum(size for _, size in listed)
         if total > max_bytes:

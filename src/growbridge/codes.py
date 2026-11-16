@@ -139,6 +139,7 @@ CODES: dict[str, dict[str, Code]] = {
         "cleanup_failed": Code(),
         "settled_by_operator": Code(action=False),
         "output_limit": Code(("limit_kind", "bytes", "limit")),
+        "too_many_files": Code(("file_count", "limit_count")),
         "artifact_missing": Code(("name",)),
         "artifact_mismatch": Code(("name",)),
         "no_artifacts": Code(),

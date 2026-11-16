@@ -111,7 +111,7 @@
 | `problems` | 每项 `t("findingProblem." + kind, {channel: 通道名, level: 档位, other: 其他档位})`，用 `t("common.listSep")` 连接 |
 | `treatments` | 每项按"带引号的名字"显示，用 `t("common.listSep")` 连接 |
 | `source`、`rule`、`rule_a`、`rule_b`、`protection`、`treatment`、`control`、`block`、`metric`、`name` | 带引号的名字：`t("common.quoted", {text: v})`。这些是人起的名字（运行单条目、规则、处理、文件名），审阅时要靠它们找到对应条目 |
-| `count`、以 `_count` 结尾、`blocks`、`min_blocks`、`flips`、`failed`、`priority`、`round`、`mode`、`top_rowid`、`cursor` | `formatNumber(v, 0, lang)` |
+| `count`、以 `_count` 结尾（如 `file_count`、`limit_count`）、`blocks`、`min_blocks`、`flips`、`failed`、`priority`、`round`、`mode`、`top_rowid`、`cursor` | `formatNumber(v, 0, lang)` |
 | `fraction`（0–1） | 百分数，`formatNumber(v * 100, 0, lang)` 加 "%" |
 | `bytes`、`limit` | 字节数：`formatNumber(v, 0, lang)` 加 `t("common.bytes")`（新键，中英文各一） |
 | `device_unit`、`rule_unit` | `unitText(v)`（`W/pages/safety-text.js`，把 `C` 写成 `°C`） |

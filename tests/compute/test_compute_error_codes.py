@@ -164,6 +164,25 @@ async def test_outputs_over_the_limit_carry_bytes_limit_and_kind(env, tmp_path):
     )
 
 
+async def test_too_many_output_files_carry_the_counts_and_are_final(env, tmp_path):
+    attempt = await finished(env)
+
+    async def crowded(job_id, out_dir, max_bytes):
+        raise OutputTooLarge(
+            "output limit: 1001 output files, over the limit of 1000",
+            limit_kind="files",
+            file_count=1001,
+            limit_count=1000,
+        )
+
+    env.backend.fetch = crowded
+    with pytest.raises(OutputTooLarge):
+        await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
+    assert coded(env, attempt.id) == ("too_many_files", {"file_count": 1001, "limit_count": 1000})
+    with pytest.raises(Exception, match="over the limit"):  # only an operator can settle it
+        await env.service.fetch_compute_artifacts(attempt.id, "alice", tmp_path / "out")
+
+
 async def test_a_missing_or_wrong_artifact_names_the_file(env, tmp_path):
     attempt = await finished(env)
     env.backend.wrong_checksums = True

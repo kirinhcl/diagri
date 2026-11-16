@@ -13,6 +13,8 @@ from growbridge.codes import checked
 
 OUTPUT_LIMIT_MARK = "output limit:"  # how an oversized fetch was written before it had a code
 OUTPUT_LIMIT = "output_limit"
+TOO_MANY_FILES = "too_many_files"
+OUTPUT_LIMIT_CODES = frozenset({OUTPUT_LIMIT, TOO_MANY_FILES})  # a fetch refused for its size
 CLEARED: dict[str, str] = {"error": "", "error_code": "", "error_params": "{}"}
 
 
@@ -33,5 +35,5 @@ def coded(code: str, params: Mapping[str, Any] | None = None) -> dict[str, str]:
 def is_output_limit(error: str, error_code: str) -> bool:
     """Whether the attempt's error is a fetch refused for its size (old rows: by the prefix)."""
     if error_code:
-        return error_code == OUTPUT_LIMIT
+        return error_code in OUTPUT_LIMIT_CODES
     return error.startswith(OUTPUT_LIMIT_MARK)

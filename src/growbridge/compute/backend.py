@@ -27,7 +27,8 @@ class OutputTooLarge(BackendError):
 
     ``limit_kind`` says which limit ("files": too many files, "total": the outputs together,
     "file": one listed file, "download": a transfer that grew past what was left). ``size`` and
-    ``limit`` are byte counts, or None where the limit is not a byte count.
+    ``limit`` are byte counts, or None where the limit is not a byte count; for "files",
+    ``file_count`` and ``limit_count`` are the number of output files and the most allowed.
     """
 
     def __init__(
@@ -37,11 +38,15 @@ class OutputTooLarge(BackendError):
         limit_kind: str = "total",
         size: int | None = None,
         limit: int | None = None,
+        file_count: int | None = None,
+        limit_count: int | None = None,
     ) -> None:
         super().__init__(message)
         self.limit_kind = limit_kind
         self.size = size
         self.limit = limit
+        self.file_count = file_count
+        self.limit_count = limit_count
 
 
 class BackendUnavailable(RuntimeError):

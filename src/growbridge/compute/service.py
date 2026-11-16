@@ -192,7 +192,11 @@ def _require_amount(value: Any, what: str) -> None:
 
 
 def _limit_columns(error: OutputTooLarge) -> dict[str, str]:
-    """The code and params of a refused fetch, from the numbers the backend measured."""
+    """The code and params of a refused fetch, from the numbers the backend measured: too many
+    files is counted in files, every other limit in bytes."""
+    if error.limit_kind == "files":
+        counts = {"file_count": error.file_count, "limit_count": error.limit_count}
+        return coded("too_many_files", counts)
     params = {"limit_kind": error.limit_kind, "bytes": error.size, "limit": error.limit}
     return coded("output_limit", params)
 

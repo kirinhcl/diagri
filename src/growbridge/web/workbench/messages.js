@@ -73,6 +73,7 @@ const EXACT = {
 };
 const LEVEL_NAMES = ["level", "min", "max", "expected", "protection_level"];
 const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name"];
+// counts: these names and every name ending in "_count" (e.g. file_count, limit_count)
 const COUNT_NAMES = ["count", "blocks", "min_blocks", "flips", "failed", "priority", "round", "mode", "top_rowid", "cursor"];
 const BYTE_NAMES = ["bytes", "limit"];
 const TIME_NAMES = ["window_start", "window_end"];

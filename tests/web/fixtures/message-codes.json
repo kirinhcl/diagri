@@ -598,6 +598,13 @@
       ],
       "action": true
     },
+    "too_many_files": {
+      "params": [
+        "file_count",
+        "limit_count"
+      ],
+      "action": true
+    },
     "artifact_missing": {
       "params": [
         "name"

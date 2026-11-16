@@ -277,6 +277,8 @@ export default {
   "msg.compute_error.settled_by_operator": "已由操作员结算。",
   "msg.compute_error.output_limit": "输出超过了上限（{bytes}，上限 {limit}）。",
   "msg.compute_error.output_limit.action": "结算它；按未知用量计费。",
+  "msg.compute_error.too_many_files": "输出文件太多（{file_count} 个，上限 {limit_count} 个）。",
+  "msg.compute_error.too_many_files.action": "结算它；按未知用量计费。",
   "msg.compute_error.artifact_missing": "输出文件{name}缺失，或不在输出目录里。",
   "msg.compute_error.artifact_missing.action": "结算后重新提交。",
   "msg.compute_error.artifact_mismatch": "输出文件{name}的校验值对不上。",
