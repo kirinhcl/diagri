@@ -21,6 +21,8 @@ from growbridge.ports import Actor, Denied
 from growbridge.research.holdout import Holdout, HoldoutRegistry
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import Ident
+from growbridge.workbench.scope import project_write
+from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 
 MAX_NAMES = 50
@@ -50,19 +52,22 @@ def add_holdout_routes(
     fresh: Dependency,
     workflow: WorkflowService,
     holdout: HoldoutRegistry,
+    access: Access | None = None,
 ) -> None:
     """Mount the routes on ``router``; ``operator`` and ``fresh`` are the workbench's operator
     dependencies (``fresh`` also asks for a recent re-authentication)."""
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
-    def require_project(project_id: str) -> None:
+    def require_project(project_id: str, actor: Actor) -> None:
+        unknown = Denied("scope", f"unknown project {project_id}")
         if not workflow.store.has_project(project_id):
-            raise Denied("scope", f"unknown project {project_id}")
+            raise unknown
+        project_write(access, actor, project_id, lambda: unknown)
 
     @router.post("/holdouts")
     async def register_holdout(body: HoldoutIn, actor: Fresh):
-        require_project(body.project_id)
+        require_project(body.project_id, actor)
         holdout_id = new_id("holdout")
         args = (body.project_id, holdout_id, body.batch_ids, body.outcome_fields)
         holdout.register(*args, body.development_batch_ids, registered_by=actor.id)
@@ -73,5 +78,5 @@ def add_holdout_routes(
     async def list_holdouts(
         project_id: Annotated[str, Query(min_length=1, max_length=100)], actor: Operator
     ):
-        require_project(project_id)
+        require_project(project_id, actor)
         return {"holdouts": [holdout_json(item, holdout) for item in holdout.holdouts(project_id)]}

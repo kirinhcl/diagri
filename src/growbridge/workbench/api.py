@@ -47,6 +47,7 @@ from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
+from growbridge.workbench.scope import project_write, stage_write
 from growbridge.workflow.access import Access
 from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
@@ -59,7 +60,13 @@ COOKIE = "growbridge_operator"
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 MAX_IRRIGATION_SECONDS = 60
 MIN_ROLE_TOKEN_LENGTH = 32
-STATUS_BY_CODE = {"state": 409, "session": 401, "locked": 429}
+STATUS_BY_CODE = {
+    "state": 409,
+    "session": 401,
+    "locked": 429,
+    "lock_taken": 409,
+    "greenhouse_busy": 409,
+}
 
 
 # --- request bodies ----------------------------------------------------------------------------
@@ -219,19 +226,27 @@ class Workbench:
         reads = (self.router, self.operator, workflow, archive, control, self.clock)
         add_read_routes(*reads, tasks=tasks, budget=budget, alerts=alerts, compute=compute)
         add_round_routes(
-            self.router, self.operator, self.fresh, workflow, tasks, budget, archive, conversation
+            self.router,
+            self.operator,
+            self.fresh,
+            workflow,
+            tasks,
+            budget,
+            archive,
+            conversation,
+            access=access,
         )
         add_evidence_routes(self.router, self.operator, archive)
         add_manual_task_routes(
-            self.router, self.operator, self.on_site, workflow, archive, control, self.clock
+            self.router, self.operator, self.on_site, workflow, archive, control, self.clock, access
         )
         if runner is not None:
             args = (self.router, self.operator, self.fresh, workflow, archive, runner, holdout)
-            add_analysis_routes(*args)
+            add_analysis_routes(*args, access=access)
         if holdout is not None:
-            add_holdout_routes(self.router, self.operator, self.fresh, workflow, holdout)
+            add_holdout_routes(self.router, self.operator, self.fresh, workflow, holdout, access)
         if compute is not None and tasks is not None:
-            add_compute_routes(self.router, self.operator, self.fresh, compute, tasks)
+            add_compute_routes(self.router, self.operator, self.fresh, compute, tasks, access)
 
     # --- who is calling ------------------------------------------------------------------------
 
@@ -401,6 +416,9 @@ class Workbench:
 
         @router.post("/drafts/run-sheet")
         async def draft(body: Draft, actor: Annotated[Actor, Depends(self.anyone)]):
+            if self.access is not None and actor.kind == "model":
+                # a role token is bound to no task: models draft only through their tools
+                raise Denied("model_role", "model roles file run sheets through their tools")
             findings = workflow.submit_run_sheet(body.round_id, body.run_sheet, actor)
             return {
                 "stage_id": body.run_sheet.stage_id,
@@ -409,7 +427,8 @@ class Workbench:
 
     # --- device writes by the operator ---------------------------------------------------------
 
-    def manual_stage(self, stage_id: str) -> StageRuntime:
+    def manual_stage(self, stage_id: str, actor: Actor) -> StageRuntime:
+        stage_write(self.access, actor, stage_id)
         stage = self.workflow.stage(stage_id)
         if stage.state is not StageState.MANUAL or stage.manual_right is None:
             raise Denied("state", "the stage is not under manual control")
@@ -443,13 +462,13 @@ class Workbench:
                 raise rejected(str(error)) from error
             if channel is Channel.PUMP and body.level != 0:
                 raise Denied("pump_on_forbidden", "the pump is only started by an irrigation run")
-            stage = self.manual_stage(body.stage_id)
+            stage = self.manual_stage(body.stage_id, actor)
             request = self.action_request(body, stage, actor, channel, body.level)
             return (await self.control.submit(request)).model_dump(mode="json")
 
         @router.post("/irrigation")
         async def irrigation(body: Irrigation, actor: OnSite):
-            stage = self.manual_stage(body.stage_id)
+            stage = self.manual_stage(body.stage_id, actor)
             request = self.action_request(body, stage, actor, Channel.PUMP, 1)
             record = await self.control.irrigate(request, body.seconds)
             return record.model_dump(mode="json")
@@ -463,10 +482,12 @@ class Workbench:
 
         @router.post("/measurements")
         async def measurement(body: MeasurementIn, actor: Operator):
-            if not self.workflow.store.projects_of_experiment(body.experiment_id):
-                raise Denied(  # every measurement must be traceable to a project
-                    "scope", "a measurement belongs to an experiment of an existing stage"
-                )
+            projects = self.workflow.store.projects_of_experiment(body.experiment_id)
+            unknown = Denied("scope", "a measurement belongs to an experiment of an existing stage")
+            if not projects:
+                raise unknown  # every measurement must be traceable to a project
+            for project_id in projects:
+                project_write(self.access, actor, project_id, lambda: unknown)
             fields = body.model_dump(exclude={"id"})
             try:
                 record = ManualMeasurement(
@@ -479,9 +500,18 @@ class Workbench:
 
         @router.post("/safety/approve")
         async def approve_safety(body: SafetyApproval, actor: Fresh):
+            self.require_local_lock(actor)
             stamp = {"approved_by": actor.id, "approved_at": self.clock.now()}
             number = self.control.approve_safety(body.config.model_copy(update=stamp), actor.id)
             return {"protection_right": number}
+
+    def require_local_lock(self, actor: Actor) -> None:
+        """The safety limits are the local device's: its lock holder or an administrator."""
+        access = self.access
+        if access is None or access.is_admin(actor):
+            return
+        if access.locks.holder_of_device(self.settings.device) != actor.id:
+            raise Denied("not_lock_holder", "lock this greenhouse first")
 
     # --- reads ---------------------------------------------------------------------------------
 
@@ -527,6 +557,8 @@ class Workbench:
 
         @router.post("/alerts/{event_id}/read")
         async def mark_read(event_id: str, actor: Annotated[Actor, Depends(self.operator)]):
+            if self.access is not None and not self.access.sees_alert(actor, book.get(event_id)):
+                raise Denied("state", f"unknown alert {event_id}")
             book.mark_read(event_id, actor)
             return {"event_id": event_id}
 
