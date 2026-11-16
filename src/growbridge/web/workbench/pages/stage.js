@@ -136,7 +136,7 @@ export function statusView(ctx, stage) {
     stage.paused_at ? [ctx.t("stage.pausedAt"), timeText(ctx, stage.paused_at)] : null,
   ];
   const banner = stage.end_pending ? h("p", { class: "block-note", text: ctx.t("stage.endPending") }) : null;
-  const details = techDetails(ctx.t, [...nameDetails(stage, ctx.t), ...rightsEntries(ctx.t, stage)]);
+  const details = techDetails(ctx.t, rightsEntries(ctx.t, stage));
   return h("div", { class: "status-view" }, keyValues(rows.filter(Boolean)), banner, details);
 }
 

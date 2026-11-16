@@ -51,8 +51,5 @@ export function clearOnHandOver(previousOperator, operator) {
   return changed;
 }
 
-// A resent request is said so in the action log, so a stored receipt is not taken for a new write.
-export const resentHeading = (heading, resentText, reused) => (reused ? `${heading} (${resentText})` : heading);
-
 export const unsettledCount = () => unsettled.size;
 export const clearIntents = () => unsettled.clear();

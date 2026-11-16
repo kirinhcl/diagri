@@ -10,7 +10,6 @@ import {
   settleIntent,
   claimIntent,
   INTENT_TTL_MS,
-  resentHeading,
   unsettledCount,
 } from "../../src/growbridge/web/workbench/intents.js";
 
@@ -93,11 +92,6 @@ test("clearing all intents (session lost, operator changed) forgets every id", (
   clearIntents();
   assert.equal(unsettledCount(), 0);
   assert.notEqual(idForIntent(key, body, makeId), first);
-});
-
-test("the log heading says when an earlier request is resent", () => {
-  assert.equal(resentHeading("Light 40", "Resent earlier request wb-1", false), "Light 40");
-  assert.equal(resentHeading("Light 40", "Resent earlier request wb-1", true), "Light 40 (Resent earlier request wb-1)");
 });
 
 test("only a final outcome releases the intent; timeout, stopped and rejection keep it", async () => {

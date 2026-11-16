@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { differenceLines, logItem, manualGroup, manualHeading } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
+import { actionsView, differenceLines, logItem, manualGroup, manualHeading, outcomeLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
 import { statusView } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { installFakeDom, FIXTURES, testCtx } from "./support/render-page.mjs";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
@@ -20,7 +20,7 @@ test("status hides empty rows and keeps write rights in the details", () => {
   assert.doesNotMatch(text, new RegExp(stage.experiment_id));
   assertNoLeaks(view);
   const all = visibleTextIncludingDetails(view);
-  assert.ok(all.includes(stage.experiment_id));
+  assert.ok(!all.includes(stage.experiment_id), "ids stay in the page header fold");
   assert.ok(all.includes("阶段写入权"));
 });
 
@@ -31,12 +31,76 @@ test("a pending end shows a banner and a pause time shows its row", () => {
   assert.match(text, /暂停时间/);
 });
 
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+function elements(node, name) {
+  const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
+  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+}
+
 test("a level is written against its full scale", () => {
   const ctx = testCtx({ lang: "zh" });
   assert.equal(manualHeading(ctx, "fan", 3), "风扇调到 3 / 10");
   assert.equal(manualHeading(ctx, "light", 50), "灯光调到 50 %");
-  const group = manualGroup({ ctx, stage, log: {}, onChanged() {} });
-  assert.ok(group);
+});
+
+test("the manual form sends the level and the log heading carries the scale", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  const sent = [];
+  ctx.api = { post: async (path, body) => (sent.push([path, body]), { request_id: "wb-1", created_at: 1000, state: "pending" }) };
+  const tracked = [];
+  const env = { ctx, stage, log: { track: (heading, record) => tracked.push([heading, record]) }, onChanged: async () => {} };
+  const form = manualGroup(env).children.find((child) => child.tagName && child.tagName.toLowerCase() === "form");
+  elements(form, "select")[0].value = "fan";
+  const level = elements(form, "input").find((input) => input.getAttribute("name") === "level");
+  level.value = "3";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.equal(sent[0][0], "/manual/fan");
+  assert.equal(tracked[0][0], "风扇调到 3 / 10");
+});
+
+test("receipt outcomes write levels, durations and no request id", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const applied = (level) => ({ outcome: "applied", record: { confirmed_level: level } });
+  assert.match(outcomeLines(ctx, applied(3), "fan").join(" "), /3 \/ 10/);
+  assert.match(outcomeLines(ctx, applied(1), "pump").join(" "), /开/);
+  const unsettled = outcomeLines(ctx, { outcome: "timeout", record: { request_id: "wb-9" } }, "fan").join(" ");
+  assert.match(unsettled, /\d+ 秒|\d+ 分钟/);
+  assert.doesNotMatch(unsettled, /wb-|请求编号/);
+});
+
+test("the irrigation heading shows a formatted duration", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  ctx.me = { ...ctx.me, entry: "lan" };
+  ctx.api = { post: async () => ({ request_id: "wb-2", created_at: 1000, state: "pending" }) };
+  const tracked = [];
+  const env = { ctx, stage, log: { track: (heading) => tracked.push(heading) }, onChanged: async () => {} };
+  const view = actionsView({ ...env, stage: { ...stage, state: "manual" } });
+  const form = elements(view, "form").find((f) => elements(f, "input").some((i) => i.getAttribute("name") === "seconds"));
+  elements(form, "input").find((i) => i.getAttribute("name") === "seconds").value = "90";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.match(tracked[0], /浇水 1 分钟 30 秒|浇水 2 分钟|浇水 90 秒/);
+});
+
+test("a resent write is said so in a line under the heading, not in it", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  let n = 0;
+  ctx.api = { post: async () => { if (++n === 1) throw Object.assign(new Error("network"), { status: 0 }); return { request_id: "wb-3", created_at: 1000, state: "pending" }; } };
+  const calls = [];
+  const env = { ctx, stage, log: { track: (heading, record, opts) => calls.push([heading, opts]) }, onChanged: async () => {} };
+  const form = manualGroup(env).children.find((child) => child.tagName && child.tagName.toLowerCase() === "form");
+  elements(form, "select")[0].value = "light";
+  elements(form, "input").find((i) => i.getAttribute("name") === "level").value = "50";
+  for (let i = 0; i < 2; i += 1) {
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+  }
+  assert.equal(calls[0][0], "灯光调到 50 %");
+  assert.equal(calls.at(-1)[0], "灯光调到 50 %");
+  assert.equal(calls[0][1].lost, true);
+  assert.equal(calls.at(-1)[1].resent, true);
 });
 
 test("a log item says when it was sent and keeps the request id in the details", () => {
