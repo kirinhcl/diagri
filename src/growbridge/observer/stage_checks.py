@@ -54,7 +54,7 @@ class StageChecks:
         """Resolve the stage alerts of every stage but the active one: nothing re-evaluates them
         once their stage is no longer active, so they would stay open for ever."""
         for alert in self.book.open():
-            if alert.kind in STAGE_KINDS and alert.key.split(":", 1)[0] != active_id:
+            if alert.kind in STAGE_KINDS and not _of_stage(alert.key, active_id):
                 self.book.resolve(alert.kind, alert.key)
 
     def _check_tasks(self, stage: StageRuntime, start: float, end: float) -> None:
@@ -135,3 +135,9 @@ class StageChecks:
             f"task's window (from {first} to {last}). Enter the measurement with the time it "
             "was taken."
         )
+
+
+def _of_stage(key: str, stage_id: str | None) -> bool:
+    """Whether a stage alert's key names this stage. Matches the whole id, not the part before
+    the first colon: a stage id may itself contain one."""
+    return stage_id is not None and (key == stage_id or key.startswith(f"{stage_id}:"))
