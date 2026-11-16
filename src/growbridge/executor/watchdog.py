@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from growbridge.archive.clock import Clock
-from growbridge.observer.alerts import Severity
+from growbridge.observer.alerts import AlertHook, Severity
 from growbridge.ports import ControlPort, Denied, PumpReading, StagePort, StageRuntime
 
 UNREADABLE = "pump_unreadable"
@@ -49,7 +49,7 @@ class PumpWatchdog:
         self.stages = stages
         self.clock = clock
         # hooks report whether the alert was stored; a latch is set only after a stored write
-        self.alert: Callable[[str, str, str, Severity], bool] | None = None
+        self.alert: AlertHook | None = None
         self.resolve: Callable[[str, str], bool] | None = None
         self._acted: float | None = None  # monotonic time of its own last switch-off
         # latched alerts: (message, monotonic time raised) while active, False once resolved;

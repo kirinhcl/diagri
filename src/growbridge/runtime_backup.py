@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 RETRY_SECONDS = 300.0  # real seconds to wait after a failed attempt
 LIMIT_FACTOR = 2.0  # the probe fails when the last backup is older than this many intervals
 
-Notify = Callable[[str, str, str], None]
+Notify = Callable[..., None]  # (kind, key, message, severity=..., *, code=None, params=None)
 
 
 class Backups:

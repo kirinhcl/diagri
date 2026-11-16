@@ -8,7 +8,6 @@ and the later steps still run. ``tick`` never calls a model.
 """
 
 import asyncio
-import hashlib
 import inspect
 import json
 import logging
@@ -64,6 +63,7 @@ from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltS
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_backup import Backups
 from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
+from growbridge.runtime_mirror import InterventionMirror
 from growbridge.service import Bridge
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
@@ -184,47 +184,6 @@ def waiting_message(item: Mapping[str, Any]) -> str:
     return f"{text}: {json.dumps(detail, sort_keys=True)}" if detail else text
 
 
-MIRROR_NAMESPACE = "runtime_mirror"
-MIRROR_STEPS = ("CREATE TABLE intervention_mirror(key TEXT PRIMARY KEY, record_id TEXT NOT NULL)",)
-
-
-class InterventionMirror:
-    """Copies each workflow intervention into the archive exactly once.
-
-    The key is a digest of the intervention's content, kept in a table of the archive database
-    so the copy and its key are saved together; a repeat (restart, replay) finds the key.
-    """
-
-    def __init__(self, db: Database, archive: Archive):
-        self.db = db
-        self.archive = archive
-        self.alert: Callable[[str, str, str], None] | None = None
-        db.migrate(MIRROR_NAMESPACE, MIRROR_STEPS)
-
-    def __call__(self, item: dict) -> None:
-        try:
-            self._mirror(item)
-        except Exception as error:
-            log.exception("intervention could not be copied to the archive")
-            if self.alert is not None:
-                message = f"{item.get('kind')} not copied to the archive: {error}"
-                self.alert("intervention_mirror", "archive", message)
-
-    def _mirror(self, item: dict) -> None:
-        key = hashlib.sha256(json.dumps(item, sort_keys=True).encode()).hexdigest()
-        with self.db.transaction():
-            if self.db.one("SELECT 1 FROM intervention_mirror WHERE key = ?", (key,)):
-                return
-            record_id = self.archive.record_intervention(
-                item["experiment_id"],
-                item["stage_id"],
-                item["kind"],
-                item["detail"],
-                item["operator"],
-            )
-            self.db.execute("INSERT INTO intervention_mirror VALUES (?, ?)", (key, record_id))
-
-
 class _GuardedBridge(Bridge):
     """The BLE connection opens only on the registered write host, whoever asks to start it."""
 
@@ -330,9 +289,18 @@ class Runtime:
 
     # --- model roles (never called from tick) --------------------------------------------------
 
-    def alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> None:
+    def alert(
+        self,
+        kind: str,
+        key: str,
+        message: str,
+        severity: Any = "critical",
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> None:
         """Raise an alert, critical by default (and queue its notification); never raises."""
-        self._alert(kind, key, message, severity)
+        self._alert(kind, key, message, severity, code=code, params=params)
 
     def role_tools(self) -> dict[str, list[Tool]]:
         return role_tools(self, private_dir(self.settings.data_dir / "agent_work"))
@@ -402,10 +370,19 @@ class Runtime:
             return False
         return True
 
-    def _alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> bool:
+    def _alert(
+        self,
+        kind: str,
+        key: str,
+        message: str,
+        severity: Any = "critical",
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> bool:
         """Raise an alert and queue its notification; never raises. True when it was stored."""
         try:
-            alert = self.book.raise_alert(kind, key, severity, message)
+            alert = self.book.raise_alert(kind, key, severity, message, code=code, params=params)
         except Exception:
             log.exception("could not record a runtime alert")
             return False

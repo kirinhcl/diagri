@@ -4,6 +4,7 @@ window. Closes those alerts, the auditor's findings and the warning of its faile
 their stage is no longer the active one. Reads stored records only; never reports a stage event
 or pauses anything."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -120,9 +121,18 @@ class StageChecks:
                 if alert.key[len(prefix) :] not in outside:
                     self.book.resolve(OUTSIDE_WINDOW, alert.key)
 
-    def _set(self, active: bool, kind: str, key: str, message: str) -> None:
+    def _set(
+        self,
+        active: bool,
+        kind: str,
+        key: str,
+        message: str,
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> None:
         if active:
-            self.book.raise_alert(kind, key, SEVERITY, message)
+            self.book.raise_alert(kind, key, SEVERITY, message, code=code, params=params)
         else:
             self.book.resolve(kind, key)
 

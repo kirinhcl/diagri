@@ -254,3 +254,14 @@ def test_existing_keys_are_unchanged(bench, operator):
         "awaiting_choice": None,
         "created_at": now,
     }
+
+
+def test_the_inbox_alert_item_carries_code_and_params(bench, operator):
+    alert = bench.alerts.raise_alert(
+        "threshold", "too_hot", "critical", "31 C", code="threshold", params={"value": 31}
+    )
+
+    items = {item["id"]: item for item in operator.get("/wb/inbox").json()["items"]}
+
+    detail = items[alert.event_id]["detail"]
+    assert (detail["code"], detail["params"]) == ("threshold", {"value": 31})

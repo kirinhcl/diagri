@@ -143,6 +143,8 @@ def _alert_items(alerts: AlertBook | None, now: float, trusted: bool) -> list[di
                 "alert_kind": alert.kind,
                 "severity": alert.severity,
                 "message": alert.message,
+                "code": alert.code,
+                "params": alert.params,
                 "count": alert.count,
                 "last_at": alert.last_at,
                 "never_read": alert.read_at is None or alert.read_severity is None,

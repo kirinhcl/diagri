@@ -101,3 +101,14 @@ async def test_stage_paused_after_the_recovery_check_keeps_an_alert_until_it_is_
     await second.workflow.resume_stage(STAGE, world.operator)
     await world.beat(second, 1)
     assert stage_alerts(second) == []
+
+
+async def test_runtime_alert_passes_code_and_params_through(world):
+    runtime = await world.boot(channels={})
+
+    runtime.alert("probe", "k", "m", code="probe_code", params={"n": 1})
+    assert runtime._alert("probe2", "k", "m", code="c2", params={"n": 2}) is True
+
+    found = {a.kind: (a.code, a.params) for a in runtime.book.open()}
+    assert found["probe"] == ("probe_code", {"n": 1})
+    assert found["probe2"] == ("c2", {"n": 2})
