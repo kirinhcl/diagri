@@ -1,6 +1,7 @@
 // Finds internal text in what a page shows: snake_case codes, hex ids, uuids, epoch seconds, raw JSON
 // and catalog keys. Technical details (<details class="tech-details">) are where such text belongs,
-// so they are not scanned.
+// so they are not scanned. What a <textarea> holds is an input value, like an <input>'s value
+// attribute, so it is not scanned either.
 import assert from "node:assert/strict";
 
 import en from "../../../src/growbridge/web/workbench/i18n/en.js";
@@ -39,7 +40,8 @@ function collect(node, parts, withDetails) {
   const isElement = node.nodeType === ELEMENT_NODE;
   if (isElement && !withDetails && isTechDetails(node)) return;
   parts.push(" ", (isElement && node.getAttribute("aria-label")) || "");
-  for (const child of node.childNodes) collect(child, parts, withDetails);
+  const holdsValue = isElement && node.localName === "textarea";
+  if (!holdsValue) for (const child of node.childNodes) collect(child, parts, withDetails);
   parts.push(" ");
 }
 
@@ -49,7 +51,8 @@ function textOf(node, withDetails) {
   return parts.join("").replace(/\s+/g, " ").trim();
 }
 
-// Text nodes and aria-labels, a space between elements; never title attributes or technical details.
+// Text nodes and aria-labels, a space between elements; never title attributes, technical details
+// or what a textarea holds.
 export function visibleText(node) {
   return textOf(node, false);
 }

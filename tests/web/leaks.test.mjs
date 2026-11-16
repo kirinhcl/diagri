@@ -8,8 +8,16 @@ import { h } from "../../src/growbridge/web/workbench/ui/dom.js";
 import { assertNoLeaks, exemptStrings, findLeaks, visibleText } from "./support/leaks.mjs";
 import { FIXTURES, installFakeDom, renderPage, testCtx } from "./support/render-page.mjs";
 
+// A stage read from before the server named stages: no number, phase, round number or project name.
+const NAMES = new Set(["stage_index", "round_number", "project_name", "phase"]);
+const OLD_STAGE = Object.fromEntries(Object.entries(FIXTURES["stage.json"]).filter(([key]) => !NAMES.has(key)));
+
 // Each page task adds its pages here: { page, params, fixtures? }; `fixtures` overrides files by name.
-const PAGES_CHECKED = [];
+const PAGES_CHECKED = [
+  { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id } },
+  { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id } },
+  { page: "stage", params: { stageId: FIXTURES["stage.json"].stage_id }, fixtures: { "stage.json": OLD_STAGE } },
+];
 
 const BATCH_1_PAGES = ["inbox", "projects", "project", "round", "stage", "environment", "safety", "alerts", "evidence", "compute"];
 const PARAMS = {
@@ -49,6 +57,16 @@ test("visibleText skips technical details but keeps aria-label", () => {
     );
     assert.equal(visibleText(node), "x a");
     assert.equal(visibleText(h("div", {}, h("p", { text: "a" }), h("details", {}, h("summary", { text: "更多" })))), "a 更多");
+  } finally {
+    dom.restore();
+  }
+});
+
+test("visibleText skips what a textarea holds, like any other input value", () => {
+  const dom = installFakeDom();
+  try {
+    const node = h("div", {}, h("label", { text: "草稿" }), h("textarea", { text: '{ "round_id": "round_1" }' }), h("p", { text: "b" }));
+    assert.equal(visibleText(node), "草稿 b");
   } finally {
     dom.restore();
   }
@@ -121,4 +139,11 @@ test("no Batch 1 page leaks internal text", async (t) => {
       });
     }
   }
+});
+
+test("a stage read from before stages had names is called an unnamed stage", async () => {
+  const { element, ctx } = await renderPage("stage", PARAMS.stage, { fixtures: { "stage.json": OLD_STAGE } });
+  const headings = (node) => [...(node.localName === "h1" ? [node] : []), ...node.children.flatMap(headings)];
+  assert.deepEqual(headings(element).map((h1) => h1.textContent), ["未命名阶段"]);
+  assert.deepEqual(ctx.crumbs.map((crumb) => crumb.label), ["项目", "未命名项目", "未命名轮次", "未命名阶段"]);
 });

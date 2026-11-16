@@ -1,10 +1,12 @@
 // The stage's manual tasks: every daily occurrence the run sheet plans, its state, and the buttons
 // that record it. A planned irrigation (an irrigation task with seconds) is started here by a
 // person on the on-site entry; the stage keeps running. Records are appended, the latest counts.
+import { formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
-import { errorBox, note, showErrors, timeText } from "../ui/section.js";
+import { displayName } from "../ui/names.js";
+import { errorBox, note, showErrors, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 
 export const AHEAD_SECONDS = 86400; // upcoming occurrences are listed one day ahead
@@ -31,13 +33,12 @@ export function rowActions(row, body) {
 }
 
 // After a planned run: done, partial (cut short or not confirmed), or nothing recorded (it never
-// reached the device). The server derives the request id from the occurrence.
+// reached the device). The notice names the task; a recorded run's request id is in its row's details.
 export function irrigationNotice(answer) {
-  const id = (answer && answer.action && answer.action.request_id) || "";
   const task = answer && answer.task;
-  if (!task) return { key: "tasks.irrigateUnconfirmed", tone: "error", id };
-  if (task.status === "partial") return { key: "tasks.irrigatePartial", tone: "error", id };
-  return { key: "tasks.irrigated", tone: "ok", id };
+  if (!task) return { key: "tasks.irrigateUnconfirmed", tone: "error" };
+  if (task.status === "partial") return { key: "tasks.irrigatePartial", tone: "error" };
+  return { key: "tasks.irrigated", tone: "ok" };
 }
 
 function partialText(ctx, record) {
@@ -46,19 +47,32 @@ function partialText(ctx, record) {
   return ctx.t("tasks.partialRan", { seconds: Math.round(record.ran_seconds * 10) / 10, why });
 }
 
-function statusCell(ctx, row) {
-  const pill = h("span", { class: ["pill", PILL[row.status]], text: labelOr(ctx.t, "tasks.status", row.status) });
-  const record = row.record;
-  if (!record) return pill;
+// The planned task's id, and the record's id and pump request once there is a record.
+function taskDetails(ctx, row) {
+  const record = row.record || {};
+  return techDetails(ctx.t, [
+    [ctx.t("tech.id.task_id"), row.task_id],
+    [ctx.t("tech.recordId"), record.id],
+    [ctx.t("receipt.requestId"), record.irrigation_request_id],
+  ]);
+}
+
+function recordMeta(ctx, record) {
+  if (!record) return [];
   const when = record.done_at ? ctx.t("tasks.doneAt", { time: timeText(ctx, record.done_at), who: record.operator }) : ctx.t("tasks.by", { who: record.operator });
   const meta = [h("span", { class: "task-meta", text: when })];
   if (record.outcome === "partial") meta.push(h("span", { class: "task-meta", text: partialText(ctx, record) }));
-  return h("span", { class: "cell-stack" }, pill, ...meta);
+  return meta;
+}
+
+function statusCell(ctx, row) {
+  const pill = h("span", { class: ["pill", PILL[row.status]], text: labelOr(ctx.t, "tasks.status", row.status) });
+  return h("div", { class: "cell-stack" }, pill, ...recordMeta(ctx, row.record), taskDetails(ctx, row));
 }
 
 function kindCell(ctx, row) {
   const kind = labelOr(ctx.t, "tasks.kind", row.kind);
-  return row.seconds ? ctx.t("tasks.pumpRun", { kind, seconds: row.seconds }) : kind;
+  return row.seconds ? ctx.t("tasks.pumpRun", { kind, duration: formatDuration(ctx.t, row.seconds) }) : kind;
 }
 
 function button(label, tone, run, box) {
@@ -84,9 +98,10 @@ function actionsCell(env, body, row) {
   const box = errorBox();
   const base = `/stages/${encodeURIComponent(stage.stage_id)}/manual-tasks`;
   const occurrence = { task_id: row.task_id, due_at: row.due_at };
+  const name = displayName(ctx, "manualTask", row);
   const record = (outcome, label) => async () => {
     await ctx.api.post(base, { ...occurrence, outcome }, { action: label });
-    ctx.notify(ctx.t("tasks.recorded", { task: row.task_id }), "ok");
+    ctx.notify(ctx.t("tasks.recorded", { name }), "ok");
     await onChanged();
   };
   const irrigate = async () => {
@@ -95,7 +110,7 @@ function actionsCell(env, body, row) {
     if (!(await confirmAction(ctx.t, { title: label, lines, confirmLabel: label }))) return;
     const answer = await ctx.api.post(`${base}/irrigate`, occurrence, { action: label });
     const notice = irrigationNotice(answer);
-    ctx.notify(ctx.t(notice.key, { id: notice.id }), notice.tone);
+    ctx.notify(ctx.t(notice.key, { name }), notice.tone);
     await onChanged();
   };
   const wrap = (run) => async () => {
@@ -119,7 +134,6 @@ export function tasksView(env, body) {
   if (!rows.length) return note(ctx.t(body.occurrences && body.occurrences.length ? "tasks.noneYet" : "tasks.empty"));
   const columns = [
     { label: ctx.t("tasks.due"), cell: (row) => timeText(ctx, row.due_at) },
-    { label: ctx.t("tasks.task"), cell: (row) => h("code", { text: row.task_id }) },
     { label: ctx.t("tasks.kindTitle"), cell: (row) => kindCell(ctx, row) },
     { label: ctx.t("col.state"), cell: (row) => statusCell(ctx, row) },
     { label: ctx.t("tasks.actions"), cell: (row) => actionsCell(env, body, row) },
@@ -129,5 +143,6 @@ export function tasksView(env, body) {
   const more = older.length
     ? h("details", { class: "tasks-older" }, h("summary", { text: ctx.t("tasks.older", { count: older.length }) }), table(columns, older, { label: ctx.t("tasks.list") }))
     : null;
-  return h("div", { class: "tasks" }, note(ctx.t("tasks.lead")), table(columns, recent, { label: ctx.t("tasks.list") }), more);
+  const rules = h("details", { class: "tasks-rules" }, h("summary", { text: ctx.t("tasks.rules") }), h("p", { text: ctx.t("tasks.rulesText") }));
+  return h("div", { class: "tasks" }, note(ctx.t("tasks.lead")), rules, table(columns, recent, { label: ctx.t("tasks.list") }), more);
 }

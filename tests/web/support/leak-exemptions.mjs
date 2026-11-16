@@ -4,4 +4,5 @@
 export const EXEMPTIONS = [
   { page: "stage", fixture: "run-sheet.json", path: "findings[*].message", batch: 2, why: "服务器整句（C4，STG-01）" },
   { page: "stage", fixture: "run-sheet-pending.json", path: "findings[*].message", batch: 2, why: "服务器整句（C4，STG-01）" },
+  { page: "stage", fixture: "measurements.json", path: "measurements[*].metric", batch: "keep", why: "测量指标名由录入人自己填写（TSK-06），照原样显示，也照原样出现在表单的候选和“正在更正”提示里" },
 ];

@@ -13,7 +13,7 @@ import { errorParts, keyValues, replaceParts, section, techDetails, timeText } f
 import { statePill } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
-import { measurementForm, measurementTable } from "./stage-measurements.js";
+import { measurementForm, measurementsView } from "./stage-measurements.js";
 import { tasksView } from "./stage-tasks.js";
 
 const POLL_SECONDS = 15;
@@ -194,7 +194,7 @@ function draw(page, data) {
   const tasksKey = (r) => JSON.stringify([r.stage_state, r.occurrences, Math.floor((r.now || 0) / 60)]);
   const tasksEnv = { ctx, stage, onChanged: page.env.onChanged };
   showResult(parts.tasks, ctx, data.tasks, tasksKey, (r) => tasksView(tasksEnv, r));
-  showResult(parts.measurements, ctx, data.measurements, (r) => JSON.stringify(r.measurements), (r) => measurementTable(ctx, r.measurements));
+  showResult(parts.measurements, ctx, data.measurements, (r) => JSON.stringify(r.measurements), (r) => measurementsView(ctx, r.measurements, page.measure));
   showResult(parts.history, ctx, data.history, (r) => JSON.stringify(r), (r) => historyView(ctx, r));
 }
 
@@ -254,13 +254,14 @@ export function sectionOrder(state) {
 function sections(ctx, page, stage, onRecorded) {
   const { parts } = page;
   const newMeasurement = h("h3", { class: "action-title", text: ctx.t("measure.new") });
+  page.measure = measurementForm(ctx, stage, onRecorded);
   const regions = {
     status: section(ctx.t("stage.status"), parts.status.element),
     controls: section(ctx.t("stage.controls"), parts.actions.element, page.log.element),
     readings: section(ctx.t("stage.readings"), parts.readings.element),
     runSheet: section(ctx.t("stage.runSheet"), parts.review.element),
     tasks: section(ctx.t("stage.tasks"), parts.tasks.element),
-    measurements: section(ctx.t("stage.measurements"), parts.measurements.element, newMeasurement, measurementForm(ctx, stage, onRecorded)),
+    measurements: section(ctx.t("stage.measurements"), parts.measurements.element, newMeasurement, page.measure.element),
     history: section(ctx.t("stage.history"), parts.history.element),
   };
   page.regions = regions;

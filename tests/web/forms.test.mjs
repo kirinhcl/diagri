@@ -7,10 +7,14 @@ import {
   dropDetachedDraftSavers,
   errorDetail,
   errorLines,
+  formControls,
   registerDraftSaver,
   saveAllDrafts,
+  simpleForm,
   worthKeeping,
 } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { visibleText } from "./support/leaks.mjs";
+import { installFakeDom, testCtx } from "./support/render-page.mjs";
 
 const t = (key) => `t:${key}`;
 
@@ -93,4 +97,57 @@ test("a form started from a restored draft keeps its values on a lost session", 
 test("a form started fresh keeps its values only when they changed", () => {
   assert.equal(worthKeeping({ a: "x" }, { a: "x" }), false);
   assert.equal(worthKeeping({ a: "x" }, { a: "y" }), true);
+});
+
+// --- hidden fields, suggestions and filling a form in ---------------------------------------------
+function elements(node, name) {
+  const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
+  return [...own, ...(node.children || []).flatMap((child) => elements(child, name))];
+}
+
+function sampleForm(sent) {
+  const fields = [
+    { name: "when", label: "When", type: "datetime", required: true },
+    { name: "metric", label: "Metric", required: true, suggestions: ["height"] },
+    { name: "link", type: "hidden" },
+  ];
+  return simpleForm({ fields, submitLabel: "Save", onSubmit: async (values) => sent.push(values), timeZone: "UTC", ctx: testCtx({ lang: "en", timezone: "UTC" }) });
+}
+
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+test("a hidden field has no label, is sent when set and left out when empty", async () => {
+  installFakeDom();
+  const sent = [];
+  const form = sampleForm(sent);
+  const hidden = elements(form, "input").find((input) => input.getAttribute("name") === "link");
+  assert.equal(hidden.getAttribute("type"), "hidden");
+  assert.deepEqual(elements(form, "label").map((label) => label.textContent), ["When", "Metric"]);
+  const controls = formControls(form);
+  controls.set({ when: 1796594755, metric: "height", link: "m-1" });
+  assert.equal(controls.get("when"), "2026-12-06T22:05");
+  form.dispatchEvent(new Event("submit"));
+  await settle();
+  controls.set({ link: null });
+  form.dispatchEvent(new Event("submit"));
+  await settle();
+  assert.deepEqual(sent, [
+    { when: 1796594700, metric: "height", link: "m-1" },
+    { when: 1796594700, metric: "height" },
+  ]);
+});
+
+test("suggestions make a datalist the page can refill", () => {
+  installFakeDom();
+  const form = sampleForm([]);
+  const input = elements(form, "input").find((element) => element.getAttribute("name") === "metric");
+  const list = elements(form, "datalist")[0];
+  assert.equal(input.getAttribute("list"), list.getAttribute("id"));
+  const values = () => elements(list, "option").map((option) => option.getAttribute("value"));
+  assert.deepEqual(values(), ["height"]);
+  formControls(form).suggest("metric", ["area", "height"]);
+  assert.deepEqual(values(), ["area", "height"]);
+  assert.ok(!visibleText(form).includes("area"), "suggestions are not page text");
+  assert.throws(() => formControls(form).suggest("when", ["x"]), /no suggestions/);
+  assert.throws(() => formControls(form).get("nope"), /no field/);
 });

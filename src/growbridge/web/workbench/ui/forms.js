@@ -158,12 +158,17 @@ function optionList(field, value) {
 function control(field, attrs, value) {
   if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs, text: value });
   if (field.type === "select") return h("select", { class: "input", attrs }, optionList(field, value));
-  const types = { number: "number", datetime: "datetime-local", password: "password" };
+  const types = { number: "number", datetime: "datetime-local", password: "password", hidden: "hidden" };
   const type = types[field.type] || "text";
   const extra = { type, value: type === "password" ? null : value };
   if (type === "number") extra.step = field.step ?? "any";
   if (type === "password") extra.autocomplete = "current-password";
   return h("input", { class: "input", attrs: { ...attrs, ...extra } });
+}
+
+// The options a text field suggests; the values are attributes only, never page text.
+function suggestionOptions(values) {
+  return (values || []).map((value) => h("option", { attrs: { value: String(value) } }));
 }
 
 function fieldRow(field, value, timeZone) {
@@ -172,18 +177,20 @@ function fieldRow(field, value, timeZone) {
   const zoneId = `${id}-zone`;
   const isTime = field.type === "datetime";
   const describedBy = isTime ? `${zoneId} ${errorId}` : errorId;
-  const attrs = { id, name: field.name, required: Boolean(field.required), "aria-describedby": describedBy };
+  const list = Array.isArray(field.suggestions) ? h("datalist", { attrs: { id: `${id}-list` } }, suggestionOptions(field.suggestions)) : null;
+  const attrs = { id, name: field.name, required: Boolean(field.required), "aria-describedby": describedBy, list: list && `${id}-list` };
   const input = control(field, attrs, value);
   const error = h("p", { class: "field-error", attrs: { id: errorId, hidden: true } });
+  if (field.type === "hidden") return { field, input, row: h("div", { attrs: { hidden: true } }, input, error), error, list };
   const zone = isTime ? h("span", { class: "field-zone", attrs: { id: zoneId }, text: timeZone }) : null;
   const row = h(
     "div",
     { class: "field" },
     h("label", { class: "field-label", attrs: { for: id }, text: field.label }),
-    h("div", { class: "field-control" }, input, zone),
+    h("div", { class: "field-control" }, input, zone, list),
     error,
   );
-  return { field, input, row, error };
+  return { field, input, row, error, list };
 }
 
 function setFieldError(entry, message) {
@@ -227,9 +234,10 @@ function convert(entries, timeZone, t) {
   return valid ? values : null;
 }
 
-// Puts each 422 error beside its field; returns the lines for errors that match no field.
+// Puts each 422 error beside its field; returns the lines for errors that match no field. A hidden
+// field's error could not be seen beside it, so it is one of those lines.
 function placeFieldErrors(entries, fieldErrors) {
-  const byName = new Map(entries.map((entry) => [entry.field.name, entry]));
+  const byName = new Map(entries.filter((entry) => entry.field.type !== "hidden").map((entry) => [entry.field.name, entry]));
   const rest = [];
   for (const { loc, msg } of fieldErrors) {
     const name = loc.find((part) => byName.has(part));
@@ -263,6 +271,37 @@ function keepOnSessionLoss(form, draftKey, entries, restored) {
     const now = stripSecrets(rawValues(entries), secretNames);
     if (worthKeeping(start, now)) saveDraft(draftKey, now);
   });
+}
+
+// What the page that made a form may still do with it: read and fill fields in, change suggestions.
+const formParts = new WeakMap();
+
+function partOf(form, name) {
+  const own = formParts.get(form);
+  if (!own) throw new TypeError("not a form made by simpleForm");
+  const entry = own.entries.find((item) => item.field.name === name);
+  if (!entry) throw new RangeError(`no field ${name}`);
+  return { entry, own };
+}
+
+// set({name: value}) writes values as the form would start with them (a datetime from epoch
+// seconds; null empties the field); suggest(name, values) replaces a field's suggestions.
+export function formControls(form) {
+  const get = (name) => partOf(form, name).entry.input.value;
+  const set = (values) => {
+    for (const [name, value] of Object.entries(values)) {
+      const { entry, own } = partOf(form, name);
+      entry.input.value = initialText({ ...entry.field, value }, own.zone, own.lang);
+      setFieldError(entry, "");
+    }
+  };
+  const suggest = (name, values) => {
+    const { entry } = partOf(form, name);
+    if (!entry.list) throw new RangeError(`field ${name} has no suggestions`);
+    entry.list.replaceChildren(...suggestionOptions(values));
+  };
+  const focus = (name) => partOf(form, name).entry.input.focus();
+  return { get, set, suggest, focus };
 }
 
 export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own }) {
@@ -300,6 +339,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     }
   };
   const { form, status } = formFrame(submitLabel, entries.map((entry) => entry.row), run, getCtx);
+  formParts.set(form, { entries, zone, lang: getCtx().lang });
   if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft));
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;
