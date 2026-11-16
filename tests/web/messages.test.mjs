@@ -120,6 +120,22 @@ test("a time param is a date and time in the site's zone", () => {
   assert.equal(format(utc, "x", {}), "—");
 });
 
+test("a treatment problem whose level or other level is not a number shows a dash", () => {
+  const ctx = testCtx({ lang: "en" });
+  const problems = (list) => formatterFor("problems")(ctx, list, {});
+  const good = problems([{ kind: "other_levels", channel: "fan", level: 3, other: 5 }]);
+  assert.match(good, /5 \/ 10$/);
+  const pump = problems([{ kind: "no_action", channel: "pump", level: "0", other: null }]);
+  assert.match(pump, / —$/);
+  assert.doesNotMatch(pump, /\b(on|off)\b/);
+  const fan = problems([{ kind: "no_action", channel: "fan", level: "3", other: null }]);
+  assert.match(fan, / —$/);
+  assert.doesNotMatch(fan, /\/ 10/);
+  const other = problems([{ kind: "other_levels", channel: "fan", level: 3, other: "5" }]);
+  assert.match(other, / —$/);
+  assert.doesNotMatch(other, /\/ 10/);
+});
+
 test("too many output files reads as two counts, never as dashes", () => {
   for (const lang of ["en", "zh"]) {
     const parts = messageParts(testCtx({ lang }), "compute_error", "too_many_files", { file_count: 1001, limit_count: 1000 });

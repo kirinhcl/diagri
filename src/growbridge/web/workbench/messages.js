@@ -43,8 +43,8 @@ function problem(ctx, p) {
   if (!p) return DASH;
   const vars = {
     channel: labelOr(ctx.t, "channel", p.channel),
-    level: levelText(ctx.t, p.channel, p.level),
-    other: levelText(ctx.t, p.channel, p.other),
+    level: level(ctx, p.level, p),
+    other: level(ctx, p.other, p),
   };
   return textOr(ctx.t, "findingProblem", p.kind, vars) ?? DASH;
 }
