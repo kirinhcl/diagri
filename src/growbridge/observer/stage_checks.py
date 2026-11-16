@@ -1,7 +1,8 @@
 """Alerts on process errors in a started stage: a manual task past its deadline with no record,
 a measurement task recorded done with no measurement behind it, a measurement outside the data
-window. Closes those alerts, and the auditor's findings, once their stage is no longer the
-active one. Reads stored records only; never reports a stage event or pauses anything."""
+window. Closes those alerts, the auditor's findings and the warning of its failed runs once
+their stage is no longer the active one. Reads stored records only; never reports a stage event
+or pauses anything."""
 
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -23,6 +24,7 @@ OUTSIDE_WINDOW = "measurement_outside_window"
 AUDIT_FINDING = "audit_finding"  # raised by the auditor role; kept here so this module closes it
 # alerts keyed "<stage id>:..." that only mean something while that stage is the active one
 STAGE_KINDS = frozenset({TASK_MISSED, MEASUREMENT_MISSING, OUTSIDE_WINDOW, AUDIT_FINDING})
+AUDIT_TASK = "audit_task"  # the runtime's warning that an auditor run failed, one per stage
 SEVERITY = "warning"
 TIME_FORMAT = "%Y-%m-%d %H:%M"  # in the run sheet's time zone
 
@@ -53,8 +55,13 @@ class StageChecks:
     def _close_other_stages(self, active_id: str | None) -> None:
         """Resolve the stage alerts of every stage but the active one: nothing re-evaluates them
         once their stage is no longer active, so they would stay open for ever."""
+        own_audit = None if active_id is None else audit_task_key(active_id)
         for alert in self.book.open():
-            if alert.kind in STAGE_KINDS and not _of_stage(alert.key, active_id):
+            if alert.kind in STAGE_KINDS:
+                stale = not _of_stage(alert.key, active_id)
+            else:
+                stale = alert.kind == AUDIT_TASK and alert.key != own_audit
+            if stale:
                 self.book.resolve(alert.kind, alert.key)
 
     def _check_tasks(self, stage: StageRuntime, start: float, end: float) -> None:
@@ -135,6 +142,11 @@ class StageChecks:
             f"task's window (from {first} to {last}). Enter the measurement with the time it "
             "was taken."
         )
+
+
+def audit_task_key(stage_id: str) -> str:
+    """The key of a stage's failed-audit warning; one per stage, however many runs failed."""
+    return f"audit:{stage_id}"
 
 
 def _of_stage(key: str, stage_id: str | None) -> bool:

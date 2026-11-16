@@ -278,6 +278,28 @@ async def test_a_stage_id_with_a_colon_keeps_its_own_alerts(db, clock, tmp_path)
     assert set(rig.open_alerts()) == {(kind, "round:1:x") for kind in STAGE_KINDS}
 
 
+async def test_a_failed_audit_warning_closes_once_its_stage_is_no_longer_active(rig):
+    # raised by the runtime when an auditor run fails, keyed "audit:<stage id>"
+    rig.book.raise_alert("audit_task", "audit:st0", "warning", "an older stage's audit failed")
+    rig.book.raise_alert("audit_task", "audit:st10", "warning", "shares the prefix, other stage")
+    rig.book.raise_alert("audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed")
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert set(rig.open_alerts()) == {("audit_task", f"audit:{STAGE}")}
+
+
+async def test_with_no_active_stage_a_failed_audit_warning_is_resolved(rig):
+    rig.book.raise_alert("audit_task", f"audit:{STAGE}", "warning", "this stage's audit failed")
+    rig.stages.active = False
+    rig.at(DAY_START + 60)
+
+    await rig.checks.tick()
+
+    assert rig.open_alerts() == {}
+
+
 def _missing(rig):
     return [a for k, a in rig.open_alerts().items() if k[0] == "measurement_missing"]
 
