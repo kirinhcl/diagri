@@ -68,15 +68,19 @@ export function errorLines(error, lang, t) {
   return [t("error.title")];
 }
 
+// What api.js writes itself when the server's answer had no words of its own ("HTTP 502: not JSON").
+const CONSOLE_MESSAGE = /^HTTP \d+/;
+
 // [label, value] pairs for the technical details: HTTP status, code and the message as it came (a
 // message that only repeats the code is left out). The labels use t, else the bound page's.
 export function errorDetail(error, t = bound.t) {
   if (!error) return [];
   const isApi = error instanceof ApiError;
   const message = typeof error === "object" ? String(error.message || "") : String(error); // a thrown string too
-  const fromServer = isApi && error.status > 0;
+  const answered = isApi && error.status > 0; // status 0: no answer, or the console's own refusal
+  const fromServer = answered && !CONSOLE_MESSAGE.test(message);
   const entries = [
-    [t("tech.httpStatus"), isApi ? error.status : null],
+    [t("tech.httpStatus"), answered ? error.status : null],
     [t("tech.code"), isApi ? error.code : null],
     [t(fromServer ? "tech.serverMessage" : "tech.message"), isApi && message === error.code ? null : message],
   ];

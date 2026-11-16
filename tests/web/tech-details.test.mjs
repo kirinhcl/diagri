@@ -171,10 +171,10 @@ test("a draft run sheet refused for blocking findings says so in the form, not o
 test("errorDetail labels each fact in the page language and leaves out what is missing", () => {
   const zh = makeT("zh");
   assert.deepEqual(errorDetail(new ApiError(409, "state", RAW), zh), [["HTTP 状态", 409], ["代码", "state"], ["服务器原文", RAW]]);
-  assert.deepEqual(errorDetail(new ApiError(404, null, "HTTP 404"), zh), [["HTTP 状态", 404], ["服务器原文", "HTTP 404"]]);
+  assert.deepEqual(errorDetail(new ApiError(404, null, "HTTP 404"), zh), [["HTTP 状态", 404], ["错误信息", "HTTP 404"]]);
   assert.deepEqual(errorDetail(new ApiError(422, "validation", "validation"), zh), [["HTTP 状态", 422], ["代码", "validation"]]);
   const network = errorDetail(new ApiError(0, "network", "Failed to fetch"), zh); // no answer: the browser's words
-  assert.deepEqual(network, [["HTTP 状态", 0], ["代码", "network"], ["错误信息", "Failed to fetch"]]);
+  assert.deepEqual(network, [["代码", "network"], ["错误信息", "Failed to fetch"]]);
   assert.deepEqual(errorDetail(new TypeError("x is undefined"), makeT("en")), [["Error message", "x is undefined"]]);
   assert.deepEqual(errorDetail(null, zh), []);
 });
@@ -296,4 +296,14 @@ test("without the Selection API a copy still fails quietly", async () => {
   const [button] = elements(techDetails(makeT("zh"), [["轮次 id", "round_1"]]), "button");
   await click(button);
   assert.equal(button.textContent, "复制失败，请手动选择");
+});
+
+// --- final review: the error fold says what each fact is (F9) ------------------------------------
+test("an error made by the console has no HTTP status 0 and its text is not called the server's", () => {
+  const zh = makeT("zh");
+  assert.deepEqual(errorDetail(new ApiError(0, "network", "Failed to fetch"), zh), [["代码", "network"], ["错误信息", "Failed to fetch"]]);
+  assert.deepEqual(errorDetail(new ApiError(0, "not_approved", "你审阅期间运行单变了"), zh), [["代码", "not_approved"], ["错误信息", "你审阅期间运行单变了"]]);
+  assert.deepEqual(errorDetail(new ApiError(502, "server_error", "HTTP 502: not JSON"), zh), [["HTTP 状态", 502], ["代码", "server_error"], ["错误信息", "HTTP 502: not JSON"]]);
+  assert.deepEqual(errorDetail(new ApiError(503, "server_error", "HTTP 503"), zh), [["HTTP 状态", 503], ["代码", "server_error"], ["错误信息", "HTTP 503"]]);
+  assert.deepEqual(errorDetail(new ApiError(409, "state", "HTTP is not ready"), zh), [["HTTP 状态", 409], ["代码", "state"], ["服务器原文", "HTTP is not ready"]]);
 });
