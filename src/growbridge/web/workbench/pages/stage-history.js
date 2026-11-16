@@ -1,5 +1,5 @@
 // The stage's history: state changes and interventions on one timeline, told in sentences, newest first.
-import { formatDuration, shortDigest } from "../format.js";
+import { formatDuration, levelText, shortDigest } from "../format.js";
 import { hasLabel, labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { note, techDetails, timeText } from "../ui/section.js";
@@ -11,7 +11,7 @@ export const HISTORY_SHOWN = 20;
 // Intervention fields the line itself already shows; everything else is its detail.
 const SAID_IN_LINE = new Set(["stage_id", "at", "kind", "operator"]);
 // In the catalog, but only ever meaningful as raw values.
-const ALWAYS_RAW = new Set(["right_number", "request_id"]);
+const ALWAYS_RAW = new Set(["right_number", "request_id", "request_ids", "period", "alert"]);
 
 const listOf = (value) => (Array.isArray(value) ? value : []);
 const isPlain = (value) => value !== null && typeof value === "object";
@@ -40,9 +40,10 @@ export function timeline(history, interventions) {
 const isKnown = hasLabel;
 
 // Value-writers by key; each returns text, or null when the value can only go to the details.
-const CODE_FIELDS = { on_expiry: "history.onExpiry", channel: "channel", alert: "alert.kind" };
+const CODE_FIELDS = { on_expiry: "history.onExpiry", channel: "channel" };
+const FROZEN_RULE = /^frozen:(.+)$/;
 
-function valueLine(ctx, key, value) {
+function valueLine(ctx, key, value, detail) {
   const { t } = ctx;
   const join = (items) => items.join(t("history.listJoin"));
   if (typeof value === "boolean") return t(value ? "common.yes" : "common.no");
@@ -50,12 +51,12 @@ function valueLine(ctx, key, value) {
   if (key === "reasons") return Array.isArray(value) ? join(value.map((code) => labelOr(t, "history.reason", code))) : null;
   if (key === "reason") return isKnown(t, "history.reason", value) ? labelOr(t, "history.reason", value) : null;
   if (key in CODE_FIELDS) return typeof value === "string" ? labelOr(t, CODE_FIELDS[key], value) : null;
+  if (key === "level") return typeof value === "number" ? levelText(t, detail.channel, value) : null;
+  if (key === "rule") return typeof value === "string" && FROZEN_RULE.test(value) ? labelOr(t, "metric", value.match(FROZEN_RULE)[1]) : null;
   if (key === "digest") return typeof value === "string" ? shortDigest(value) : null;
   if (/seconds$/.test(key)) return typeof value === "number" ? formatDuration(t, value) : null;
   if (/_at$/.test(key)) return typeof value === "number" ? timeText(ctx, value) : null;
-  if (Array.isArray(value)) return value.every((item) => !isPlain(item)) ? join(value.map(String)) : null;
-  if (isPlain(value) || value === null || value === undefined) return null;
-  return String(value);
+  return typeof value === "number" ? String(value) : null; // other text has no catalog meaning
 }
 
 const fieldLabel = (t, key) => labelOr(t, "history.field", key);
@@ -69,7 +70,7 @@ export function detailLines(ctx, entry) {
   const lines = [];
   const raw = [];
   for (const [key, value] of Object.entries(detail)) {
-    const line = isKnownKey(t, key) ? valueLine(ctx, key, value) : null;
+    const line = isKnownKey(t, key) ? valueLine(ctx, key, value, detail) : null;
     if (line !== null) lines.push(t("history.line", { label: fieldLabel(t, key), value: line }));
     else raw.push([isKnown(t, "history.field", key) ? `${fieldLabel(t, key)} (${key})` : key, value]);
   }

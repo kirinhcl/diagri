@@ -284,6 +284,12 @@ code {
 }
 .timeline-intervention::before { background: var(--amber); }
 .timeline-time { font-size: 12px; color: var(--muted-strong); font-variant-numeric: tabular-nums; }
+.timeline-states {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .timeline-what {
   display: flex;
   flex-wrap: wrap;

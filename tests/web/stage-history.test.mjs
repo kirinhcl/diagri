@@ -76,3 +76,25 @@ test("the history fixture renders without leaks", () => {
   assertNoLeaks(historyView(testCtx({ lang: "en" }), FIXTURES["history.json"]));
   assertNoLeaks(historyView(testCtx({ lang: "zh" }), FIXTURES["history-pending.json"]));
 });
+
+test("server-shaped pause and unknown-result details keep ids out of the body", () => {
+  const details = [
+    ["alert_pause", { rule: "Soil too dry", alert: "alert_9d38ffa4ca3049948194e0b60315c650" }],
+    ["rule_pause", { rule: "frozen:soil_moisture", alert: "alert_9d38ffa4ca3049948194e0b60315c650", period: "frozen_9d38ffa4ca3049948194e0b60315c650" }],
+    ["result_unknown", { request_ids: ["write_9d38ffa4ca3049948194e0b60315c650", "write_abc"], right_number: 3 }],
+  ];
+  for (const lang of ["zh", "en"]) {
+    const ctx = testCtx({ lang });
+    const history = details.map(([event, detail], i) => ({ at: 10 + i, from: "running", to: "paused", event, detail }));
+    assertNoLeaks(historyView(ctx, { history }));
+    const { lines, raw } = detailLines(ctx, { type: "transition", event: "rule_pause", detail: details[1][1] });
+    assert.equal(lines.length, 1);
+    assert.ok(raw.some(([, value]) => value === details[1][1].period));
+  }
+});
+
+test("a level is written against its scale", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const { lines } = detailLines(ctx, { type: "transition", event: "end_actions", detail: { channel: "light", level: 50 } });
+  assert.ok(lines.some((l) => l.includes("50 %")));
+});
