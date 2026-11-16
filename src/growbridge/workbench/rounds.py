@@ -21,7 +21,7 @@ from growbridge.archive.store import Archive
 from growbridge.planning.validate import check_evidence
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
-from growbridge.workbench.scope import project_write
+from growbridge.workbench.scope import project_read, project_write, stage_read
 from growbridge.workflow.access import Access
 from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
@@ -227,21 +227,30 @@ def _steering_routes(
     operator: Dependency,
     workflow: WorkflowService,
     archive: Archive | None = None,
+    access: Access | None = None,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
+    def visible_round(round_id: str, actor: Actor) -> None:
+        project_id = workflow.store.round(round_id).project_id  # unknown round: refused
+        unknown = Denied("state", f"unknown round {round_id}")
+        project_read(access, actor, project_id, lambda: unknown)
+
     @router.get("/rounds/{round_id}")
     async def read_round(round_id: PathId, actor: Operator):
+        visible_round(round_id, actor)
         return round_json(workflow, round_id)
 
     @router.get("/rounds/{round_id}/report")
     async def read_report(round_id: PathId, actor: Operator):
+        visible_round(round_id, actor)
         if archive is None:
             raise Denied("state", "no archive is mounted: reports cannot be read")
         return report_json(workflow, archive, round_id)
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):
+        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
         return review_json(workflow, stage_id, archive)
 
     @router.post("/rounds/{round_id}/choice")
@@ -270,11 +279,12 @@ def _model_routes(
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
-    def require_project(project_id: str, actor: Actor) -> None:
+    def require_project(project_id: str, actor: Actor, write: bool = True) -> None:
         unknown = Denied("state", f"unknown project {project_id}")
         if not workflow.store.has_project(project_id):
             raise unknown
-        project_write(access, actor, project_id, lambda: unknown)
+        check = project_write if write else project_read
+        check(access, actor, project_id, lambda: unknown)
 
     def require_round(round_id: str | None, actor: Actor) -> None:
         """A goal's round: another operator's is answered as an unknown round."""
@@ -326,7 +336,7 @@ def _model_routes(
     async def read_conversation(
         project_id: PathId, actor: Operator, after: Annotated[int, Query(ge=0)] = 0
     ):
-        require_project(project_id, actor)
+        require_project(project_id, actor, write=False)
         entries = conversation.entries(project_id, after)
         return {"entries": [entry.model_dump(mode="json") for entry in entries]}
 
@@ -348,6 +358,6 @@ def add_round_routes(
     re-authentication). The budget and goal routes exist only when ``tasks`` and ``budget`` are
     given."""
     _design_routes(router, operator, workflow)
-    _steering_routes(router, operator, workflow, archive)
+    _steering_routes(router, operator, workflow, archive, access)
     if tasks is not None and budget is not None:
         _model_routes(router, operator, fresh, workflow, tasks, budget, conversation, access)

@@ -23,6 +23,8 @@ from growbridge.observer.alerts import AlertBook, awaits_reading
 from growbridge.ports import Actor, ControlPort, Denied
 from growbridge.workbench.environment import add_environment_routes
 from growbridge.workbench.rounds import PathId, ProjectBudget
+from growbridge.workbench.scope import project_read, stage_read
+from growbridge.workflow.access import Access
 from growbridge.workflow.listing import (
     count_rounds_awaiting_choice,
     project_detail,
@@ -257,10 +259,11 @@ def add_read_routes(
     budget: ProjectBudget | None = None,
     alerts: AlertBook | None = None,
     compute: ComputeService | None = None,
+    access: Access | None = None,
 ) -> None:
     _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock)
-    _project_routes(router, operator, workflow, tasks, budget)
-    _stage_read_routes(router, operator, workflow, archive, clock)
+    _project_routes(router, operator, workflow, tasks, budget, access)
+    _stage_read_routes(router, operator, workflow, archive, clock, access)
     add_environment_routes(router, operator, workflow, archive, control, clock, alerts)
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
@@ -296,15 +299,18 @@ def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock) -> 
         return {"items": _by_age(kept), "truncated": truncated}
 
 
-def _project_routes(router, operator, workflow, tasks, budget) -> None:
+def _project_routes(router, operator, workflow, tasks, budget, access=None) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/projects")
     async def projects(actor: Operator):
-        return {"projects": project_summaries(workflow.store, PROJECT_LIMIT)}
+        owner = None if access is None else access.owner_filter(actor)
+        return {"projects": project_summaries(workflow.store, PROJECT_LIMIT, only_owner=owner)}
 
     @router.get("/projects/{project_id}")
     async def project(project_id: PathId, actor: Operator):
+        unknown = Denied("state", f"unknown project {project_id}")
+        project_read(access, actor, project_id, lambda: unknown)
         detail = project_detail(workflow.store, project_id)
         if detail is None:
             raise Denied("state", f"unknown project {project_id}")
@@ -316,9 +322,13 @@ def _project_routes(router, operator, workflow, tasks, budget) -> None:
         }
 
 
-def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
+def _stage_read_routes(router, operator, workflow, archive, clock, access=None) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     cache = ReadingsCache(clock)
+
+    def _visible(stage_id: str, actor: Actor) -> StageRow:
+        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
+        return _stage(workflow, stage_id)
 
     @router.get("/stages/{stage_id}/readings")
     async def readings(
@@ -326,7 +336,7 @@ def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
         actor: Operator,
         points: Annotated[int, Query(ge=2, le=MAX_POINTS)] = DEFAULT_POINTS,
     ):
-        row = _stage(workflow, stage_id)
+        row = _visible(stage_id, actor)
         if row.started_at is None:
             return _empty_readings()
         started_at = row.started_at
@@ -340,13 +350,13 @@ def _stage_read_routes(router, operator, workflow, archive, clock) -> None:
 
     @router.get("/stages/{stage_id}/measurements")
     async def measurements(stage_id: PathId, actor: Operator):
-        row = _stage(workflow, stage_id)
+        row = _visible(stage_id, actor)
         found = archive.measurements(row.experiment_id, include_corrected=True)
         return {"measurements": [record.model_dump(mode="json") for record in found]}
 
     @router.get("/stages/{stage_id}/history")
     async def history(stage_id: PathId, actor: Operator):
-        row = _stage(workflow, stage_id)
+        row = _visible(stage_id, actor)
         mine = [
             entry
             for entry in workflow.store.interventions(row.experiment_id)

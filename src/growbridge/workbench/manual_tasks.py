@@ -27,7 +27,7 @@ from growbridge.control.device import changed_nothing
 from growbridge.planning import manual_tasks
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.workbench.common import Body
-from growbridge.workbench.scope import stage_write
+from growbridge.workbench.scope import stage_read, stage_write
 from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
@@ -172,6 +172,7 @@ def add_manual_task_routes(
 
     @router.get("/stages/{stage_id}/manual-tasks")
     async def list_tasks(stage_id: str, actor: Operator):
+        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
         stage = workflow.stage(stage_id)
         body = {
             "stage_id": stage.stage_id,

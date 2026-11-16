@@ -47,7 +47,7 @@ from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
-from growbridge.workbench.scope import project_write, stage_write
+from growbridge.workbench.scope import project_write, stage_read, stage_write
 from growbridge.workflow.access import Access
 from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
@@ -224,7 +224,8 @@ class Workbench:
         self._record_routes()
         self._read_routes()
         reads = (self.router, self.operator, workflow, archive, control, self.clock)
-        add_read_routes(*reads, tasks=tasks, budget=budget, alerts=alerts, compute=compute)
+        more_reads = {"tasks": tasks, "budget": budget, "alerts": alerts, "compute": compute}
+        add_read_routes(*reads, **more_reads, access=access)
         add_round_routes(
             self.router,
             self.operator,
@@ -505,6 +506,13 @@ class Workbench:
             number = self.control.approve_safety(body.config.model_copy(update=stamp), actor.id)
             return {"protection_right": number}
 
+    def sees_receipt(self, actor: Actor, stage_id: str | None) -> bool:
+        """A receipt is its stage's; one of no stage is the administrators'."""
+        access = self.access
+        if access is None or actor.kind != "operator" or access.is_admin(actor):
+            return True
+        return stage_id is not None and access.sees_stage(actor, stage_id)
+
     def require_local_lock(self, actor: Actor) -> None:
         """The safety limits are the local device's: its lock holder or an administrator."""
         access = self.access
@@ -521,6 +529,9 @@ class Workbench:
 
         @router.get("/stages/{stage_id}")
         async def stage(stage_id: str, actor: Anyone):
+            stage_read(
+                self.access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}")
+            )
             runtime = self.workflow.stage(stage_id)
             body = runtime_json(runtime)
             if actor.kind != "operator":
@@ -540,7 +551,7 @@ class Workbench:
         @router.get("/receipts/{request_id}")
         async def receipt(request_id: str, actor: Anyone):
             record = self.control.receipt(request_id)
-            if record is None:
+            if record is None or not self.sees_receipt(actor, record.stage_id):
                 raise HTTPException(404, "Unknown request id")
             return record.model_dump(mode="json")
 

@@ -29,7 +29,7 @@ from growbridge.research.preregistration import (
 )
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import Ident, PathId
-from growbridge.workbench.scope import project_write
+from growbridge.workbench.scope import project_read, project_write
 from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 
@@ -209,9 +209,10 @@ def add_analysis_routes(
     """Mount the routes on ``router``; ``operator`` and ``fresh`` are the workbench's operator
     dependencies (``fresh`` also asks for a recent re-authentication)."""
 
-    def owned(actor: Actor, protocol_id: str, project_id: str) -> None:
+    def owned(actor: Actor, protocol_id: str, project_id: str, write: bool = True) -> None:
         unknown = Denied("state", f"no protocol {protocol_id} in project {project_id}")
-        project_write(access, actor, project_id, lambda: unknown)
+        check = project_write if write else project_read
+        check(access, actor, project_id, lambda: unknown)
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
@@ -228,6 +229,7 @@ def add_analysis_routes(
         project_id: Annotated[str, Query(min_length=1, max_length=100)],
         actor: Operator,
     ):
+        owned(actor, protocol_id, project_id, write=False)
         return routes.state(protocol_id, project_id)
 
     @router.post("/analysis/runs")

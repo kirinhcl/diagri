@@ -21,7 +21,7 @@ from growbridge.ports import Actor, Denied
 from growbridge.research.holdout import Holdout, HoldoutRegistry
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import Ident
-from growbridge.workbench.scope import project_write
+from growbridge.workbench.scope import project_read, project_write
 from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 
@@ -59,11 +59,12 @@ def add_holdout_routes(
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
-    def require_project(project_id: str, actor: Actor) -> None:
+    def require_project(project_id: str, actor: Actor, write: bool = True) -> None:
         unknown = Denied("scope", f"unknown project {project_id}")
         if not workflow.store.has_project(project_id):
             raise unknown
-        project_write(access, actor, project_id, lambda: unknown)
+        check = project_write if write else project_read
+        check(access, actor, project_id, lambda: unknown)
 
     @router.post("/holdouts")
     async def register_holdout(body: HoldoutIn, actor: Fresh):
@@ -78,5 +79,5 @@ def add_holdout_routes(
     async def list_holdouts(
         project_id: Annotated[str, Query(min_length=1, max_length=100)], actor: Operator
     ):
-        require_project(project_id, actor)
+        require_project(project_id, actor, write=False)
         return {"holdouts": [holdout_json(item, holdout) for item in holdout.holdouts(project_id)]}
