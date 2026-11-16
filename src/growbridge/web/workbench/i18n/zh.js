@@ -143,6 +143,8 @@ export default {
   "project.protocols.saved": "已保存协议 {id} 第 {version} 版。",
   "project.budget.title": "模型调用预算",
   "project.budget.none": "还没有设置预算，这个项目暂时不能调用模型。",
+  "project.budget.callsUsed": "已用调用次数 / 总数",
+  "project.budget.costUsed": "已用费用 / 总额",
   "project.budget.callsLeft": "剩余调用次数",
   "project.budget.costLeft": "剩余费用",
   "project.budget.maxCalls": "调用次数上限",

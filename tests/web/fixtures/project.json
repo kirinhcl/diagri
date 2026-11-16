@@ -22,7 +22,11 @@
   ],
   "budget": {
     "calls_left": 103,
-    "cost_left": 97.06714
+    "cost_left": 97.06714,
+    "used_calls": 17,
+    "used_cost": 2.93286,
+    "max_calls": 120,
+    "max_cost": 100.0
   },
   "tasks": [
     {

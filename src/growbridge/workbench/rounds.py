@@ -14,6 +14,7 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
 
+from growbridge.agents.budget import BudgetUsage
 from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
@@ -48,6 +49,8 @@ class ProjectBudget(Protocol):
     def set(self, project_id: str, budget: Budget) -> None: ...
 
     def remaining(self, project_id: str) -> tuple[int, float]: ...
+
+    def usage(self, project_id: str) -> BudgetUsage | None: ...
 
 
 # --- request bodies ----------------------------------------------------------------------------

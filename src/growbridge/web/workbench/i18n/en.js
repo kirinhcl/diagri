@@ -143,6 +143,8 @@ export default {
   "project.protocols.saved": "Protocol {id} version {version} was saved.",
   "project.budget.title": "Model call budget",
   "project.budget.none": "No budget has been set, so models cannot be called for this project.",
+  "project.budget.callsUsed": "Calls used / total",
+  "project.budget.costUsed": "Cost used / total",
   "project.budget.callsLeft": "Calls left",
   "project.budget.costLeft": "Cost left",
   "project.budget.maxCalls": "Maximum calls",

@@ -35,6 +35,34 @@ def test_inbox_shows_a_stage_waiting_for_review(bench, operator):
     assert ("stage_review", "stage-1") in kinds
 
 
+def test_the_project_read_shows_used_and_total_budget(bench, operator):
+    bench.seed_round()
+    bench.budget.set(bench.project_id, Budget(max_calls=10, max_cost=5.0))
+    bench.budget.reserve(bench.project_id, 3)
+    bench.budget.charge(bench.project_id, 1.25)
+    shown = operator.get(f"/wb/projects/{bench.project_id}").json()["budget"]
+    assert shown == {
+        "calls_left": 7,
+        "cost_left": 3.75,
+        "used_calls": 3,
+        "used_cost": 1.25,
+        "max_calls": 10,
+        "max_cost": 5.0,
+    }
+
+
+def test_used_cost_can_exceed_the_total_and_is_shown_as_it_is(bench, operator):
+    bench.seed_round()
+    bench.budget.set(bench.project_id, Budget(max_calls=10, max_cost=1.0))
+    bench.budget.charge(bench.project_id, 1.5)
+    shown = operator.get(f"/wb/projects/{bench.project_id}").json()["budget"]
+    assert (shown["used_cost"], shown["max_cost"], shown["cost_left"]) == (1.5, 1.0, 0.0)
+
+
+def test_budget_usage_is_none_without_a_budget(bench):
+    assert bench.budget.usage(bench.project_id) is None
+
+
 def test_inbox_caps_each_kind_at_fifty(bench, operator):
     bench.seed_round()
     protocol_id = bench.workflow.store.db.one("SELECT id FROM wf_protocols")["id"]

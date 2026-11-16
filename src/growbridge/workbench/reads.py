@@ -196,7 +196,17 @@ def _budget_view(budget: ProjectBudget | None, project_id: str) -> dict[str, Any
         if refusal.code == "budget":
             return None
         raise
-    return {"calls_left": calls, "cost_left": cost}
+    used = budget.usage(project_id)
+    if used is None:
+        return None
+    return {
+        "calls_left": calls,
+        "cost_left": cost,
+        "used_calls": used.used_calls,
+        "used_cost": used.used_cost,
+        "max_calls": used.max_calls,
+        "max_cost": used.max_cost,
+    }
 
 
 def _stage(workflow: WorkflowService, stage_id: str) -> StageRow:

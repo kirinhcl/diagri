@@ -155,6 +155,18 @@ test("budget numbers carry no float noise", () => {
   assert.equal(visibleText(budgetView(ctx, {})), zh["project.budget.none"]);
 });
 
+test("the budget reads as used of total, and an overspent cost is shown as it is", () => {
+  const usage = { calls_left: 7, cost_left: 3.75, used_calls: 3, used_cost: 1.25, max_calls: 10, max_cost: 5 };
+  const text = visibleText(budgetView(testCtx({ lang: "zh" }), { budget: usage }));
+  assert.ok(text.includes(zh["project.budget.callsUsed"]) && text.includes("3 / 10"), text);
+  assert.ok(text.includes(zh["project.budget.costUsed"]) && text.includes("1.25") && text.includes("5.00"), text);
+  const over = visibleText(budgetView(testCtx({ lang: "en" }), { budget: { ...usage, used_cost: 5.5, cost_left: 0 } }));
+  assert.ok(over.includes(en["project.budget.costUsed"]) && over.includes("5.50") && over.includes("5.00"), over);
+  // an old server without the new fields keeps the left-over display
+  const old = visibleText(budgetView(testCtx({ lang: "en" }), { budget: { calls_left: 37, cost_left: 97.06714 } }));
+  assert.ok(old.includes(en["project.budget.callsLeft"]) && !old.includes(en["project.budget.callsUsed"]), old);
+});
+
 test("holdouts keep their id in the details and say how often they were read", async () => {
   const holdout = {
     holdout_id: "holdout_5c987768a8b544ad80c4af4c0af9a962",

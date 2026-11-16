@@ -76,3 +76,10 @@ beside the unchanged English `note`, as the server now writes them. The top-leve
 is the answer's new field; its value `canopy_area_growth` is the metric the project's protocol names
 in project.json (the protocol itself is not among the captured answers), so the value is that
 protocol's endpoint but the field was added by hand, not captured.
+
+## project.json budget (task 15)
+
+The top-level `budget` gained `used_calls`, `used_cost`, `max_calls` and `max_cost` by hand, as the
+server now answers (beside the captured `calls_left` and `cost_left`). Values are synthetic but
+consistent with the captured left-overs: 103 left of 120 calls (17 used), 97.06714 left of 100 cost
+(2.93286 used).
