@@ -81,11 +81,11 @@ async def test_a_watchdog_alert_whose_first_write_failed_is_written_on_the_next_
     real = runtime.book.raise_alert
     refused: list[str] = []
 
-    def locked_once(kind, key, severity, message):
+    def locked_once(kind, key, severity, message, scope=None):
         if kind == "pump_watchdog" and not refused:
             refused.append(kind)
             raise RuntimeError("database is locked")
-        return real(kind, key, severity, message)
+        return real(kind, key, severity, message, scope)
 
     monkeypatch.setattr(runtime.book, "raise_alert", locked_once)
     await world.beat(runtime, 5)
