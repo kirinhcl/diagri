@@ -98,3 +98,10 @@ Alert message wording, the exact shape of `get_stage_records`' output, the conso
 ## Interaction with other work
 
 A separate branch (`fix/pr4-review-findings`) is fixing the PR 4 review findings, including where the data window ends and how manual task records are accepted. This work reads the window through the freeze's own function and the task records through `planning/manual_tasks.py`, so it follows whatever rule that branch settles on. Whichever lands second rebases.
+
+## Revised during implementation
+
+- The console shows the alert messages, not per-kind labels. The only console change is the conversation label "Auditor" / "监察 Agent".
+- The data window follows the stage's actual end (taken from the fix branch), not only its planned end.
+- The 6-call cap is the auditor's default role limit (`RoleModel(max_calls=6)`). The per-task call budget is not enforced.
+- An audit left in `needs_attention` does not block the next one.

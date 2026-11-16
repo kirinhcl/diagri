@@ -1,4 +1,4 @@
-# The five agents
+# The agents
 
 [简体中文](../zh-CN/The-Five-Agents.md)
 
@@ -13,12 +13,13 @@ This page is for readers who want to know what each agent is allowed to do, and 
 | Orchestrator | model role | Turns a goal into research tasks for the other two model roles. |
 | Planner | model role | Drafts run sheets and checks them. |
 | Researcher | model role | Freezes data, analyzes it and publishes the report. |
+| Auditor | model role | Reads a stage's records, compares them with the run sheet and files advisory findings. |
 | Executor | deterministic program | Carries out the approved run sheet on the device. |
 | Observer and notifier | deterministic program | Watches readings and health, raises alerts, sends notifications. |
 
-The split follows one rule: a model may reason, but only a program with fixed behavior may act on the device. The same inputs always give the same action, so the action can be tested. The split is enforced in code, not in the prompts.
+Four of the agents are model roles and two are programs. The split follows one rule: a model may reason, but only a program with fixed behavior may act on the device. The same inputs always give the same action, so the action can be tested. The split is enforced in code, not in the prompts.
 
-## Rules shared by the three model roles
+## Rules shared by the four model roles
 
 - **A fixed tool list.** `ROLE_TOOLS` in [`agents/tools.py`](../../../src/growbridge/agents/tools.py) names the tools of each role. The configuration (`roles.<name>.tools`) can only narrow it. `build_role_tools` in [`agents/handlers.py`](../../../src/growbridge/agents/handlers.py) refuses to build a tool set that differs from the list.
 - **No control tool, by name.** `CONTROL_TOOLS` lists stage and device tool names such as `start_approved_stage`, `approve_run_sheet`, `set_light` and `run_pump`. Asking for one is `Denied("model_role")`, and no handler exists for any of them.
@@ -74,7 +75,7 @@ The system prompts are in [`agents/roles.py`](../../../src/growbridge/agents/rol
 
 **Scoped to its task.** `inspect_stage_data`, `freeze_dataset`, `run_local_analysis` and `publish_research_report` take a `task_id`, and that id must be the task the dispatcher is running (see "Bound to the running task" below), which must be one owned by the researcher. Every stage, round or snapshot id in the same call must then belong to that task's project, or the call is refused with `Denied("scope")` before anything is written, mounted or read. An unknown snapshot and another project's snapshot get the same answer, so the reply reveals nothing. A snapshot that contains outcomes of a held-out batch is refused as well. The reason: a model names ids freely, and without this check a task in one project could read another project's data or advance another project's round. The checks are `own_task` in [`agents/handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) and `require_round` and `scoped_snapshot` in [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py).
 
-**Bound to the running task.** The model supplies every id in a tool call, so none of them is trusted. The dispatcher binds the task it is running for the whole run, and each tool compares the ids in its input with that binding. The `task_id` a model passes must equal the bound task: a researcher working on one task cannot name another task, in this project or in another, and a tool call made outside a dispatched run is refused. The same holds for the other two model roles. They may name only the project, rounds, stages and experiments of the bound task's project. `get_task_status` answers only for the bound task and the tasks delegated below it, `read_artifact` only for artifacts of tasks of the project, and `delegate_task` accepts only the bound task as parent. Every refusal is `Denied("scope")`. The binding is a context variable set by `Dispatcher` in [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py) and read through `bound_task`, `require_bound` and `require_project` in [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py). A context variable is used because the tools are built once and shared, while runs can overlap: each asyncio task sees only its own binding.
+**Bound to the running task.** The model supplies every id in a tool call, so none of them is trusted. The dispatcher binds the task it is running for the whole run, and each tool compares the ids in its input with that binding. The `task_id` a model passes must equal the bound task: a researcher working on one task cannot name another task, in this project or in another, and a tool call made outside a dispatched run is refused. The same holds for the other model roles. They may name only the project, rounds, stages and experiments of the bound task's project. `get_task_status` answers only for the bound task and the tasks delegated below it, `read_artifact` only for artifacts of tasks of the project, and `delegate_task` accepts only the bound task as parent. Every refusal is `Denied("scope")`. The binding is a context variable set by `Dispatcher` in [`agents/dispatch.py`](../../../src/growbridge/agents/dispatch.py) and read through `bound_task`, `require_bound` and `require_project` in [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py). A context variable is used because the tools are built once and shared, while runs can overlap: each asyncio task sees only its own binding.
 
 **One owner per experiment.** A snapshot belongs to the project that owns its experiment, found through the stage that runs it. An experiment id belongs to one project: the workflow refuses a run sheet whose `experiment_id` is already used by a stage of another project (`Denied("scope")` in `WorkflowService.submit_run_sheet`), and a lookup on an experiment that stages of two projects claim is refused as well, so such an id can never make one project's data look like another's.
 
@@ -94,11 +95,35 @@ Roles do not talk to each other. One role leaves a research task on the task boa
 
 The reason for the task board: a hand-off that lives in a database row survives a restart and can be audited. A hand-off that lives in a conversation does neither.
 
+## Auditor
+
+**For.** Read the records of one stage and compare them with its plan, then say in the project conversation what matches, what deviates and what it could not check.
+
+**May read.** The project state and the run status. A stage's data over the freeze window (`inspect_stage_data`, its own copy of the researcher's tool, scoped to the bound task's project). The stage's records (`get_stage_records`): the run sheet summary, the manual-task occurrences with their status and record, the current measurements marked inside or outside the window, and the open alerts of the stage. Outcomes of held-out batches are hidden. Each list holds up to 200 entries.
+
+**May do.**
+
+| Tool | What it does |
+| --- | --- |
+| `get_project_state`, `get_run_status` | Read-only state of the project and of the run. |
+| `inspect_stage_data` | The same read-only data summary as the researcher's, bound to the task's project. |
+| `get_stage_records` | The stage's records, as listed above. |
+| `raise_audit_finding` | Raises an `audit_finding` alert with severity `info` or `warning`, never higher. It pauses nothing and changes nothing. |
+
+The final reply of an auditor run is stored as a conversation entry under the role "auditor" (shown as "Auditor" in the console). It wakes no other role.
+
+**When it runs.** At the start of each `run_agents` pass, `schedule_audits` ([`runtime_agents.py`](../../../src/growbridge/runtime_agents.py)) opens an auditor task `audit:{stage}:day{n}` once stage day n (n of at least 1) has passed while the stage is running, and `audit:{stage}:end` once the stage has ended or stopped. It does not open one while another audit of the same stage is in progress, nor for a project with no call budget or no calls left. Because it lives in `run_agents`, a stage is audited only while the model loop runs. An audit may use 6 model calls by default (`RoleModel(max_calls=6)` unless the configuration sets another) and has a one-day deadline. If scheduling raises an exception, an `audit_schedule` alert is raised and the other tasks still run.
+
+**Can never.** Change anything: it has no control tool, and `CONTROL_TOOLS` would refuse one by name. Pause a stage (a finding is advisory). Raise an alert above `warning`.
+
+**Code.** [`agents/handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py), the `AUDITOR` role in [`agents/roles.py`](../../../src/growbridge/agents/roles.py), `schedule_audits` in [`runtime_agents.py`](../../../src/growbridge/runtime_agents.py).
+
 ## Call budget
 
 | Limit | Where | What happens at the limit |
 | --- | --- | --- |
-| Calls and cost per project, shared by all three roles | `CallBudget` in [`agents/budget.py`](../../../src/growbridge/agents/budget.py) | Each model call is reserved before it is made. `Denied("budget")`; the task goes to `needs_attention`. |
+| Calls and cost per project, shared by all four roles | `CallBudget` in [`agents/budget.py`](../../../src/growbridge/agents/budget.py) | Each model call is reserved before it is made. `Denied("budget")`; the task goes to `needs_attention`. |
+| 6 model calls per audit run (default, auditor only) | `RoleModel(max_calls=6)`, set in `runtime_agents.py` | The run stops; the audit task goes to `needs_attention`. |
 | 20 model turns per run | `max_turns` in `run_agent` | The task goes to `needs_attention`. |
 | Delegation depth, 2 by default | `Budget.max_delegation_depth`, checked by `TaskBoard.create` | The new task is refused with `Denied("budget")`. |
 | One run per trigger | `dispatch_claims` | The task is not run again. |
@@ -127,13 +152,21 @@ Each tick does six things in order: pump-off interlock (followed by the pump wat
 
 **May read.** Sensor readings and the active stage. For the daily report, the samples and action records in the archive and the interventions recorded by the workflow service.
 
-**May do.** Evaluate threshold alert rules and keep the alert book (`AlertBook`). Queue each alert once per channel in the outbox and retry delivery with backoff (`Outbox`). Report an `ALERT_PAUSE` stage event for a rule marked `pause_stage`; the workflow service then pauses a `running` stage. Render the daily report from a template: every figure comes from `compute_daily_metrics`. Check run health with six probes (`RunHealthCheck`).
+**May do.** Evaluate threshold alert rules and keep the alert book (`AlertBook`). Queue each alert once per channel in the outbox and retry delivery with backoff (`Outbox`). Report an `ALERT_PAUSE` stage event for a rule marked `pause_stage`; the workflow service then pauses a `running` stage. Render the daily report from a template: every figure comes from `compute_daily_metrics`. Check run health with six probes (`RunHealthCheck`). Run the stage checks (below).
 
 **Frozen readings.** About every five minutes `FrozenWatch` looks at the stored samples. A sensor whose value has not changed for longer than its threshold (`frozen` in the safety configuration; defaults temp 120, humi 60, co2 60, tempSoil 240 minutes) opens a frozen period in the archive and raises a `frozen_reading` alert. If a running stage has a feedback rule on that sensor, or a protection rule uses it, the observer reports an `ALERT_PAUSE` event. A failure of this check raises a critical `frozen_watch` alert and does not stop the other alert rules.
 
+**Stage checks.** At most every 300 seconds `StageChecks` ([`observer/stage_checks.py`](../../../src/growbridge/observer/stage_checks.py)), a program on the observer's tick that `build_observer` wires in, compares the active stage, once it has started (in any state), with its run sheet. It raises warning alerts:
+
+- `task_missed` (key `stage:task:due`): a manual task occurrence is past its on-time deadline and has no record. It resolves when a record arrives.
+- `measurement_missing` (same key): a measurement task is recorded done, and 2 hours after the record no current measurement of the experiment is timed between an hour before the task was due and its deadline.
+- `measurement_outside_window` (key `stage:measurement`): a current measurement that the snapshot will leave out because of its time (the same window and 2-hour grace as the freeze). It resolves when a correction replaces the measurement.
+
+A failure of these checks raises a critical `stage_checks` alert (key `check`) and does not stop the other alert rules. No model is involved: they run when the model API is down.
+
 **Can never.** Write to the device. Resume, stop or approve anything. Put a number into a report that the metrics did not compute.
 
-**Why it never calls a model.** An alert that depends on a model would be silent exactly when the model is down. The daily report is template-only: `render_daily_report` accepts an optional model-written narrative, but `Runtime._report_text` never passes one.
+**Why it never calls a model.** (The stage checks included.) An alert that depends on a model would be silent exactly when the model is down. The daily report is template-only: `render_daily_report` accepts an optional model-written narrative, but `Runtime._report_text` never passes one.
 
 **Not started yet.** The runtime ships with an empty alert-rule list (`DEFAULT_ALERT_RULES`), and the external monitor (`ExternalMonitor`) runs only when both heartbeat URLs are set in the environment. Delivery to real Telegram and email has not been verified.
 

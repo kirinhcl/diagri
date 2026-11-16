@@ -18,7 +18,7 @@
 **Concepts and design**
 
 - [Architecture overview](Architecture.md)
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Control and safety model](Control-and-Safety-Model.md)
 - [Workflow and state machines](Workflow-and-State-Machines.md)
 - [Data, archive and traceability](Data-Archive-and-Traceability.md)

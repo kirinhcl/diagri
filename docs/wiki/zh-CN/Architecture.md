@@ -52,7 +52,7 @@ flowchart TD
 
 这张图的形状来自两条规则。
 
-**模型角色碰不到设备，也碰不到阶段。** 模型会出错，也可能被它读到的文字带偏。所以三个模型角色只拿到读数据和交草稿的工具。每个角色的工具清单写死在 `ROLE_TOOLS` 里；凡是控制阶段或设备的工具名都列在 `CONTROL_TOOLS` 里，无论配置怎么写都会被拒绝（[`agents/tools.py`](../../../src/growbridge/agents/tools.py)）。详见[五个 Agent](The-Five-Agents.md)。
+**模型角色碰不到设备，也碰不到阶段。** 模型会出错，也可能被它读到的文字带偏。所以四个模型角色只拿到读数据和交草稿的工具。每个角色的工具清单写死在 `ROLE_TOOLS` 里；凡是控制阶段或设备的工具名都列在 `CONTROL_TOOLS` 里，无论配置怎么写都会被拒绝（[`agents/tools.py`](../../../src/growbridge/agents/tools.py)）。详见[Agent 一览](The-Five-Agents.md)。
 
 **所有设备写入都过同一个关口。** 执行 Agent 和操作员都经控制服务写设备：先核对写入权，记下意图，下发，再回读。详见[控制与安全模型](Control-and-Safety-Model.md)。
 
@@ -130,7 +130,7 @@ flowchart TD
 
 ## 另见
 
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [控制与安全模型](Control-and-Safety-Model.md)
 - [工作流与状态机](Workflow-and-State-Machines.md)
 - [数据、档案与可追溯性](Data-Archive-and-Traceability.md)

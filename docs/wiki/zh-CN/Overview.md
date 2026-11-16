@@ -14,7 +14,7 @@ DiAGRI 是一个面向植物生长研究的 AI Agent 平台。它把一个研究
 
 GrowBridge 是 DiAGRI 的设备桥接部分，只占整体的一小块。它是一个 Python 常驻程序，运行在种植帐篷旁边的 Mac 或树莓派上，独占与 AC5 的那一条蓝牙（BLE）连接。通过这条连接，它读取传感器和设备状态，按请求写入设置，每次写入后回读设备加以确认，并把历史数据保存在本地的 SQLite 里。
 
-DiAGRI 的其余部分都建立在这条连接之上：工作流服务、检查每一次写入的控制服务、项目档案、五个 Agent 和科研方法。各部分的关系见[架构总览](Architecture.md)。
+DiAGRI 的其余部分都建立在这条连接之上：工作流服务、检查每一次写入的控制服务、项目档案、Agent 和科研方法。各部分的关系见[架构总览](Architecture.md)。
 
 整个项目作为一个 Python 软件包发布。软件包名是 `spiderfarmer-growbridge`，导入名和命令是 `growbridge`（见 [`pyproject.toml`](../../../pyproject.toml) 和 [`cli.py`](../../../src/growbridge/cli.py)），DiAGRI 的其他部分是它下面的子包。这些名字来自最先写成的桥接部分。这是一个独立项目，与 Spider Farmer 官方没有关联。
 
@@ -61,19 +61,20 @@ flowchart LR
 
 代码目前做到的是这样。从运行单往后的每一步都有对应的服务，也都在模拟的 AC5 上跑过端到端测试：起草和校验运行单、审批、执行、告警和日报、数据快照、分析和报告。开头这一段走工作台路由：操作员创建项目、研究协议和轮次，设置模型调用预算，然后提出问题，问题成为编排 Agent 的一个任务。`/workbench` 的控制台有对应的表单；没有命令。测试用的是脚本化的模型。真实模型也已经把问题带完过整轮：在开发用工作台上，三个角色都由 Claude 担任，见[示例：模型角色跑完整一轮](Example-Full-Round-With-Claude.md)和[状态与已知限制](Status-and-Known-Limitations.md)。
 
-## 五个 Agent
+## Agent 一览
 
-其中三个是模型角色：由语言模型读数据、交草稿。另外两个是确定性程序：同样的输入总是得到同样的动作，从不调用模型。
+其中四个是模型角色：由语言模型读数据、交草稿。另外两个是确定性程序：同样的输入总是得到同样的动作，从不调用模型。
 
 | Agent | 类型 | 代码中 | 做什么 |
 | --- | --- | --- | --- |
 | 编排 Agent | 模型角色 | 角色 `orchestrator` | 接收用户目标，创建研究任务，交给计划 Agent 或研究 Agent |
 | 计划 Agent | 模型角色 | 角色 `planner` | 设计实验：起草运行单，并用校验工具检查运行单和研究协议的设计 |
 | 研究 Agent | 模型角色 | 角色 `researcher` | 冻结数据，跑分析，发布报告 |
+| 监察 Agent | 模型角色 | 角色 `auditor` | 阶段运行期间每过一个阶段日、阶段结束时各读一次该阶段的记录，与运行单对照，提出建议性的发现 |
 | 执行 Agent | 确定性程序 | `ExecutorEngine` | 执行已批准的运行单，上报阶段事件 |
-| 观察与通知 Agent | 确定性程序 | `Observer` | 判定告警规则，把通知和日报放进发送队列 |
+| 观察与通知 Agent | 确定性程序 | `Observer` | 判定告警规则，运行阶段检查，把通知和日报放进发送队列 |
 
-每个模型角色能调用哪些工具，列在 [`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS` 里。各个 Agent 的细节见[五个 Agent](The-Five-Agents.md)。
+每个模型角色能调用哪些工具，列在 [`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS` 里。各个 Agent 的细节见[Agent 一览](The-Five-Agents.md)。
 
 ## 系统绝不会做的事
 
@@ -107,6 +108,6 @@ flowchart LR
 ## 另见
 
 - [架构设计文档](../../diagri-agent-architecture.zh-CN.md)：第 1 到 4 节是设计概览，本页是它的摘要。
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [工作流与状态机](Workflow-and-State-Machines.md)
 - [常见问题](FAQ.md)

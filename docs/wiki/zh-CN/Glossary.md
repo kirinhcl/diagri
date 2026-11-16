@@ -68,6 +68,8 @@
 | 计划 Agent | planner | 角色 `planner` | 设计实验，起草研究协议和运行单。 |
 | 研究 Agent | researcher | 角色 `researcher` | 查文献、读数据、跑分析，交付结论。 |
 | 执行 Agent | executor | `ExecutorEngine` | 确定性程序，执行已批准的运行单。从不调用模型。 |
+| 监察 Agent | auditor | 角色 `auditor` | 读取阶段记录并与运行单对照的模型角色。它只能提出建议性的 `audit_finding` 告警。 |
+| 阶段检查 | stage checks | `StageChecks`，告警 `task_missed`、`measurement_missing`、`measurement_outside_window` | 挂在观察者 tick 上的确定性检查：人工任务过了截止时间仍无记录、测量任务已完成却没有测量、测量的时间会让快照把它排除。只发警告，从不暂停阶段。 |
 | 冻结读数 | frozen reading | `FrozenWatch`、`frozen_reading` 告警 | 传感器的数值在超过门槛的时间里完全不变。它会在档案里开一个冻结时段并发出告警；只有阶段的规则依赖该传感器时，才会暂停正在执行的阶段。 |
 | 观察与通知 Agent | observer and notifier | `Observer` | 确定性程序，负责指标、日报、告警和通知。从不调用模型。 |
 | 工作流服务 | workflow service | `WorkflowService` | 轮次、阶段和任务状态的唯一所有者。 |

@@ -194,7 +194,7 @@ n = ((z(1 - alpha/2) + z(power)) × sd / effect)²
 
 - [数据、档案与可追溯性](Data-Archive-and-Traceability.md)
 - [设计决策记录](Design-Decisions.md)
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [运行一轮研究](Run-a-Research-Round.md)
 - [拒绝码与事件类型](Denial-Codes-and-Events.md)
 - [术语表](Glossary.md)

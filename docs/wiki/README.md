@@ -21,7 +21,7 @@ This folder is the project wiki. It lives in the repository so that pages are ve
 | | `Troubleshooting-Runbook.md` | Troubleshooting runbook | 故障处理手册 | how-to · 操作指南 |
 | | `Notifications-Reports-and-Backup.md` | Notifications, daily reports and backup | 通知、日报与备份 | how-to · 操作指南 |
 | Concepts and design · 概念与设计 | `Architecture.md` | Architecture overview | 架构总览 | explanation · 解释 |
-| | `The-Five-Agents.md` | The five agents | 五个 Agent | explanation · 解释 |
+| | `The-Five-Agents.md` | The agents | Agent 一览 | explanation · 解释 |
 | | `Control-and-Safety-Model.md` | Control and safety model | 控制与安全模型 | explanation · 解释 |
 | | `Workflow-and-State-Machines.md` | Workflow and state machines | 工作流与状态机 | explanation · 解释 |
 | | `Data-Archive-and-Traceability.md` | Data, archive and traceability | 数据、档案与可追溯性 | explanation · 解释 |

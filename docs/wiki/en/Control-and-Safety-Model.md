@@ -10,7 +10,7 @@ This page is for anyone who has to trust, review or change the path from a decis
 
 An operator takes over and sets the light to 50%. A command "light to 80%" from the automatic schedule is still queued, and goes out two seconds later. The manual setting is gone, and nobody decided that.
 
-The same kind of accident can come from a restarted process, a restored backup, a second machine, or a command whose reply was lost. The control model removes all of them with one idea: **a write must show a numbered permission that is still valid at the moment the bytes leave, and one service checks it.** That service is `ControlService` in [`control/service.py`](../../../src/growbridge/control/service.py). Model roles cannot call it at all; see [The five agents](The-Five-Agents.md).
+The same kind of accident can come from a restarted process, a restored backup, a second machine, or a command whose reply was lost. The control model removes all of them with one idea: **a write must show a numbered permission that is still valid at the moment the bytes leave, and one service checks it.** That service is `ControlService` in [`control/service.py`](../../../src/growbridge/control/service.py). Model roles cannot call it at all; see [The agents](The-Five-Agents.md).
 
 ## Write rights
 
@@ -176,7 +176,7 @@ The watchdog's `pump_unreadable` and `pump_watchdog` alerts are latched. While t
 ## See also
 
 - [Workflow and state machines](Workflow-and-State-Machines.md)
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Manual takeover, irrigation and handback](Manual-Takeover-and-Irrigation.md)
 - [Troubleshooting runbook](Troubleshooting-Runbook.md)
 - [Denial codes and stage events](Denial-Codes-and-Events.md)

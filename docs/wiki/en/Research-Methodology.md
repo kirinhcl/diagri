@@ -194,7 +194,7 @@ The researcher is a language model, so its tools are fenced in ([`agents/handler
 
 - [Data, archive and traceability](Data-Archive-and-Traceability.md)
 - [Design decisions](Design-Decisions.md)
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Run a research round](Run-a-Research-Round.md)
 - [Denial codes and stage events](Denial-Codes-and-Events.md)
 - [Glossary](Glossary.md)

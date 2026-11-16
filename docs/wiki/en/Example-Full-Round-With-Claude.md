@@ -159,6 +159,6 @@ The orchestrator's follow-up told the operator where things stand and what to do
 ## See also
 
 - [Run a research round](Run-a-Research-Round.md): every step with its request and states
-- [The five agents](The-Five-Agents.md): what each role may and may not do
+- [The agents](The-Five-Agents.md): what each role may and may not do
 - [Research methodology](Research-Methodology.md): labels, conclusions and the treatment check
 - [Tutorial: a simulated round](Tutorial-Simulated-Round.md): the scripted round without models

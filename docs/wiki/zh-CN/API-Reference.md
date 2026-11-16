@@ -267,5 +267,5 @@
 - [配置参考](Configuration-Reference.md)
 - [CLI 参考](CLI-Reference.md)
 - [控制与安全模型](Control-and-Safety-Model.md)
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [术语表](Glossary.md)

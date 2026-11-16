@@ -202,7 +202,7 @@ The state tables in Appendix B of the [architecture document](../../diagri-agent
 
 - [Architecture overview](Architecture.md)
 - [Control and safety model](Control-and-Safety-Model.md)
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Run a research round](Run-a-Research-Round.md)
 - [Troubleshooting runbook](Troubleshooting-Runbook.md)
 - [Denial codes and stage events](Denial-Codes-and-Events.md)

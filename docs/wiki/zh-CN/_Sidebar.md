@@ -18,7 +18,7 @@
 **概念与设计**
 
 - [架构总览](Architecture.md)
-- [五个 Agent](The-Five-Agents.md)
+- [Agent 一览](The-Five-Agents.md)
 - [控制与安全模型](Control-and-Safety-Model.md)
 - [工作流与状态机](Workflow-and-State-Machines.md)
 - [数据、档案与可追溯性](Data-Archive-and-Traceability.md)

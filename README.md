@@ -2,7 +2,7 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**DiAGRI is an agentic research system for plant-growth experiments.** Give it a research question and it takes the question through a whole experiment. Three language-model agents design the study and analyse the result. Deterministic programs run the approved plan on a grow tent and watch over it. Every reading, write, approval and report is kept, so the study can be traced and repeated. A person approves each run sheet before anything touches the plants, and no safety check depends on a model.
+**DiAGRI is an agentic research system for plant-growth experiments.** Give it a research question and it takes the question through a whole experiment. Four language-model agents design the study, analyse the result and audit the records. Deterministic programs run the approved plan on a grow tent and watch over it. Every reading, write, approval and report is kept, so the study can be traced and repeated. A person approves each run sheet before anything touches the plants, and no safety check depends on a model.
 
 > **Status.** DiAGRI as a whole has run only on a simulated AC5 controller, including complete research rounds with Claude in the model roles. Its device bridge, GrowBridge, has read and controlled a real Spider Farmer AC5 over Bluetooth. See [Status and known limitations](docs/wiki/en/Status-and-Known-Limitations.md).
 
@@ -67,10 +67,11 @@ DiAGRI splits the work in two. **Model roles reason:** they read data and hand i
 | Orchestrator | model role | Takes the operator's goal, delegates to the planner or the researcher, and reports back in the project conversation |
 | Planner | model role | Designs the experiment and drafts the run sheets, checking them with the validation tools |
 | Researcher | model role | Inspects the data, freezes it into a snapshot, runs the analysis and publishes the report |
+| Auditor | model role | Reads the records of a running stage once per stage day and at its end, compares them with the run sheet and raises advisory findings; it cannot change anything |
 | Executor | program | Carries out the approved run sheet: timed actions, feedback rules, protection rules, end actions |
-| Observer and notifier | program | Evaluates alert rules, notices frozen readings, queues notifications and the daily report |
+| Observer and notifier | program | Evaluates alert rules, notices frozen readings, runs the stage checks (missed tasks, missing or out-of-window measurements), queues notifications and the daily report |
 
-A round moves through fixed states: designing, stage review, stage running, data verification, analysis, delivered. The operator works from the web console at `/workbench`: projects and conversations, run sheets to review, the live environment, manual tasks, alerts and reports. See [The five agents](docs/wiki/en/The-Five-Agents.md) and [Run a research round](docs/wiki/en/Run-a-Research-Round.md).
+A round moves through fixed states: designing, stage review, stage running, data verification, analysis, delivered. The operator works from the web console at `/workbench`: projects and conversations, run sheets to review, the live environment, manual tasks, alerts and reports. See [The agents](docs/wiki/en/The-Five-Agents.md) and [Run a research round](docs/wiki/en/Run-a-Research-Round.md).
 
 ## What DiAGRI never does
 

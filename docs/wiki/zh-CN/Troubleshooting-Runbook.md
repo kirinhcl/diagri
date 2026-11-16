@@ -187,6 +187,12 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 | `pump_watchdog`（键 `step` 或 `intervention`） | `step`：看门狗自己出错。`intervention`：`unexpected_watering` 干预没能记下来（泵仍然被关掉了）。严重。 | 看日志。`step` 在一次读过水泵的步骤完成后解决；`intervention` 在之后有干预记录成功后解决。锁存告警，见表格下方。 |
 | `frozen_reading`（键为传感器名） | 某个传感器的读数在超过门槛的时间里完全不变。保护规则用到它时为严重，否则为警告。规则依赖它的阶段会被暂停（事件 `alert_pause`，`rule` 为 `frozen:<传感器>`）。 | 检查探头和线缆。读数变化或传感器移出检查后告警解决。传感器恢复或改了规则后，再恢复阶段。 |
 | `frozen_watch`（键 `check`） | 冻结读数检查本身出错。严重。 | 看日志。一次检查完整结束后解决。 |
+| `task_missed`（键 `stage:task:due`） | 某次人工任务已过准时截止时间，却没有记录。警告。 | 还来得及就去做，并在控制台里录入记录。有记录后告警自动解决。 |
+| `measurement_missing`（键 `stage:task:due`） | 测量任务已记为完成，但记录 2 小时后，该实验没有任何一条有效测量的时间落在「任务应做时间前一小时」到截止时间之间。警告。 | 按真实时间录入测量；如果其实没有测，就更正任务记录。窗口内有了测量后告警解决。 |
+| `measurement_outside_window`（键 `stage:measurement`） | 有一条有效测量的时间在窗口之外，快照会把它排除。警告。 | 检查录入的时间，用更正后的测量替换它；被替换后告警解决。 |
+| `stage_checks`（键 `check`） | 阶段检查本身出错。严重。 | 看日志。一次检查完整结束后解决。其他告警规则照常运行。 |
+| `audit_finding` | 监察 Agent 发现了需要人处理的事。信息或警告级，不会暂停任何东西，消息里写明内容。 | 读这条发现，以及项目对话里监察 Agent 的说明，必要时自己处理阶段。 |
+| `audit_schedule`（键 `schedule`） | 安排监察时出错。其他模型任务照常运行。 | 看日志。调度恢复后监察继续。 |
 | `stage_waiting` | 系统暂停了某个阶段，或把它送进了恢复待核对。消息里写明事件和事件携带的内容。 | 按事件名到上面对应的小节处理。阶段离开这个状态时告警自动解除。 |
 | `backup`、`backup_unconfigured` | 备份失败，或者没有配置 `backup_dir`。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |
 | `notify_unconfigured` | 没有配置任何通知渠道。告警会记录，但不会发出。 | 见[通知、日报与备份](Notifications-Reports-and-Backup.md)。 |

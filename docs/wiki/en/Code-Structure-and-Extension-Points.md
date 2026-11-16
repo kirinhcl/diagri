@@ -35,7 +35,7 @@ The package has two layers. The **bridge**, GrowBridge, is the original daemon: 
 | [`observer/`](../../../src/growbridge/observer) | `Observer`: alert rules and the alert book, the notification outbox and channels, daily metrics and reports, run health and heartbeat. |
 | [`planning/`](../../../src/growbridge/planning) | Pure functions: experimental-design checks in `design.py`, run-sheet validation in `validate.py`. |
 | [`research/`](../../../src/growbridge/research) | The analysis library: statistics, the confirmatory gate, `HoldoutRegistry`, report publishing and the code sandbox. |
-| [`agents/`](../../../src/growbridge/agents) | The three model roles: prompts in `roles.py`, the tool registry in `tools.py`, tool handlers in `handlers*.py`, the agent loop, `Dispatcher`, `CallBudget` and the model client in `llm.py`. |
+| [`agents/`](../../../src/growbridge/agents) | The four model roles: prompts in `roles.py`, the tool registry in `tools.py`, tool handlers in `handlers*.py`, the agent loop, `Dispatcher`, `CallBudget` and the model client in `llm.py`. |
 | [`compute/`](../../../src/growbridge/compute) | `ComputeService`: quota checks and job tracking. The `ComputeBackend` protocol. `FirecrestBackend`, unverified against CSC. |
 | [`workbench/`](../../../src/growbridge/workbench) | The operator's HTTP routes under `/wb`: sessions, stage control, manual writes and reads in `api.py`; starting and steering a round in `rounds.py`; the read routes of the console (inbox, projects, readings, measurements, history, safety) in `reads.py`. Operator credentials, sessions and the entry decision in `auth.py`. |
 | [`sim/`](../../../src/growbridge/sim) | Simulators and fixtures, used by the tests and by `growbridge simulate`. |
@@ -180,6 +180,6 @@ These pieces exist as code and tests, and `growbridge serve` does not connect th
 - [Architecture overview](Architecture.md)
 - [Design decisions](Design-Decisions.md)
 - [Control and safety model](Control-and-Safety-Model.md)
-- [The five agents](The-Five-Agents.md)
+- [The agents](The-Five-Agents.md)
 - [Development setup, testing and CI](Development-Setup-Testing-and-CI.md)
 - [Glossary](Glossary.md)

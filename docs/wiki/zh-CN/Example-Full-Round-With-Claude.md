@@ -167,6 +167,6 @@ unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY   # Claude Code 用它自己的登录
 ## 另见
 
 - [跑一轮研究](Run-a-Research-Round.md)：每一步的请求和状态
-- [五个 Agent](The-Five-Agents.md)：每个角色能做什么、不能做什么
+- [Agent 一览](The-Five-Agents.md)：每个角色能做什么、不能做什么
 - [研究方法](Research-Methodology.md)：等级、结论和处理检查
 - [教程：模拟的一轮](Tutorial-Simulated-Round.md)：不用模型、用脚本跑的一轮
