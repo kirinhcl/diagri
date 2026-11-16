@@ -244,6 +244,13 @@ code {
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
+.chart-plan {
+  fill: none;
+  stroke: var(--muted-strong);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.chart-plan-key::before { content: "- - "; letter-spacing: 1px; }
 .chart-hit { fill: var(--green); opacity: 0; transition: opacity var(--fast); }
 .chart-hit:hover { opacity: 1; }
 .chart-lone { fill: var(--green); stroke: var(--paper); stroke-width: 1; vector-effect: non-scaling-stroke; }

@@ -153,7 +153,7 @@ function trendsView(ctx, env) {
     h("h3", { class: "env-sub", text: ctx.t("env.sensors") }),
     readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, empty: "env.readingsEmpty", scope: "sensors" }),
     h("h3", { class: "env-sub", text: ctx.t("env.channels") }),
-    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty", scope: "levels" }),
+    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty", scope: "levels", planned: env.stage ? env.stage.planned : null }),
   );
 }
 

@@ -162,3 +162,12 @@ test("a refresh with the same state keeps an open unknown-state fold open", asyn
   assert.notEqual(rebuilt, fold, "another state rebuilds the row");
   assert.ok(!rebuilt.hasAttribute("open"));
 });
+
+// --- the run sheet's planned levels are drawn on the level charts (batch 2a, task 16) ---------------
+test("the page draws the stage's planned levels on the level charts, and none when there is no plan", async () => {
+  const planned = { light: [[1794817834, 0], [1794819000, 70]] };
+  const withPlan = await envText("en", { ...RUNNING, planned });
+  assert.ok(withPlan.includes("Planned level"));
+  const without = await envText("en", { ...RUNNING, planned: {} });
+  assert.ok(!without.includes("Planned"));
+});

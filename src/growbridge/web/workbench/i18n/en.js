@@ -410,6 +410,8 @@ export default {
   "chart.table.title": "Data table",
   "chart.table.time": "Time",
   "chart.table.value": "Value",
+  "chart.table.planned": "Planned level",
+  "chart.planned": "Planned",
   "nav.environment": "Live environment",
   "env.lead": "The device's newest readings and channel levels, against what the running stage's run sheet expects now. Refreshed every {seconds} s.",
   "env.now": "Now",

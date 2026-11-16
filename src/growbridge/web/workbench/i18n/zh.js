@@ -410,6 +410,8 @@ export default {
   "chart.table.title": "数据表",
   "chart.table.time": "时间",
   "chart.table.value": "数值",
+  "chart.table.planned": "计划档位",
+  "chart.planned": "计划",
   "nav.environment": "实时环境",
   "env.lead": "设备最新的读数和各通道档位，并和运行中阶段的运行单此刻的要求对照。每 {seconds} 秒刷新一次。",
   "env.now": "现在",
