@@ -598,6 +598,7 @@ export default {
   "safety.field.action.level": "动作档位",
   "safety.field.sensor": "传感器",
   "safety.field.unit": "单位",
+  "safety.exactSeconds": "{text}（{n} 秒）",
   "safety.approved": "已批准，新限值已生效。",
   "frame.timezone": "时区",
   "entry.onsiteHint": "浇水等操作只能在现场（实验室网络）进行。",

@@ -598,6 +598,7 @@ export default {
   "safety.field.action.level": "Action level",
   "safety.field.sensor": "Sensor",
   "safety.field.unit": "Unit",
+  "safety.exactSeconds": "{text} ({n} s)",
   "safety.approved": "Approved; the new limits are in force.",
   "frame.timezone": "Time zone",
   "entry.onsiteHint": "Some actions, such as irrigation, work only on site (lab network).",

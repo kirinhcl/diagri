@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { configDiff } from "../../src/growbridge/web/workbench/diff.js";
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { isNotMounted } from "../../src/growbridge/web/workbench/pages/not-mounted.js";
 import { baselineChanged, diffLines, formatValue, visibleChanges } from "../../src/growbridge/web/workbench/pages/safety-diff.js";
@@ -128,41 +129,57 @@ test("a rule unit C is shown as °C and the English sentence reads too", () => {
   assert.doesNotMatch(en, /heat-cut|300|600/);
 });
 
+const zh = makeT("zh");
+const COLD = { ...HEAT, id: "cold-cut", sensor: "humi", unit: "%" };
+const lines = (before, after, t = zh) => diffLines(visibleChanges(configDiff(before, after)), t, { before, after });
+const withRule = (patch) => ({ ...HEAT, ...patch });
+
 test("the approval dialog describes changes by rule and unit", () => {
-  const before = { rules: [{ id: "heat-cut", unit: "°C", trigger: { value: 30 } }] };
-  const after = { rules: [{ id: "heat-cut", unit: "°C", trigger: { value: 35 } }] };
-  const zh = makeT("zh");
-  assert.deepEqual(diffLines([{ path: "rules.0.trigger.value", before: 30, after: 35 }], zh, { before, after }), ["规则 heat-cut：触发值 30 °C → 35 °C"]);
+  const out = lines({ rules: [HEAT] }, { rules: [withRule({ trigger: { op: ">", value: 35 } })] });
+  assert.deepEqual(out, ["规则 heat-cut：触发值 30 °C → 35 °C"]);
 });
 
 test("dialog lines write durations, levels, frozen limits and gaps as words", () => {
-  const zh = makeT("zh");
-  const before = { rules: [HEAT] };
-  const after = { rules: [{ ...HEAT, duration_seconds: 600, action: { channel: "fan", level: 3 } }] };
-  const lines = diffLines(
-    [
-      { path: "rules.0.duration_seconds", before: 300, after: 600 },
-      { path: "rules.0.action.level", before: 0, after: 3 },
-      { path: "frozen.minutes.temp", before: 120, after: 60 },
-      { path: "frozen.max_gap_seconds", before: 600, after: undefined },
-    ],
-    zh,
-    { before, after },
-  );
-  assert.deepEqual(lines, [
+  const before = { rules: [HEAT], frozen: { minutes: { temp: 120 }, max_gap_seconds: 600 } };
+  const after = { rules: [withRule({ duration_seconds: 600, action: { channel: "fan", level: 3 } })], frozen: { minutes: { temp: 60 }, max_gap_seconds: 660 } };
+  assert.deepEqual(lines(before, after), [
     "规则 heat-cut：持续时间 5 分钟 → 10 分钟",
     "规则 heat-cut：动作档位 0 / 10 → 3 / 10",
     "空气温度 冻结判定：2 小时 → 60 分钟",
-    "最长空档：10 分钟 → （无）",
+    "最长空档：10 分钟 → 11 分钟",
   ]);
 });
 
+test("a rounded duration carries its exact seconds; a hidden change falls back to the raw line", () => {
+  const gap = (a, b) => lines({ frozen: { max_gap_seconds: a } }, { frozen: { max_gap_seconds: b } });
+  assert.deepEqual(gap(600, 620), ["最长空档：10 分钟 → 10 分钟（620 秒）"]);
+  assert.deepEqual(gap(600, 930), ["最长空档：10 分钟 → 16 分钟（930 秒）"]);
+  assert.deepEqual(gap(600, 600.4), ["最长空档：10 分钟 → 10 分钟（600.4 秒）"]);
+  assert.deepEqual(gap(600, "600"), ['frozen.max_gap_seconds: 600 → "600"']);
+  assert.deepEqual(gap(600, -5), ["frozen.max_gap_seconds: 600 → -5"]);
+  const frozen = lines({ frozen: { minutes: { temp: 120 } } }, { frozen: { minutes: { temp: 120.4 } } });
+  assert.match(frozen[0], /2 小时（7224 秒）/);
+  assert.deepEqual(lines({ rules: [HEAT] }, { rules: [withRule({ duration_seconds: 300.2 })] }).length, 1);
+});
+
+test("deleting or reordering rules never names the wrong rule", () => {
+  const deleted = lines({ rules: [HEAT, COLD] }, { rules: [COLD] });
+  assert.ok(deleted.length >= 1);
+  assert.ok(deleted.every((line) => !line.startsWith("规则 ")));
+  const reordered = lines({ rules: [HEAT, COLD] }, { rules: [COLD, HEAT] });
+  assert.ok(reordered.length >= 1);
+  assert.ok(reordered.every((line) => !line.startsWith("规则 ")));
+  assert.equal(new Set(reordered).size, reordered.length);
+});
+
+test("an unknown code is listed raw, and so is every path without the rules", () => {
+  assert.match(lines({ rules: [HEAT] }, { rules: [withRule({ sensor: "mystery" })] })[0], /^rules\[0\]\.sensor: /);
+  const changes = visibleChanges(configDiff({ frozen: { max_gap_seconds: 600 } }, { frozen: { max_gap_seconds: 660 } }));
+  assert.deepEqual(diffLines(changes, zh), ["frozen.max_gap_seconds: 600 → 660"]);
+});
+
 test("an unknown path is still listed", () => {
-  const zh = makeT("zh");
-  const lines = diffLines([{ path: "extra.flag", before: undefined, after: "x" }, { path: "rules.0.mystery", before: 1, after: 2 }], zh, {
-    before: { rules: [HEAT] },
-    after: { rules: [HEAT] },
-  });
-  assert.match(lines[0], /extra\.flag/);
-  assert.match(lines[1], /rules\.0\.mystery/);
+  const out = lines({ rules: [HEAT], extra: {} }, { rules: [withRule({ mystery: 2 })], extra: { flag: "x" } });
+  assert.ok(out.some((line) => line.includes("extra.flag")));
+  assert.ok(out.some((line) => line.includes("rules[0].mystery")));
 });
