@@ -5,7 +5,7 @@ import { clearOnHandOver } from "./intents.js";
 import { LANGS, initialLang, makeT } from "./i18n.js";
 import { inboxCounts } from "./pages/inbox.js";
 import * as loginPage from "./pages/login.js";
-import { hrefFor, parseHash } from "./router.js";
+import { PAGES, hrefFor, parseHash } from "./router.js";
 import { askSecret } from "./ui/dialog.js";
 import { clear, h } from "./ui/dom.js";
 import { bindFormContext, dropDetachedDraftSavers, errorDetail, errorLines, saveAllDrafts } from "./ui/forms.js";
@@ -15,7 +15,6 @@ import { techDetails } from "./ui/section.js";
 const LANGUAGE_KEY = "growbridge-workbench-language";
 const NOTICE_MS = 6000;
 // Each page lives in pages/<name>.js and is loaded on its first visit.
-const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
 // Until a page has read its data it shows the generic word, never the id from the address.
 const ID_CRUMBS = new Map([
   ["project", "crumb.project"],

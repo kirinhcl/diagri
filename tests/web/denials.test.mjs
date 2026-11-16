@@ -35,3 +35,14 @@ test("an unknown code is null", () => {
   assert.equal(describeDenial("nope", "en"), null);
   assert.equal(describeDenial(null, "zh"), null);
 });
+
+test("the re-authentication and lock-out denials say password, and a lock-out says how long", () => {
+  for (const code of ["reauth_required", "reauth_failed", "locked"]) {
+    const zh = describeDenial(code, "zh");
+    const en = describeDenial(code, "en");
+    assert.doesNotMatch(`${zh.text}${zh.advice}`, /口令/, code);
+    assert.doesNotMatch(`${en.text}${en.advice}`, /secret/i, code);
+  }
+  assert.match(describeDenial("locked", "zh").text, /已锁定 15 分钟/);
+  assert.match(describeDenial("locked", "en").text, /locked for 15 minutes/);
+});

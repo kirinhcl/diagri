@@ -14,6 +14,9 @@ function decode(part) {
   }
 }
 
+// Every page a signed-in operator can open; the sign-in page is separate.
+export const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
+
 export function parseHash(hash) {
   const [path, query = ""] = String(hash || "").replace(/^#/, "").split("?");
   if (path === "" || path === "/") return { page: "inbox", params: {} };

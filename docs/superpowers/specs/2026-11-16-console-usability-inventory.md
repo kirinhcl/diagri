@@ -388,3 +388,116 @@
 
 其余 Medium 和 Low 没有逐条打开代码，保留审计的原样。我读到的相邻代码与审计引用没有矛盾。
 截图证据（`docs/images/example-round/*`）没有重新查看，只按审计转述。
+
+---
+
+## 6. 第一批结果
+
+第一批覆盖 73 行：61 行全部完成，12 行部分完成。计划里写的“74 行、其中 65 行整行”是数错了：清单实际是 64 行整行加 9 行只做客户端部分，共 73 行，下表逐行核对过。
+状态：`已改`；`部分（…，第 N 批）`，写明已做和未做；`关闭：无法复现`（本批没有这样的行）。证据是钉住这条改动的测试文件和测试名（均在 `tests/web/`），没有测试的行直接说明。截图列留给 Task 19 填写。
+
+| 编号 | 状态 | 证据 | 截图 |
+|---|---|---|---|
+| INB-01 | 已改 | `shell.test.mjs`「a stage waiting for review is titled by names」；`shell.test.mjs`「an old stage item falls back to the generic names」；`shell.test.mjs`「the other stage kinds and round choice and compute are titled by names」；`shell.test.mjs`「each item's ids go into its own technical details」 |  |
+| INB-02 | 已改 | `shell.test.mjs`「an alert kind shows its label; an unknown kind says unknown」 |  |
+| INB-03 | 已改 | `shell.test.mjs`「the waiting time is a duration with the exact time in the title」；`time-display.test.mjs`「timeCell is relative within a day, absolute otherwise and for the future」 |  |
+| INB-04 | 已改 | `shell.test.mjs`「a task item is titled by its question and shows the owner role」；`shell.test.mjs`「an open fold stays open across a redraw of the same item」 |  |
+| INB-05 | 已改 | `shell.test.mjs`「the 'more' line links to the full list」；`shell.test.mjs`「inbox counts include what the server cut」 |  |
+| INB-06 | 已改 | `shell.test.mjs`「a task item is titled by its question and shows the owner role」 |  |
+| INB-07 | 已改 | `shell.test.mjs`「each inbox kind links to its page」；`shell.test.mjs`「each alert row has an id and the focused one is highlighted」；`shell.test.mjs`「alerts page survives a hostile or unknown focus and highlights nothing」；`router.test.mjs`「the router passes focus to the alerts page」 |  |
+| P-01 | 已改 | `project-page.test.mjs`「the projects list has no id column and names the latest round」 |  |
+| P-04 | 部分（已改：数字无浮点误差；未改：“已用 / 共”要服务器给预算的已用量读字段，第二批） | `project-page.test.mjs`「budget numbers carry no float noise」 |  |
+| P-05 | 已改 | `project-page.test.mjs`「the project page puts the conversation and rounds first, then tasks, protocols, budget and holdouts」；`project-page.test.mjs`「the four editors are closed folds titled Edit…」；`project-page.test.mjs`「an editor that brings back an unsent draft opens by itself」 |  |
+| P-06 | 已改 | `project-page.test.mjs`「the task table names the owner role」；`leaks.test.mjs`「no Batch 1 page leaks internal text」（项目页） |  |
+| P-07 | 已改 | `project-page.test.mjs`「holdouts keep their id in the details and say how often they were read」 |  |
+| P-08 | 已改 | `project-page.test.mjs`「saving the budget, a goal or a holdout says what was saved」；`project-page.test.mjs`「a new project is announced by its name」；`project-page.test.mjs`「compute, round and analysis writes say what was done」；`project-page.test.mjs`「every new save notice exists in both languages」 |  |
+| P-10 | 已改 | `conversation.test.mjs`「adjacent tool calls fold into one group」；`conversation.test.mjs`「several tool calls in a row fold into one line that counts them」；`conversation.test.mjs`「one tool call reads as what it did; its name, input and result are in the details」；`conversation.test.mjs`「the captured conversation shows no tool name, input or result outside the details」 |  |
+| P-11 | 部分（客户端已改：状态句和未知状态的标签；未改：原因码 reason_code 由服务器发，第二批） | `conversation.test.mjs`「a status line says who ended and how; the server's reason is not part of it」；`conversation.test.mjs`「a status entry keeps the raw reason in the details」；`catalog.test.mjs`「a pill for a state or severity the catalog lacks says unknown, not the code」 |  |
+| P-12 | 已改 | `conversation.test.mjs`「the round picker starts at no round and names rounds」；`conversation.test.mjs`「a message can only be about an open round, newest first as listed」 |  |
+| P-13 | 已改 | `conversation.test.mjs`「a sent message shows a pending line until its own task answers」；`conversation.test.mjs`「the hint under the message box is one sentence」 |  |
+| RND-01 | 已改 | `names.test.mjs`「round page title and crumbs carry no id」；`names.test.mjs`「an old round without number or project name shows generic words」 |  |
+| RND-02 | 已改 | `round-report.test.mjs`「the summary names the project and the protocol version, and lists no snapshot or report id」 |  |
+| RND-03 | 已改 | `round-report.test.mjs`「stages are linked by name, and the stopped stage is named in the choice」 |  |
+| RND-05 | 已改 | `round-report.test.mjs`「the analysis block is folded by default」；`round-report.test.mjs`「the analysis says where it stands in one word」；`round-report.test.mjs`「snapshots are named by date and completeness, their ids in the details」；`round-report.test.mjs`「a frozen script keeps its fingerprint and text in folds」；`round-report.test.mjs`「a run's id, exit code and output are in the details; its status is a word」 |  |
+| RND-08 | 已改 | `round-report.test.mjs`「a round planned on an older version says the analysis is not for it」；`research-pages.test.mjs`「the analysis block says when the protocol's latest version is not the round's」 |  |
+| RND-09 | 部分（客户端已改：局限折叠（显示三条，其余折起），服务器自己的说明在前；未改：模型写的局限里的英文、epoch 秒和字段名，第三批） | `round-report.test.mjs`「limitations show three and fold the rest」；`round-report.test.mjs`「the server's own limitation notes come before the model's and stay in view」 |  |
+| RND-10 | 部分（客户端已改：条目与下一轮用简单排版（富文本）；未改：模型措辞，第三批） | `round-report.test.mjs`「report items and the next round keep the model's light markup」；`rich-text.test.mjs`「paragraphs, lists and headings are told apart; wrapped lines stay together」 |  |
+| RND-11 | 部分（客户端已改：效应取整、说明 p 值含义、没有估计时说原因；未改：note_code 由服务器发，第二批；缺指标名，需要报告里带协议的终点，第二批） | `round-report.test.mjs`「an estimate reads as effect, p value and blocks, or says why there is none」；`round-report.test.mjs`「estimateText rounds the effect」；`round-report.test.mjs`「an estimable effect says what its p value means」；`round-report.test.mjs`「server notes follow the console language; old reports keep their plain text」 |  |
+| RND-12 | 已改 | `round-report.test.mjs`「the report shows a short fingerprint and keeps ids in the details」；`round-report.test.mjs`「a report answer without its own id keeps the round's report id in the details」 |  |
+| RND-13 | 已改 | `round-report.test.mjs`「the report shows a short fingerprint and keeps ids in the details」 |  |
+| RND-14 | 已改 | `round-report.test.mjs`「every label and conclusion the server writes has a text」；`round-report.test.mjs`「each label says under it what it allows」；`round-report.test.mjs`「a missing label or conclusion says 'not stated'」；`round-report.test.mjs`「a label or conclusion the catalog lacks is 'unknown', its code in the details」 |  |
+| RND-15 | 已改 | `round-report.test.mjs`「report items and the next round keep the model's light markup」 |  |
+| RND-20 | 已改 | `round-report.test.mjs`「a report that could not be read shows the plain lines and folds the server's words」；`error-folds.test.mjs`「a refused chat message keeps the server's words in the fold under the plain lines」 |  |
+| STG-01 | 部分（客户端已改：检查结果按代码显示为标签并换行；未改：句子和参数（findings 的 params）由服务器发，第二批） | `run-sheet-review.test.mjs`「finding codes are shown as labels with counts, never as code」 |  |
+| STG-02 | 部分（客户端已改：阻断项在前，按代码分组并带条数；未改：怎么改的说明文字由服务器发，第二批） | `run-sheet-review.test.mjs`「blocking findings come first, grouped by code with counts」；`run-sheet-review.test.mjs`「a code seen first as a hint and later as blocking is grouped by both」 |  |
+| STG-07 | 已改 | `run-sheet-review.test.mjs`「the review shows days, a short fingerprint, a version and a simulated device」 |  |
+| STG-08 | 已改 | `run-sheet-review.test.mjs`「the review shows days, a short fingerprint, a version and a simulated device」；`format.test.mjs`「shortDigest keeps eight characters」 |  |
+| STG-09 | 已改 | `run-sheet-review.test.mjs`「the review shows days, a short fingerprint, a version and a simulated device」 |  |
+| STG-10 | 已改 | `names.test.mjs`「stage page title and crumbs carry no id」；`leaks.test.mjs`「a stage read from before stages had names is called an unnamed stage」 |  |
+| STG-11 | 已改 | `stage-status.test.mjs`「status hides empty rows and keeps write rights in the details」 |  |
+| STG-12 | 已改 | `stage-status.test.mjs`「status hides empty rows and keeps write rights in the details」；`stage-status.test.mjs`「a pending end shows a banner and a pause time shows its row」 |  |
+| STG-13 | 已改 | `run-sheet-review.test.mjs`「pending review puts the run sheet before the controls; running puts readings first」；`run-sheet-review.test.mjs`「the pending stage page lists the run sheet before the controls」；`run-sheet-review.test.mjs`「a page refreshed with a running stage rearranges its regions」 |  |
+| STG-18 | 已改 | `stage-status.test.mjs`「a log item says when it was sent and keeps the request id in the details」；`stage-status.test.mjs`「a resent write is said so in a line under the heading, not in it」；`stage-status.test.mjs`「receipt outcomes write levels, durations and no request id」 |  |
+| STG-19 | 已改 | `stage-status.test.mjs`「a level is written against its full scale」；`stage-status.test.mjs`「receipt outcomes write levels, durations and no request id」；`format.test.mjs`「levelText writes value over full scale」 |  |
+| STG-21 | 已改 | `stage-status.test.mjs`「hand-back differences use labels and units」 |  |
+| HIS-01 | 已改 | `stage-history.test.mjs`「events read as sentences and same-state moves show no pills」；`stage-history.test.mjs`「an unknown event says unknown and keeps the code in the details」 |  |
+| HIS-02 | 已改 | `stage-history.test.mjs`「durations, times and reasons are written for people; raw values go to the details」；`stage-history.test.mjs`「differences read as sentences」；`stage-history.test.mjs`「free-text reasons and unknown keys stay in the details」 |  |
+| HIS-03 | 已改 | `stage-history.test.mjs`「unexpected watering shows labelled times, not epoch seconds」 |  |
+| HIS-04 | 已改 | `stage-history.test.mjs`「events read as sentences and same-state moves show no pills」；`stage-history.test.mjs`「a move between two states shows both pills」 |  |
+| HIS-05 | 已改 | `stage-history.test.mjs`「newest first; a transition and an intervention of the same second keep a fixed order」；`stage-history.test.mjs`「beyond twenty entries the newest stay on top and the rest fold away」 |  |
+| TSK-01 | 已改 | `stage-tasks.test.mjs`「the task table has no task-id column and verbs on its buttons」；`stage-tasks.test.mjs`「recording a task names it, not its id」 |  |
+| TSK-02 | 已改 | `stage-tasks.test.mjs`「the task table has no task-id column and verbs on its buttons」 |  |
+| TSK-05 | 已改 | `stage-tasks.test.mjs`「the lead is one sentence and the scoring rules fold away」 |  |
+| TSK-06 | 已改 | `measurements.test.mjs`「the measurement table shows six columns and folds the rest」；`measurements.test.mjs`「each row's details tell its corrections by time and keep the ids」 |  |
+| TSK-07 | 已改 | `measurements.test.mjs`「the metric, unit and method fields suggest what this stage already recorded」；`measurements.test.mjs`「the form's lead names no experiment id and corrects stays hidden」；`measurements.test.mjs`「Correct fills the form from the row and says which record it corrects」；`measurements.test.mjs`「a refused correction names the corrected record, not the field」 |  |
+| ENV-01 | 已改 | `environment.test.mjs`「the fan shows its full scale and the pump its plan」；`environment.test.mjs`「channel levels are read where the device reports them」 |  |
+| ENV-02 | 部分（已改：坐标轴、最小跨度、数据表；未改：运行单目标带，需要服务器给运行单读字段，第二批） | `chart-math.test.mjs`「paddedRange widens a narrow range around its middle」；`chart-math.test.mjs`「every sensor has a minimum span in its own unit」；`chart-math.test.mjs`「a fixed domain scales a series against it」；`chart.test.mjs`「the chart has tick labels, one status line and a data table」；`chart.test.mjs`「a level chart is drawn against the channel's full scale」 |  |
+| ENV-03 | 已改 | `chart.test.mjs`「the chart has tick labels, one status line and a data table」；`chart.test.mjs`「time labels take the year from the page clock」；`environment.test.mjs`「a live refresh keeps open folds open and closed ones closed」 |  |
+| SAF-01 | 已改 | `config-pages.test.mjs`「a rule reads as one sentence」；`config-pages.test.mjs`「a rule unit C is shown as °C and the English sentence reads too」 |  |
+| SAF-02 | 已改 | `safety-frozen.test.mjs`「frozenRows lists the sensors in name order」；`config-pages.test.mjs`「dialog lines write durations, levels, frozen limits and gaps as words」 |  |
+| SAF-03 | 已改 | `config-pages.test.mjs`「the approval dialog describes changes by rule and unit」；`config-pages.test.mjs`「deleting or reordering rules never names the wrong rule」；`config-pages.test.mjs`「an unknown code is listed raw, and so is every path without the rules」 |  |
+| SAF-05 | 已改（无专门测试） | 没有测试钉住这一句：`i18n/zh.js` 的 `safety.approved` 在 c3abf7b 改成“已批准，新限值已生效。”；两种语言的键由 `i18n.test.mjs` 检查 |  |
+| ALT-12 | 部分（已改：读取状态和时间；未改：指向受影响对象的链接，需要服务器给参数，第二批） | `alerts-page.test.mjs`「the read column says one thing」；`alerts-page.test.mjs`「a read without a recorded severity is not called worse; a day-old read says why it asks again」 |  |
+| ALT-11 | 部分（客户端已改：告警类型“审计备注”的标签，证据行拆成列表；未改：摘要和证据分字段由服务器发，第二批；模型写的摘要措辞，第三批） | `alerts-page.test.mjs`「an alert row has a kind label and splits evidence lines」 |  |
+| EVI-01 | 已改 | `research-pages.test.mjs`「an evidence card is titled by its claim and keeps its id in the details」；`research-pages.test.mjs`「an evidence card entered by the signed-in operator says you」；`research-pages.test.mjs`「an evidence value is shown exactly as entered」 |  |
+| CMP-01 | 已改 | `catalog.test.mjs`「compute phases have labels and colour groups」；`shell.test.mjs`「every state from the plan's table lands in its colour group」 |  |
+| CMP-02 | 已改 | `research-pages.test.mjs`「the change-budget button fills the task field」；`research-pages.test.mjs`「a task reads the same in every table, and a new budget row does not rename another」 |  |
+| CMP-03 | 已改 | `research-pages.test.mjs`「compute usage reads as hours」 |  |
+| CMP-05 | 已改（无专门测试） | 没有测试钉住这一句：`i18n/zh.js` 的 `compute.balance.none` 在 f4fc131 改成说明 MyCSC 在哪里（my.csc.fi）；键由 `i18n.test.mjs` 检查 |  |
+| FRM-01 | 已改 | `time-display.test.mjs`「timeText shows no zone; the sidebar names it once」；`time-display.test.mjs`「timeCell is relative within a day, absolute otherwise and for the future」；`time-display.test.mjs`「a missing zone falls back to UTC and says so」；`format.test.mjs`「formatDateTime follows the language and shows the year only when it differs」 |  |
+| FRM-02 | 已改 | `catalog.test.mjs`「labelOr never prints a key」；`catalog.test.mjs`「no page builds a catalog key from a server value without labelOr」 |  |
+| FRM-03 | 已改（无直接测试） | `main.js` 启动时就运行，测试无法导入，“页面无法加载”的视图没有直接测试；原因进详情用的是 `errorDetail`，由 `forms.test.mjs`「errorDetail 的断言」 和 `tech-details.test.mjs`「errorDetail labels each fact in the page language and leaves out what is missing」 钉住 |  |
+| FRM-04 | 已改 | `time-display.test.mjs`「the sidebar says why entry matters」 |  |
+| FRM-05 | 已改 | `denials.test.mjs`「the re-authentication and lock-out denials say password, and a lock-out says how long」；`leaks.test.mjs`「the sign-in page and its denials call the secret a password」 |  |
+| FRM-06 | 部分（客户端已改：所有时长统一用 formatDuration；未改：服务器句子里的“300 s”类文字，第二批） | `format.test.mjs`「formatDuration picks the unit by size」；`stage-status.test.mjs`「the irrigation heading shows a formatted duration」 |  |
+| ERR-01 | 部分（客户端已改：服务器原话进“技术详情”，已知错误码只显示说明和建议，没有码的 404 有自己的文字；未改：服务器仍发不带码的句子，需要错误码和参数，第二批） | `tech-details.test.mjs`「errorLines keeps only the human lines; the server text goes to the details」；`tech-details.test.mjs`「errorParts: the plain lines as paragraphs, then the fold with the server's words」；`forms.test.mjs`「a known refusal shows its explanation and advice; the server's own words go to the details」 |  |
+
+注：`leaks.test.mjs` 的“no Batch 1 page leaks internal text”对每个页面的中英文都跑一遍，是所有整行的共同底线（它用 `tests/web/fixtures/` 里抓取的真实读取结果渲染页面，再扫描 id、事件码、epoch 秒、原始载荷和目录键）。
+
+### 6.1 第二、三批待办：泄漏测试的豁免项
+
+`tests/web/support/leak-exemptions.mjs` 里每一条都是页面上仍然原样显示的服务器或模型文字，由对应的批次去掉；`keep` 是操作员自己起的名字，保持原样。
+
+| 页面 | 夹具 | 路径 | 显示方式 | 批次 | 原因 |
+|---|---|---|---|---|---|
+| stage | run-sheet.json | `findings[*].message` | 原样 | 第 2 批 | 服务器整句（C4，STG-01） |
+| stage | run-sheet-pending.json | `findings[*].message` | 原样 | 第 2 批 | 服务器整句（C4，STG-01） |
+| stage | measurements.json | `measurements[*].metric` | 原样 | 保留 | 测量指标名由录入人自己填写（TSK-06），照原样显示，也照原样出现在表单的候选和“正在更正”提示里 |
+| round | report.json | `report.model_limitations[*]` | 原样 | 第 3 批 | 模型写的文字（C5） |
+| round | report.json | `report.unresolved[*]` | 原样 | 第 3 批 | 模型写的文字（C5） |
+| round | report.json | `report.next_round` | 原样 | 第 3 批 | 模型写的文字（C5） |
+| round | report.json | `report.estimate.note` | 原样 | 第 2 批 | 服务器整句（C4，RND-11） |
+| project | conversation.json | `entries[kind=reply].text` | richText | 第 3 批 | 模型写的回复（C5，P-10） |
+| project | holdouts.json | `holdouts[*].outcome_fields[*]` | 原样 | 保留 | 结局字段名由操作员登记留出批次时自己填写（P-07），照原样显示 |
+| project | project.json | `tasks[*].question` | folded | 第 3 批 | 委派和后续任务的问题是模型写的（C5，P-06）；操作员自己的目标在同一列，本身不含代码 |
+| inbox | inbox.json | `items[*].detail.message` | folded | 第 2 批 | 告警正文是服务器整句（INB-01，C4） |
+| inbox | inbox.json | `items[*].detail.question` | folded | 第 3 批 | 研究任务的问题是模型写的（C5，INB-01） |
+| inbox | inbox.json | `items[*].detail.reason` | 原样 | 第 2 批 | 计算卡住的原因是服务器整句（INB-01，C4） |
+| alerts | alerts.json | `alerts[*].message` | 原样 | 第 2 批 | 告警正文是服务器整句（ALT-11，C4） |
+
+### 6.2 其他留到后面的事项
+
+- 草稿运行单的 JSON 编辑器没有被泄漏测试检查（编辑器里本来就是 JSON）；改成结构化表单是第三批（C8）。
+- 对话框（确认框、重新认证框）不被泄漏测试渲染；确认文字是人工逐条看过的。
+- `visibleText` 跳过隐藏的 textarea 内容，所以文本框里的预填文字（如 JSON 骨架）不在检查范围内。
+- `main.js` 在导入时就启动，测试无法导入它；页面清单 `PAGES` 因此放在 `router.js` 并导出，`main.js` 引用它。“页面无法加载”的视图没有直接测试（FRM-03）。

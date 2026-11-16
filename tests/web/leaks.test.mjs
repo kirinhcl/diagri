@@ -4,8 +4,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
+import { PAGES } from "../../src/growbridge/web/workbench/router.js";
 import { h } from "../../src/growbridge/web/workbench/ui/dom.js";
 import { assertNoLeaks, exemptStrings, findLeaks, visibleText } from "./support/leaks.mjs";
+import { EXEMPTIONS } from "./support/leak-exemptions.mjs";
 import { FIXTURES, installFakeDom, renderPage, testCtx } from "./support/render-page.mjs";
 
 // A stage read from before the server named stages: no number, phase, round number or project name.
@@ -81,6 +83,7 @@ const PAGES_CHECKED = [
   { page: "evidence" },
   { page: "evidence", fixtures: { "evidence.json": { cards: EVIDENCE_CARDS } } },
   { page: "compute" },
+  { page: "login" },
 ];
 
 const BATCH_1_PAGES = ["inbox", "projects", "project", "round", "stage", "environment", "safety", "alerts", "evidence", "compute"];
@@ -240,4 +243,24 @@ test("the fake DOM's children and childNodes behave like the browser's collectio
   assert.equal(parent.children[0].localName, "a");
   assert.deepEqual([...parent.children].map((el) => el.localName), ["a", "b"]);
   assert.equal([...parent.childNodes].length, 3);
+});
+
+test("every console page is checked for leaks", () => {
+  const checked = new Set(PAGES_CHECKED.map((entry) => entry.page));
+  for (const page of [...PAGES, "login"]) assert.ok(checked.has(page), page);
+});
+
+test("every exemption names its batch and reason", () => {
+  for (const entry of EXEMPTIONS) {
+    assert.ok([2, 3, "keep"].includes(entry.batch), entry.path);
+    assert.ok(typeof entry.why === "string" && entry.why.trim(), entry.path);
+  }
+});
+
+test("the sign-in page and its denials call the secret a password", async () => {
+  const forbidden = { zh: /口令/, en: /secret/i };
+  for (const lang of ["zh", "en"]) {
+    const { element } = await renderPage("login", {}, { lang });
+    assert.doesNotMatch(visibleText(element), forbidden[lang], lang);
+  }
 });
