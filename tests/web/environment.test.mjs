@@ -11,6 +11,8 @@ import {
   staleAfter,
 } from "../../src/growbridge/web/workbench/pages/environment.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
+import { formatDuration } from "../../src/growbridge/web/workbench/format.js";
+import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { hrefFor, parseHash } from "../../src/growbridge/web/workbench/router.js";
 
 const t = (key, vars) => (vars ? `${key}${JSON.stringify(vars)}` : key);
@@ -56,14 +58,18 @@ test("a reading is stale after three sampling intervals, or three minutes betwee
   assert.equal(freshness({ latest: reading({ age_seconds: 600 }), stage: null }), "stale");
 });
 
-test("sensors follow the chart order and units; ages read in the largest whole unit", () => {
+test("sensors follow the chart order and units; ages read as every other duration does", () => {
   assert.deepEqual(
     sensorValues({ latest: reading() }).map(({ metric, value }) => [metric.key, value]),
     [["temp", 22.5], ["humi", 55], ["co2", 500]],
   );
-  assert.equal(ageText(t, 42), 'env.ageSeconds{"n":42}');
-  assert.equal(ageText(t, 600), 'env.ageMinutes{"n":10}');
-  assert.equal(ageText(t, 7200), 'env.ageHours{"n":2}');
+  const zh = makeT("zh");
+  for (const seconds of [42, 90, 600, 7200, 3 * 86400]) assert.equal(ageText(zh, seconds), formatDuration(zh, seconds), String(seconds));
+  assert.equal(ageText(zh, 90), "90 秒");
+  assert.equal(ageText(zh, 3 * 86400), "3 天");
+  assert.equal(ageText(makeT("en"), 3 * 86400), "3 days");
+  assert.equal(ageText(zh, 42.4), "42 秒", "a clock age has no tenths");
+  assert.equal(ageText(zh, -3), "0 秒", "a clock a little ahead of the device reads as now");
 });
 
 test("channel levels are read where the device reports them", () => {

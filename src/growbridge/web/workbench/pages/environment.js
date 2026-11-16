@@ -2,7 +2,7 @@
 // expects of each channel at this moment. Refreshed every few seconds; a reading that stops
 // arriving is said plainly, never shown as if it were current.
 import { LEVELS, METRICS } from "../chart-math.js";
-import { formatNumber, levelText } from "../format.js";
+import { formatAge, formatNumber, levelText } from "../format.js";
 import { hrefFor } from "../router.js";
 import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
@@ -59,11 +59,10 @@ export function sensorValues(env) {
   }));
 }
 
+// How old the newest reading is, in the bands of every other duration; a device clock a little
+// ahead reads as now.
 export function ageText(t, seconds) {
-  const s = Math.max(0, Math.round(seconds));
-  if (s < 60) return t("env.ageSeconds", { n: s });
-  if (s < 3600) return t("env.ageMinutes", { n: Math.round(s / 60) });
-  return t("env.ageHours", { n: Math.round(s / 3600) });
+  return formatAge(t, typeof seconds === "number" ? Math.max(0, seconds) : seconds);
 }
 
 function statusLine(ctx, env) {
