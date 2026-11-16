@@ -119,6 +119,7 @@ class AnalysisRoutes:
                     "experiment_id": snap.experiment_id,
                     "complete": snap.complete,
                     "run_status": self.runner.status(snap.id, protocol),
+                    "created_at": snap.created_at,
                 }
                 for experiment in experiments
                 for snap in self.archive.snapshots(experiment)

@@ -9,7 +9,8 @@
       "protocol_id": "protocol-lettuce-light",
       "protocol_version": 1,
       "awaiting_choice": null,
-      "created_at": 1794779648.813178
+      "created_at": 1794779648.813178,
+      "round_number": 1
     }
   ],
   "protocols": [

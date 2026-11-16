@@ -7,7 +7,8 @@
       "round_count": 1,
       "latest_round": {
         "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
-        "state": "delivered"
+        "state": "delivered",
+        "round_number": 1
       }
     },
     {
@@ -17,7 +18,8 @@
       "round_count": 1,
       "latest_round": {
         "round_id": "round_00405e43c54b48d1902a7aa7b82f7200",
-        "state": "stage_review"
+        "state": "stage_review",
+        "round_number": 1
       }
     }
   ]

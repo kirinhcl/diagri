@@ -8,11 +8,15 @@
   "awaiting_choice": null,
   "snapshot_id": null,
   "report_artifact_id": null,
+  "project_name": "dev light stage",
+  "round_number": 1,
   "stage_total": 1,
   "stages": [
     {
       "stage_id": "stage-dev",
-      "state": "pending_review"
+      "state": "pending_review",
+      "stage_index": 1,
+      "phase": "vegetative"
     }
   ]
 }

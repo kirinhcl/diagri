@@ -241,6 +241,7 @@ def test_the_state_shows_the_freeze_and_each_snapshots_run_without_a_reauthentic
             "experiment_id": "experiment-stage-1",
             "complete": True,
             "run_status": "succeeded",
+            "created_at": snap.created_at,
         }
     ]
 

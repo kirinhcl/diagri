@@ -12,5 +12,9 @@
   "end_pending": false,
   "ended_at": null,
   "round_id": "round_00405e43c54b48d1902a7aa7b82f7200",
-  "state_at": 1794821386.0544891
+  "state_at": 1794821386.0544891,
+  "project_name": "dev light stage",
+  "round_number": 1,
+  "stage_index": 1,
+  "phase": "vegetative"
 }

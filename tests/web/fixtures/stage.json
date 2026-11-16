@@ -12,5 +12,9 @@
   "end_pending": false,
   "ended_at": 1796594755.2374132,
   "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
-  "state_at": 1796594755.2374132
+  "state_at": 1796594755.2374132,
+  "project_name": "Lettuce light series",
+  "round_number": 1,
+  "stage_index": 1,
+  "phase": "vegetative"
 }

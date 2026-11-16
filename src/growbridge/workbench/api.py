@@ -47,6 +47,7 @@ from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
+from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
@@ -490,12 +491,14 @@ class Workbench:
                 # Models get the stage as they always did (project id included) but not its round:
                 # naming the round would let a model aim a run-sheet draft at it.
                 return body
-            row = self.workflow.store.find_stage(stage_id)  # the runtime does not name its round
+            store = self.workflow.store
+            row = store.find_stage(stage_id)  # the runtime does not name its round
             return {
                 **body,
                 "round_id": row.round_id if row else None,
                 "state_at": row.state_at if row else None,  # the console proves a finished window
                 "project_id": row.project_id if row else runtime.project_id,
+                **(stage_names(store, row) if row else dict.fromkeys(STAGE_NAME_KEYS)),
             }
 
         @router.get("/receipts/{request_id}")
