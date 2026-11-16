@@ -192,7 +192,8 @@ class AlertBook:
             code, stored = kind, {}
         else:
             stored = checked("alert", code, params or {})
-        params_json = json.dumps(stored, sort_keys=True)
+        # a value that is not JSON is stored as its text: the params never stop an alert
+        params_json = json.dumps(stored, sort_keys=True, default=str)
         with self.db.transaction():
             row = self.db.one(
                 "SELECT event_id, read_severity FROM observer_alerts "

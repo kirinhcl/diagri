@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from growbridge.archive.models import Condition
@@ -258,6 +260,19 @@ def test_an_alert_stores_its_code_and_params(db, clock):
     stored = book.get(alert.event_id)
     assert (stored.code, stored.params) == ("data_gap", {"sensor": "t", "n": 2})
     assert stored.message == "no data"
+
+
+def test_params_that_are_not_json_do_not_stop_the_alert_from_being_stored(db, clock):
+    book = AlertBook(db, clock)
+    when = datetime(2026, 11, 16, 8, 30, tzinfo=UTC)
+
+    alert = book.raise_alert(
+        "data_gap", "t", "warning", "no data", code="data_gap", params={"at": when, "seen": {"x"}}
+    )
+
+    stored = book.get(alert.event_id)
+    assert stored.message == "no data"
+    assert stored.params == {"at": str(when), "seen": "{'x'}"}
 
 
 def test_a_repeat_writes_the_new_code_and_params(db, clock):
