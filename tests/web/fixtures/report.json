@@ -1,8 +1,7 @@
 {
-  "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
   "artifact_id": "artifact_6487a55756ba49a4913fdbb464e121a6",
   "label": "descriptive",
-  "sha256": "827ea8c5b5e173abc2ca1c35fbd708b9f64b312bcbbb54002bd7e59202d6f1b1",
+  "primary_endpoint": "canopy_area_growth",
   "report": {
     "conclusion": "uncertain",
     "conclusion_text": "不确定",
@@ -15,6 +14,11 @@
       "effect": 0.0,
       "estimable": false,
       "note": "fewer than 2 complete blocks; no treatment effect can be estimated",
+      "note_code": "too_few_blocks",
+      "note_params": {
+        "blocks": 0,
+        "min_blocks": 2
+      },
       "p_value": null
     },
     "evidence_chain": [
@@ -81,5 +85,7 @@
       "Where the 21 'done' measurement and photo tasks' data went, and the user's report of 6 canopy measurements that are absent from the frozen data.",
       "Whether the 128 s at the end of the stage, outside the freeze window, holds any records."
     ]
-  }
+  },
+  "round_id": "round_9d38ffa4ca3049948194e0b60315c650",
+  "sha256": "827ea8c5b5e173abc2ca1c35fbd708b9f64b312bcbbb54002bd7e59202d6f1b1"
 }

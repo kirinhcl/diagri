@@ -153,23 +153,25 @@ def unread(samples: Iterable[dict], treatment: Treatment) -> list[str]:
     ]
 
 
-def delivered(samples: Iterable[dict], treatment: Treatment) -> list[str]:
-    """Why the recorded readings (sample ``data`` dicts) contradict ``treatment``; empty when
-    they agree or show nothing (see ``unread``). Off (0) is allowed: a light schedule has
-    nights."""
+def delivered(samples: Iterable[dict], treatment: Treatment) -> list[dict]:
+    """Where the recorded readings (sample ``data`` dicts) contradict ``treatment``, as
+    ``{channel, kind, level, recorded, share}``: ``never_at`` (the level never showed; ``share``
+    is 0) or ``other_share`` (``share`` is the share of readings at other non-zero levels);
+    empty when they agree or show nothing (see ``unread``). Off (0) is allowed: a light
+    schedule has nights."""
     rows = list(samples)
-    problems = []
+    problems: list[dict] = []
     for channel, level in levels(treatment).items():
         if channel not in DEVICE_FIELDS:
             continue
         seen = [r for r in (_recorded(row, channel) for row in rows) if r is not None]
         if not seen:
             continue
+        item = {"channel": channel.value, "level": level, "recorded": sorted(set(seen))}
         if level not in seen:
-            problems.append(f"{channel.value} was never at {level} (recorded {sorted(set(seen))})")
+            problems.append({**item, "kind": "never_at", "share": 0.0})
             continue
         other = [r for r in seen if r not in (level, OFF)]
         if len(other) > MAX_OTHER_SHARE * len(seen):
-            share = round(100 * len(other) / len(seen))
-            problems.append(f"{channel.value} was at other levels in {share} % of the readings")
+            problems.append({**item, "kind": "other_share", "share": len(other) / len(seen)})
     return problems

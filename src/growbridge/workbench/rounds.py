@@ -123,8 +123,10 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
         raise Denied("state", f"the report file of round {round_id} is missing")
     if path.stat().st_size > MAX_REPORT_BYTES or file_digest(path) != artifact.sha256:
         raise Denied("state", f"the report of round {round_id} no longer matches its digest")
+    protocol = workflow.store.protocol(rnd.protocol_id, rnd.protocol_version)
     return {
         "round_id": round_id,
+        "primary_endpoint": None if protocol is None else protocol.analysis.primary_endpoint,
         "artifact_id": artifact.id,
         "label": artifact.label,
         "sha256": artifact.sha256,

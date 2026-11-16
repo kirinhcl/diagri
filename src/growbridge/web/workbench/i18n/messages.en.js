@@ -336,4 +336,10 @@ export default {
   "msg.chat_end.undelivered": "{role} did not hand in a result.",
   "msg.chat_end.undelivered.action": "Ask again, or do this step yourself.",
   "msg.chat_end.run_finished": "The task finished.",
+  "msg.estimate.too_few_blocks":
+    "Fewer than {min_blocks} complete blocks ({blocks} so far), so no treatment effect can be estimated.",
+  "msg.estimate.too_few_blocks.action":
+    "Run more rounds until every treatment has at least {min_blocks} complete blocks.",
+  "msg.estimate.sampled_p":
+    "The p value is approximated from {flips} random sign flips over {blocks} blocks.",
 };

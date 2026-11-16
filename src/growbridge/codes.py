@@ -153,7 +153,10 @@ CODES: dict[str, dict[str, Code]] = {
         "undelivered": Code(("role",)),
         "run_finished": Code(action=False),
     },
-    "estimate": {},
+    "estimate": {
+        "too_few_blocks": Code(("blocks", "min_blocks")),
+        "sampled_p": Code(("flips", "blocks"), action=False),
+    },
 }
 
 

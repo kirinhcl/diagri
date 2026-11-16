@@ -5,6 +5,7 @@ codes_at_calls."""
 import ast
 import json
 import logging
+import re
 from pathlib import Path
 
 import pytest
@@ -292,3 +293,12 @@ def test_chat_end_codes_in_dispatch_match_the_registry() -> None:
         "undelivered",
         "run_finished",
     }
+
+
+def test_estimate_codes_in_stats_match_the_registry() -> None:
+    source = (REPO / "src" / "growbridge" / "research" / "stats.py").read_text(encoding="utf-8")
+    emitted = set(re.findall(r'note_code="(\w+)"', source))
+
+    assert emitted == set(CODES["estimate"]), emitted ^ set(CODES["estimate"])
+    assert CODES["estimate"]["too_few_blocks"].params == ("blocks", "min_blocks")
+    assert CODES["estimate"]["sampled_p"] == Code(("flips", "blocks"), action=False)

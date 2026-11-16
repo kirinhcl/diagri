@@ -58,18 +58,18 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "zh": "{count} 条测量没有对应的分配，未计入",
     },
     "treatment_not_applied": {
-        "en": "Round {round} did not run its allocated treatment {treatment_id}: {problems}",
-        "zh": "第 {round} 轮没有按分配的处理 {treatment_id} 运行：{problems}",
+        "en": "Round {round} did not run its allocated treatment {treatment}: {problems}",
+        "zh": "第 {round} 轮没有按分配的处理 {treatment} 运行：{problems}",
     },
     "treatment_unverified": {
         "en": "The samples of round {round} record no level for {channels}, so whether "
-        "treatment {treatment_id} was applied cannot be checked",
-        "zh": "第 {round} 轮的样本没有记录 {channels} 的档位，无法核对处理 {treatment_id} 是否执行",
+        "treatment {treatment} was applied cannot be checked",
+        "zh": "第 {round} 轮的样本没有记录 {channels} 的档位，无法核对处理 {treatment} 是否执行",
     },
     "manual_tasks_missed": {
         "en": "Round {round}: {missed} of {total} planned manual tasks were not done on time "
-        "({detail})",
-        "zh": "第 {round} 轮：计划的 {total} 次人工任务中有 {missed} 次没有按时完成（{detail}）",
+        "({by_kind})",
+        "zh": "第 {round} 轮：计划的 {total} 次人工任务中有 {missed} 次没有按时完成（{by_kind}）",
     },
     "manual_tasks_unsettled": {
         "en": "Round {round}: {open} of {planned} planned manual tasks were not yet due or still "
@@ -93,7 +93,9 @@ class Note(Model):
 
     def text(self, language: str = TEXT_LANGUAGE) -> str:
         template = TEMPLATES[self.code][language]
-        return template.format(**{key: _shown(value) for key, value in self.params.items()})
+        return template.format(
+            **{key: _shown(key, value, language) for key, value in self.params.items()}
+        )
 
     def texts(self) -> dict[str, str]:
         return {language: self.text(language) for language in LANGUAGES}
@@ -109,7 +111,68 @@ def note(code: str, **params: Any) -> Note:
     return Note(code=code, params=params)
 
 
-def _shown(value: Any) -> str:
+def _shown(key: str, value: Any, language: str) -> str:
+    """One param in ``language``: the structured ones (problems, channels, by_kind, coverage)
+    are written out, the rest as they are."""
+    if key == "problems" and isinstance(value, (list, tuple)):
+        return _JOIN[language].join(_problem_text(item, language) for item in value)
+    if key == "channels" and isinstance(value, (list, tuple)):
+        return _LIST[language].join(_channel(item, language) for item in value)
+    if key == "by_kind" and isinstance(value, dict):
+        return _LIST[language].join(_kind_count(k, n, language) for k, n in value.items())
+    if key == "coverage" and isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _percent(value)
     if isinstance(value, (list, tuple)):
         return "; ".join(str(item) for item in value)
     return str(value)
+
+
+_JOIN = {"en": "; ", "zh": "；"}
+_LIST = {"en": ", ", "zh": "、"}
+# the server cannot read the console's catalogs, so the few names a note says live here
+_CHANNELS = {
+    "light": {"en": "light", "zh": "光照"},
+    "exhaust": {"en": "exhaust", "zh": "排风"},
+    "fan": {"en": "fan", "zh": "风扇"},
+    "pump": {"en": "pump", "zh": "水泵"},
+}
+_TASK_KINDS = {
+    "irrigation": {"en": "irrigation", "zh": "浇水"},
+    "measurement": {"en": "measurement", "zh": "测量"},
+    "photo": {"en": "photo", "zh": "拍照"},
+}
+_PROBLEMS = {
+    "never_at": {
+        "en": "{channel} was never at {level} (recorded {recorded})",
+        "zh": "{channel}从未处于 {level} 档（记录到 {recorded}）",
+    },
+    "other_share": {
+        "en": "{channel} was at other levels in {share} of the readings",
+        "zh": "{channel}在 {share} 的读数中处于其他档位",
+    },
+}
+
+
+def _percent(share: float) -> str:
+    return f"{round(100 * share)}%"
+
+
+def _channel(name: Any, language: str) -> str:
+    return _CHANNELS.get(str(name), {}).get(language, str(name))
+
+
+def _kind_count(kind: Any, count: Any, language: str) -> str:
+    name = _TASK_KINDS.get(str(kind), {}).get(language, str(kind))
+    return f"{name} {count}" if language == "en" else f"{name} {count} 次"
+
+
+def _problem_text(item: Any, language: str) -> str:
+    template = _PROBLEMS.get(item.get("kind")) if isinstance(item, dict) else None
+    if template is None:
+        return str(item)
+    return template[language].format(
+        channel=_channel(item.get("channel"), language),
+        level=item.get("level"),
+        recorded=", ".join(str(level) for level in item.get("recorded") or ()),
+        share=_percent(item.get("share") or 0),
+    )

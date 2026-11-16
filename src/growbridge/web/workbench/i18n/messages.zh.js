@@ -290,4 +290,7 @@ export default {
   "msg.chat_end.undelivered": "{role}没有交出成果。",
   "msg.chat_end.undelivered.action": "再问一次，或者自己做这一步。",
   "msg.chat_end.run_finished": "任务做完了。",
+  "msg.estimate.too_few_blocks": "完整区组不足 {min_blocks} 个（目前 {blocks} 个），无法估计处理效应。",
+  "msg.estimate.too_few_blocks.action": "再跑几轮，让每个处理至少有 {min_blocks} 个完整区组。",
+  "msg.estimate.sampled_p": "p 值是基于 {blocks} 个区组、用 {flips} 次随机翻转符号近似得到的。",
 };

@@ -68,3 +68,11 @@ against the server's enums and literals.
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
 | compute.json | `/compute` (synthetic) |
+
+## report.json (task 14)
+
+`report.estimate` carries `note_code: "too_few_blocks"` and `note_params: {blocks: 0, min_blocks: 2}`
+beside the unchanged English `note`, as the server now writes them. The top-level `primary_endpoint`
+is the answer's new field; its value `canopy_area_growth` is the metric the project's protocol names
+in project.json (the protocol itself is not among the captured answers), so the value is that
+protocol's endpoint but the field was added by hand, not captured.

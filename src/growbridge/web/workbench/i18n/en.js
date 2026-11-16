@@ -203,6 +203,8 @@ export default {
   "report.estimate": "Effect {effect}, p = {p}, over {blocks} complete blocks",
   "report.pHelp": "The smaller the p value, the less likely the difference is due to chance.",
   "report.notEstimable": "No treatment effect can be estimated",
+  "report.metric": "Metric: {metric}",
+  "report.estimateNote": "Estimate note (as the server wrote it)",
   "report.digest": "Report fingerprint",
   "report.sha256": "Report fingerprint (full SHA-256)",
   "report.artifactId": "Report id",

@@ -203,6 +203,8 @@ export default {
   "report.estimate": "效应 {effect}，p = {p}，基于 {blocks} 个完整区组",
   "report.pHelp": "p 值越小，越不像是偶然造成的差异。",
   "report.notEstimable": "无法估计处理效应",
+  "report.metric": "指标：{metric}",
+  "report.estimateNote": "估计说明（服务器原文）",
   "report.digest": "报告指纹",
   "report.sha256": "报告完整指纹（SHA-256）",
   "report.artifactId": "报告 id",

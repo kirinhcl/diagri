@@ -1,6 +1,7 @@
 // One round: its state, stages, the choice after a stop, abort, and the confirmatory analysis.
 import { shortDigest } from "../format.js";
 import { hasLabel, labelOr } from "../i18n.js";
+import { messageParts } from "../messages.js";
 import { hrefFor } from "../router.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
@@ -83,19 +84,44 @@ function digits(value, count, lang) {
   return new Intl.NumberFormat(lang, { minimumSignificantDigits: count, maximumSignificantDigits: count }).format(value);
 }
 
+// The server's coded note on the estimate in the console's language, when the report has one.
+function estimateNote(ctx, estimate) {
+  const code = estimate && estimate.note_code;
+  return typeof code === "string" && code ? messageParts(ctx, "estimate", code, estimate.note_params) : null;
+}
+
 // What the estimate says, in one line: the effect with its p value, or why there is none.
 export function estimateText(ctx, estimate) {
   if (!estimate) return "—";
-  if (!estimate.estimable) return estimate.note || ctx.t("report.notEstimable");
+  if (!estimate.estimable) {
+    const parts = estimateNote(ctx, estimate);
+    return parts && parts.known ? parts.text : ctx.t("report.notEstimable");
+  }
   const effect = digits(estimate.effect, EFFECT_DIGITS, ctx.lang);
   return ctx.t("report.estimate", { effect, p: digits(estimate.p_value, P_DIGITS, ctx.lang), blocks: estimate.blocks });
 }
 
-// The estimate, and under an estimated p value one line on what it means.
-function estimateView(ctx, estimate) {
+// The estimate's entries for the report's fold: its note's code and params, or an old report's
+// English sentence.
+function estimateDetails(ctx, estimate) {
+  const parts = estimateNote(ctx, estimate);
+  if (parts) return parts.details;
+  const old = estimate && !estimate.estimable && !isBlank(estimate.note);
+  return old ? [[ctx.t("report.estimateNote"), estimate.note]] : [];
+}
+
+// The estimate; under it the p value's meaning, what the note says to do, a note on an approximated
+// p value and the measured quantity.
+function estimateView(ctx, estimate, endpoint) {
   const text = estimateText(ctx, estimate);
   const withP = Boolean(estimate && estimate.estimable && typeof estimate.p_value === "number");
-  return withP ? h("div", {}, h("span", { text }), note(ctx.t("report.pHelp"))) : text;
+  const parts = estimateNote(ctx, estimate);
+  const lines = [h("span", { text })];
+  if (withP) lines.push(note(ctx.t("report.pHelp")));
+  if (parts && estimate.estimable && parts.known) lines.push(note(parts.text));
+  if (parts && !estimate.estimable && parts.action) lines.push(note(parts.action));
+  if (!isBlank(endpoint)) lines.push(note(ctx.t("report.metric", { metric: ctx.t("common.quoted", { text: endpoint }) })));
+  return lines.length === 1 ? text : h("div", {}, ...lines);
 }
 
 // A label or conclusion the report leaves out is "not stated", never a default.
@@ -121,6 +147,7 @@ function reportDetails(ctx, data, label, round) {
     [ctx.t("report.artifactId"), data.artifact_id || round.report_artifact_id],
     [ctx.t("report.label"), unknown("report.labels", label)],
     [ctx.t("report.conclusion"), unknown("report.conclusions", report.conclusion)],
+    ...estimateDetails(ctx, report.estimate),
   ]);
 }
 
@@ -160,7 +187,7 @@ export function reportView(ctx, data, round = {}) {
     keyValues([
       [ctx.t("report.label"), labelView(ctx, label)],
       [ctx.t("report.conclusion"), stated(ctx, "report.conclusions", report.conclusion)],
-      [ctx.t("report.estimateTitle"), estimateView(ctx, report.estimate)],
+      [ctx.t("report.estimateTitle"), estimateView(ctx, report.estimate, data.primary_endpoint)],
       [ctx.t("report.digest"), shortDigest(data.sha256)],
     ]),
     reportDetails(ctx, data, label, round),

@@ -653,5 +653,20 @@
       "action": false
     }
   },
-  "estimate": {}
+  "estimate": {
+    "too_few_blocks": {
+      "params": [
+        "blocks",
+        "min_blocks"
+      ],
+      "action": true
+    },
+    "sampled_p": {
+      "params": [
+        "flips",
+        "blocks"
+      ],
+      "action": false
+    }
+  }
 }
