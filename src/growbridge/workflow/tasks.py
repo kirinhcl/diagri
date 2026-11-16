@@ -56,6 +56,9 @@ class TaskBoard:
             existing = self.db.one(
                 "SELECT * FROM task_board WHERE trigger_event_id = ?", (task.trigger_event_id,)
             )
+            if existing is not None and existing["project_id"] != task.project_id:
+                # say nothing about another project's task, not even that it is one
+                raise Denied("state", "this trigger_event_id is already used")
             if existing is not None:
                 return self._load(existing)
             if self.db.one("SELECT 1 FROM task_board WHERE id = ?", (task.id,)) is not None:

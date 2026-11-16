@@ -125,7 +125,9 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             require_round_project(deps, data.round_id)
         tasks = deps.tasks.list(data.project_id)
         out: dict = {"tasks": [_task_summary(t) for t in tasks[-MAX_ITEMS:]]}
-        out["active_stage"] = getattr(deps.workflow.active_stage(), "stage_id", None)
+        active = deps.workflow.active_stage()
+        own = active is not None and active.project_id == data.project_id
+        out["active_stage"] = active.stage_id if own else None  # never another project's stage
         if data.round_id is not None:
             out["round_state"] = deps.workflow.round_state(data.round_id).value
             out["stages"] = [

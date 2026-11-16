@@ -204,6 +204,12 @@ class WorkflowService(StageRecovery):
         """A new version while waiting for review voids the approval of the old one (App. B)."""
         if stage.round_id != rnd.id or stage.state is not S.PENDING_REVIEW:
             raise Denied("state", f"stage {stage.stage_id} is {stage.state.value}; use a switch")
+        bound = (stage.project_id, stage.experiment_id, stage.device_id)
+        if (sheet.project_id, sheet.experiment_id, sheet.device_id) != bound:
+            # rights follow the sheet's device while checks read the stage row: keep them equal
+            raise Denied(
+                "state", "a replacement run sheet keeps the stage's project, experiment and device"
+            )
         current = self._sheet(stage)
         if sheet.version == current.version:
             if sheet.digest() != current.digest():
@@ -438,6 +444,7 @@ class WorkflowService(StageRecovery):
         sheet = self._sheet(stage)
         # read first: if the device cannot be read the stage keeps its manual right
         diffs = await self.control.differences(sheet.expected_levels(self.clock.now()))
+        self._require_unchanged(stage)  # stopped meanwhile: handing over would end irrigation
         await self.control.handover(stage.manual_right, "handback")
         detail = {"differences": [diff.model_dump(mode="json") for diff in diffs]}
         record = self._intervention(stage, "accepted", actor, detail)
@@ -699,6 +706,7 @@ class WorkflowService(StageRecovery):
         self, stage: StageRow, plan: Plan, event: StageEvent | None = None
     ) -> StageRow:
         for number in plan.handover:
+            self._require_unchanged(stage)  # a late hand-over would end the device's irrigation
             await self.control.handover(number, plan.reason or plan.event)
         numbers: dict[str, int] = {}
         try:
@@ -711,13 +719,18 @@ class WorkflowService(StageRecovery):
         self._hand_on_interventions()
         return updated
 
+    def _require_unchanged(self, stage: StageRow) -> StageRow:
+        """The stage as stored, refused when it changed since ``stage`` was read."""
+        fresh = self.store.stage(stage.stage_id)
+        if fresh.rev != stage.rev:
+            raise Denied("state", f"stage {stage.stage_id} changed while the request was running")
+        return fresh
+
     def _commit(
         self, stage: StageRow, plan: Plan, event: StageEvent | None, numbers: dict[str, int]
     ) -> StageRow:
         """No awaits from here to the end: the revision check and the save are one step."""
-        fresh = self.store.stage(stage.stage_id)
-        if fresh.rev != stage.rev:
-            raise Denied("state", f"stage {stage.stage_id} changed while the request was running")
+        fresh = self._require_unchanged(stage)
         sheet = plan.sheet or self._sheet(fresh)
         for grant in plan.grants:
             self._grant(fresh, sheet, grant, numbers)
