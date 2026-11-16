@@ -72,7 +72,7 @@
 | `input_per_mtok` | 数字或不设置 | 不设置 | 不小于 0 | `model` 每百万输入 token 的价格（美元），用于费用预算。要和 `output_per_mtok` 一起设置。`model` 不是默认模型时必填。 |
 | `output_per_mtok` | 数字或不设置 | 不设置 | 不小于 0 | `model` 每百万输出 token 的价格（美元）。要和 `input_per_mtok` 一起设置。 |
 
-会被读取的角色名是 `orchestrator`、`planner` 和 `researcher`（[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`）。其他键能通过校验，但会被忽略。只要 `roles` 里有一个键，没有列出的角色就按上表的默认值运行（[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py) 的 `make_dispatcher`）。
+会被读取的角色名是 `orchestrator`、`planner`、`researcher` 和 `auditor`（[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`）。其他键能通过校验，但会被忽略。只要 `roles` 里有一个键，没有列出的角色就按上表的默认值运行，监察 Agent 除外：它的默认值是默认模型，每次监察最多 6 次模型调用（`AUDIT_MAX_CALLS`）；配置了 `[roles.auditor]` 就会替换这个默认值，所以不想要 6 次时要在那里设置 `max_calls`（[`runtime_agents.py`](../../../src/growbridge/runtime_agents.py) 的 `make_dispatcher`）。
 
 ## 作业模板文件
 
@@ -175,7 +175,7 @@ token = "REPLACE_WITH_AT_LEAST_24_CHARACTERS"
 data_dir = "/absolute/path/to/data"
 ```
 
-最小的 DiAGRI 配置：两个入口、备份，以及三个都用默认值的模型角色。
+最小的 DiAGRI 配置：两个入口、备份，以及四个都用默认值的模型角色。
 
 ```toml
 device = "YOUR_SCANNED_ADDRESS"
