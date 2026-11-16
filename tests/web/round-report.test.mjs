@@ -359,6 +359,17 @@ test("an old report's note stays in the details", () => {
   assert.ok(visibleTextIncludingDetails(view).includes(old.note), "but it is in the details");
 });
 
+test("an old estimable report's note on its sampled p value is folded, not shown", () => {
+  const old = { estimable: true, effect: 1.5, blocks: 25, p_value: 0.001, note: "p-value approximated by sampled sign flips" };
+  for (const lang of ["zh", "en"]) {
+    const view = reportView(testCtx({ lang }), withEstimate(old));
+    assert.ok(!visibleText(view).includes(old.note), `${lang}: the English sentence is not on the page`);
+    assert.ok(visibleTextIncludingDetails(view).includes(old.note), `${lang}: but it is in the details`);
+  }
+  const none = reportView(testCtx({ lang: "zh" }), withEstimate({ ...old, note: "" }));
+  assert.ok(!visibleTextIncludingDetails(none).includes(zh["report.estimateNote"]), "an empty note adds no row");
+});
+
 test("the estimate names the measured quantity", () => {
   const view = reportView(testCtx({ lang: "zh" }), withEstimate(TOO_FEW, { primary_endpoint: "canopy_area_growth" }));
   assert.ok(visibleText(view).includes("指标：「canopy_area_growth」"));

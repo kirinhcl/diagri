@@ -102,11 +102,11 @@ export function estimateText(ctx, estimate) {
 }
 
 // The estimate's entries for the report's fold: its note's code and params, or an old report's
-// English sentence.
+// English sentence (why there is no estimate, or, beside one, how its p value was approximated).
 function estimateDetails(ctx, estimate) {
   const parts = estimateNote(ctx, estimate);
   if (parts) return parts.details;
-  const old = estimate && !estimate.estimable && !isBlank(estimate.note);
+  const old = estimate && !isBlank(estimate.note);
   return old ? [[ctx.t("report.estimateNote"), estimate.note]] : [];
 }
 
