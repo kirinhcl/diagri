@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { actionsView, differenceLines, logItem, manualGroup, manualHeading, outcomeLines, plainActionLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
+import { actionsView, activityLog, differenceLines, logItem, manualGroup, manualHeading, outcomeLines, plainActionLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
 import { statusView } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { installFakeDom, FIXTURES, testCtx } from "./support/render-page.mjs";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
@@ -130,4 +130,35 @@ test("the stop and take-over dialogs name the stage and never its id", () => {
   }
   const zh = testCtx({ lang: "zh" });
   assert.deepEqual(plainActionLines(zh, "stop", { stage_id: "stage-x-1" }), ["未命名阶段 将永久停止，不能再次启动。"]);
+});
+
+// --- final review: the approval gate's mismatch path (F7) --------------------------------------
+test("an approval of another run sheet than the one reviewed keeps both digests folded and sends the reviewed one", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  const reviewed = "a1".repeat(32);
+  const approved = "b2".repeat(32);
+  const pending = FIXTURES["stage-pending.json"];
+  const posts = [];
+  const notices = [];
+  ctx.api = {
+    get: async () => ({ run_sheet_digest: reviewed }),
+    post: async (path, body) => (posts.push([path, body]), { run_sheet_version: 3, run_sheet_digest: approved, approved_at: 1796594700 }),
+  };
+  ctx.notify = (message, tone) => notices.push([message, tone]);
+  const log = activityLog(ctx, { signal: new AbortController().signal, alive: () => true });
+  const view = actionsView({ ctx, stage: pending, review: { run_sheet_digest: reviewed, blocking: false }, log, onChanged: async () => {} });
+  const approveGroup = elements(view, "div").find((node) => node.getAttribute("data-action") === "approve");
+  elements(approveGroup, "button")[0].dispatchEvent(new Event("click"));
+  await settle();
+  await settle();
+  assert.deepEqual(posts, [[`/stages/${encodeURIComponent(pending.stage_id)}/approve`, { expected_digest: reviewed }]]);
+  const shown = [visibleText(log.element), visibleText(approveGroup), ...notices.map(([message]) => message)].join(" ");
+  assert.match(shown, /已审批，但不是你审阅的那份运行单/);
+  for (const digest of [reviewed, approved]) assert.ok(!shown.includes(digest), `digest ${digest.slice(0, 4)} in view`);
+  assert.deepEqual(notices.map(([, tone]) => tone), ["error"]);
+  const [mismatch, approval] = elements(log.element, "li");
+  const folded = visibleTextIncludingDetails(mismatch);
+  assert.ok(folded.includes(`服务器批准的摘要 ${approved}`) && folded.includes(`你审阅的摘要 ${reviewed}`), folded);
+  assert.ok(visibleTextIncludingDetails(approval).includes(approved));
+  assert.match(visibleText(approval), /指纹 b2b2b2b2…/);
 });
