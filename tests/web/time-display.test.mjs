@@ -40,3 +40,11 @@ test("the sidebar says why entry matters", () => {
   const ctx = testCtx({ lang: "en", now: NOW });
   assert.match(visibleText(sidebar(ctx, [])), /work only on site/);
 });
+
+test("the css keeps the green on-site entry and the zone override after it", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../../src/growbridge/web/workbench/workbench.css", import.meta.url), "utf8");
+  const green = css.indexOf(".wb-entry-lan strong { color: var(--green); }");
+  const zone = css.indexOf(".wb-entry-lan strong.wb-entry-zone { color: inherit; }");
+  assert.ok(green >= 0 && zone > green);
+});
