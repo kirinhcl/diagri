@@ -16,10 +16,11 @@ const LANGUAGE_KEY = "growbridge-workbench-language";
 const NOTICE_MS = 6000;
 // Each page lives in pages/<name>.js and is loaded on its first visit.
 const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
+// Until a page has read its data it shows the generic word, never the id from the address.
 const ID_CRUMBS = new Map([
-  ["project", ["projectId", "crumb.project"]],
-  ["round", ["roundId", "crumb.round"]],
-  ["stage", ["stageId", "crumb.stage"]],
+  ["project", "crumb.project"],
+  ["round", "crumb.round"],
+  ["stage", "crumb.stage"],
 ]);
 
 const app = document.getElementById("app");
@@ -151,11 +152,10 @@ function showFatal(error) {
   clear(app).append(h("main", { class: "wb-fatal" }, view));
 }
 
-function defaultCrumbs(page, params) {
+function defaultCrumbs(page) {
   const { t } = state;
   if (ID_CRUMBS.has(page)) {
-    const [key, text] = ID_CRUMBS.get(page);
-    return [{ label: t("nav.projects"), href: hrefFor("projects") }, { label: t(text, { id: params[key] }) }];
+    return [{ label: t("nav.projects"), href: hrefFor("projects") }, { label: t(ID_CRUMBS.get(page)) }];
   }
   return [{ label: PAGES.has(page) ? t(`nav.${page}`) : t("page.notFound") }];
 }
@@ -192,7 +192,7 @@ async function showPage(page, params, token) {
   const firstView = state.at === null;
   state.at = location.hash;
   frame.setActive(page);
-  frame.setBreadcrumbs(defaultCrumbs(page, params));
+  frame.setBreadcrumbs(defaultCrumbs(page));
   const ctx = makeCtx(frame);
   bindFormContext(ctx);
   if (moved) {

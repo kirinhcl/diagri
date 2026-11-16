@@ -4,7 +4,8 @@ import { hrefFor } from "../router.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, simpleForm } from "../ui/forms.js";
-import { afterWrite, confirmedButton, keyValues, note, pageHead, section } from "../ui/section.js";
+import { displayName, nameDetails } from "../ui/names.js";
+import { afterWrite, confirmedButton, keyValues, note, pageHead, section, techDetails } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { analysisSection } from "./round-analysis.js";
@@ -130,16 +131,18 @@ async function reportSection(ctx, round) {
 
 export async function render(ctx, params) {
   const round = await ctx.api.get(`/rounds/${encodeURIComponent(params.roundId)}`);
+  const name = displayName(ctx, "round", round);
   ctx.setBreadcrumbs([
     { label: ctx.t("nav.projects"), href: hrefFor("projects") },
-    { label: ctx.t("crumb.project", { id: round.project_id }), href: hrefFor("project", { projectId: round.project_id }) },
-    { label: ctx.t("crumb.round", { id: round.round_id }) },
+    { label: displayName(ctx, "project", round), href: hrefFor("project", { projectId: round.project_id }) },
+    { label: name },
   ]);
   const [analysis, report] = await Promise.all([analysisSection(ctx, round), reportSection(ctx, round)]);
   const element = h(
     "div",
     { class: "page round" },
-    pageHead(ctx.t("crumb.round", { id: round.round_id }), ctx.t("round.lead")),
+    pageHead(name, ctx.t("round.lead")),
+    techDetails(ctx.t, nameDetails(round, ctx.t)),
     section(ctx.t("round.summary"), summary(ctx, round)),
     report,
     round.awaiting_choice ? choiceForm(ctx, round) : null,

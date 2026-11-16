@@ -4,16 +4,12 @@
 import { labelOr } from "../i18n.js";
 import { newRequestId } from "../receipts.js";
 import { clear, h } from "../ui/dom.js";
+import { roleLabel } from "../ui/names.js";
 import { richText } from "../ui/rich-text.js";
 import { errorParts, timeText } from "../ui/section.js";
 
-const ROLES = new Set(["user", "orchestrator", "planner", "researcher", "auditor"]);
 const CLOSED_ROUNDS = new Set(["delivered", "aborted"]);
 const NEAR_BOTTOM_PX = 48;
-
-function roleLabel(ctx, role) {
-  return labelOr(ctx.t, "chat.role", ROLES.has(role) ? role : "other");
-}
 
 function codeDetail(label, text) {
   if (text === undefined || text === null || text === "") return null;
@@ -21,12 +17,12 @@ function codeDetail(label, text) {
 }
 
 function messageView(ctx, entry) {
-  const head = h("p", { class: "chat-meta" }, `${roleLabel(ctx, "user")} · ${entry.detail.operator || ""} · ${timeText(ctx, entry.at)}`);
+  const head = h("p", { class: "chat-meta" }, `${roleLabel(ctx.t, "user")} · ${entry.detail.operator || ""} · ${timeText(ctx, entry.at)}`);
   return h("li", { class: "chat-entry chat-user" }, head, h("div", { class: "chat-bubble", text: entry.text }));
 }
 
 function replyView(ctx, entry) {
-  const head = h("p", { class: "chat-meta" }, h("span", { class: `chat-role chat-role-${entry.role}`, text: roleLabel(ctx, entry.role) }), ` · ${timeText(ctx, entry.at)}`);
+  const head = h("p", { class: "chat-meta" }, h("span", { class: `chat-role chat-role-${entry.role}`, text: roleLabel(ctx.t, entry.role) }), ` · ${timeText(ctx, entry.at)}`);
   const kind = entry.detail.final ? "chat-bubble" : "chat-bubble chat-bubble-aside";
   return h("li", { class: "chat-entry chat-agent" }, head, richText(entry.text, `${kind} rich-text`));
 }
@@ -36,7 +32,7 @@ function toolView(ctx, entry) {
   const summary = h(
     "summary",
     {},
-    h("span", { class: `chat-role chat-role-${entry.role}`, text: roleLabel(ctx, entry.role) }),
+    h("span", { class: `chat-role chat-role-${entry.role}`, text: roleLabel(ctx.t, entry.role) }),
     " ",
     h("code", { text: entry.text }),
     failed ? h("span", { class: "chat-tool-failed", text: ` ${ctx.t("chat.toolFailed")}` }) : null,
@@ -47,7 +43,7 @@ function toolView(ctx, entry) {
 
 // One line for a status entry; a reason is shown unless it only says that the run finished.
 export function statusText(ctx, entry) {
-  const role = roleLabel(ctx, entry.role);
+  const role = roleLabel(ctx.t, entry.role);
   if (entry.text === "follow_up") return ctx.t("chat.followUp", { role });
   const detail = entry.detail || {};
   const reason = detail.reason && detail.reason !== "run finished" ? `: ${detail.reason}` : "";

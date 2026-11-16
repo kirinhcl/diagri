@@ -2,7 +2,8 @@
 import { ApiError } from "../api.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
-import { errorParts, keyValues, note, pageHead, section, timeText } from "../ui/section.js";
+import { displayName, nameDetails } from "../ui/names.js";
+import { errorParts, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { conversationSection } from "./conversation.js";
@@ -108,14 +109,16 @@ export async function render(ctx, params) {
     ctx.api.get(`/projects/${encodeURIComponent(projectId)}`),
     readHoldouts(ctx, projectId),
   ]);
-  ctx.setBreadcrumbs([{ label: ctx.t("nav.projects"), href: hrefFor("projects") }, { label: project.name }]);
-  const lead = ctx.t("project.lead", { id: project.project_id, time: timeText(ctx, project.created_at) });
+  const name = displayName(ctx, "project", project);
+  ctx.setBreadcrumbs([{ label: ctx.t("nav.projects"), href: hrefFor("projects") }, { label: name }]);
+  const lead = ctx.t("project.lead", { time: timeText(ctx, project.created_at) });
   const chat = conversationSection(ctx, project);
   await chat.refresh();
   const element = h(
     "div",
     { class: "page project" },
-    pageHead(project.name, lead),
+    pageHead(name, lead),
+    techDetails(ctx.t, nameDetails(project, ctx.t)),
     section(ctx.t("chat.title"), chat.element),
     section(ctx.t("project.rounds.title"), roundsTable(ctx, project), startRoundForm(ctx, project)),
     section(ctx.t("project.protocols.title"), protocolsTable(ctx, project), protocolEditor(ctx, project)),

@@ -104,8 +104,10 @@ export function testCtx(options = {}) {
   const { lang = "zh", fixtures = {}, now } = options;
   if (typeof document === "undefined") installFakeDom();
   const files = { ...FIXTURES, ...fixtures };
+  const crumbs = [];
   return {
     api: fakeApi(files),
+    crumbs,
     t: makeT(lang),
     lang,
     me: meWith(files["me.json"], options),
@@ -114,7 +116,7 @@ export function testCtx(options = {}) {
     notify: () => {},
     reload: () => {},
     setLang: () => {},
-    setBreadcrumbs: () => {},
+    setBreadcrumbs: (items) => crumbs.splice(0, crumbs.length, ...items),
     setCounts: () => {},
   };
 }

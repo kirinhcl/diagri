@@ -8,7 +8,8 @@ import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { errorDetail, errorLines } from "../ui/forms.js";
-import { codeBlock, errorParts, keyValues, replaceParts, section, timeText } from "../ui/section.js";
+import { displayName, nameDetails } from "../ui/names.js";
+import { codeBlock, errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
@@ -177,13 +178,13 @@ function draw(page, data) {
 }
 
 // --- the page ---------------------------------------------------------------------------------------
-function headView(ctx, stageId, onRefresh) {
+function headView(ctx, stage, onRefresh) {
   const pill = h("span", { class: "stage-pill" });
   const updated = h("p", { class: "page-sub" });
   const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: ctx.t("stage.refresh") });
   button.addEventListener("click", () => onRefresh());
-  const title = h("div", { class: "stage-title" }, h("h1", { text: ctx.t("crumb.stage", { id: stageId }) }), pill);
-  const text = h("div", {}, title, h("p", { class: "page-lead", text: ctx.t("stage.lead") }), updated);
+  const title = h("div", { class: "stage-title" }, h("h1", { text: displayName(ctx, "stage", stage) }), pill);
+  const text = h("div", {}, title, h("p", { class: "page-lead", text: ctx.t("stage.lead") }), updated, techDetails(ctx.t, nameDetails(stage, ctx.t)));
   return { element: h("header", { class: "page-head" }, text, button), pill, updated };
 }
 
@@ -191,10 +192,10 @@ function setCrumbs(ctx, stage) {
   const { project_id: projectId, round_id: roundId } = stage;
   const crumbs = [
     { label: ctx.t("nav.projects"), href: hrefFor("projects") },
-    { label: ctx.t("crumb.project", { id: projectId }), href: hrefFor("project", { projectId }) },
+    { label: displayName(ctx, "project", stage), href: hrefFor("project", { projectId }) },
   ];
-  if (roundId) crumbs.push({ label: ctx.t("crumb.round", { id: roundId }), href: hrefFor("round", { roundId }) });
-  crumbs.push({ label: ctx.t("crumb.stage", { id: stage.stage_id }) });
+  if (roundId) crumbs.push({ label: displayName(ctx, "round", stage), href: hrefFor("round", { roundId }) });
+  crumbs.push({ label: displayName(ctx, "stage", stage) });
   ctx.setBreadcrumbs(crumbs);
 }
 
@@ -256,7 +257,7 @@ export async function render(shellCtx, params) {
       problem.hidden = false;
     }
   });
-  page.head = headView(ctx, params.stageId, refresh);
+  page.head = headView(ctx, first.stage, refresh);
   page.env = { ctx, log: page.log, onChanged: refresh };
   const onRecorded = async (message) => {
     ctx.notify(message, "ok");
