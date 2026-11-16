@@ -155,6 +155,9 @@ function waitingText(ctx, since) {
   return ctx.t("inbox.waiting", { duration: formatDuration(ctx.t, age) });
 }
 
+// Each waiting time and the epoch it counts from: a poll that brings the same items still moves them on.
+const SINCE = new WeakMap();
+
 const LABEL_CHARS = 80;
 const shortTitle = (text) => {
   const chars = [...String(text).trim().replace(/\s+/g, " ")];
@@ -175,6 +178,7 @@ function itemView(ctx, item) {
   );
   const open = href && folded ? h("a", { class: "inbox-open", attrs: { href, "aria-label": `${ctx.t("inbox.open")}: ${shortTitle(plain)}` }, text: ctx.t("inbox.open") }) : null;
   const time = h("span", { class: "inbox-time", text: waitingText(ctx, item.since), attrs: { title: timeText(ctx, item.since) } });
+  SINCE.set(time, item.since);
   const side = h("div", { class: "inbox-side" }, pill, time, open);
   const key = `${item.kind}:${item.id}`;
   const linked = href && !folded;
@@ -245,13 +249,21 @@ function restore(list, { focus, open }) {
   if (target) target.focus();
 }
 
-// Redraws only when the answer changed, keeping keyboard focus and open folds on the same items.
+function moveTimesOn(ctx, list) {
+  for (const el of descendants(list)) if (SINCE.has(el)) el.textContent = waitingText(ctx, SINCE.get(el));
+}
+
+// Redraws only when the answer changed, keeping keyboard focus and open folds on the same items;
+// otherwise only the waiting times are written again.
 export function draw(view, ctx, data) {
   const inbox = normalizeInbox(data);
   if (ctx.setCounts) ctx.setCounts(inboxCounts(inbox));
   view.updated.textContent = ctx.t("inbox.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   const signature = JSON.stringify(inbox);
-  if (signature === view.signature) return;
+  if (signature === view.signature) {
+    moveTimesOn(ctx, view.list);
+    return;
+  }
   view.signature = signature;
   const before = remember(view.list);
   const groups = groupByKind(inbox);

@@ -266,3 +266,18 @@ test("an inbox item with an unknown state keeps the code in its details and no f
   const alert = groupView(ctx, { kind: "alert", hidden: 0, items: [{ kind: "alert", id: "a1", since: NOW, detail: { message: "m", alert_kind: "data_gap", severity: "warp_level" } }] });
   assert.match(visibleTextIncludingDetails(alert), /代码 warp_level/);
 });
+
+// --- final review: the waiting times move on while the data stays the same (F4) ----------------
+test("a poll with unchanged data still moves the waiting times on and leaves the rows alone", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = pageView(ctx);
+  const data = { items: [{ kind: "alert", id: "a1", since: NOW - 120, detail: { message: "m", alert_kind: "data_gap" } }], truncated: {} };
+  draw(view, ctx, data);
+  assert.match(visibleText(view.list), /已等待 2 分钟/);
+  const fold = findAll(view.list, (n) => n.localName === "details")[0];
+  fold.setAttribute("open", "");
+  draw(view, { ...ctx, now: NOW + 600 }, structuredClone(data));
+  assert.match(visibleText(view.list), /已等待 12 分钟/);
+  assert.equal(findAll(view.list, (n) => n.localName === "details")[0], fold, "the row was not rebuilt");
+  assert.ok(fold.hasAttribute("open"));
+});
