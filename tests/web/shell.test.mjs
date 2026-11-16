@@ -88,7 +88,7 @@ test("groups follow the urgency order and keep kinds that only have cut items", 
 });
 
 // --- inbox titles, durations and "more" links (Task 14) -----------------------------------------
-import { findLeaks, visibleText } from "./support/leaks.mjs";
+import { findLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { testCtx } from "./support/render-page.mjs";
 
 const NOW = 1_800_000_000;
@@ -222,4 +222,33 @@ test("the open link of a folded row names the item", () => {
   draw(view, ctx, { items: [LONG_TASK], truncated: {} });
   const link = findAll(view.list, withClass("inbox-open"))[0];
   assert.match(link.getAttribute("aria-label"), /^打开: word word word/);
+});
+
+// --- final review: no stage or device ids in the inbox's text (F1) ------------------------------
+const CHOICE_ROUND = "round_9d38ffa4ca3049948194e0b60315c650";
+const CHOICE_STAGE = `stage-${CHOICE_ROUND}-1`;
+
+test("a round choice names no stage id and keeps it in the item's details", () => {
+  const ctx = testCtx({ now: NOW });
+  const item = { kind: "round_choice", id: CHOICE_ROUND, project_name: "Lettuce", round_number: 3, since: NOW, detail: { awaiting_choice: CHOICE_STAGE } };
+  const view = groupView(ctx, { kind: "round_choice", hidden: 0, items: [item] });
+  assert.ok(!visibleText(view).includes(CHOICE_STAGE), visibleText(view));
+  assert.match(visibleText(view), /本轮有一个阶段已停止，请选择这一轮接下来怎么做/);
+  assert.match(visibleTextIncludingDetails(view), new RegExp(`阶段 id ${CHOICE_STAGE}`));
+  const en = groupView(testCtx({ lang: "en", now: NOW }), { kind: "round_choice", hidden: 0, items: [item] });
+  assert.match(visibleText(en), /A stage of this round stopped; choose how this round goes on\./);
+});
+
+test("the simulator reads as a simulated device; any device id stays in the item's details", () => {
+  const ctx = testCtx({ now: NOW });
+  const stageItem = (device) => ({ kind: "stage_paused", id: "s1", project_name: "Lettuce", round_number: 3, stage_index: 1, since: NOW, detail: { state: "paused", device_id: device } });
+  const simulated = groupView(ctx, { kind: "stage_paused", hidden: 0, items: [stageItem("SIMULATED")] });
+  assert.match(visibleText(simulated), /设备：模拟设备/);
+  assert.ok(!visibleText(simulated).includes("SIMULATED"));
+  assert.match(visibleTextIncludingDetails(simulated), /设备 SIMULATED/);
+  const real = groupView(ctx, { kind: "stage_paused", hidden: 0, items: [stageItem("chamber-2")] });
+  assert.match(visibleText(real), /设备：chamber-2/);
+  assert.match(visibleTextIncludingDetails(real), /设备 chamber-2/);
+  const en = groupView(testCtx({ lang: "en", now: NOW }), { kind: "stage_paused", hidden: 0, items: [stageItem("SIMULATED")] });
+  assert.match(visibleText(en), /Device: Simulated device/);
 });

@@ -8,7 +8,7 @@ import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { errorDetail, errorLines } from "../ui/forms.js";
-import { displayName, nameDetails } from "../ui/names.js";
+import { deviceName, displayName, nameDetails } from "../ui/names.js";
 import { errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
@@ -140,11 +140,9 @@ export function statusView(ctx, stage) {
   return h("div", { class: "status-view" }, keyValues(rows.filter(Boolean)), banner, details);
 }
 
-const SIMULATED_DEVICE = "SIMULATED";
-
 export function reviewView(ctx, review) {
   const sheet = review.run_sheet || {};
-  const device = sheet.device_id === SIMULATED_DEVICE ? ctx.t("stage.review.simulated") : sheet.device_id;
+  const device = deviceName(ctx.t, sheet.device_id);
   const protocol = sheet.protocol_id ? ctx.t("stage.review.protocolValue", { id: sheet.protocol_id, v: sheet.protocol_version }) : null;
   const facts = keyValues([
     [ctx.t("stage.review.version"), ctx.t("stage.review.versionValue", { n: review.run_sheet_version })],

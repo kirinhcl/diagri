@@ -4,7 +4,7 @@ import { formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
-import { displayName, nameDetails, roleLabel } from "../ui/names.js";
+import { deviceName, displayName, nameDetails, roleLabel } from "../ui/names.js";
 import { errorParts, foldedText, replaceParts, techDetails, timeText } from "../ui/section.js";
 import { severityPill, statePill } from "../ui/status.js";
 
@@ -81,14 +81,14 @@ export const DESCRIBERS = {
     return {
       title,
       pill: statePill(ctx.t, d.state),
-      meta: [say(ctx.t, "inbox.device", { id: d.device_id }), ...(review ? [] : where(ctx, item))],
+      meta: [say(ctx.t, "inbox.device", { device: deviceName(ctx.t, d.device_id) }), ...(review ? [] : where(ctx, item))],
     };
   },
   round_choice: (ctx, item, d) => ({
     title: ctx.t("inbox.title.choice", { project: displayName(ctx, "project", item), round: displayName(ctx, "round", item) }),
     pill: statePill(ctx.t, "awaiting_choice"),
     lines: [
-      say(ctx.t, "inbox.roundChoice", { stage: d.awaiting_choice }),
+      d.awaiting_choice ? ctx.t("inbox.roundChoice") : null,
       d.since_from === "round_created" ? ctx.t("inbox.sinceRoundCreated") : null,
     ],
     meta: [],
@@ -125,15 +125,22 @@ export function describe(ctx, item) {
   return { pill: null, lines: [], meta: [], ...describer(ctx, item, detail) };
 }
 
-// The item's own ids (and the raw alert code), for its technical details.
+// What an item's detail carries that only its technical details show: the stopped stage of a round
+// choice, the device of a stage, the raw alert code.
+function detailEntries(ctx, item, d) {
+  if (item.kind === "round_choice") return [[ctx.t("tech.id.stage_id"), d.awaiting_choice]];
+  if (item.kind === "alert") return [[ctx.t("inbox.tech.alertKind"), d.alert_kind]];
+  return STAGE_KINDS.has(item.kind) ? [[ctx.t("stage.review.device"), d.device_id]] : [];
+}
+
+// The item's own ids and detailEntries, for its technical details.
 function itemDetails(ctx, item) {
   const d = item.detail && typeof item.detail === "object" ? item.detail : {};
   const own = { stage: "stage_id", round_choice: "round_id", compute_stuck: "attempt_id", task: "task_id" };
   const key = STAGE_KINDS.has(item.kind) ? own.stage : own[item.kind];
   const row = key ? { ...item, id: undefined, [key]: item.id } : item;
   if (item.kind === "compute_stuck") row.task_id = d.task_id;
-  const rawKind = item.kind === "alert" ? [[ctx.t("inbox.tech.alertKind"), d.alert_kind]] : [];
-  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...rawKind]);
+  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...detailEntries(ctx, item, d)]);
 }
 
 // "Waiting 3 h 20 min", or the full time when the clock says the item is from the future.

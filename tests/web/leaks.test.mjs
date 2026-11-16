@@ -37,7 +37,7 @@ const BUSY_PROJECT = { "project.json": { ...PROJECT, rounds: [WAITING_ROUND] }, 
 // choice, a stuck compute attempt and a research task, plus a kind this console does not know.
 const INBOX = FIXTURES["inbox.json"];
 const MORE_ITEMS = [
-  { kind: "round_choice", id: "round_9d38ffa4ca3049948194e0b60315c650", project_id: PROJECT.project_id, project_name: "dev light stage", round_number: 2, since: 1794821386, detail: { awaiting_choice: "stage-x-1", since_from: "round_created" } },
+  { kind: "round_choice", id: "round_9d38ffa4ca3049948194e0b60315c650", project_id: PROJECT.project_id, project_name: "dev light stage", round_number: 2, since: 1794821386, detail: { awaiting_choice: "stage-round_9d38ffa4ca3049948194e0b60315c650-1", since_from: "round_created" } },
   { kind: "compute_stuck", id: "attempt_9d38ffa4ca3049948194e0b60315c650", project_id: null, round_id: null, since: 1794821386, detail: { phase: "running", reason: "No result after 2 h on the cluster", task_id: "task_9d38ffa4ca3049948194e0b60315c650" } },
   { kind: "task", id: "task_9d38ffa4ca3049948194e0b60315c650", project_id: PROJECT.project_id, project_name: "dev light stage", since: 1794821386, detail: { question: "Which light level keeps the lettuce compact?", state: "needs_review", owner_role: "researcher" } },
   { kind: "brand_new_kind", id: "thing_1", project_id: null, round_id: null, since: 1794821386, detail: {} },

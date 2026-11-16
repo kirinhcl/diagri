@@ -66,6 +66,13 @@ const NAMERS = {
   attempt: attemptName,
 };
 
+// The simulator's device id; a person reads "Simulated device" instead, a real device by its id.
+export const SIMULATED_DEVICE = "SIMULATED";
+
+export function deviceName(t, id) {
+  return id === SIMULATED_DEVICE ? t("stage.review.simulated") : id;
+}
+
 export function displayName(ctx, kind, row) {
   return NAMERS[kind](ctx, row || {});
 }
