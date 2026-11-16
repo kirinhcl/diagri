@@ -49,6 +49,9 @@ const ROUTES = [
   [/^\/alerts$/, () => "alerts.json"],
   [/^\/evidence$/, () => "evidence.json"],
   [/^\/compute$/, () => "compute.json"],
+  [/^\/greenhouses$/, () => "greenhouses.json"],
+  [/^\/admin\/operators$/, () => "admin-operators.json"],
+  [/^\/admin\/locks$/, () => "admin-locks.json"],
 ];
 
 function stageFixture(id, part, pending) {
@@ -74,7 +77,8 @@ function fixtureFor(path, pending) {
   return null;
 }
 
-function fakeApi(files) {
+// `answers` maps a POST path to a function giving its answer (or throwing a refusal); others get {}.
+function fakeApi(files, answers = {}) {
   const pending = { round: files["round-pending.json"]?.round_id, stage: files["stage-pending.json"]?.stage_id };
   const calls = [];
   const get = async (path) => {
@@ -86,7 +90,8 @@ function fakeApi(files) {
   };
   const post = async (path, body = {}, options = {}) => {
     calls.push({ method: "POST", path, body: JSON.parse(JSON.stringify(body)), options }); // the body as sent
-    return {};
+    const answer = answers[path];
+    return typeof answer === "function" ? answer(body) : {};
   };
   return { get, post, calls };
 }
@@ -101,12 +106,12 @@ function meWith(me, options) {
 // The page ctx of W/main.js makeCtx, plus `now` (fixed epoch seconds, or undefined). `fixtures`
 // replaces fixture files by name. Pages build DOM, so a fake DOM is installed when there is none.
 export function testCtx(options = {}) {
-  const { lang = "zh", fixtures = {}, now } = options;
+  const { lang = "zh", fixtures = {}, now, answers = {} } = options;
   if (typeof document === "undefined") installFakeDom();
   const files = { ...FIXTURES, ...fixtures };
   const crumbs = [];
   return {
-    api: fakeApi(files),
+    api: fakeApi(files, answers),
     crumbs,
     t: makeT(lang),
     lang,

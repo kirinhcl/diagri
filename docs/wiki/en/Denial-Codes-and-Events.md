@@ -8,7 +8,7 @@ The conditions were read from the code and its tests, which run on the simulated
 
 ## Denial codes
 
-A denial is the exception `Denied(code, message)` in [`ports.py`](../../../src/growbridge/ports.py). The docstring of `Denied` names 33 codes, and the code raises exactly those 33. The workbench answers a denial with HTTP 409 for `state`, 401 for `session`, 429 for `locked` and 403 for every other code; see [HTTP, workbench and MCP interfaces](API-Reference.md#workbench-routes).
+A denial is the exception `Denied(code, message)` in [`ports.py`](../../../src/growbridge/ports.py). The docstring of `Denied` names 38 codes, and the code raises exactly those 38. The workbench answers a denial with HTTP 409 for `state`, `lock_taken` and `greenhouse_busy`, 401 for `session`, 429 for `locked` and 403 for every other code; see [HTTP, workbench and MCP interfaces](API-Reference.md#workbench-routes).
 
 | Code | Meaning | Raised by | What the caller should do |
 | --- | --- | --- | --- |
@@ -45,6 +45,11 @@ A denial is the exception `Denied(code, message)` in [`ports.py`](../../../src/g
 | `cooldown` | An irrigation is running, or the last one started less than `pump_cooldown_seconds` ago. | control service | Wait, then send the irrigation again. |
 | `unavailable` | An optional backend is not configured: search, compute service, sandbox or holdout registry. | [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) | Nothing the caller can do; the daemon was built without that backend. |
 | `locked` | Too many failed logins in 15 minutes: 5 for one name from one address, or 25 for one name from all addresses. | `workbench/auth.py` | Wait until the failures are older than 15 minutes. |
+| `lock_taken` | One of the greenhouses asked for is already locked; none of them was locked (multi-user). | `workflow/locks.py` | Leave out the taken greenhouses and lock again. |
+| `greenhouse_busy` | A stage on the greenhouse has not ended or stopped, so it cannot be released (multi-user). | `workflow/locks.py` | Stop or end the stage, or abort its round, then release. |
+| `not_owner` | An administrator tried to act on another operator's project; administrators only pause and stop others' stages (multi-user). | `workflow/access.py` | Ask the owner, or disable the owner's account and hand the project over. |
+| `not_lock_holder` | The project's owner does not hold the greenhouse the stage or run sheet uses (multi-user). | `workflow/access.py`, `workbench/api.py` | Lock the greenhouse first. |
+| `admin_only` | Only an administrator may do this (multi-user). | `workflow/access.py` | Ask an administrator. |
 
 Notes on reach. `member`, `quota` and the compute cases of `param`, `scope`, `state` and `snapshot_incomplete` occur in the daemon only when the compute service is configured. The last three come from the check of a compute input: a snapshot of another project or with held-out outcomes (`scope`), an invalidated one (`state`) or one that fails verification (`snapshot_incomplete`). `batches` is raised only by `HoldoutRegistry.register`, which nothing in `src/` calls. `script_hash` and `already_run` come from `ConfirmatoryRunner.freeze_analysis` and `run_frozen`, through the two analysis routes of the workbench. The workbench also uses the word `param` as the code in its HTTP 422 body; that is not a `Denied`.
 
@@ -53,7 +58,7 @@ A refusal when a request is first submitted leaves no record in the action ledge
 | Who receives the denial | What it sees |
 | --- | --- |
 | HTTP client of the workbench | The status above and the body `{"detail": {"code": "<code>", "message": "<text>"}}`. |
-| Operator console (`/workbench`) | A plain-language text in Chinese or English for each of the 33 codes, with what to do next. The console also has three codes of its own that no server sends: `validation` (the form failed its own checks, or the server answered `422`), `network` (the server could not be reached) and `reauth_failed` (a wrong secret in the re-authentication dialog). See `denials.js` in [`web/workbench/`](../../../src/growbridge/web/workbench). |
+| Operator console (`/workbench`) | A plain-language text in Chinese or English for each of the 38 codes, with what to do next. The console also has three codes of its own that no server sends: `validation` (the form failed its own checks, or the server answered `422`), `network` (the server could not be reached) and `reauth_failed` (a wrong secret in the re-authentication dialog). See `denials.js` in [`web/workbench/`](../../../src/growbridge/web/workbench). |
 | Model role, inside a tool call | An error tool result `Error: denied (<code>): <message>`, cut at 500 characters. |
 | Dispatcher, outside a tool call (for example `budget`) | The task moves to `needs_attention` with the reason `<code>: <message>`. |
 | Executor | The write is skipped for this tick and `<request_id>: <code>` is added to `TickReport.denied`. A later tick tries again. |

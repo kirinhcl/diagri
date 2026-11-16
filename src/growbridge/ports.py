@@ -39,7 +39,9 @@ class Denied(Exception):
     ``member``, ``quota``, ``param`` (compute), ``clock_unsynced`` (archive), ``script_hash``,
     ``snapshot_incomplete``, ``already_run``, ``batches``, ``model_unregistered``,
     ``sandbox_unavailable`` (research), ``unsettled``, ``cooldown`` (control),
-    ``unavailable`` (an optional backend is not configured), ``locked`` (login rate limit).
+    ``unavailable`` (an optional backend is not configured), ``locked`` (login rate limit),
+    ``lock_taken``, ``greenhouse_busy``, ``not_owner``, ``not_lock_holder``, ``admin_only``
+    (multi-user workbench).
     """
 
     def __init__(self, code: str, message: str = ""):

@@ -29,6 +29,9 @@ against the server's enums and literals.
 | projects.json | `/projects` |
 | project.json | `/projects/{project_id}` (Lettuce light series) |
 | holdouts.json | `/holdouts?project_id={project_id}` |
+| greenhouses.json | `/greenhouses` (multi-user; synthetic) |
+| admin-operators.json | `/admin/operators` (multi-user; synthetic) |
+| admin-locks.json | `/admin/locks` (multi-user; synthetic) |
 | conversation.json | `/projects/{project_id}/conversation?after=0` |
 | round.json | `/rounds/{round_id}` (delivered round) |
 | report.json | `/rounds/{round_id}/report` |

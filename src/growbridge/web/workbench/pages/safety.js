@@ -8,6 +8,7 @@ import { clear, h } from "../ui/dom.js";
 import { errorLines, jsonEditor } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
+import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
 import { frozenLine, ruleSentence } from "./safety-text.js";
@@ -103,7 +104,12 @@ export async function render(ctx) {
   };
   const refreshCurrent = () =>
     readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t).join(" "), "error"));
-  await readCurrent();
+  try {
+    await readCurrent();
+  } catch (error) {
+    if (!isNotLockHolder(error)) throw error;
+    return { element: lockFirst(ctx, ctx.t("nav.safety")) };
+  }
   const outcome = { text: ctx.t("form.done"), refused: false };
   const editor = jsonEditor({
     label: ctx.t("safety.json"),
