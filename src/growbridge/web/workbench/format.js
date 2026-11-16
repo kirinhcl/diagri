@@ -84,3 +84,62 @@ export function formatNumber(value, precision, lang) {
     maximumFractionDigits: precision,
   });
 }
+
+const MONTHS_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DIGEST_SHORT_LENGTH = 8;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
+const HOURS_PER_DAY = 24;
+const SHORT_SECONDS_LIMIT = 120;
+const MINUTES_LIMIT = 120;
+const HOURS_LIMIT = 48;
+
+export const DEFAULT_LEVEL_RANGES = { light: [0, 100], exhaust: [0, 100], fan: [0, 10] };
+
+// Human duration: the unit follows the size (seconds, minutes, hours, days).
+export function formatDuration(t, seconds) {
+  if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) return DASH;
+  const s = Math.round(seconds);
+  if (s < SHORT_SECONDS_LIMIT) return t("duration.seconds", { n: s });
+  const totalMinutes = Math.round(s / SECONDS_PER_MINUTE);
+  if (totalMinutes < MINUTES_LIMIT) return t("duration.minutes", { n: totalMinutes });
+  const totalHours = Math.round(s / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR));
+  if (totalHours < HOURS_LIMIT) {
+    const h = Math.floor(totalMinutes / MINUTES_PER_HOUR);
+    const m = totalMinutes % MINUTES_PER_HOUR;
+    return m === 0 ? t("duration.hours", { h }) : t("duration.hoursMinutes", { h, m });
+  }
+  const d = Math.floor(totalHours / HOURS_PER_DAY);
+  const h = totalHours % HOURS_PER_DAY;
+  return h === 0 ? t("duration.days", { d }) : t("duration.daysHours", { d, h });
+}
+
+// Date and time in the site zone; the year appears only when it is not the current year.
+export function formatDateTime(epochSeconds, timeZone, lang, nowSeconds = Date.now() / 1000) {
+  if (typeof epochSeconds !== "number" || !Number.isFinite(epochSeconds)) return DASH;
+  const p = wallParts(epochSeconds, timeZone);
+  const showYear = p.year !== wallParts(nowSeconds, timeZone).year;
+  const month = Number(p.month);
+  const day = Number(p.day);
+  const clock = `${p.hour}:${p.minute}`;
+  if (lang === "zh") return `${showYear ? `${p.year}年` : ""}${month}月${day}日 ${clock}`;
+  return `${day} ${MONTHS_EN[month - 1]}${showYear ? ` ${p.year}` : ""} ${clock}`;
+}
+
+// A level written as value over full scale; pumps are on or off.
+export function levelText(t, channel, level, range = DEFAULT_LEVEL_RANGES[channel]) {
+  if (level === null || level === undefined) return DASH;
+  if (channel === "pump") return level > 0 ? t("level.on") : t("level.off");
+  if (channel === "light" || channel === "exhaust") return t("level.percent", { level });
+  if (range) return t("level.steps", { level, max: range[1] });
+  return String(level);
+}
+
+export function formatMoney(value, lang) {
+  return formatNumber(value, 2, lang);
+}
+
+export function shortDigest(hex) {
+  if (typeof hex !== "string" || hex === "") return DASH;
+  return `${hex.slice(0, DIGEST_SHORT_LENGTH)}…`;
+}
