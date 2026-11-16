@@ -4,7 +4,7 @@ import { formatTime } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
-import { errorLines } from "../ui/forms.js";
+import { errorParts, replaceParts } from "../ui/section.js";
 import { severityPill, statePill } from "../ui/status.js";
 
 const POLL_SECONDS = 15;
@@ -191,8 +191,7 @@ export async function render(ctx) {
       await load();
       view.problem.hidden = true;
     } catch (error) {
-      const lines = [ctx.t("inbox.stale"), ...errorLines(error, ctx.lang, ctx.t)];
-      clear(view.problem).append(...lines.map((line) => h("p", { text: line })));
+      replaceParts(view.problem, [h("p", { text: ctx.t("inbox.stale") }), ...errorParts(ctx, error)]);
       view.problem.hidden = false;
     }
   });

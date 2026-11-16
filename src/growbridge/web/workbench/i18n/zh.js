@@ -66,7 +66,7 @@ export default {
   "stage.irrigation.lanOnly": "浇水只能在实验室内网里启动。",
   "error.title": "请求没有成功",
   "error.notFound": "没有找到这一项，可能已被删除。",
-  "error.network": "连不上服务器。请检查网络后再试。",
+  "error.network": "连不上服务器，或没有收到答复。请检查网络后刷新页面再看。",
   "tech.title": "技术详情",
   "tech.copy": "复制",
   "tech.copyAll": "复制全部",

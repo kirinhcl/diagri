@@ -4,9 +4,8 @@
 import { labelOr } from "../i18n.js";
 import { newRequestId } from "../receipts.js";
 import { clear, h } from "../ui/dom.js";
-import { errorLines } from "../ui/forms.js";
 import { richText } from "../ui/rich-text.js";
-import { timeText } from "../ui/section.js";
+import { errorParts, timeText } from "../ui/section.js";
 
 const ROLES = new Set(["user", "orchestrator", "planner", "researcher", "auditor"]);
 const CLOSED_ROUNDS = new Set(["delivered", "aborted"]);
@@ -95,7 +94,7 @@ export function conversationSection(ctx, project) {
   let last = 0;
 
   const showProblem = (error) => {
-    clear(problem).append(...errorLines(error, ctx.lang, ctx.t).map((line) => h("p", { text: line })));
+    clear(problem).append(...errorParts(ctx, error));
     problem.hidden = false;
   };
 

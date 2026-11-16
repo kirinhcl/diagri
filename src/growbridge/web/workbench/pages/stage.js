@@ -7,8 +7,8 @@ import { formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
-import { errorLines } from "../ui/forms.js";
-import { codeBlock, keyValues, section, timeText } from "../ui/section.js";
+import { errorDetail, errorLines } from "../ui/forms.js";
+import { codeBlock, errorParts, keyValues, replaceParts, section, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
@@ -95,14 +95,16 @@ function region(className) {
   return { element, show };
 }
 
-function problemBox(lines) {
-  return h("div", { class: "form-status form-status-error", attrs: { role: "status" } }, lines.map((line) => h("p", { text: line })));
+function problemBox(nodes) {
+  return h("div", { class: "form-status form-status-error", attrs: { role: "status" } }, nodes);
 }
 
+// A part that could not be read: drawn again only when the error says something else, so a fold
+// opened between polls stays open.
 function showResult(part, ctx, result, signatureOf, build) {
   if (result.error) {
-    const lines = errorLines(result.error, ctx.lang, ctx.t);
-    part.show(`error:${lines.join("|")}`, () => problemBox(lines));
+    const said = [errorLines(result.error, ctx.lang, ctx.t), errorDetail(result.error, ctx.t)];
+    part.show(`error:${JSON.stringify(said)}`, () => problemBox(errorParts(ctx, result.error)));
     return;
   }
   part.show(signatureOf(result.value), () => build(result.value));
@@ -250,7 +252,7 @@ export async function render(shellCtx, params) {
       draw(page, data);
       problem.hidden = true;
     } catch (error) {
-      problem.replaceChildren(...[ctx.t("stage.stale"), ...errorLines(error, ctx.lang, ctx.t)].map((line) => h("p", { text: line })));
+      replaceParts(problem, [h("p", { text: ctx.t("stage.stale") }), ...errorParts(ctx, error)]);
       problem.hidden = false;
     }
   });

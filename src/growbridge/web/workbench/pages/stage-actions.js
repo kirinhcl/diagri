@@ -8,7 +8,7 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
-import { errorBox, note, showErrors, timeText } from "../ui/section.js";
+import { errorBox, errorFold, note, replaceParts, showErrors, timeText } from "../ui/section.js";
 
 // A manual write may only switch the pump off; irrigation is what switches it on.
 const CHANNELS = ["light", "exhaust", "fan", "pump"];
@@ -324,31 +324,33 @@ function logItem(ctx, title, record) {
     detail,
     meta ? h("p", { class: "activity-meta", text: meta }) : null,
   );
+  // Lines are text or nodes (a fold); the same again every poll leaves an opened fold as it is.
   const show = (status, lines) => {
     if (status) {
       pill.className = RECEIPT_TONE[status];
       pill.textContent = labelOr(ctx.t, "receipt", status);
     }
-    detail.replaceChildren(...lines.filter(Boolean).map((line) => h("p", { text: line })));
+    replaceParts(detail, lines.filter(Boolean).map((line) => (typeof line === "string" ? h("p", { text: line }) : line)));
   };
   return { element, show };
 }
 
-// Why a receipt could not be read; a 404 means the server holds nothing under that request id (yet).
-function checkLine(ctx, error) {
-  if (error instanceof ApiError && error.status === 404) return ctx.t("receipt.noRecord");
-  return ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") });
+// Why a receipt could not be read, with the error's own words folded away; a 404 means the server
+// holds nothing under that request id (yet).
+export function checkParts(ctx, error) {
+  if (error instanceof ApiError && error.status === 404) return [ctx.t("receipt.noRecord")];
+  return [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }), errorFold(ctx, error)];
 }
 
 function outcomeLines(ctx, { outcome, record, error }) {
-  const problem = error ? checkLine(ctx, error) : null;
+  const problem = error ? checkParts(ctx, error) : [];
   if (outcome === "applied") {
     const level = record && record.confirmed_level;
     return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level })];
   }
   if (outcome === "unknown") return [ctx.t("receipt.unknownNote")];
   if (outcome === "failed") return [record && record.error ? ctx.t("receipt.error", { error: record.error }) : null];
-  return [ctx.t("receipt.unsettledNote", { seconds: RECEIPT_LIMIT_MS / 1000 }), problem];
+  return [ctx.t("receipt.unsettledNote", { seconds: RECEIPT_LIMIT_MS / 1000 }), ...problem];
 }
 
 // life = { signal, alive() }: the page's lifetime; a poll ends when the page is left.
@@ -367,7 +369,7 @@ export function activityLog(ctx, life) {
     const item = push(logItem(ctx, heading, record));
     const note = lost ? ctx.t("receipt.lost") : null;
     item.show("pending", [note]);
-    const onUpdate = ({ error }) => item.show("pending", [note, error ? checkLine(ctx, error) : null]);
+    const onUpdate = ({ error }) => item.show("pending", [note, ...(error ? checkParts(ctx, error) : [])]);
     const fetchReceipt = () => ctx.api.get(`/receipts/${encodeURIComponent(record.request_id)}`);
     const followed = pollReceipt({ initial: record, fetchReceipt, onUpdate, signal: life.signal, isActive: life.alive })
       .then((result) => {

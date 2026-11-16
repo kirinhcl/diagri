@@ -66,7 +66,7 @@ export default {
   "stage.irrigation.lanOnly": "Irrigation can only be started from the lab network.",
   "error.title": "The request failed",
   "error.notFound": "This item was not found; it may have been removed.",
-  "error.network": "The server could not be reached. Check the network and try again.",
+  "error.network": "The server could not be reached, or no answer came back. Check the network, then reload the page to see what happened.",
   "tech.title": "Technical details",
   "tech.copy": "Copy",
   "tech.copyAll": "Copy all",

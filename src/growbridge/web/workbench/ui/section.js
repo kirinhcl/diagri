@@ -98,11 +98,32 @@ export function errorBox() {
   return h("div", { class: "form-status form-status-error", attrs: { role: "status", hidden: true } });
 }
 
-// The plain lines of a refusal, then its status, code and the server's own words in the details.
+// An error's status, code and own words in the technical details; null when it has none.
+export function errorFold(ctx, error) {
+  return techDetails(ctx.t, errorDetail(error, ctx.t));
+}
+
+// The plain lines of an error as paragraphs, then its fold: what every error box that stays on a
+// page shows.
+export function errorParts(ctx, error) {
+  const lines = errorLines(error, ctx.lang, ctx.t).map((line) => h("p", { text: line }));
+  const fold = errorFold(ctx, error);
+  return fold ? [...lines, fold] : lines;
+}
+
+// For a box a poll fills again and again: the same text as last time leaves it as it is, so a fold
+// someone opened stays open (and its copy buttons where they were).
+const shownText = new WeakMap();
+
+export function replaceParts(box, nodes) {
+  const text = nodes.map((node) => node.textContent).join("\n");
+  if (box.childNodes.length > 0 && shownText.get(box) === text) return;
+  shownText.set(box, text);
+  box.replaceChildren(...nodes);
+}
+
 export function showErrors(box, error, ctx) {
-  clear(box).append(...errorLines(error, ctx.lang, ctx.t).map((line) => h("p", { text: line })));
-  const details = techDetails(ctx.t, errorDetail(error, ctx.t));
-  if (details) box.append(details);
+  clear(box).append(...errorParts(ctx, error));
   box.hidden = false;
 }
 

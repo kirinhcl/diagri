@@ -1,8 +1,8 @@
 // The confirmatory analysis of a round's protocol: the frozen script, its snapshots, and the two writes.
 import { ApiError } from "../api.js";
 import { h } from "../ui/dom.js";
-import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
-import { afterWrite, codeBlock, keyValues, note, section, timeText } from "../ui/section.js";
+import { jsonEditor, simpleForm } from "../ui/forms.js";
+import { afterWrite, codeBlock, errorParts, keyValues, note, section, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
@@ -13,10 +13,10 @@ let lastRun = null;
 async function readAnalysis(ctx, round) {
   const path = `/protocols/${encodeURIComponent(round.protocol_id)}/analysis?project_id=${encodeURIComponent(round.project_id)}`;
   try {
-    return { analysis: await ctx.api.get(path), problem: null };
+    return { analysis: await ctx.api.get(path), error: null };
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
-    return { analysis: null, problem: errorLines(error, ctx.lang, ctx.t) };
+    return { analysis: null, error };
   }
 }
 
@@ -99,12 +99,9 @@ export function versionMismatch(analysis, round) {
 }
 
 export async function analysisSection(ctx, round) {
-  const { analysis, problem } = await readAnalysis(ctx, round);
+  const { analysis, error } = await readAnalysis(ctx, round);
   const title = ctx.t("analysis.title");
-  if (!analysis) {
-    const lines = problem.map((line) => h("p", { text: line }));
-    return section(title, h("div", { class: "form-status form-status-error" }, lines));
-  }
+  if (!analysis) return section(title, h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)));
   const mismatch = versionMismatch(analysis, round);
   return section(
     title,

@@ -7,7 +7,7 @@ import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { describeDenial } from "../../src/growbridge/web/workbench/denials.js";
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { errorDetail, errorLines, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
-import { copyText, errorBox, showErrors, techDetails } from "../../src/growbridge/web/workbench/ui/section.js";
+import { copyText, errorBox, errorParts, replaceParts, showErrors, techDetails } from "../../src/growbridge/web/workbench/ui/section.js";
 import { countButtons, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { FIXTURES, installFakeDom, renderPage } from "./support/render-page.mjs";
 
@@ -112,6 +112,42 @@ test("errorLines: a network failure is one line whatever its status; anything el
   for (const error of [new ApiError(500, "server_error", "HTTP 500"), new ApiError(409, "state", RAW)]) {
     assert.ok(errorLines(error, "en", t).length <= 2);
   }
+});
+
+test("no answer may still mean the write arrived: the network line says to reload and look, not to resend", () => {
+  const network = new ApiError(0, "network", "Failed to fetch");
+  assert.deepEqual(errorLines(network, "zh", makeT("zh")), ["连不上服务器，或没有收到答复。请检查网络后刷新页面再看。"]);
+  assert.deepEqual(errorLines(network, "en", makeT("en")), [
+    "The server could not be reached, or no answer came back. Check the network, then reload the page to see what happened.",
+  ]);
+});
+
+test("errorParts: the plain lines as paragraphs, then the fold with the server's words", () => {
+  installFakeDom();
+  const ctx = { t: makeT("en"), lang: "en" };
+  const parts = errorParts(ctx, new ApiError(409, "state", RAW));
+  const { text, advice } = describeDenial("state", "en");
+  assert.deepEqual(parts.map((node) => node.localName), ["p", "p", "details"]);
+  assert.deepEqual(parts.slice(0, 2).map((node) => node.textContent), [text, advice]);
+  assert.match(visibleTextIncludingDetails(parts[2]), /recovery_check; it cannot pause/);
+  assert.deepEqual(errorParts(ctx, null).map((node) => node.localName), ["p"], "nothing to fold, no fold");
+});
+
+test("replaceParts leaves an opened fold open when a poll brings the same error again", () => {
+  installFakeDom();
+  const ctx = { t: makeT("en"), lang: "en" };
+  const box = errorBox();
+  replaceParts(box, errorParts(ctx, new ApiError(409, "state", RAW)));
+  const [fold] = elements(box, "details");
+  fold.setAttribute("open", "");
+  replaceParts(box, errorParts(ctx, new ApiError(409, "state", RAW)));
+  assert.equal(elements(box, "details")[0], fold);
+  assert.equal(fold.hasAttribute("open"), true);
+  replaceParts(box, errorParts(ctx, new ApiError(409, "state", "other words")));
+  assert.notEqual(elements(box, "details")[0], fold, "different words: shown afresh");
+  box.replaceChildren();
+  replaceParts(box, errorParts(ctx, new ApiError(409, "state", "other words")));
+  assert.equal(elements(box, "details").length, 1, "an emptied box is filled again");
 });
 
 test("the console's own refusals (not_approved) keep their catalog line in view", () => {

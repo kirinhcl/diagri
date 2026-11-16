@@ -2,8 +2,7 @@
 import { ApiError } from "../api.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
-import { errorLines } from "../ui/forms.js";
-import { keyValues, note, pageHead, section, timeText } from "../ui/section.js";
+import { errorParts, keyValues, note, pageHead, section, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { conversationSection } from "./conversation.js";
@@ -91,16 +90,15 @@ function holdoutsTable(ctx, holdouts) {
 async function readHoldouts(ctx, projectId) {
   try {
     const data = await ctx.api.get(`/holdouts?project_id=${encodeURIComponent(projectId)}`);
-    return { holdouts: array(data && data.holdouts), problem: null };
+    return { holdouts: array(data && data.holdouts), error: null };
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
-    return { holdouts: [], problem: errorLines(error, ctx.lang, ctx.t) };
+    return { holdouts: [], error };
   }
 }
 
 function holdoutsBlock(ctx, project, read) {
-  const lines = read.problem ? read.problem.map((line) => h("p", { text: line })) : [];
-  const problem = lines.length ? h("div", { class: "form-status form-status-error" }, lines) : null;
+  const problem = read.error ? h("div", { class: "form-status form-status-error" }, errorParts(ctx, read.error)) : null;
   return section(ctx.t("project.holdouts.title"), problem, holdoutsTable(ctx, read.holdouts), holdoutEditor(ctx, project));
 }
 

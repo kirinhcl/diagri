@@ -128,6 +128,7 @@ code {
 .tech-copy { min-height: 28px; padding: 3px 10px; font-size: 12px; }
 .form-status .tech-details { margin-top: 8px; }
 .wb-problem .tech-details { margin: 0 0 14px; }
+.activity-detail .tech-details { margin: 4px 0; }
 
 /* --- actions ---------------------------------------------------------------------------------- */
 .action { display: grid; gap: 10px; justify-items: start; }
