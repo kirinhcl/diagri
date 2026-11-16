@@ -1,4 +1,4 @@
-// A plain data table: columns are [{label, cell: (row) => Node | string | null}].
+// A plain data table: columns are [{label, cell: (row, index) => Node | string | null}].
 import { h } from "./dom.js";
 
 // With a label the wrapper becomes a focusable region, so a wide table can be scrolled by keyboard.

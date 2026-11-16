@@ -1,6 +1,5 @@
 // Evidence cards: every card with its source and verification, a form to enter one, and verification of a model's card.
 import { labelOr } from "../i18n.js";
-import { formatNumber } from "../format.js";
 import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
 import { roleLabel } from "../ui/names.js";
@@ -60,11 +59,14 @@ function enteredBy(ctx, source) {
   return Object.hasOwn(AGENT_SOURCES, source) ? roleLabel(ctx.t, AGENT_SOURCES[source]) : source;
 }
 
+// The value as it was entered: no fixed number of decimals (a datum is never rounded on screen).
+const exactNumber = (value, lang) => Number(value).toLocaleString(lang, { maximumFractionDigits: 20 });
+
 function facts(ctx, card) {
   const hasValue = card.value !== null && card.value !== undefined;
   return keyValues([
     [ctx.t("evidence.fact.class"), labelOr(ctx.t, "evidence.class", card.source_class)],
-    [ctx.t("evidence.fact.value"), hasValue ? `${formatNumber(card.value, 2, ctx.lang)} ${card.unit || ""}`.trim() : null],
+    [ctx.t("evidence.fact.value"), hasValue ? `${exactNumber(card.value, ctx.lang)} ${card.unit || ""}`.trim() : null],
     [ctx.t("evidence.fact.calibration"), ctx.t(card.calibrated ? "evidence.calibratedYes" : "evidence.uncalibrated")],
     [ctx.t("evidence.fact.by"), enteredBy(ctx, card.source)],
     [ctx.t("evidence.fact.at"), timeText(ctx, card.added_at)],
@@ -93,7 +95,7 @@ function cardView(ctx, card) {
     h("p", { class: "cell-sub", text: ctx.t("evidence.citedFrom", { citation: card.citation }) }),
     facts(ctx, card),
     verificationBlock(ctx, card),
-    techDetails(ctx.t, [[ctx.t("tech.id.id"), card.id]]),
+    techDetails(ctx.t, [[ctx.t("tech.id.id"), card.id], [ctx.t("evidence.fact.rawValue"), card.value]]),
   );
 }
 

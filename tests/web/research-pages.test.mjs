@@ -62,4 +62,25 @@ test("the change-budget button fills the task field", async () => {
   assert.equal(field().value, "");
   button.dispatchEvent(new Event("click"));
   assert.match(field().value, /^task_3f1c/);
+  assert.match(visibleText(element), /已选择任务 3f1c9a7e…/);
+});
+
+test("a task reads the same in every table, and a new budget row does not rename another", async () => {
+  const base = (await renderPage("compute", {}, { now: NOW })).element;
+  const label = /任务 3f1c9a7e…/;
+  assert.equal((visibleText(base).match(/任务 3f1c9a7e…/g) || []).length >= 3, true);
+  const { FIXTURES } = await import("./support/render-page.mjs");
+  const compute = FIXTURES["compute.json"];
+  const other = { ...compute.tasks[0], task_id: "task_0000aaaa1111bbbb2222cccc3333dddd" };
+  const more = await renderPage("compute", {}, { now: NOW, fixtures: { "compute.json": { ...compute, tasks: [other, ...compute.tasks] } } });
+  assert.match(visibleText(more.element), label);
+  assert.match(visibleText(more.element), /任务 0000aaaa…/);
+});
+
+test("an evidence value is shown exactly as entered", async () => {
+  for (const [value, shown] of [[0.0035, "0.0035"], [12.345, "12.345"]]) {
+    const { element } = await renderPage("evidence", {}, { fixtures: cards([{ ...CARD, value, unit: "cm" }]), now: NOW, lang: "en" });
+    assert.match(visibleText(element), new RegExp(`${shown} cm`));
+    assert.match(visibleTextIncludingDetails(element), new RegExp(`Value as entered.*${shown}`, "s"));
+  }
 });

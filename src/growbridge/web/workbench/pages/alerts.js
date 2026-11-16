@@ -23,7 +23,7 @@ export function alertWaiting(alert, now) {
 // One phrase about the reading: unread, who read it and when, or read before it got worse.
 export function readLine(ctx, alert) {
   if (!alert.read_by) return ctx.t("alerts.unread");
-  const worse = !alert.read_severity || SEVERITY_ORDER.indexOf(alert.severity) > SEVERITY_ORDER.indexOf(alert.read_severity);
+  const worse = Boolean(alert.read_severity) && SEVERITY_ORDER.indexOf(alert.severity) > SEVERITY_ORDER.indexOf(alert.read_severity);
   if (worse) return ctx.t("alerts.readWorse");
   return ctx.t("alerts.readBy", { who: alert.read_by, time: timeText(ctx, alert.read_at) });
 }
@@ -34,6 +34,13 @@ function messageCell(message) {
   const [summary = "", ...rest] = lines;
   const items = rest.map((line) => h("li", { text: line.replace(/^-\s+/, "") }));
   return h("div", { class: "cell-stack" }, h("p", { text: summary }), items.length ? h("ul", {}, items) : null);
+}
+
+// Offered again only because the day has passed: it did not get worse, and was read.
+function olderThanReask(alert) {
+  const readAt = SEVERITY_ORDER.indexOf(alert.read_severity);
+  const worse = readAt >= 0 && SEVERITY_ORDER.indexOf(alert.severity) > readAt;
+  return Boolean(alert.read_by) && !worse && alertWaiting(alert, nowSeconds());
 }
 
 function readCell(ctx, alert) {
@@ -56,7 +63,8 @@ function readCell(ctx, alert) {
     ctx.notify(ctx.t("alerts.wasRead"), "ok");
     ctx.reload();
   });
-  return h("div", { class: "action" }, h("p", { class: "block-note", text: said }), button, box);
+  const why = olderThanReask(alert) ? h("p", { class: "cell-sub", text: ctx.t("alerts.askAgain") }) : null;
+  return h("div", { class: "action" }, h("p", { class: "block-note", text: said }), why, button, box);
 }
 
 function alertsTable(ctx, alerts, focus) {

@@ -4,7 +4,7 @@ import { h } from "../ui/dom.js";
 import { simpleForm } from "../ui/forms.js";
 import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
-import { attemptSections } from "./compute-attempts.js";
+import { attemptSections, taskLabel } from "./compute-attempts.js";
 import { isNotMounted } from "./not-mounted.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
@@ -45,8 +45,8 @@ function serviceView(ctx, service) {
 function budgetsTable(ctx, tasks, pickTask) {
   const usage = (key, used, reserved, budget) =>
     ctx.t(key, { used: num(ctx, used), reserved: num(ctx, reserved), budget: num(ctx, budget) });
-  const taskCell = (row, index) =>
-    h("div", { class: "cell-stack" }, ctx.t("compute.taskOrdinal", { n: index + 1 }), techDetails(ctx.t, [[ctx.t("tech.id.task_id"), row.task_id]]));
+  const taskCell = (row) =>
+    h("div", { class: "cell-stack" }, taskLabel(ctx, row.task_id), techDetails(ctx.t, [[ctx.t("tech.id.task_id"), row.task_id]]));
   const change = (row) => {
     const label = ctx.t("compute.budget.change");
     const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
@@ -54,7 +54,7 @@ function budgetsTable(ctx, tasks, pickTask) {
     return button;
   };
   const columns = [
-    { label: ctx.t("compute.task"), cell: (row, index) => taskCell(row, index) },
+    { label: ctx.t("compute.task"), cell: taskCell },
     { label: ctx.t("compute.budget.cpu"), cell: (row) => usage("compute.budget.usage", row.cpu_hours_used, row.cpu_hours_reserved, row.cpu_hours_budget) },
     { label: ctx.t("compute.budget.storage"), cell: (row) => usage("compute.budget.usageStorage", row.storage_gb_used, row.storage_gb_reserved, row.storage_gb_budget) },
     { label: ctx.t("compute.budget.change"), cell: change },
@@ -79,21 +79,23 @@ function budgetForm(ctx) {
 const descendants = (node) => [...(node.children || [])].flatMap((child) => [child, ...descendants(child)]);
 
 // "Change budget" on a row: that task goes into the form's task field, and the cursor goes there.
-function fillTask(form, taskId) {
+function fillTask(ctx, form, taskId, chosen) {
   const field = descendants(form).find((el) => el.getAttribute("name") === "task_id");
   if (!field) return;
   field.value = taskId;
+  chosen.textContent = ctx.t("compute.budget.chosen", { task: taskLabel(ctx, taskId) });
   field.focus();
 }
 
 function overviewPage(ctx, overview) {
   const tasks = array(overview.tasks);
   const form = budgetForm(ctx);
-  const budgets = tasks.length ? budgetsTable(ctx, tasks, (taskId) => fillTask(form, taskId)) : note(ctx.t("compute.budget.none"));
+  const chosen = h("p", { class: "cell-sub", attrs: { role: "status" } });
+  const budgets = tasks.length ? budgetsTable(ctx, tasks, (taskId) => fillTask(ctx, form, taskId, chosen)) : note(ctx.t("compute.budget.none"));
   return [
     section(ctx.t("compute.balance.title"), balanceView(ctx, overview.balance), balanceForm(ctx)),
     section(ctx.t("compute.service.title"), serviceView(ctx, overview.service)),
-    section(ctx.t("compute.budget.title"), budgets, form),
+    section(ctx.t("compute.budget.title"), budgets, form, chosen),
     ...attemptSections(ctx, overview),
   ];
 }

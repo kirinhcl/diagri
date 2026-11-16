@@ -2,14 +2,22 @@
 import { confirmAction } from "../ui/dialog.js";
 import { clear, h } from "../ui/dom.js";
 import { afterWrite, errorBox, note, section, showErrors, techDetails, timeText } from "../ui/section.js";
+import { shortDigest } from "../format.js";
+import { displayName } from "../ui/names.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
 
+// A task as people read it: the first 8 characters of its id after the prefix, the same everywhere.
+export function taskLabel(ctx, taskId) {
+  const id = String(taskId ?? "");
+  return ctx.t("compute.taskLabel", { fingerprint: shortDigest(id.slice(id.indexOf("_") + 1)) });
+}
+
 function settleLines(ctx, row, reason) {
   return [
-    ctx.t("compute.settleWhat", { id: row.attempt_id, task: row.task_id }),
+    ctx.t("compute.settleWhat", { attempt: displayName(ctx, "attempt", row), task: taskLabel(ctx, row.task_id) }),
     ctx.t("compute.settleCharge"),
     ctx.t("compute.settleReason", { reason }),
   ];
@@ -39,20 +47,21 @@ function settleControl(ctx, row) {
       button.disabled = false;
       return;
     }
-    afterWrite(ctx, ctx.t("compute.settled", { id: row.attempt_id }));
+    afterWrite(ctx, ctx.t("compute.settled", { id: displayName(ctx, "attempt", row) }));
   });
   return h("div", { class: "action" }, h("div", { class: "inline-control" }, input, button), box);
 }
 
-// The attempt's ordinal in the list, with its ids one click away.
-function attemptCell(ctx, row, index, extra = []) {
+// The attempt by its submission time, the task it belongs to, and its ids one click away.
+function attemptCell(ctx, row, extra = []) {
   const ids = [[ctx.t("tech.id.attempt_id"), row.attempt_id], [ctx.t("tech.id.task_id"), row.task_id], ...extra];
-  return h("div", { class: "cell-stack" }, ctx.t("compute.attemptOrdinal", { n: index + 1 }), techDetails(ctx.t, ids));
+  return h("div", { class: "cell-stack" }, displayName(ctx, "attempt", row), techDetails(ctx.t, ids));
 }
 
 function jobsTable(ctx, jobs) {
   const columns = [
-    { label: ctx.t("compute.attempt"), cell: (row, index) => attemptCell(ctx, row, index, [[ctx.t("compute.remoteJob"), row.remote_job_id]]) },
+    { label: ctx.t("compute.attempt"), cell: (row) => attemptCell(ctx, row, [[ctx.t("compute.remoteJob"), row.remote_job_id]]) },
+    { label: ctx.t("compute.task"), cell: (row) => taskLabel(ctx, row.task_id) },
     { label: ctx.t("compute.template"), cell: (row) => row.template_id },
     { label: ctx.t("compute.phase"), cell: (row) => statePill(ctx.t, row.phase) },
     { label: ctx.t("col.created"), cell: (row) => timeText(ctx, row.created_at) },
@@ -62,7 +71,8 @@ function jobsTable(ctx, jobs) {
 
 function stuckTable(ctx, stuck) {
   const columns = [
-    { label: ctx.t("compute.attempt"), cell: (row, index) => attemptCell(ctx, row, index) },
+    { label: ctx.t("compute.attempt"), cell: (row) => attemptCell(ctx, row) },
+    { label: ctx.t("compute.task"), cell: (row) => taskLabel(ctx, row.task_id) },
     { label: ctx.t("compute.phase"), cell: (row) => statePill(ctx.t, row.phase) },
     { label: ctx.t("compute.why"), cell: (row) => row.reason },
     { label: ctx.t("compute.since"), cell: (row) => timeText(ctx, row.since) },

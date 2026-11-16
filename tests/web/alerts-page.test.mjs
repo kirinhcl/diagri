@@ -74,3 +74,13 @@ test("the read column says one thing", async () => {
   const en = await renderPage("alerts", {}, { lang: "en", fixtures: withAlerts([{ severity: "critical", read_by: "alice", read_at: NOW - 300, read_severity: "warning" }]), now: NOW });
   assert.match(visibleText(en.element), /Read, but it got worse; please read again/);
 });
+
+test("a read without a recorded severity is not called worse; a day-old read says why it asks again", async () => {
+  const legacy = await renderPage("alerts", {}, { fixtures: withAlerts([{ read_by: "alice", read_at: NOW - 300, read_severity: null }]), now: NOW });
+  assert.match(visibleText(legacy.element), /alice .* 已读/);
+  assert.doesNotMatch(visibleText(legacy.element), /情况变糟/);
+  const old = await renderPage("alerts", {}, { fixtures: withAlerts([{ read_by: "alice", read_at: NOW - 30 * 3600, read_severity: "warning", last_at: NOW - 40 * 3600 }]), now: NOW });
+  assert.match(visibleText(old.element), /已读超过一天，请再确认一次。/);
+  const fresh = await renderPage("alerts", {}, { fixtures: withAlerts([{ read_by: "alice", read_at: NOW - 300, read_severity: "warning" }]), now: NOW });
+  assert.doesNotMatch(visibleText(fresh.element), /超过一天/);
+});
