@@ -1,10 +1,10 @@
 // "My inbox": everything that waits for a person, grouped by kind and refreshed every 15 seconds.
 import { singleFlight } from "../api.js";
-import { formatTime } from "../format.js";
+import { formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { clear, h } from "../ui/dom.js";
-import { errorParts, replaceParts } from "../ui/section.js";
+import { errorParts, replaceParts, timeText } from "../ui/section.js";
 import { severityPill, statePill } from "../ui/status.js";
 
 const POLL_SECONDS = 15;
@@ -55,12 +55,6 @@ export function groupByKind({ items, truncated }) {
   return kinds
     .map((kind) => ({ kind, items: items.filter((item) => item.kind === kind), hidden: truncated[kind] || 0 }))
     .filter((group) => group.items.length > 0 || group.hidden > 0);
-}
-
-function timeText(ctx, epoch) {
-  if (typeof epoch !== "number" || !Number.isFinite(epoch)) return "—";
-  const zone = (ctx.me && ctx.me.timezone) || "UTC";
-  return `${formatTime(epoch, zone, ctx.lang)} ${zone}`;
 }
 
 // The text for key, or null when one of its values is missing.
@@ -159,7 +153,7 @@ function emptyView(ctx) {
 function draw(view, ctx, data) {
   const inbox = normalizeInbox(data);
   if (ctx.setCounts) ctx.setCounts(inboxCounts(inbox));
-  view.updated.textContent = ctx.t("inbox.updated", { time: timeText(ctx, Date.now() / 1000), seconds: POLL_SECONDS });
+  view.updated.textContent = ctx.t("inbox.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   const signature = JSON.stringify(inbox);
   if (signature === view.signature) return;
   view.signature = signature;

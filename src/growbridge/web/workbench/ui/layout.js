@@ -91,18 +91,22 @@ export function brand(t, tag = "a") {
   );
 }
 
-function sidebar(ctx, nav) {
+export function sidebar(ctx, nav) {
   const entry = ctx.me && ctx.me.entry ? ctx.me.entry : "unknown";
+  const zone = (ctx.me && ctx.me.timezone) || "UTC";
   return h(
     "aside",
     { class: "wb-sidebar" },
     brand(ctx.t),
     nav,
     h(
-      "p",
+      "div",
       { class: ["wb-entry", `wb-entry-${entry}`] },
       h("span", { class: "wb-entry-label", text: ctx.t("entry.label") }),
       h("strong", { text: labelOr(ctx.t, "entry", entry) }),
+      h("span", { class: "wb-entry-note", text: ctx.t("entry.onsiteHint") }),
+      h("span", { class: "wb-entry-label", text: ctx.t("frame.timezone") }),
+      h("strong", { class: "wb-entry-zone", text: zone }),
     ),
   );
 }

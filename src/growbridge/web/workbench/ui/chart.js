@@ -1,7 +1,7 @@
 // Environment curves of a stage: one small SVG line chart per reading that has data.
 // Downsampling and problem samples are always stated, never hidden (design §2, anti-goals).
 import { METRICS, gapLimit, seriesPoints, splitAtGaps } from "../chart-math.js";
-import { formatNumber, formatTime } from "../format.js";
+import { formatDateTime, formatNumber } from "../format.js";
 import { h, svg } from "./dom.js";
 
 const WIDTH = 600;
@@ -15,7 +15,7 @@ const MARKS = {
 };
 
 function timeLabel(epoch, timeZone, lang) {
-  return `${formatTime(epoch, timeZone, lang)} ${timeZone}`;
+  return formatDateTime(epoch, timeZone, lang);
 }
 
 function valueLabel(value, metric, lang) {

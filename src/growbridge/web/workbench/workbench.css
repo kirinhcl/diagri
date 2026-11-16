@@ -234,7 +234,8 @@ a {
   text-transform: uppercase;
   color: var(--muted);
 }
-.wb-entry-lan strong { color: var(--green); }
+.wb-entry-lan strong.wb-entry-zone { color: inherit; }
+.wb-entry-note { font-size: 11px; line-height: 1.4; color: var(--muted); margin-bottom: 6px; }
 .wb-body {
   min-width: 0;
   display: flex;

@@ -3,7 +3,7 @@
 // Read again every 15 s; each part is redrawn only when what it shows changed, so nothing typed
 // into a form is lost, and the results of writes stay listed while the controls change. The readings
 // of a finished stage are asked for again only every five minutes.
-import { formatNumber } from "../format.js";
+import { formatDuration, formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { readingsChart } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
@@ -162,7 +162,7 @@ function draw(page, data) {
   const { stage } = data;
   const review = data.review.error ? null : data.review.value;
   head.pill.replaceChildren(statePill(ctx.t, stage.state));
-  head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: POLL_SECONDS });
+  head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   parts.status.show(JSON.stringify(stage), () => statusView(ctx, stage));
   const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review]);
   parts.actions.show(actionKey, () => actionsView({ ...page.env, stage, review, roundId: stage.round_id }));

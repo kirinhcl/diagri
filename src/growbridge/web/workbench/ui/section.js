@@ -1,5 +1,5 @@
 // Building blocks shared by the project, round and stage pages.
-import { formatTime } from "../format.js";
+import { formatDateTime, formatDuration } from "../format.js";
 import { confirmAction } from "./dialog.js";
 import { clear, h } from "./dom.js";
 import { errorDetail, errorLines } from "./forms.js";
@@ -8,8 +8,30 @@ let counter = 0;
 
 export function timeText(ctx, epoch) {
   if (typeof epoch !== "number" || !Number.isFinite(epoch)) return "—";
-  const zone = (ctx.me && ctx.me.timezone) || "UTC";
-  return `${formatTime(epoch, zone, ctx.lang)} ${zone}`;
+  return formatDateTime(epoch, siteZone(ctx), ctx.lang, nowSeconds(ctx));
+}
+
+function siteZone(ctx) {
+  return (ctx.me && ctx.me.timezone) || "UTC";
+}
+
+function nowSeconds(ctx) {
+  return ctx.now ?? Date.now() / 1000;
+}
+
+const SECONDS_PER_DAY = 86400;
+const JUST_NOW_SECONDS = 60;
+
+// A <time> for list cells: relative within the last day, the full time otherwise (also for the future).
+export function timeCell(ctx, epoch) {
+  if (typeof epoch !== "number" || !Number.isFinite(epoch)) return h("time", { text: "—" });
+  const full = timeText(ctx, epoch);
+  const age = nowSeconds(ctx) - epoch;
+  let text = full;
+  if (age >= 0 && age < SECONDS_PER_DAY) {
+    text = age < JUST_NOW_SECONDS ? ctx.t("time.justNow") : ctx.t("time.ago", { duration: formatDuration(ctx.t, age) });
+  }
+  return h("time", { text, attrs: { datetime: new Date(epoch * 1000).toISOString(), title: full } });
 }
 
 export function pageHead(title, lead) {
