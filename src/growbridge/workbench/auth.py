@@ -44,7 +44,10 @@ STEPS = (
     "CREATE TABLE login_failures(name TEXT NOT NULL, at REAL NOT NULL)",
     "CREATE INDEX login_failures_name ON login_failures(name, at)",
     "ALTER TABLE login_failures ADD COLUMN source TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE operators ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
+    "ALTER TABLE operators ADD COLUMN disabled_at REAL",
 )
+ROLES = ("user", "admin")
 
 _NO_SALT = bytes(SALT_BYTES)  # stands in for an unknown name so the work done stays the same
 _NO_HASH = bytes(KEY_BYTES)
@@ -65,22 +68,68 @@ class Operators:
 
     # --- accounts ------------------------------------------------------------------------------
 
-    def add(self, name: str, secret: str) -> None:
-        """Register an operator; ``ValueError`` for a duplicate, empty name or weak secret."""
+    def add(self, name: str, secret: str, role: str = "user") -> None:
+        """Register an operator; ``ValueError`` for a duplicate, empty name, weak secret or an
+        unknown role."""
         name = name.strip()
         if not name or len(name) > NAME_LIMIT:
             raise ValueError(f"an operator name is 1..{NAME_LIMIT} characters")
-        if not MIN_SECRET_LENGTH <= len(secret) <= MAX_SECRET_LENGTH:
-            raise ValueError(f"a secret is {MIN_SECRET_LENGTH}..{MAX_SECRET_LENGTH} characters")
-        salt = secrets.token_bytes(SALT_BYTES)
-        key = self._derive(secret, salt, self.scrypt_n)
+        if role not in ROLES:
+            raise ValueError(f"a role is one of {', '.join(ROLES)}")
+        salt, key = self._hashed(secret)
         with self.db.transaction():
             if self.db.one("SELECT 1 FROM operators WHERE name = ?", (name,)) is not None:
                 raise ValueError(f"operator {name!r} already exists")
             self.db.execute(
-                "INSERT INTO operators(name, salt, hash, n, created_at) VALUES (?, ?, ?, ?, ?)",
-                (name, salt, key, self.scrypt_n, self.clock.now()),
+                "INSERT INTO operators(name, salt, hash, n, created_at, role) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (name, salt, key, self.scrypt_n, self.clock.now(), role),
             )
+
+    def _hashed(self, secret: str) -> tuple[bytes, bytes]:
+        if not MIN_SECRET_LENGTH <= len(secret) <= MAX_SECRET_LENGTH:
+            raise ValueError(f"a secret is {MIN_SECRET_LENGTH}..{MAX_SECRET_LENGTH} characters")
+        salt = secrets.token_bytes(SALT_BYTES)
+        return salt, self._derive(secret, salt, self.scrypt_n)
+
+    def role(self, name: str) -> str | None:
+        row = self.db.one("SELECT role FROM operators WHERE name = ?", (name,))
+        return None if row is None else row["role"]
+
+    def active(self, name: str) -> bool:
+        row = self.db.one("SELECT disabled_at FROM operators WHERE name = ?", (name,))
+        return row is not None and row["disabled_at"] is None
+
+    def disable(self, name: str) -> None:
+        """Stop an operator from signing in and end their sessions; their locks stay."""
+        with self.db.transaction():
+            self._require_known(name)
+            self.db.execute(
+                "UPDATE operators SET disabled_at = ? WHERE name = ?", (self.clock.now(), name)
+            )
+            self.db.execute("DELETE FROM operator_sessions WHERE name = ?", (name,))
+
+    def reset_secret(self, name: str, secret: str) -> None:
+        """Replace an operator's secret and end their sessions."""
+        salt, key = self._hashed(secret)
+        with self.db.transaction():
+            self._require_known(name)
+            self.db.execute(
+                "UPDATE operators SET salt = ?, hash = ?, n = ? WHERE name = ?",
+                (salt, key, self.scrypt_n, name),
+            )
+            self.db.execute("DELETE FROM operator_sessions WHERE name = ?", (name,))
+
+    def listing(self) -> list[dict]:
+        """Every account without its secret, oldest first."""
+        rows = self.db.query(
+            "SELECT name, role, created_at, disabled_at FROM operators ORDER BY created_at, name"
+        )
+        return [dict(row) for row in rows]
+
+    def _require_known(self, name: str) -> None:
+        if self.db.one("SELECT 1 FROM operators WHERE name = ?", (name,)) is None:
+            raise ValueError(f"no operator {name!r}")
 
     @staticmethod
     def _derive(secret: str, salt: bytes, n: int) -> bytes:
@@ -158,6 +207,7 @@ class Operators:
             id=row["name"],
             entry=Entry(row["entry"]),
             reauth_at=row["reauth_at"],
+            role=self.role(row["name"]),
         )
 
     def logout(self, token: str) -> None:
@@ -181,14 +231,17 @@ class Operators:
         source = source[: NAME_LIMIT * 2]
         now = self.clock.now()
         self._require_unlocked(key, source, now, session)
-        row = self.db.one("SELECT salt, hash, n FROM operators WHERE name = ?", (name,))
+        row = self.db.one(
+            "SELECT salt, hash, n, disabled_at FROM operators WHERE name = ?", (name,)
+        )
         if row is None:
             salt, expected, cost = _NO_SALT, _NO_HASH, self.scrypt_n
         else:
             salt, expected, cost = bytes(row["salt"]), bytes(row["hash"]), row["n"]
         fits = len(secret) <= MAX_SECRET_LENGTH
         derived = self._derive(secret if fits else "", salt, cost)
-        if row is None or not fits or not hmac.compare_digest(derived, expected):
+        refused = row is None or row["disabled_at"] is not None  # same work either way
+        if refused or not fits or not hmac.compare_digest(derived, expected):
             self._record_failure(key, source, now)
             raise Denied("session", "invalid credentials")
         self.db.execute("DELETE FROM login_failures WHERE name = ? AND source = ?", (key, source))

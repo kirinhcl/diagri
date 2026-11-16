@@ -52,6 +52,7 @@ class Actor(Model):
     id: str
     entry: Entry | None = None  # which address the request arrived on; decided by the server
     reauth_at: float | None = None  # when the operator last re-authenticated
+    role: Literal["user", "admin"] | None = None  # an operator's role; decided by the server
 
 
 class PumpReading(Model):

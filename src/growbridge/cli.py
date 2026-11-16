@@ -29,7 +29,7 @@ def role_tokens_from_env(environ: Mapping[str, str]) -> dict[str, str]:
     return tokens
 
 
-def _add_operator(parser, settings, name: str) -> None:
+def _add_operator(parser, settings, name: str, admin: bool = False) -> None:
     from .archive.clock import SystemClock
     from .archive.db import Database
     from .runtime import private_dir
@@ -42,7 +42,7 @@ def _add_operator(parser, settings, name: str) -> None:
         parser.error("the two entries differ")
     db = Database(private_dir(settings.data_dir) / "workflow.sqlite3")
     try:
-        Operators(db, SystemClock()).add(name, secret)
+        Operators(db, SystemClock()).add(name, secret, "admin" if admin else "user")
     except ValueError as error:
         parser.error(str(error))
     finally:
@@ -203,6 +203,7 @@ def main():
         "add", help="Add an operator; the secret is asked for, not passed"
     )
     add.add_argument("name")
+    add.add_argument("--admin", action="store_true", help="Make the operator an administrator")
     host = sub.add_parser("host", help="Manage the write host of this device (auto_research)")
     host_sub = host.add_subparsers(dest="host_command", required=True)
     host_sub.add_parser("register", help="Make this machine the registered write host")
@@ -231,7 +232,7 @@ def main():
         return
     settings = load(args.config)
     if args.command == "operator":
-        _add_operator(parser, settings, args.name)
+        _add_operator(parser, settings, args.name, args.admin)
     elif args.command == "host":
         _register_host(parser, settings)
     elif args.command == "recovery":
