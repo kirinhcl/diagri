@@ -4,6 +4,7 @@ text from (growbridge.codes, CODES["finding"]); the English message is kept for 
 import re
 
 import pytest
+from test_planning_design import alloc, protocol_with
 
 from growbridge.archive.models import (
     LEVEL_RANGES,
@@ -26,7 +27,6 @@ from growbridge.planning.treatment import check_treatment
 from growbridge.planning.validate import check_evidence, validate_run_sheet
 from growbridge.ports import Capabilities, Finding
 from growbridge.sim.fixtures import humidity_rule, make_protocol, make_run_sheet, make_safety
-from tests.planning.test_planning_design import alloc, protocol_with
 
 CAPS = Capabilities(
     version="test",
