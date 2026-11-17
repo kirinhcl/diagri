@@ -46,6 +46,7 @@ def role_tools(runtime: Any, work_root: Path) -> dict[str, list[Tool]]:
         search=None,
         holdout=runtime.holdout,
         alerts=runtime.book,
+        memory=memory_sources(runtime),
     )
     return build_role_tools(deps)
 

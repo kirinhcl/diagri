@@ -55,6 +55,7 @@ export default {
   "chat.tool.delegate_task": "委派任务",
   "chat.tool.get_task_status": "查看任务状态",
   "chat.tool.read_artifact": "读取产出文件",
+  "chat.tool.read_round_history": "读取以前的轮次",
   "chat.tool.get_device_capabilities": "读取设备能力",
   "chat.tool.find_prior_runs": "查找以往运行",
   "chat.tool.lookup_crop_conditions": "查询作物条件",

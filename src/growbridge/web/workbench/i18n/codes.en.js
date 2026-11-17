@@ -55,6 +55,7 @@ export default {
   "chat.tool.delegate_task": "Delegate a task",
   "chat.tool.get_task_status": "Check a task's status",
   "chat.tool.read_artifact": "Read an output file",
+  "chat.tool.read_round_history": "Read an earlier round",
   "chat.tool.get_device_capabilities": "Read the device capabilities",
   "chat.tool.find_prior_runs": "Find earlier runs",
   "chat.tool.lookup_crop_conditions": "Look up crop conditions",

@@ -44,6 +44,7 @@ class Deps:
     search: Any = None
     holdout: Any = None
     alerts: Any = None  # the AlertBook; only the auditor's finding tool uses it
+    memory: Any = None  # MemorySources; read_round_history reads through it
 
 
 class ToolInput(BaseModel):
