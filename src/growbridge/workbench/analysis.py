@@ -29,6 +29,8 @@ from growbridge.research.preregistration import (
 )
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import Ident, PathId
+from growbridge.workbench.scope import project_read, project_write
+from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 
 OUTPUT_LIMIT = 4000
@@ -201,15 +203,24 @@ def add_analysis_routes(
     archive: Archive,
     runner: ConfirmatoryRunner,
     holdout: HoldoutRegistry | None = None,
+    *,
+    access: Access | None = None,
 ) -> None:
     """Mount the routes on ``router``; ``operator`` and ``fresh`` are the workbench's operator
     dependencies (``fresh`` also asks for a recent re-authentication)."""
+
+    def owned(actor: Actor, protocol_id: str, project_id: str, write: bool = True) -> None:
+        unknown = Denied("state", f"no protocol {protocol_id} in project {project_id}")
+        check = project_write if write else project_read
+        check(access, actor, project_id, lambda: unknown)
+
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
     routes = AnalysisRoutes(workflow, archive, runner, holdout)
 
     @router.post("/protocols/{protocol_id}/analysis")
     async def freeze_script(protocol_id: PathId, body: FreezeIn, actor: Fresh):
+        owned(actor, protocol_id, body.project_id)
         return routes.freeze(protocol_id, body, actor)
 
     @router.get("/protocols/{protocol_id}/analysis")
@@ -218,8 +229,10 @@ def add_analysis_routes(
         project_id: Annotated[str, Query(min_length=1, max_length=100)],
         actor: Operator,
     ):
+        owned(actor, protocol_id, project_id, write=False)
         return routes.state(protocol_id, project_id)
 
     @router.post("/analysis/runs")
     async def start_run(body: RunIn, actor: Fresh):
+        owned(actor, body.protocol_id, body.project_id)
         return await routes.start(body, actor)

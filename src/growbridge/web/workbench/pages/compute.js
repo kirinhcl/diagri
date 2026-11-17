@@ -92,9 +92,15 @@ function overviewPage(ctx, overview) {
   const form = budgetForm(ctx);
   const chosen = h("p", { class: "cell-sub", attrs: { role: "status" } });
   const budgets = tasks.length ? budgetsTable(ctx, tasks, (taskId) => fillTask(ctx, form, taskId, chosen)) : note(ctx.t("compute.budget.none"));
+  const projectWide = !(ctx.me && ctx.me.multi_user && ctx.me.role !== "admin");
+  const wide = projectWide
+    ? [
+        section(ctx.t("compute.balance.title"), balanceView(ctx, overview.balance), balanceForm(ctx)),
+        section(ctx.t("compute.service.title"), serviceView(ctx, overview.service)),
+      ]
+    : []; // balance and service totals are the administrators'
   return [
-    section(ctx.t("compute.balance.title"), balanceView(ctx, overview.balance), balanceForm(ctx)),
-    section(ctx.t("compute.service.title"), serviceView(ctx, overview.service)),
+    ...wide,
     section(ctx.t("compute.budget.title"), budgets, form, chosen),
     ...attemptSections(ctx, overview),
   ];

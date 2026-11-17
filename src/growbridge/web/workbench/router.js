@@ -1,5 +1,5 @@
 // Hash routes of the console.
-const FLAT = ["login", "environment", "projects", "alerts", "evidence", "compute", "safety"];
+const FLAT = ["login", "environment", "projects", "alerts", "evidence", "compute", "safety", "greenhouses", "admin"];
 const WITH_ID = new Map([
   ["projects", ["project", "projectId"]],
   ["rounds", ["round", "roundId"]],
@@ -15,7 +15,7 @@ function decode(part) {
 }
 
 // Every page a signed-in operator can open; the sign-in page is separate.
-export const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety"]);
+export const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety", "greenhouses", "admin"]);
 
 export function parseHash(hash) {
   const [path, query = ""] = String(hash || "").replace(/^#/, "").split("?");
@@ -33,6 +33,12 @@ export function parseHash(hash) {
     if (value !== null) return { page, params: { [key]: value } };
   }
   return { page: "not_found", params: {} };
+}
+
+// Where a newly signed-in operator starts: with multi-user and no greenhouse yet, at the greenhouses.
+export function homeFor(me) {
+  const lockless = Boolean(me && me.multi_user) && !(Array.isArray(me.greenhouses) && me.greenhouses.length);
+  return hrefFor(lockless ? "greenhouses" : "inbox");
 }
 
 export function hrefFor(page, params = {}) {

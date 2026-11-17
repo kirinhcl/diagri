@@ -58,7 +58,7 @@ Source: `create_app` in [`api.py`](../../../src/growbridge/api.py). There are 14
 
 ## Workbench routes
 
-The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The operator console is a web page at `/workbench` that only calls these routes (see [Enable DiAGRI](Enable-DiAGRI.md)); the files in `web/` outside `web/workbench/` are the bridge dashboard. There are 55 routes. The seven read routes at the end of the first table are always mounted: [`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) leaves out of the inbox whatever service is not passed. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed, and the two holdout routes ([`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)) exist when a holdout registry is passed. The runtime always passes all of them.
+The workbench is the operator's HTTP interface in DiAGRI mode: JSON routes under `/wb`, built by `create_workbench` in [`workbench/api.py`](../../../src/growbridge/workbench/api.py) and mounted only when `auto_research = true`. The routes that start and steer a round are in [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py). The operator console is a web page at `/workbench` that only calls these routes (see [Enable DiAGRI](Enable-DiAGRI.md)); the files in `web/` outside `web/workbench/` are the bridge dashboard. There are 55 routes, and 10 more with `multi_user` (see [Multi-user routes](#multi-user-routes)). The seven read routes at the end of the first table are always mounted: [`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) leaves out of the inbox whatever service is not passed. The two alert routes exist when an alert book is passed, the budget and goal routes exist when a task board and a call budget are passed, and the three analysis routes ([`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)) exist when a confirmatory runner is passed, and the two holdout routes ([`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)) exist when a holdout registry is passed. The runtime always passes all of them.
 
 | Caller | Credential | Checks |
 | --- | --- | --- |
@@ -206,6 +206,23 @@ Names that people gave are shown and ids stay in the technical details. The trea
 | 404 | `GET /wb/receipts/{request_id}` with an unknown id | `{"detail": "Unknown request id"}` |
 | 422 | `level` outside the range of the channel, a measurement that was not accepted, or a protocol with an id or a version out of range or a number that is not finite | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | a body that does not pass validation, a run sheet with a number that is not finite among them | the validation errors; a NaN or an infinity the request carried is echoed as text |
+
+### Multi-user routes
+
+Mounted when `multi_user` is on ([`workbench/greenhouses.py`](../../../src/growbridge/workbench/greenhouses.py), [`workbench/admin.py`](../../../src/growbridge/workbench/admin.py)). Every other route then also checks the caller: an operator sees and acts on the projects they own, and on a stage only while holding its greenhouse; another operator's object is answered exactly as an id that does not exist. `GET /wb/me` adds `multi_user`, `role` and `greenhouses`. `POST /wb/drafts/run-sheet` refuses role tokens (`model_role`): models file run sheets through their tools, bound to their task. Which rule each read route follows is listed in [`workbench/visibility.py`](../../../src/growbridge/workbench/visibility.py).
+
+| Method and path | Who | Body | Answer | Codes |
+| --- | --- | --- | --- | --- |
+| `GET /wb/greenhouses` | operator | | `greenhouses`: `id`, `name`, `state` (`free`, `mine`, `taken`), `locked_at`; administrators also get `holder` | |
+| `POST /wb/greenhouses/lock` | operator, re-auth | `greenhouse_ids` (1 to 64) | `locked` | `lock_taken`, `state` |
+| `POST /wb/greenhouses/{id}/release` | operator holding it | | `released` | `not_lock_holder`, `greenhouse_busy`, `state` |
+| `GET /wb/admin/operators` | administrator | | `operators`: `name`, `role`, `created_at`, `disabled_at`, `unfinished_stages` | `admin_only` |
+| `POST /wb/admin/operators` | administrator, re-auth | `name`, `secret`, `role` | `name`, `role` | `admin_only`, `param` |
+| `POST /wb/admin/operators/disable` | administrator, re-auth | `name` | `disabled` | `admin_only`, `param` |
+| `POST /wb/admin/operators/secret` | administrator, re-auth | `name`, `secret` | `reset` | `admin_only`, `param` |
+| `GET /wb/admin/locks` | administrator | | `locks`, `events` | `admin_only` |
+| `POST /wb/admin/greenhouses/{id}/release` | administrator, re-auth | `note` (1 to 500) | `released` | `admin_only`, `greenhouse_busy` |
+| `POST /wb/admin/projects/{project_id}/owner` | administrator, re-auth | `owner`, `note` | `project_id`, `owner` | `admin_only`, `state` (the owner can still act, a stage is unfinished, or the new owner is not active) |
 
 ## MCP tools
 

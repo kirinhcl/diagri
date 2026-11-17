@@ -130,11 +130,13 @@ def _report_failure(runtime: Any, task: ResearchTask, message: str, *, failed: b
     if task.owner_role != AUDIT_ROLE:
         code = f"agent_task_{outcome}"  # agent_task_failed / agent_task_attention
         params = {"task_id": task.id, "project_id": task.project_id, "role": task.owner_role}
-        runtime.alert("agent_task", task.id, message, code=code, params=params)
+        scope = ("project", task.project_id)
+        runtime.alert("agent_task", task.id, message, "critical", scope, code=code, params=params)
         return
     code = f"audit_task_{outcome}"  # audit_task_failed / audit_task_attention
     params = {"stage_id": _audit_stage(task), "task_id": task.id}
-    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning", code=code, params=params)
+    scope = _audit_scope(task)
+    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning", scope, code=code, params=params)
 
 
 def _audit_stage(task: ResearchTask) -> str | None:
@@ -147,6 +149,12 @@ def _audit_key(task: ResearchTask) -> str:
     """The failed-audit warning an audit task reports to: its stage's, or its own when it names
     no stage."""
     return audit_task_key(_audit_stage(task) or task.id)
+
+
+def _audit_scope(task: ResearchTask) -> tuple[str, str]:
+    """The stage the audit was for, or its project when it names no stage."""
+    stage = _audit_stage(task)
+    return ("stage", stage) if stage is not None else ("project", task.project_id)
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:
@@ -175,5 +183,5 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             _report_failure(runtime, task, f"model task {task.id} needs attention", failed=False)
         elif state is TaskState.DONE and task.owner_role == AUDIT_ROLE:
             # an audit that finished shows the stage's audits work again
-            runtime.resolve_alert(AUDIT_TASK, _audit_key(task))
+            runtime.resolve_alert(AUDIT_TASK, _audit_key(task), _audit_scope(task))
     return finished

@@ -36,6 +36,8 @@ There are 25 fields. "Required" means the field has no default. The last column 
 | `fan_outlet` | integer | `3` | 1 to 5 | Outlet of the circulation fan. | no |
 | `retention_days` | integer | `30` | 1 to 365 | Days of samples the daemon's sample store keeps. In DiAGRI mode only samples already copied to the project archive are deleted. | no |
 | `auto_research` | boolean | `false` | `true`, `false` | Switches the daemon to DiAGRI mode: the runtime and the workbench routes start, the three bridge write routes answer 403, and the MCP server offers its read tools only. | it is the switch |
+| `multi_user` | boolean | `false` | `true`, `false` | With `auto_research`, turns on accounts with roles, greenhouse locks, project owners and per-operator visibility in the workbench (see [Multi-user](#multi-user)). Off, the workbench behaves as before. | yes |
+| `greenhouses` | list of tables | `[]` | each `{id, name, device_id}`; `id` is `[a-z0-9][a-z0-9-]{0,31}`; ids and devices unique; `device` must be one of them | The greenhouses operators can lock. Empty means one greenhouse, `gh-01`, for `device`. | yes |
 | `lan_hosts` | list of strings | `[]` | host names or addresses; a port is ignored | Addresses of the LAN entry. They join the trusted hosts and the allowed browser origins. | yes |
 | `overlay_hosts` | list of strings | `[]` | host names or addresses; a port is ignored | Addresses of the overlay entry. They join the trusted hosts and the allowed browser origins (as `https://`). | yes |
 | `lan_bind` | string | `""` | an address of this machine | Address the LAN listener binds to. The listener starts only when `lan_bind` and `lan_port` are both set. | yes |
@@ -164,6 +166,21 @@ When no safety configuration has been approved, the thresholds are the defaults 
 | Compute service (`ComputeService`) | Set by `compute_templates_dir`, `compute_member` and the seven `FIRECREST_*` environment variables, all or none. All set: `serve` builds the compute service over `FirecrestBackend`. None set: no compute service. Some set: no compute service and a warning in the log that names what is missing. A bad template, a missing `pyfirecrest` or an invalid `FIRECREST_SYSTEM`, `FIRECREST_ACCOUNT` or `FIRECREST_WORKDIR` stops `serve`. Not verified against the real CSC service; see [Status and known limitations](Status-and-Known-Limitations.md). |
 | Alert rules | No `Settings` field. `DEFAULT_ALERT_RULES` in `runtime.py` is empty. |
 | Operator accounts | Stored in `data_dir` by `growbridge operator add`, not in the file. |
+
+## Multi-user
+
+With `multi_user = true` (and `auto_research = true`) every operator has a role, `user` or `admin` (`growbridge operator add --admin` makes the first administrator). An operator locks greenhouses on the console's Greenhouses page; a project belongs to the operator who created it; acting on a stage needs both the project and the lock of the stage's greenhouse. Operators see only their own projects, stages, alerts and receipts; administrators see everything, pause or stop any stage in an emergency, manage accounts, force a release and hand an abandoned project to someone else. Releasing a greenhouse hands its care rules back and leaves the device as it is. Design: [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md).
+
+**Switching it on for an existing installation.** Create the first administrator with `growbridge operator add --admin <name>`. Every project made before has no owner: only administrators see it, and nobody can act on it until an administrator hands it over (Administration page, or `POST /wb/admin/projects/{project_id}/owner`), which needs the project to have no unfinished stage. Alerts open at the upgrade have no owner either: they show to administrators only, and some come back once with an owner, so expect one round of duplicate notifications.
+
+```toml
+multi_user = true
+
+[[greenhouses]]
+id = "gh-01"
+name = "Greenhouse 1"
+device_id = "SF-GGS-PS5"
+```
 
 ## Examples
 

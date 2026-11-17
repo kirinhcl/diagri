@@ -15,6 +15,8 @@ const ICONS = {
   evidence: ["M7 3h7l5 5v13H7z", "M14 3v5h5", "M10 14l2 2 4-4"],
   compute: ["M7 7h10v10H7z", "M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"],
   safety: ["M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"],
+  greenhouses: ["M3 11l9-7 9 7", "M5 10v10h14V10", "M12 20v-6"],
+  admin: ["M12 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8z", "M4 21c0-4 4-6 8-6s8 2 8 6"],
 };
 const NAV = [
   { page: "inbox", countKey: "inbox" },
@@ -24,7 +26,16 @@ const NAV = [
   { page: "evidence" },
   { page: "compute" },
   { page: "safety" },
+  { page: "greenhouses", multiUser: true },
+  { page: "admin", multiUser: true, adminOnly: true },
 ];
+
+// The pages this operator's sidebar lists: greenhouses only with multi-user, administration only for administrators.
+export function navItems(me) {
+  const multi = Boolean(me && me.multi_user);
+  const admin = multi && me.role === "admin";
+  return NAV.filter((item) => (!item.multiUser || multi) && (!item.adminOnly || admin));
+}
 const LANGUAGE_NAMES = { zh: "中文", en: "English" };
 
 function icon(name) {
@@ -32,10 +43,10 @@ function icon(name) {
   return svg("svg", attrs, ICONS[name].map((d) => svg("path", { d })));
 }
 
-function navigation(t) {
+function navigation(t, me) {
   const links = new Map();
   const counts = new Map();
-  const items = NAV.map((item) => {
+  const items = navItems(me).map((item) => {
     const countClass = ["wb-count", `wb-count-${item.countKey}`];
     const count = item.countKey ? h("span", { class: countClass, attrs: { hidden: true } }) : null;
     if (count) counts.set(item.countKey, count);
@@ -144,7 +155,7 @@ function skipLink(ctx, main) {
 
 // Beyond the contract it also returns setActive(page), which main.js uses to mark the current section.
 export function shell(ctx) {
-  const { nav, links, counts } = navigation(ctx.t);
+  const { nav, links, counts } = navigation(ctx.t, ctx.me);
   const crumbs = h("ol", {});
   const main = h("main", { class: "wb-main", attrs: { id: "wb-main", tabindex: "-1" } });
   const root = h(

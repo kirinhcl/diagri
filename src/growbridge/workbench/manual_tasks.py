@@ -27,6 +27,8 @@ from growbridge.control.device import changed_nothing
 from growbridge.planning import manual_tasks
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.workbench.common import Body
+from growbridge.workbench.scope import stage_read, stage_write
+from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
 
@@ -185,12 +187,14 @@ def add_manual_task_routes(
     archive: Archive,
     control: ControlPort,
     clock: Clock,
+    access: Access | None = None,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     OnSite = Annotated[Actor, Depends(on_site)]  # noqa: N806
 
     @router.get("/stages/{stage_id}/manual-tasks")
     async def list_tasks(stage_id: str, actor: Operator):
+        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
         stage = workflow.stage(stage_id)
         body = {
             "stage_id": stage.stage_id,
@@ -212,6 +216,7 @@ def add_manual_task_routes(
 
     @router.post("/stages/{stage_id}/manual-tasks")
     async def record_task(stage_id: str, body: TaskOutcome, actor: Operator):
+        stage_write(access, actor, stage_id)
         stage, item = _occurrence(workflow, stage_id, body.task_id, body.due_at)
         now = clock.now()
         _due(item, now)
@@ -238,6 +243,7 @@ def add_manual_task_routes(
 
     @router.post("/stages/{stage_id}/manual-tasks/irrigate")
     async def irrigate(stage_id: str, body: PlannedIrrigation, actor: OnSite):
+        stage_write(access, actor, stage_id)
         stage, item = _occurrence(workflow, stage_id, body.task_id, body.due_at)
         if item.kind != "irrigation" or item.seconds is None:
             raise Denied("scope", "this task is not a planned irrigation (it has no seconds)")

@@ -22,6 +22,8 @@ from growbridge.archive.store import Archive
 from growbridge.planning.validate import check_evidence
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
+from growbridge.workbench.scope import project_read, project_write, stage_read
+from growbridge.workflow.access import Access
 from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
 from growbridge.workflow.tasks import TaskBoard
@@ -230,21 +232,30 @@ def _steering_routes(
     operator: Dependency,
     workflow: WorkflowService,
     archive: Archive | None = None,
+    access: Access | None = None,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
+    def visible_round(round_id: str, actor: Actor) -> None:
+        project_id = workflow.store.round(round_id).project_id  # unknown round: refused
+        unknown = Denied("state", f"unknown round {round_id}")
+        project_read(access, actor, project_id, lambda: unknown)
+
     @router.get("/rounds/{round_id}")
     async def read_round(round_id: PathId, actor: Operator):
+        visible_round(round_id, actor)
         return round_json(workflow, round_id)
 
     @router.get("/rounds/{round_id}/report")
     async def read_report(round_id: PathId, actor: Operator):
+        visible_round(round_id, actor)
         if archive is None:
             raise Denied("state", "no archive is mounted: reports cannot be read")
         return report_json(workflow, archive, round_id)
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):
+        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
         return review_json(workflow, stage_id, archive)
 
     @router.post("/rounds/{round_id}/choice")
@@ -266,15 +277,28 @@ def _model_routes(
     tasks: TaskBoard,
     budget: ProjectBudget,
     conversation: ConversationLog | None = None,
+    access: Access | None = None,
 ) -> None:
     """What lets model roles work on a project: its call budget, a goal for the orchestrator and,
     with ``conversation``, the project conversation the goals and the role replies go into."""
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
-    def require_project(project_id: str) -> None:
+    def require_project(project_id: str, actor: Actor, write: bool = True) -> None:
+        unknown = Denied("state", f"unknown project {project_id}")
         if not workflow.store.has_project(project_id):
-            raise Denied("state", f"unknown project {project_id}")
+            raise unknown
+        check = project_write if write else project_read
+        check(access, actor, project_id, lambda: unknown)
+
+    def require_round(round_id: str | None, actor: Actor) -> None:
+        """A goal's round: another operator's is answered as an unknown round."""
+        if round_id is None or access is None:
+            return
+        owner_project = workflow.store.round(round_id).project_id  # unknown round: refused
+        project_write(
+            access, actor, owner_project, lambda: Denied("state", f"unknown round {round_id}")
+        )
 
     def require_budget_left(project_id: str) -> None:
         """Before a task is made that could never call a model."""
@@ -284,7 +308,7 @@ def _model_routes(
 
     @router.post("/projects/{project_id}/budget")
     async def set_budget(project_id: PathId, body: BudgetIn, actor: Fresh):
-        require_project(project_id)
+        require_project(project_id, actor)
         budget.set(project_id, Budget(max_calls=body.max_calls, max_cost=body.max_cost))
         calls, cost = budget.remaining(project_id)
         return {
@@ -297,7 +321,8 @@ def _model_routes(
 
     @router.post("/goals")
     async def submit_goal(body: GoalIn, actor: Operator):
-        require_project(body.project_id)
+        require_project(body.project_id, actor)
+        require_round(body.round_id, actor)
         require_budget_left(body.project_id)
         task = goal_task(body, actor, workflow)
         stored = tasks.create(task)  # one task per trigger: a repeat returns the first
@@ -316,7 +341,7 @@ def _model_routes(
     async def read_conversation(
         project_id: PathId, actor: Operator, after: Annotated[int, Query(ge=0)] = 0
     ):
-        require_project(project_id)
+        require_project(project_id, actor, write=False)
         entries = conversation.entries(project_id, after)
         return {"entries": [entry.model_dump(mode="json") for entry in entries]}
 
@@ -330,12 +355,14 @@ def add_round_routes(
     budget: ProjectBudget | None = None,
     archive: Archive | None = None,
     conversation: ConversationLog | None = None,
+    *,
+    access: Access | None = None,
 ) -> None:
     """Mount the routes on ``router``. ``operator`` and ``fresh`` are the workbench's operator
     dependencies (session, entry and origin checks; ``fresh`` also asks for a recent
     re-authentication). The budget and goal routes exist only when ``tasks`` and ``budget`` are
     given."""
     _design_routes(router, operator, workflow)
-    _steering_routes(router, operator, workflow, archive)
+    _steering_routes(router, operator, workflow, archive, access)
     if tasks is not None and budget is not None:
-        _model_routes(router, operator, fresh, workflow, tasks, budget, conversation)
+        _model_routes(router, operator, fresh, workflow, tasks, budget, conversation, access)

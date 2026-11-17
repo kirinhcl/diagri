@@ -67,7 +67,14 @@ STEPS = (
     " kind TEXT NOT NULL, operator TEXT, detail TEXT NOT NULL)",
     "CREATE INDEX wf_stages_round ON wf_stages(round_id)",
     "CREATE INDEX wf_approvals_stage ON wf_approvals(stage_id)",
+    # multi-user: who owns a project; whether a released greenhouse took a stage's care away
+    "ALTER TABLE wf_projects ADD COLUMN owner TEXT",
+    "ALTER TABLE wf_stages ADD COLUMN care_released INTEGER NOT NULL DEFAULT 0",
+    "CREATE TABLE wf_project_owner_events(id INTEGER PRIMARY KEY AUTOINCREMENT,"
+    " project_id TEXT NOT NULL, from_owner TEXT, to_owner TEXT NOT NULL, actor TEXT NOT NULL,"
+    " at REAL NOT NULL, note TEXT NOT NULL)",
 )
+FINISHED_STATES = (StageState.ENDED, StageState.STOPPED)
 
 
 class DuplicateEvent(Exception):
@@ -95,6 +102,7 @@ class StageRow(Model):
     onsite_checked: bool = False
     recovery_number: int
     rev: int = 0
+    care_released: bool = False  # a greenhouse release took this stage's care away for good
 
 
 class RoundRow(Model):
@@ -136,8 +144,42 @@ class WorkflowStore:
 
     # --- projects and protocols ----------------------------------------------------------------
 
-    def add_project(self, project_id: str, name: str, now: float) -> None:
-        self.db.execute("INSERT INTO wf_projects VALUES (?, ?, ?)", (project_id, name, now))
+    def add_project(self, project_id: str, name: str, now: float, owner: str | None = None) -> None:
+        self.db.execute(
+            "INSERT INTO wf_projects(id, name, created_at, owner) VALUES (?, ?, ?, ?)",
+            (project_id, name, now, owner),
+        )
+
+    def project_owner(self, project_id: str) -> str | None:
+        row = self.db.one("SELECT owner FROM wf_projects WHERE id = ?", (project_id,))
+        return None if row is None else row["owner"]
+
+    def set_project_owner(
+        self,
+        project_id: str,
+        owner: str,
+        actor: str,
+        note: str,
+        now: float,
+        eligible: Callable[[], None],
+    ) -> None:
+        """Give the project to ``owner``; ``eligible`` re-checks the transfer in the same step."""
+        with self.db.transaction():
+            eligible()
+            previous = self.project_owner(project_id)
+            self.db.execute("UPDATE wf_projects SET owner = ? WHERE id = ?", (owner, project_id))
+            self.db.execute(
+                "INSERT INTO wf_project_owner_events(project_id, from_owner, to_owner, actor, at,"
+                " note) VALUES (?, ?, ?, ?, ?, ?)",
+                (project_id, previous, owner, actor, now, note),
+            )
+
+    def owner_events(self, project_id: str) -> list[dict[str, Any]]:
+        rows = self.db.query(
+            "SELECT * FROM wf_project_owner_events WHERE project_id = ? ORDER BY id DESC",
+            (project_id,),
+        )
+        return [dict(row) for row in rows]
 
     def has_project(self, project_id: str) -> bool:
         return self.db.one("SELECT 1 FROM wf_projects WHERE id = ?", (project_id,)) is not None
@@ -259,6 +301,7 @@ class WorkflowStore:
         data = {key: row[key] for key in StageRow.model_fields}
         data["end_pending"] = bool(data["end_pending"])
         data["onsite_checked"] = bool(data["onsite_checked"])
+        data["care_released"] = bool(data["care_released"])
         return StageRow(**data)
 
     def add_stage(self, row: StageRow) -> None:
@@ -311,6 +354,47 @@ class WorkflowStore:
             (device_id, stage_id),
         )
         return tuple(self._stage_row(row) for row in rows)
+
+    def _unfinished(self, column: str, value: str) -> bool:
+        done = [state.value for state in FINISHED_STATES]
+        row = self.db.one(
+            f"SELECT 1 FROM wf_stages WHERE {column} = ? AND state NOT IN ({_marks(len(done))})",
+            (value, *done),
+        )
+        return row is not None
+
+    def device_unfinished(self, device_id: str) -> bool:
+        """Whether any stage on the device has not ended or stopped (pending ones included)."""
+        return self._unfinished("device_id", device_id)
+
+    def project_unfinished(self, project_id: str) -> bool:
+        return self._unfinished("project_id", project_id)
+
+    def unfinished_stages_of_owner(self, owner: str) -> int:
+        done = [state.value for state in FINISHED_STATES]
+        row = self.db.one(
+            "SELECT COUNT(*) AS n FROM wf_stages s JOIN wf_projects p ON p.id = s.project_id"
+            f" WHERE p.owner = ? AND s.state NOT IN ({_marks(len(done))})",
+            (owner, *done),
+        )
+        return row["n"] if row else 0
+
+    def release_care_of_device(self, device_id: str) -> None:
+        """No finished stage of the device holds or gets care again (a greenhouse release)."""
+        done = [state.value for state in FINISHED_STATES]
+        self.db.execute(
+            "UPDATE wf_stages SET care_right = NULL, care_released = 1, rev = rev + 1"
+            f" WHERE device_id = ? AND state IN ({_marks(len(done))})",
+            (device_id, *done),
+        )
+
+    def care_holder(self, device_id: str) -> StageRow | None:
+        row = self.db.one(
+            "SELECT * FROM wf_stages WHERE device_id = ? AND care_right IS NOT NULL"
+            " ORDER BY rowid DESC LIMIT 1",
+            (device_id,),
+        )
+        return None if row is None else self._stage_row(row)
 
     def device_busy(self, device_id: str, stage_id: str) -> bool:
         states = [state.value for state in LIVE_STATES]
