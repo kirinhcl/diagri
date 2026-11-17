@@ -1,7 +1,7 @@
 """A refusal carries a registered ``reason`` and ``params`` (growbridge.denial_codes).
 
 ``refusal_sites`` is the AST scan that keeps every ``Denied(...)`` and ``rejected(...)`` honest:
-outside ``PENDING`` each one names a registered reason of its own coarse code."""
+each one names a registered reason of its own coarse code."""
 
 import ast
 import json
@@ -73,10 +73,6 @@ def sent_elsewhere() -> set[str]:
     return coded_http_reasons(SRC) | {reason for _, reason in BRIDGE_ERROR_CODES.values()}
 
 
-# Files that still have a refusal without a reason; each task removes the files it converts.
-PENDING: set[str] = set()
-
-
 def test_a_denial_keeps_code_and_message_and_carries_reason_and_params() -> None:
     error = Denied(
         "state",
@@ -143,17 +139,10 @@ def test_the_denial_family_is_the_registry_dict() -> None:
     assert CODES["denial"] is DENIAL_CODES
 
 
-def test_every_refusal_outside_pending_names_a_registered_reason_of_its_code() -> None:
+def test_every_refusal_names_a_registered_reason_of_its_code() -> None:
     for site in refusal_sites(SRC):
-        if site.path in PENDING:
-            continue
         assert site.reason in DENIAL_CODES, site
         assert DENIAL_CODES[site.reason].of == site.code, site
-
-
-def test_pending_lists_only_files_that_still_have_a_refusal_without_reason() -> None:
-    open_files = {s.path for s in refusal_sites(SRC) if s.reason is None}
-    assert PENDING == open_files
 
 
 def test_every_registered_reason_is_sent_somewhere() -> None:
