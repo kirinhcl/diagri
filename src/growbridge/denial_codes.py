@@ -98,3 +98,55 @@ _register(
     ("protocol_version_range", ("max_version",)),
     ("numbers_not_finite", ("paths",)),
 )
+
+# --- device control (control/service.py, control/rights.py, runtime.py) -------------------------
+_register(
+    "host_unregistered",
+    ("other_host_registered", ("device_id",)),
+    ("not_write_host", ("device_id",)),
+)
+_register("controls_disabled", ("controls_disabled", ()))
+_register(
+    "right_invalid",
+    ("right_revoked", ("right_id",)),
+    ("right_from_old_recovery", ("right_id",)),
+    ("right_unknown", ("right_id",)),
+    ("right_wrong_kind", ("right_id",)),
+    ("right_voided", ("right_id",)),
+    ("right_needs_operator", ("right_id",)),
+)
+_register("right_held", ("right_held", ("device_id", "stage_id")))
+_register(
+    "scope",
+    ("right_channel", ("right_id", "channel")),
+    ("right_value", ("right_id", "channel", "level")),
+    ("right_binding", ("right_id", "stage_id")),
+    ("right_incomplete", ("right_id",)),
+    ("irrigation_seconds_range", ("seconds", "max_seconds")),
+    ("irrigation_wrong_request", ()),
+    ("unknown_device", ("device_id",)),
+)
+_register("pump_on_forbidden", ("pump_on_forbidden", ()))
+_register(
+    "not_connected",
+    ("state_unreadable", ("device_id", "detail")),
+    ("no_live_link", ("device_id",)),
+)
+_register("stale", ("stale", ("device_id", "age_seconds")))
+_register("request_id_reused", ("request_id_reused", ("request_id",)))
+_register(
+    "unsettled",
+    ("still_starting", ()),
+    ("old_path_running", ()),
+    ("unknown_result", ("count",)),
+)
+_register(
+    "cooldown",
+    ("irrigation_running", ("device_id",)),
+    ("irrigation_too_soon", ("wait_seconds", "ready_at")),
+)
+_register(
+    "approval_invalid",
+    ("safety_needs_approver", ()),
+    ("safety_unknown_sensors", ("sensors",)),
+)
