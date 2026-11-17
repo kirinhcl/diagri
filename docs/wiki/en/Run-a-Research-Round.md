@@ -243,7 +243,21 @@ The console's **Live environment** page shows the newest reading of every sensor
 | Resume | `POST /wb/stages/STAGE_ID/resume` (re-authentication) |
 | Take over by hand | [Manual takeover, irrigation and handback](Manual-Takeover-and-Irrigation.md) |
 
+### Record a measurement
+
+On the console, the measurement form offers the experiment's declared manual variables as a dropdown of metrics (with a "choose a variable" placeholder when there is more than one), and the unit comes from the variable; when there is none, a note takes the place of the form. Over HTTP, `GET /wb/experiments/EXPERIMENT_ID/variables` lists them. `POST /wb/measurements` is refused with 422 `param`, listing every problem found:
+
+| Problem | What to do |
+| --- | --- |
+| No declared variables: the protocols of the experiment declare none | An experiment whose protocols declare no variables cannot record measurements. Save a protocol version that declares them and run a new round with it: a new version applies to an experiment only once a stage of a new round runs it under that version. |
+| The metric is not declared | The message lists the declared IDs. Use one of them, or declare the variable in a new protocol version and run a new round with it. |
+| Wrong kind | The variable is a sensor or factor, not a manual one (`manual` kind). Pick a manual variable. |
+| Wrong unit | The message names the right unit. Send the value in that unit. |
+| Value outside `min` and `max` | The bounds are inclusive. Check the reading; do not widen the catalog to fit a bad value. |
+
 A measurement body has `experiment_id`, `batch`, `plant_id`, `layout_version`, `measured_at` (UTC seconds), `position`, `method`, `metric`, `value` and `unit`. Add `corrects` with the id of an earlier measurement to correct it; the earlier record is kept.
+
+A correction is a new record; it may change the metric as well as the value. Writing a correction marks every data snapshot and every report that holds the original record as invalid, so freeze a new snapshot and rebuild the report afterwards. Manual records always store the standard ID.
 
 ### Manual tasks
 

@@ -8,6 +8,7 @@ import pytest
 from test_research_analysis import RecordingSandbox, make_snapshot
 from test_research_holdout import DEV, DEV3, OUTCOMES, measurement, write_rows
 from test_research_preregistration import FROZEN_AT, recorded, row, write
+from vocab_support import TEST_CATALOG
 
 from growbridge.archive.db import Database
 from growbridge.ports import Denied
@@ -231,7 +232,7 @@ def test_snapshot_predates_freeze_carries_the_snapshot_for_a_measurement(tmp_pat
 @pytest.fixture
 def holdouts(tmp_path):
     database = Database(tmp_path / "holdout.db")
-    yield HoldoutRegistry(database, FakeClock())
+    yield HoldoutRegistry(database, FakeClock(), catalog=TEST_CATALOG)
     database.close()
 
 
@@ -272,10 +273,18 @@ def test_outcome_fields_invalid_carries_no_params(holdouts):
 
 
 def test_holdout_outcomes_exist_carries_the_project(db):
-    registry = HoldoutRegistry(
-        db, FakeClock(), project_outcomes(lambda b, f: ("m1",), lambda e: ("project-1",))
-    )
+    source = project_outcomes(lambda b: [("m1", "yield_g")], lambda e: ("project-1",), TEST_CATALOG)
+    registry = HoldoutRegistry(db, FakeClock(), source, TEST_CATALOG)
     refused(register(registry), "state", "holdout_outcomes_exist", {"project_id": "project-1"})
+
+
+def test_holdout_outcome_fields_unknown_carries_the_fields(holdouts):
+    refused(
+        register(holdouts, outcome_fields=("yeild_g",)),
+        "param",
+        "holdout_outcome_fields_unknown",
+        {"fields": ["yeild_g"]},
+    )
 
 
 def test_holdout_already_registered_carries_the_holdout(holdouts):

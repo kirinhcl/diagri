@@ -148,7 +148,7 @@ async def run_stage(world, runtime, client, project, protocol, round_id, number:
         "method": "image",
         "metric": "canopy_area_growth",
         "value": VALUES[number - 1],
-        "unit": "cm2/day",
+        "unit": "cm2/d",
     }
     await send(client, "POST", "/wb/measurements", measurement)
     return stage

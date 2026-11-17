@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from vocab_support import TEST_CATALOG
 
 from growbridge.agents.budget import CallBudget
 from growbridge.agents.conversation import ConversationLog
@@ -129,7 +130,11 @@ class Bench:
         self.control = RecordingControl(self.clock)
         # fixture sheets run light 60, not the fixture protocol's 40/70 treatments
         self.workflow = WorkflowService(
-            self.db, self.clock, self.control, check_treatments=check_treatments
+            self.db,
+            self.clock,
+            self.control,
+            check_treatments=check_treatments,
+            catalog=TEST_CATALOG,
         )
         self.archive = Archive(self.db, tmp_path / "archive", self.clock)
         self.alerts = AlertBook(self.db, self.clock, "SIMULATED")  # as serve: the local device
@@ -139,9 +144,9 @@ class Bench:
         self.sandbox = ScriptedSandbox()
         self.runner = ConfirmatoryRunner(self.db, self.clock, self.sandbox, tmp_path / "analysis")
         outcomes = project_outcomes(
-            self.archive.outcome_experiments, self.workflow.store.projects_of_experiment
+            self.archive.batch_metrics, self.workflow.store.projects_of_experiment, TEST_CATALOG
         )
-        self.holdout = HoldoutRegistry(self.db, self.clock, outcomes)
+        self.holdout = HoldoutRegistry(self.db, self.clock, outcomes, TEST_CATALOG)
         self.conversation = ConversationLog(self.db, self.clock)
         # a callable taking this bench: the compute service shares its database and clock
         self.compute = None if compute_factory is None else compute_factory(self)
@@ -280,7 +285,11 @@ class Bench:
 
     def seed_round(self) -> str:
         self.project_id = self.workflow.create_project("lettuce light series", self.designer)
-        protocol = make_protocol(project_id=self.project_id, stages=("vegetative",))
+        protocol = make_protocol(
+            project_id=self.project_id,
+            stages=("vegetative",),
+            variables=("canopy_area_growth", "height", "yield_g"),
+        )
         self.workflow.save_protocol(protocol, self.designer)
         self.round_id = self.workflow.create_round(self.project_id, protocol.id, self.designer)
         return self.round_id

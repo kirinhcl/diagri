@@ -23,6 +23,7 @@
 | 系列 | series | `ResearchProtocol.rounds`、`.blocks`、`.allocations` | 设计需要跨轮重复时，协议登记的那一组轮次。例如单顶帐篷里先后做不同处理。 |
 | 阶段 | stage | `StageState`、`StageRuntime` | 运行单定义的执行区段，例如育苗期或处理期。 |
 | 生长期 | growth period | 无 | 作物自身的发育期。它不是阶段。 |
+| 变量目录 | variable catalog | `Catalog`、`packaged_catalog()` | 协议、测量、快照和留出集共同使用的标准变量 ID 清单（含单位、方法、允许范围）。只追加；见[变量目录](Variable-Catalog.md)。 |
 | 研究协议 | research protocol | `ResearchProtocol` | 问题与假设、处理和对照、实验单位、分配方式、随机化种子、主要终点和分析约定。按版本保留。 |
 | 运行单 | run sheet | `RunSheet` | 一个阶段的可执行方案，也是操作员审批的对象。任何修改都生成新版本。 |
 | 审批 | approval | `Approval` | 操作员对运行单或其他请求做出的、留有记录的决定。 |

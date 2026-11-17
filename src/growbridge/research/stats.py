@@ -17,6 +17,7 @@ from pydantic import Field
 
 from growbridge.archive.models import Allocation, ManualMeasurement, Model
 from growbridge.codes import checked
+from growbridge.vocab import Catalog, packaged_catalog
 
 MIN_BLOCKS = 2
 MAX_EXACT_BLOCKS = 20
@@ -50,6 +51,7 @@ class UnitTable:
     values: dict[tuple[int, str], float]
     dropped: tuple[str, ...]  # measurements that map to no allocation
     excluded: tuple[str, ...]  # measurements of failed rounds
+    unresolved: tuple[str, ...] = ()  # uncorrected measurements whose metric the catalog lacks
 
 
 def unit_table(
@@ -58,10 +60,14 @@ def unit_table(
     metric: str,
     round_of: Mapping[str, int],
     failed_rounds: Collection[int] = (),
+    catalog: Catalog | None = None,
 ) -> UnitTable:
     """Mean of ``metric`` per (block, treatment); each unit contributes one value only."""
     corrected = {item.corrects for item in measurements if item.corrects}
-    relevant = [item for item in measurements if item.metric == metric and item.id not in corrected]
+    catalog = catalog or packaged_catalog()
+    current = [item for item in measurements if item.id not in corrected]
+    relevant = [item for item in current if catalog.same(item.metric, metric)]
+    unresolved = tuple(item.id for item in current if catalog.resolve(item.metric) is None)
     if len({item.unit for item in relevant}) > 1:
         raise ValueError(f"mixed units for metric {metric}: {sorted({i.unit for i in relevant})}")
     per_unit: dict[tuple[int, str], list[float]] = defaultdict(list)
@@ -83,7 +89,7 @@ def unit_table(
         home = homes[key]
         per_cell[(home.block, home.treatment_id)].append(fmean(values))
     cells = {cell: fmean(values) for cell, values in per_cell.items()}
-    return UnitTable(cells, tuple(dropped), tuple(excluded))
+    return UnitTable(cells, tuple(dropped), tuple(excluded), unresolved)
 
 
 def unit_means(
@@ -92,8 +98,9 @@ def unit_means(
     metric: str,
     round_of: Mapping[str, int],
     failed_rounds: Collection[int] = (),
+    catalog: Catalog | None = None,
 ) -> dict[tuple[int, str], float]:
-    return unit_table(measurements, allocations, metric, round_of, failed_rounds).values
+    return unit_table(measurements, allocations, metric, round_of, failed_rounds, catalog).values
 
 
 def _permutation_p(differences: list[float]) -> tuple[float, bool]:

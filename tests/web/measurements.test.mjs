@@ -3,10 +3,11 @@ import test from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { saveDraft } from "../../src/growbridge/web/workbench/drafts.js";
-import { measurementForm, measurementOptions, measurementTable } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
+import { measurementBody, measurementForm, measurementOptions, measurementTable, variableOptions } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
+import { formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { timeText } from "../../src/growbridge/web/workbench/ui/section.js";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
-import { FIXTURES, installFakeDom, testCtx } from "./support/render-page.mjs";
+import { FIXTURES, installFakeDom, renderPage, testCtx } from "./support/render-page.mjs";
 
 installFakeDom();
 
@@ -14,6 +15,12 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 const RECORDED = FIXTURES["measurements.json"].measurements;
 const STAGE = FIXTURES["stage.json"];
 const METRIC = RECORDED[0].metric; // an operator-chosen name, shown as recorded
+const VARIABLES = FIXTURES["variables.json"].variables; // what the stage's experiment declares
+// Two declared variables, to choose between.
+const TWO = [
+  { id: "canopy_area_growth", label_en: "Canopy area growth", label_zh: "冠层面积增长", unit: "cm2/d", method: "top-view images", min: null, max: null, deprecated: false },
+  { id: "height", label_en: "Plant height", label_zh: "株高", unit: "cm", method: "ruler, soil to apex", min: null, max: null, deprecated: false },
+];
 
 function elements(node, name) {
   const own = node.tagName && node.tagName.toLowerCase() === name ? [node] : [];
@@ -28,16 +35,45 @@ function rowButtons(node) {
 }
 
 const input = (node, name) => elements(node, "input").find((element) => element.getAttribute("name") === name);
+const select = (node, name) => elements(node, "select").find((element) => element.getAttribute("name") === name);
 const rowsOf = (node) => elements(node, "tbody").flatMap((body) => elements(body, "tr"));
 
 // A record and the one that corrects it, an hour later.
 const original = { ...RECORDED[0], id: "measurement_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", measured_at: 1796590000 };
 const correction = { ...RECORDED[0], id: "measurement_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", measured_at: 1796593600, value: 1.24, corrects: original.id };
 
-test("measurement options are the distinct values already recorded", () => {
-  assert.deepEqual(measurementOptions([{ metric: "canopy", unit: "cm2", method: "ruler" }, { metric: "canopy", unit: "cm2", method: "photo" }]), { metric: ["canopy"], unit: ["cm2"], method: ["photo", "ruler"] });
-  assert.deepEqual(measurementOptions(undefined), { metric: [], unit: [], method: [] });
-  assert.deepEqual(measurementOptions([{ metric: "", unit: null }]), { metric: [], unit: [], method: [] });
+test("measurement options are the distinct methods already recorded", () => {
+  assert.deepEqual(measurementOptions([{ metric: "canopy", unit: "cm2", method: "ruler" }, { metric: "canopy", unit: "cm2", method: "photo" }]), { method: ["photo", "ruler"] });
+  assert.deepEqual(measurementOptions(undefined), { method: [] });
+  assert.deepEqual(measurementOptions([{ metric: "", unit: null, method: "" }]), { method: [] });
+});
+
+test("variable options are labelled in the page's language, with the unit", () => {
+  assert.deepEqual(variableOptions(TWO, "zh"), [
+    { value: "canopy_area_growth", label: "冠层面积增长 (cm2/d)" },
+    { value: "height", label: "株高 (cm)" },
+  ]);
+  assert.deepEqual(variableOptions(TWO, "en"), [
+    { value: "canopy_area_growth", label: "Canopy area growth (cm2/d)" },
+    { value: "height", label: "Plant height (cm)" },
+  ]);
+  assert.deepEqual(variableOptions(undefined, "en"), []);
+});
+
+test("the body takes its unit from the chosen variable, never from the values", () => {
+  const values = { metric: "height", value: 12.5, unit: "mm", plant_id: "plant-1" };
+  const body = measurementBody(values, TWO, "experiment-1");
+  assert.equal(body.unit, "cm");
+  assert.equal(body.metric, "height");
+  assert.equal(body.experiment_id, "experiment-1");
+  assert.equal(body.position, "", "an empty position is sent as such");
+});
+
+test("with no variable chosen the body carries no unit at all", () => {
+  for (const metric of ["", "heigth", undefined]) {
+    const body = measurementBody({ metric, value: 12.5, unit: "mm" }, TWO, "experiment-1");
+    assert.ok(!Object.hasOwn(body, "unit"), JSON.stringify(body));
+  }
 });
 
 test("the measurement table shows six columns and folds the rest", () => {
@@ -78,25 +114,104 @@ test("a record already corrected offers no second correction", () => {
   assert.deepEqual(rowButtons(second), ["更正"]);
 });
 
-function formView(lang = "zh") {
+function formView(lang = "zh", variables = VARIABLES) {
   const ctx = testCtx({ lang });
   const recorded = [];
-  const form = measurementForm(ctx, STAGE, async (message) => recorded.push(message));
+  const form = measurementForm(ctx, STAGE, async (message) => recorded.push(message), variables);
   return { ctx, form, recorded };
 }
 
-test("the metric, unit and method fields suggest what this stage already recorded", () => {
-  const { form } = formView();
+test("the metric is a choice of the declared variables, and only the method suggests", () => {
+  const { form } = formView("zh", TWO);
   form.update(RECORDED);
-  const lists = ["metric", "unit", "method"].map((name) => input(form.element, name).getAttribute("list"));
-  assert.equal(new Set(lists).size, 3);
-  const datalists = elements(form.element, "datalist");
-  const options = (id) => elements(datalists.find((list) => list.getAttribute("id") === id), "option").map((o) => o.getAttribute("value"));
-  assert.deepEqual(options(lists[0]), [METRIC]);
-  assert.deepEqual(options(lists[1]), ["cm2/day"]);
-  assert.deepEqual(options(lists[2]), ["image"]);
-  const other = formView().form;
-  assert.ok(!lists.includes(input(other.element, "metric").getAttribute("list")), "ids are unique per form");
+  const metric = select(form.element, "metric");
+  assert.deepEqual(elements(metric, "option").map((o) => [o.getAttribute("value"), o.textContent]), [
+    ["", "选择一个变量"],
+    ["canopy_area_growth", "冠层面积增长 (cm2/d)"],
+    ["height", "株高 (cm)"],
+  ]);
+  assert.equal(metric.hasAttribute("required"), true);
+  assert.equal(input(form.element, "metric"), undefined, "no free-text metric");
+  assert.equal(input(form.element, "unit"), undefined, "the unit comes with the variable");
+  assert.equal(select(form.element, "unit"), undefined);
+  const list = input(form.element, "method").getAttribute("list");
+  const datalist = elements(form.element, "datalist").find((item) => item.getAttribute("id") === list);
+  assert.deepEqual(elements(datalist, "option").map((o) => o.getAttribute("value")), ["image"]);
+  assert.equal(elements(form.element, "datalist").length, 1);
+  assertNoLeaks(form.element);
+});
+
+test("with several declared variables none is chosen for the operator, and the method waits", () => {
+  const { form } = formView("en", TWO);
+  const metric = select(form.element, "metric");
+  assert.equal(metric.value, "");
+  assert.equal(elements(metric, "option")[0].textContent, "Choose a variable");
+  assert.equal(input(form.element, "method").value, "");
+  metric.value = "height";
+  metric.dispatchEvent(new Event("change"));
+  assert.equal(input(form.element, "method").value, "ruler, soil to apex");
+  metric.value = "canopy_area_growth";
+  metric.dispatchEvent(new Event("change"));
+  assert.equal(input(form.element, "method").value, "top-view images");
+});
+
+test("the form posts nothing while no variable is chosen", async () => {
+  const { ctx, form, recorded } = formView("en", TWO);
+  const inner = elements(form.element, "form")[0];
+  formControls(inner).set({ measured_at: 1796590000, plant_id: "plant-1", batch: "batch-1", layout_version: "layout-1", value: 12.5, method: "ruler" });
+  inner.dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+  assert.deepEqual(ctx.api.calls.filter((call) => call.method === "POST"), []);
+  assert.deepEqual(recorded, []);
+  assert.ok(visibleText(form.element).includes(ctx.t("form.required")), visibleText(form.element));
+});
+
+test("a single declared variable is chosen already, with its method", () => {
+  const { form } = formView("en", [TWO[1]]);
+  const metric = select(form.element, "metric");
+  assert.deepEqual(elements(metric, "option").map((o) => o.getAttribute("value")), ["height"], "no placeholder");
+  assert.equal(metric.value, "height");
+  assert.equal(input(form.element, "method").value, "ruler, soil to apex");
+});
+
+test("Correct chooses the record's own variable among several and posts its unit", async () => {
+  const { ctx, form } = formView("en", TWO);
+  const record = { ...RECORDED[0], metric: "height", unit: "cm", method: "tape" };
+  form.update([record]);
+  form.correct(record);
+  assert.equal(select(form.element, "metric").value, "height");
+  assert.equal(input(form.element, "method").value, "tape", "the record's own method is kept");
+  elements(form.element, "form")[0].dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+  const sent = ctx.api.calls.find((call) => call.method === "POST");
+  assert.equal(sent.body.metric, "height");
+  assert.equal(sent.body.unit, "cm");
+  assert.equal(sent.body.corrects, record.id);
+});
+
+test("with no declared variables there is no form, only a note saying why", () => {
+  for (const lang of ["zh", "en"]) {
+    const { ctx, form } = formView(lang, []);
+    assert.equal(elements(form.element, "form").length, 0);
+    assert.equal(elements(form.element, "button").length, 0, "no submit button");
+    assert.ok(visibleText(form.element).includes(ctx.t("measure.noVariables")), visibleText(form.element));
+    form.update(RECORDED);
+    const view = measurementTable(ctx, RECORDED, { onCorrect: form.correct });
+    assert.deepEqual(rowsOf(view).flatMap(rowButtons), [], "nothing to correct with");
+  }
+  assert.equal(elements(measurementForm(testCtx(), STAGE, async () => {}).element, "form").length, 0, "variables left out count as none");
+});
+
+// The list holds the declared manual variables only, and a new protocol version applies once a
+// new round runs the experiment under it: the note says both.
+test("the no-variables note names manual variables and a new round", () => {
+  const expected = { en: ["manual variables", "new round"], zh: ["人工变量", "新的一轮"] };
+  for (const [lang, words] of Object.entries(expected)) {
+    const text = visibleText(formView(lang, []).form.element);
+    for (const word of words) assert.ok(text.includes(word), `${lang}: ${text}`);
+  }
 });
 
 test("the form's lead names no experiment id and corrects stays hidden", () => {
@@ -118,7 +233,7 @@ test("Correct fills the form from the row and says which record it corrects", as
   assert.equal(input(form.element, "corrects").value, target.id);
   assert.equal(input(form.element, "plant_id").value, target.plant_id);
   assert.equal(input(form.element, "value").value, String(target.value));
-  assert.equal(input(form.element, "metric").value, target.metric);
+  assert.equal(select(form.element, "metric").value, target.metric);
   assert.ok(input(form.element, "measured_at").value.startsWith("2026-12-07T"), input(form.element, "measured_at").value);
   assert.ok(visibleText(form.element).includes(`正在更正 ${timeText(ctx, target.measured_at)} 的 ${METRIC} 记录`));
   elements(form.element, "form")[0].dispatchEvent(new Event("submit"));
@@ -128,6 +243,8 @@ test("Correct fills the form from the row and says which record it corrects", as
   assert.equal(sent.path, "/measurements");
   assert.equal(sent.body.corrects, target.id);
   assert.equal(sent.body.experiment_id, STAGE.experiment_id);
+  assert.equal(sent.body.metric, target.metric);
+  assert.equal(sent.body.unit, VARIABLES[0].unit, "the declared unit, not the one the record carried");
   assert.equal(recorded.length, 1);
   assert.ok(!recorded[0].includes("measurement_"), recorded[0]);
   assert.equal(input(form.element, "corrects").value, "", "the next record is a new one");
@@ -202,4 +319,20 @@ test("a correction whose time was changed sends the new minute", async () => {
   const sent = ctx.api.calls.find((call) => call.method === "POST");
   assert.notEqual(sent.body.measured_at, 1796594755);
   assert.equal(sent.body.measured_at % 60, 0);
+});
+
+// --- variable catalog: the stage page reads what its experiment declares -------------------------
+test("the stage page reads its experiment's variables and offers them in the form", async () => {
+  const { element, ctx } = await renderPage("stage", { stageId: STAGE.stage_id }, { lang: "en" });
+  const asked = ctx.api.calls.filter((call) => call.method === "GET" && call.path.includes("/variables"));
+  assert.deepEqual(asked.map((call) => [call.path, call.fixture]), [[`/experiments/${encodeURIComponent(STAGE.experiment_id)}/variables`, "variables.json"]]);
+  assert.deepEqual(elements(select(element, "metric"), "option").map((o) => o.textContent), ["Canopy area growth (cm2/d)"]);
+});
+
+test("variables that cannot be read leave a refusal where the form was, and no Correct", async () => {
+  const { element, ctx } = await renderPage("stage", { stageId: STAGE.stage_id }, { lang: "en", fixtures: { "variables.json": null } });
+  assert.equal(select(element, "metric"), undefined);
+  assert.ok(!visibleText(element).includes(ctx.t("measure.noVariables")), "not read is not none declared");
+  assert.ok(visibleText(element).includes(ctx.t("error.notFound")), visibleText(element));
+  assert.ok(!elements(element, "button").some((b) => b.textContent === ctx.t("measure.correct")));
 });

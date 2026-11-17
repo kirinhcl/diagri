@@ -5,9 +5,10 @@ import { formControls, simpleForm } from "../ui/forms.js";
 import { note, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 
-const SUGGESTED = ["metric", "unit", "method"];
-// What Correct copies from a record into the form; `corrects` is then set to the record's id.
-const COPIED = ["measured_at", "plant_id", "batch", "layout_version", "position", "metric", "value", "unit", "method"];
+const SUGGESTED = ["method"];
+// What Correct copies from a record into the form; `corrects` is then set to the record's id. The
+// unit is not copied: it is always the chosen variable's own.
+const COPIED = ["measured_at", "plant_id", "batch", "layout_version", "position", "metric", "value", "method"];
 
 // id -> {corrects, correctedBy}: both ends of every correction in the list.
 export function correctionLinks(measurements) {
@@ -19,11 +20,27 @@ export function correctionLinks(measurements) {
   return new Map(list.map((record) => [record.id, { corrects: record.corrects ?? null, correctedBy: correctedBy.get(record.id) }]));
 }
 
-// The distinct metric, unit and method names already recorded, sorted: what the form suggests.
+// The distinct methods already recorded, sorted: what the form suggests.
 export function measurementOptions(measurements) {
   const list = Array.isArray(measurements) ? measurements : [];
   const distinct = (name) => [...new Set(list.map((record) => record && record[name]).filter((value) => typeof value === "string" && value !== ""))].sort();
   return Object.fromEntries(SUGGESTED.map((name) => [name, distinct(name)]));
+}
+
+// The manual variables the experiment's protocols declared, as the metric's choices: the label in
+// the page's language, then the unit the value is recorded in.
+export function variableOptions(variables, lang) {
+  const list = Array.isArray(variables) ? variables : [];
+  return list.map((variable) => ({ value: variable.id, label: `${lang === "zh" ? variable.label_zh : variable.label_en} (${variable.unit})` }));
+}
+
+// The body to post: the unit is always the chosen variable's own, never one typed or copied, and
+// with no variable chosen there is no unit at all (the server then refuses the body).
+export function measurementBody(values, variables, experimentId) {
+  const chosen = (Array.isArray(variables) ? variables : []).find((variable) => variable.id === values.metric);
+  const { unit: _given, ...rest } = values;
+  const body = { position: "", ...rest, experiment_id: experimentId };
+  return chosen ? { ...body, unit: chosen.unit } : body;
 }
 
 // Batch, position, layout, the record's id and both ends of its corrections, told by time.
@@ -78,21 +95,39 @@ export function measurementsView(ctx, measurements, form) {
   return measurementTable(ctx, measurements, { onCorrect: form.correct });
 }
 
-function fields(ctx) {
+// The metric is a choice of the declared manual variables (the server lists no others, so a
+// declared sensor or factor variable never counts here); the unit comes with it and is no field.
+// With more than one, the choice starts empty so a value is never stored under a variable nobody
+// chose (required: the form will not send it so); a single variable is the only possible choice.
+function metricOptions(ctx, variables) {
+  const options = variableOptions(variables, ctx.lang);
+  return variables.length > 1 ? [{ value: "", label: ctx.t("measure.chooseVariable") }, ...options] : options;
+}
+
+function fields(ctx, variables) {
   const text = (name, key, required = true) => ({ name, label: ctx.t(`measure.${key}`), required });
-  const suggested = (name) => ({ ...text(name, name), suggestions: [] });
   return [
     { name: "measured_at", label: ctx.t("measure.measuredAt"), type: "datetime", required: true },
     text("plant_id", "plant"),
     text("batch", "batch"),
     text("layout_version", "layout"),
     text("position", "position", false),
-    suggested("metric"),
+    { name: "metric", label: ctx.t("measure.metric"), type: "select", required: true, options: metricOptions(ctx, variables) },
     { name: "value", label: ctx.t("measure.value"), type: "number", required: true },
-    suggested("unit"),
-    suggested("method"),
+    { ...text("method", "method"), suggestions: [] },
     { name: "corrects", type: "hidden", label: ctx.t("measure.correctedRecord") },
   ];
+}
+
+// Writes the chosen variable's method into the method field (empty when it names none).
+function fillMethod(controls, variables, metric) {
+  const chosen = variables.find((variable) => variable.id === metric);
+  controls.set({ method: chosen && chosen.method ? chosen.method : null });
+}
+
+// No declared manual variable, so nothing can be recorded: a note instead of the form, and no Correct.
+function noVariables(ctx) {
+  return { element: h("div", { class: "measure-new" }, note(ctx.t("measure.noVariables"))), correct: null, update: () => {} };
 }
 
 // The line saying which record the next save corrects, with a way out; hidden while it corrects none.
@@ -111,9 +146,12 @@ function correctingLine(ctx) {
 }
 
 // experiment_id comes from the stage; measured_at is wall time in the site's zone, shown beside it.
+// `variables` are the manual ones the experiment's protocols declared (GET /experiments/{id}/variables).
 // Returns the form with correct(record), which fills it in to correct that record, and
 // update(measurements), which the list calls with what was recorded.
-export function measurementForm(ctx, stage, onRecorded) {
+export function measurementForm(ctx, stage, onRecorded, variables) {
+  const declared = Array.isArray(variables) ? variables : [];
+  if (!declared.length) return noVariables(ctx);
   const submitLabel = ctx.t("measure.record");
   const line = correctingLine(ctx);
   let recorded = [];
@@ -131,15 +169,18 @@ export function measurementForm(ctx, stage, onRecorded) {
     return untouched ? copied.epoch : values.measured_at;
   };
   const onSubmit = async (values) => {
-    const body = { position: "", ...values, measured_at: measuredAt(values), experiment_id: stage.experiment_id };
+    const body = measurementBody({ ...values, measured_at: measuredAt(values) }, declared, stage.experiment_id);
     await ctx.api.post("/measurements", body, { action: submitLabel });
     stopCorrecting();
     await onRecorded(ctx.t("measure.recorded", { metric: values.metric, plant: values.plant_id }));
   };
   const timeZone = (ctx.me && ctx.me.timezone) || "UTC";
-  const form = simpleForm({ fields: fields(ctx), submitLabel, onSubmit, draftKey: `measurement:${stage.experiment_id}`, timeZone, ctx });
+  const form = simpleForm({ fields: fields(ctx, declared), submitLabel, onSubmit, draftKey: `measurement:${stage.experiment_id}`, timeZone, ctx });
   form.classList.add("form-columns");
   controls = formControls(form);
+  controls.onChange("metric", (metric) => fillMethod(controls, declared, metric));
+  // Only a variable already chosen (the single one, or a restored draft's) fills the method; a draft keeps its own.
+  if (controls.get("metric") && !controls.get("method")) fillMethod(controls, declared, controls.get("metric"));
   line.cancel.addEventListener("click", stopCorrecting);
   showCorrecting(); // a draft restored after a lost session may already correct a record
   const correct = (record) => {

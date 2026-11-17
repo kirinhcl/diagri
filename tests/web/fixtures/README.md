@@ -73,6 +73,7 @@ against the server's enums and literals.
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
 | compute.json | `/compute` (synthetic) |
+| variables.json, variables-pending.json | `/experiments/{experiment_id}/variables` of the ended stage's and of `stage-dev`'s experiment (synthetic) |
 
 ## report.json (task 14)
 
@@ -103,3 +104,11 @@ All three are additive server fields, added to the fixtures by hand (not capture
 - project.json: each `protocols[]` row gained `primary_endpoint: "canopy_area_growth"` and
   `method: "paired_block"`, the values of the protocol body the dev project was frozen with (the same
   endpoint report.json names). Both are `null` on the server when the stored body has none.
+
+## variables.json and variables-pending.json (variable catalog, task 5)
+
+Synthetic, not captured: the answer of the new `/experiments/{experiment_id}/variables` read, written
+by hand to the shape of `src/growbridge/workbench/api.py`. Both experiments' protocols name the
+primary endpoint `canopy_area_growth` (the dev seed's `protocol-1` is `make_protocol`, which declares
+it), so each file lists that one variable with the packaged catalog's labels, unit `cm2/d` and
+method. The measurements captured before the catalog keep their recorded unit `cm2/day`.

@@ -84,6 +84,17 @@ async function loadAll(ctx, stageId, kept = null) {
   return { stage: stage.value, review, readings: kept || readings, measurements, history, tasks };
 }
 
+// The variables the stage's experiment declares, read with the page's first data: the measurement
+// form is made once, from them. A failed read is kept as such, never taken for "none declared".
+async function loadVariables(ctx, stage) {
+  try {
+    const answer = await ctx.api.get(`/experiments/${enc(stage.experiment_id)}/variables`);
+    return { value: answer.variables };
+  } catch (error) {
+    return { error };
+  }
+}
+
 // --- parts ------------------------------------------------------------------------------------------
 // A part drawn again only when its signature changes; folds with a data-fold key (the chart's legend
 // and data tables, the tasks' folds) that were open stay open across the redraw.
@@ -254,10 +265,16 @@ export function sectionOrder(state) {
   return [...(ORDERS[state] || DEFAULT_ORDER)];
 }
 
-function sections(ctx, page, stage, onRecorded) {
+// The form for a new measurement, or why there is none: the declared variables could not be read.
+function measureEntry(ctx, stage, onRecorded, variables) {
+  if (!variables.error) return measurementForm(ctx, stage, onRecorded, variables.value);
+  return { element: problemBox(errorParts(ctx, variables.error)), correct: null, update: () => {} };
+}
+
+function sections(ctx, page, stage, onRecorded, variables) {
   const { parts } = page;
   const newMeasurement = h("h3", { class: "action-title", text: ctx.t("measure.new") });
-  page.measure = measurementForm(ctx, stage, onRecorded);
+  page.measure = measureEntry(ctx, stage, onRecorded, variables);
   const regions = {
     status: section(ctx.t("stage.status"), parts.status.element),
     controls: section(ctx.t("stage.controls"), parts.actions.element, page.log.element),
@@ -273,6 +290,7 @@ function sections(ctx, page, stage, onRecorded) {
 
 export async function render(shellCtx, params) {
   const first = await loadAll(shellCtx, params.stageId);
+  const variables = await loadVariables(shellCtx, first.stage);
   setCrumbs(shellCtx, first.stage);
   // Everything on this page reads again in place: a form's state conflict (409) calls ctx.reload,
   // and a full re-render would drop the action log and stop the receipt polls still running.
@@ -303,7 +321,7 @@ export async function render(shellCtx, params) {
     await refresh();
   };
   page.container = element;
-  element.append(...sections(ctx, page, first.stage, onRecorded));
+  element.append(...sections(ctx, page, first.stage, onRecorded, variables));
   draw(page, first);
   return { element, refresh, pollSeconds: POLL_SECONDS };
 }

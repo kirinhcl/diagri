@@ -127,5 +127,6 @@ def make_protocol(**overrides) -> ResearchProtocol:
         "stages": ("vegetative",),
         "rounds": 4,
         "blocks": 2,
+        "variables": ("canopy_area_growth",),
     }
     return ResearchProtocol(**{**fields, **overrides})

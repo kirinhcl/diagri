@@ -12,8 +12,7 @@ LICENCE = "CC-BY-4.0"
 DOI = "doi:10.0000/example"
 
 
-@pytest.fixture
-def frozen(archive, clock):
+def _append_samples(archive, data):
     for i in range(10):
         archive.append_sample(
             SampleRecord(
@@ -24,9 +23,14 @@ def frozen(archive, clock):
                 captured_at=START + i * 60,
                 received_at=START + i * 60,
                 clock_synced=True,
-                data={"temperature": 24.0, "humidity": 60.0},
+                data=data,
             )
         )
+
+
+@pytest.fixture
+def frozen(archive, clock):
+    _append_samples(archive, {"sensor": {"temperature": 24.0, "humidity": 60.0}})
     archive.add_measurement(
         ManualMeasurement(
             id="m1",
@@ -73,6 +77,25 @@ def test_export_lists_units_variables_and_files(archive, frozen, tmp_path):
     assert meta["data_files"] == frozen.files
     assert meta["snapshot"]["complete"] is True
     assert meta["snapshot"]["id"] == frozen.id
+
+
+def test_sensor_variables_are_the_sensor_keys(archive, clock, tmp_path):
+    _append_samples(
+        archive,
+        {
+            "sensor": {"temp": 21.0, "humi": 60.0},
+            "outlet": {},
+            "light": {"level": 40},
+            "blower": {},
+            "fan": {},
+        },
+    )
+    frozen = snap.freeze(archive, "exp-1", clock, START, START + 600, 60, 90)
+
+    meta = read(export_miappe(archive, frozen, make_protocol(), tmp_path / "o", LICENCE, DOI))
+
+    names = [v["name"] for v in meta["observed_variables"]]
+    assert names == ["humi", "temp"]
 
 
 def test_export_refuses_a_snapshot_whose_files_were_modified(archive, frozen, tmp_path):

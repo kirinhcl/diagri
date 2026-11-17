@@ -1,0 +1,91 @@
+version = 1
+
+[unit_aliases]
+C = "Cel"
+ppm = "[ppm]"
+
+[[variable]]
+id = "air_temperature"
+kind = "sensor"
+label_en = "Air temperature"
+label_zh = "空气温度"
+quantity = "temperature"
+unit = "Cel"
+aliases = ["temp"]
+refs = []
+
+[[variable]]
+id = "air_relative_humidity"
+kind = "sensor"
+label_en = "Air relative humidity"
+label_zh = "空气相对湿度"
+quantity = "relative_humidity"
+unit = "%"
+aliases = ["humi"]
+min = 0
+max = 100
+refs = []
+
+[[variable]]
+id = "vapour_pressure_deficit"
+kind = "sensor"
+label_en = "Vapour pressure deficit"
+label_zh = "饱和水汽压差"
+quantity = "pressure"
+unit = "kPa"
+aliases = ["vpd"]
+min = 0
+refs = []
+
+[[variable]]
+id = "co2_concentration"
+kind = "sensor"
+label_en = "CO2 concentration"
+label_zh = "二氧化碳浓度"
+quantity = "concentration"
+unit = "[ppm]"
+aliases = ["co2"]
+min = 0
+refs = []
+
+[[variable]]
+id = "photosynthetic_photon_flux_density"
+kind = "sensor"
+label_en = "Photosynthetic photon flux density"
+label_zh = "光合光量子通量密度"
+quantity = "photon_flux_density"
+unit = "umol/m2/s"
+aliases = ["ppfd"]
+min = 0
+refs = []
+
+[[variable]]
+id = "soil_temperature"
+kind = "sensor"
+label_en = "Soil temperature"
+label_zh = "土壤温度"
+quantity = "temperature"
+unit = "Cel"
+aliases = ["tempSoil"]
+refs = []
+
+[[variable]]
+id = "canopy_area_growth"
+kind = "manual"
+label_en = "Canopy area growth"
+label_zh = "冠层面积增长"
+quantity = "area_growth_rate"
+unit = "cm2/d"
+method = "Canopy area from top-view images, change per day"
+refs = []
+
+[[variable]]
+id = "light"
+kind = "factor"
+label_en = "Light level"
+label_zh = "光照水平"
+quantity = "level"
+unit = "%"
+min = 0
+max = 100
+refs = []

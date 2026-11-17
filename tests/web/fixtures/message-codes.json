@@ -898,6 +898,14 @@
       "action": false,
       "of": "state"
     },
+    "protocol_variables_invalid": {
+      "params": [
+        "protocol_id",
+        "version"
+      ],
+      "action": true,
+      "of": "param"
+    },
     "approval_blocking_findings": {
       "params": [
         "stage_id",
@@ -1478,6 +1486,13 @@
       "action": true,
       "of": "param"
     },
+    "measurement_variable_refused": {
+      "params": [
+        "experiment_id"
+      ],
+      "action": true,
+      "of": "param"
+    },
     "param_too_long": {
       "params": [
         "field",
@@ -1842,6 +1857,13 @@
       ],
       "action": true,
       "of": "state"
+    },
+    "holdout_outcome_fields_unknown": {
+      "params": [
+        "fields"
+      ],
+      "action": true,
+      "of": "param"
     },
     "batches_no_holdout": {
       "params": [],

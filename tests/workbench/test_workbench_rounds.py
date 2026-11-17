@@ -815,6 +815,17 @@ def test_a_report_whose_protocol_is_gone_has_no_primary_endpoint(bench, operator
     assert body["primary_endpoint"] is None
 
 
+def test_protocol_without_variables_is_refused_by_name(bench, operator):
+    project_id = bench.post(operator, "/wb/projects", {"name": "lettuce"}).json()["project_id"]
+    protocol = protocol_json(project_id)
+    del protocol["variables"]
+    refused = bench.post(operator, "/wb/protocols", {"protocol": protocol})
+
+    assert detail(refused)["code"] == "param"
+    assert detail(refused)["reason"] == "protocol_variables_invalid"
+    assert "variables" in detail(refused)["message"]
+
+
 def _goal_language(bench, operator, project_id: str, **fields):
     answer = bench.post(operator, "/wb/goals", {"project_id": project_id, "goal": GOAL, **fields})
     return answer, bench.tasks.list(project_id)

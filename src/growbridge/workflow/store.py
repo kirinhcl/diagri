@@ -190,6 +190,15 @@ class WorkflowStore:
         )
         return None if row is None else ResearchProtocol.model_validate_json(row["body"])
 
+    def protocol_variables_before(self, protocol_id: str, version: int) -> frozenset[str]:
+        rows = self.db.query(
+            "SELECT body FROM wf_protocols WHERE id = ? AND version < ?", (protocol_id, version)
+        )
+        declared: set[str] = set()
+        for row in rows:
+            declared.update(ResearchProtocol.model_validate_json(row["body"]).variables)
+        return frozenset(declared)
+
     def latest_protocol(self, protocol_id: str, project_id: str) -> ResearchProtocol | None:
         row = self.db.one(
             "SELECT body FROM wf_protocols WHERE id = ? AND project_id = ?"
@@ -489,6 +498,17 @@ class WorkflowStore:
             (experiment_id,),
         )
         return tuple((row["protocol_id"], row["protocol_version"]) for row in rows)
+
+    def declared_variables(self, experiment_id: str) -> frozenset[str]:
+        """The union of the variables of every protocol version a stage of this experiment runs
+        under (none: no stage runs it). A round's protocol version is always saved before the
+        round; were one missing, its variables would simply not count, which refuses more."""
+        declared: set[str] = set()
+        for protocol_id, version in self.protocol_versions_of(experiment_id):
+            protocol = self.protocol(protocol_id, version)
+            if protocol is not None:
+                declared.update(protocol.variables)
+        return frozenset(declared)
 
     # --- approvals -----------------------------------------------------------------------------
 

@@ -4,6 +4,8 @@ conclusion by accident."""
 
 import json
 
+from vocab_support import TEST_CATALOG
+
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import ManualMeasurement, SampleRecord
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -209,7 +211,7 @@ async def test_without_a_frozen_script_the_behaviour_is_unchanged(env, tmp_path)
 
 
 async def test_a_refusal_does_not_use_up_the_holdout_read(env, tmp_path):
-    registry = HoldoutRegistry(env.db, env.clock)
+    registry = HoldoutRegistry(env.db, env.clock, catalog=TEST_CATALOG)
     registry.register(env.project_id, "hold-1", ("batch-9",), ("yield_g",), ("d-1", "d-2"))
     registry.register_model("hold-1", "model-sha", "features", "prep")
     task = env.task("researcher")

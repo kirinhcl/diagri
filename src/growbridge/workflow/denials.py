@@ -63,6 +63,16 @@ def protocol_version_exists(protocol_id: str, version: int) -> Denied:
     )
 
 
+def protocol_variables_invalid(protocol_id: str, version: int, problems: list[str]) -> Denied:
+    """The protocol's variables do not fit the variable catalog; every problem is listed."""
+    return Denied(
+        "param",
+        "; ".join(problems),
+        reason="protocol_variables_invalid",
+        params={"protocol_id": protocol_id, "version": version},
+    )
+
+
 def protocol_not_found(protocol_id: str, project_id: str) -> Denied:
     return Denied(
         "state",

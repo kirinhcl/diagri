@@ -76,6 +76,8 @@ export default {
   "protocol.form.analysis": "Analysis",
   "protocol.form.endpoint": "Primary endpoint",
   "protocol.form.endpointHint": "Pick a suggestion or type your own.",
+  "protocol.form.variables": "Measured variables",
+  "protocol.form.variablesHint": "Variable catalog IDs, one per line; the primary endpoint must be one of them.",
   "protocol.form.effect": "Target effect",
   "protocol.form.effectHint": "The smallest change you want to be able to detect, as a number.",
   "protocol.form.method": "Method",

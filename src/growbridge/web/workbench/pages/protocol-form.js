@@ -105,6 +105,7 @@ function analysisFields(t, project) {
   const rows = array(project.protocols);
   const fraction = (name, label, value) => ({ name, label, hint: t("protocol.form.fractionHint"), type: "number", required: true, min: 0, max: 1, value });
   return [
+    linesField({ name: "variables", label: t("protocol.form.variables"), hint: t("protocol.form.variablesHint"), required: true }),
     { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t("protocol.form.endpointHint"), required: true, parse: trimmed, suggestions: unique(rows.map((row) => row.primary_endpoint)) },
     { name: "target_effect", label: t("protocol.form.effect"), hint: t("protocol.form.effectHint"), type: "number", required: true },
     { name: "method", label: t("protocol.form.method"), hint: t("protocol.form.methodHint"), required: true, parse: trimmed, suggestions: unique([...FIXED_METHODS, ...rows.map((row) => row.method)]) },
@@ -144,6 +145,7 @@ export function buildProtocol(projectId, values, id, version) {
     control_treatment_id: values.control_treatment_id,
     allocations: values.allocations.map((row) => ({ round: row.round, block: row.block, unit: row.unit ?? "", treatment_id: row.treatment_id })),
     randomization_seed: values.randomization_seed,
+    variables: analysis.variables ?? [],
     analysis: {
       primary_endpoint: analysis.primary_endpoint,
       target_effect: analysis.target_effect,
@@ -218,7 +220,7 @@ function saveAsField(ctx, rows, protocolId) {
 export function protocolSkeleton(projectId, rows) {
   return {
     id: newProtocolId(projectId, rows), project_id: projectId, version: 1, question: "", hypothesis: "", crop: "", batch: "",
-    treatments: [], control_treatment_id: "", allocations: [], randomization_seed: null,
+    treatments: [], control_treatment_id: "", allocations: [], randomization_seed: null, variables: [],
     analysis: { primary_endpoint: "", target_effect: null, method: "", exclusion_rules: [], max_missing_fraction: DEFAULT_MISSING, max_deviation_fraction: DEFAULT_DEVIATION },
     stages: [], rounds: null, blocks: null, experimental_unit: "tent",
   };

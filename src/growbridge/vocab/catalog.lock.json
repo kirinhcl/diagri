@@ -1,0 +1,15 @@
+{
+  "versions": {
+    "1": "e61ec20502a9e7a0d9b86a34974df0eaf63a4cf7f81cfbd74cf6be1d60f1fa68"
+  },
+  "entries": {
+    "air_relative_humidity": "e3adad4a38a69cb2bd0573fa7e8fc2cfc7050dc6140a4c854b27619bd37c42f8",
+    "air_temperature": "813955f448eb3a62f599c365a30c711aacb47661742acb14983e9b541fd628af",
+    "canopy_area_growth": "768ccf9a6df92a15b545d3277fb3ad16faa19b20d498e771e0622d44f5abaf4a",
+    "co2_concentration": "45d332de60269f3383a799802f6e079b7b939ad91b16d6e355c1b2a1527449f1",
+    "light": "45fa3318818dce79bdef8adecf838afc50657e1dc347a8da350a855eb3e9d77f",
+    "photosynthetic_photon_flux_density": "95273a1d2b8ab2930e53ea7103add48cf5bcc4ea1863ba5b39959ef61a14dcc8",
+    "soil_temperature": "645ecf82d30cff46b422830d80f83a5aba015b53a8db407c44c6055596da3f90",
+    "vapour_pressure_deficit": "5872986d514d7163fae115cb817609ae00db2931d07acbe909295b4530eec151"
+  }
+}

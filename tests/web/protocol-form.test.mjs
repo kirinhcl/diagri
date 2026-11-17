@@ -69,6 +69,7 @@ function fill(form, { question = "Does more light speed up growth?" } = {}) {
     change(named(row, "unit")[0], "tent-1");
     change(named(row, "treatment_id")[0], treatment);
   }
+  change(named(form, "variables")[0], "canopy_area_growth");
   change(named(form, "primary_endpoint")[0], "canopy_area_growth");
   change(named(form, "target_effect")[0], "0.15");
   change(named(form, "method")[0], "paired_block");
@@ -98,6 +99,7 @@ test("the protocol form builds a protocol the server accepts, with version 1 for
         { round: 2, block: 1, unit: "tent-1", treatment_id: "control" },
       ],
       randomization_seed: 20261118,
+      variables: ["canopy_area_growth"],
       analysis: { primary_endpoint: "canopy_area_growth", target_effect: 0.15, method: "paired_block", exclusion_rules: [], max_missing_fraction: 0.2, max_deviation_fraction: 0.1 },
       stages: ["vegetative"],
       rounds: 2,

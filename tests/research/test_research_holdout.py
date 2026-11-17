@@ -1,10 +1,12 @@
 import pytest
+from vocab_support import TEST_CATALOG
 
 from growbridge.archive.db import Database
 from growbridge.archive.models import ManualMeasurement
 from growbridge.ports import Denied
 from growbridge.research.holdout import HoldoutRegistry, refuse_holdout_rows
 from growbridge.sim.clock import FakeClock
+from growbridge.vocab import packaged_catalog
 
 OUTCOMES = ("yield_g", "canopy_score")
 DEV = ("dev-1", "dev-2")
@@ -25,7 +27,7 @@ def clock():
 
 @pytest.fixture
 def registry(db, clock):
-    return HoldoutRegistry(db, clock)
+    return HoldoutRegistry(db, clock, catalog=TEST_CATALOG)
 
 
 @pytest.fixture
@@ -139,7 +141,7 @@ def test_registering_a_model_for_an_unknown_holdout_is_denied(registry):
 def test_registrations_survive_reopening_the_database(tmp_path, clock):
     path = tmp_path / "again.db"
     first = Database(path)
-    registry = HoldoutRegistry(first, clock)
+    registry = HoldoutRegistry(first, clock, catalog=TEST_CATALOG)
     registry.register("project-1", "hold-1", ("b3",), OUTCOMES, development_batch_ids=DEV)
     registry.register_model("hold-1", "m" * 64, "f" * 64, "p" * 64)
     registry.evaluate("hold-1", "a", "m" * 64)
@@ -147,7 +149,7 @@ def test_registrations_survive_reopening_the_database(tmp_path, clock):
 
     second = Database(path)
     try:
-        reopened = HoldoutRegistry(second, clock)
+        reopened = HoldoutRegistry(second, clock, catalog=TEST_CATALOG)
         assert reopened.evaluate("hold-1", "b", "m" * 64) == "exploratory"
     finally:
         second.close()
@@ -243,3 +245,41 @@ def test_a_row_without_a_batch_is_refused_when_its_metric_is_an_outcome(register
 
     with pytest.raises(Denied):
         refuse_holdout_rows(registered, "project-1", "snap-1", path)
+
+
+# --- names the catalog cannot resolve fail closed ----------------------------------------------
+
+
+@pytest.fixture
+def blinded(registry):
+    registry.register("p1", "h1", ("b3",), ("yield_g",), development_batch_ids=DEV)
+    return registry
+
+
+def test_misspelled_outcome_in_held_batch_is_hidden(blinded):  # it leaked before
+    assert blinded.development_filter("p1")(measurement("yeild_g", "b3")) is False
+
+
+def test_unresolved_name_in_development_batch_is_kept(blinded):
+    assert blinded.development_filter("p1")(measurement("yeild_g", "b1")) is True
+
+
+def test_other_known_metric_in_held_batch_is_kept(blinded):
+    assert blinded.development_filter("p1")(measurement("height", "b3")) is True
+
+
+def test_snapshot_with_unresolved_held_row_is_refused(blinded, tmp_path):
+    rows = write_rows(tmp_path / "measurements.jsonl", [measurement("yeild_g", "b3")])
+
+    with pytest.raises(Denied):
+        refuse_holdout_rows(blinded, "p1", "snap-1", rows)
+
+
+def test_a_stored_outcome_field_that_no_longer_resolves_hides_its_held_batches(blinded, db, clock):
+    # "yield_g" resolved when registered (TEST_CATALOG); the packaged catalog lacks it, as a
+    # holdout registered before outcome fields had to resolve may hold such a name.
+    keep = HoldoutRegistry(db, clock, catalog=packaged_catalog()).development_filter("p1")
+
+    assert keep(measurement("canopy_area_growth", "b3")) is False  # held batch: fail closed
+    assert keep(measurement("canopy_area_growth", "")) is False  # no batch: fail closed
+    assert keep(measurement("canopy_area_growth", "b1")) is True  # development batch

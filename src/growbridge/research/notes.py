@@ -57,6 +57,11 @@ TEMPLATES: dict[str, dict[str, str]] = {
         "en": "{count} measurements have no matching allocation and were left out",
         "zh": "{count} 条测量没有对应的分配，未计入",
     },
+    "unresolved_metrics": {
+        "en": "{count} measurements name a metric the variable catalog does not know;"
+        " check them for misspellings",
+        "zh": "{count} 条测量的指标名不在变量目录里，请检查是否拼错",
+    },
     "treatment_not_applied": {
         "en": "Round {round} did not run its allocated treatment {treatment}: {problems}",
         "zh": "第 {round} 轮没有按分配的处理 {treatment} 运行：{problems}",

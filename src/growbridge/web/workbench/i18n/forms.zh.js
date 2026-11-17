@@ -75,6 +75,8 @@ export default {
   "protocol.form.analysis": "分析",
   "protocol.form.endpoint": "主要终点",
   "protocol.form.endpointHint": "可以选一个建议，也可以自己写。",
+  "protocol.form.variables": "测量的变量",
+  "protocol.form.variablesHint": "变量目录里的 ID，每行一个；主要终点必须在其中。",
   "protocol.form.effect": "目标效应",
   "protocol.form.effectHint": "你希望能检出的最小变化，写成数字。",
   "protocol.form.method": "方法",

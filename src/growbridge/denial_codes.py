@@ -54,6 +54,7 @@ _register(
     ("round_already_ended", ("round_id", "state")),
 )
 _register("state", ("unknown_choice", ("choice",)), action=False)
+_register("param", ("protocol_variables_invalid", ("protocol_id", "version")))
 
 _register(
     "approval_invalid",
@@ -191,7 +192,11 @@ _register(
     ("skipped_has_time", ()),
     ("level_out_of_range", ("channel", "level", "min", "max")),
 )
-_register("param", ("measurement_rejected", ("detail",)))
+_register(
+    "param",
+    ("measurement_rejected", ("detail",)),
+    ("measurement_variable_refused", ("experiment_id",)),  # vocab/checks.py, via api.py
+)
 
 # --- compute service (compute/service.py, via compute/refusals.py) ----------------------------
 _register(
@@ -268,6 +273,7 @@ _register(
     ("holdout_outcomes_exist", ("project_id",)),
     ("holdout_already_registered", ("holdout_id",)),
 )
+_register("param", ("holdout_outcome_fields_unknown", ("fields",)))
 _register(
     "batches",
     ("batches_no_holdout", ()),

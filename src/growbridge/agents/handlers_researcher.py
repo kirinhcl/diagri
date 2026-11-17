@@ -206,6 +206,7 @@ def stage_preview(deps: Deps, stage) -> dict:
         DEFAULT_MIN_COVERAGE,
         measurement_filter=keep,
         measurement_grace=MEASUREMENT_GRACE_SECONDS,
+        catalog=deps.workflow.catalog,
     )
     start, end = limits[0], limits[1]
     left_out = snapshots.outside_window(
@@ -243,6 +244,8 @@ def _freeze(deps: Deps, data: FreezeInput) -> dict:
         measurement_filter=keep,
         schedule=_schedule(stage),
         measurement_grace=MEASUREMENT_GRACE_SECONDS,
+        declared=deps.workflow.store.declared_variables(experiment_id),
+        catalog=deps.workflow.catalog,
     )
     verified = snapshots.verify(deps.archive, shot.id)
     body = {

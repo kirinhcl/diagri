@@ -267,3 +267,40 @@ def test_manifest_records_zero_exclusions_without_a_filter(archive, clock):
 
     manifest = json.loads((archive.root / "snapshots" / frozen.id / "manifest.json").read_text())
     assert manifest["measurements_excluded"] == 0
+
+
+def test_preview_groups_alias_with_id(archive):
+    fill(archive, 11)
+    for index, metric in enumerate(("temp", "air_temperature", "heigth")):
+        item = measurement(f"m{index}").model_copy(update={"metric": metric, "unit": "Cel"})
+        archive.add_measurement(item)
+
+    summary = snap.preview(archive, "exp-1", START, START + 10 * STEP, STEP, STEP * 1.5)
+
+    groups = summary["measurements"]
+    assert set(groups) == {"air_temperature", "heigth"}
+    assert groups["air_temperature"]["plants"] == 1
+
+
+def test_freeze_writes_catalog_json(archive, clock):
+    archive.add_measurement(measurement("m1").model_copy(update={"metric": "canopy_area_growth"}))
+    archive.add_measurement(measurement("m2").model_copy(update={"metric": "heigth"}))
+    put(archive, 1, START + 1, data={"sensor": {"temp": 21.0}, "light": {"level": 40}})
+
+    frozen = freeze(archive, clock, declared={"canopy_area_growth"})
+
+    record = json.loads((archive.root / "snapshots" / frozen.id / "catalog.json").read_text())
+    assert [v["id"] for v in record["variables"]] == ["air_temperature", "canopy_area_growth"]
+    assert record["unresolved"] == ["heigth"]
+    assert "catalog.json" in frozen.files
+    assert snap.verify(archive, frozen.id)
+
+
+def test_sample_without_sensor_key_adds_no_names(archive, clock):
+    put(archive, 1, START + 1, data={})
+
+    frozen = freeze(archive, clock)
+
+    record = json.loads((archive.root / "snapshots" / frozen.id / "catalog.json").read_text())
+    assert record["variables"] == []
+    assert record["unresolved"] == []

@@ -84,3 +84,10 @@ def test_a_coverage_share_reads_as_a_percentage():
 
     assert "87%" in item.text("en") and "87%" in item.text("zh")
     assert item.entry("reason")["params"] == {"coverage": 0.87}
+
+
+def test_unresolved_metrics_note_has_both_languages():
+    item = note("unresolved_metrics", count=2)
+
+    for language in LANGUAGES:
+        assert "2" in item.text(language)

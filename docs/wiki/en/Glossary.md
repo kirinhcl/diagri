@@ -23,6 +23,7 @@ Where to look up an identifier: data models are in [`archive/models.py`](../../.
 | series | 系列 | `ResearchProtocol.rounds`, `.blocks`, `.allocations` | The rounds a protocol needs when a design has to repeat across rounds, for example treatments run one after another in a single tent. |
 | stage | 阶段 | `StageState`, `StageRuntime` | An execution segment defined by a run sheet, for example the seedling period or the treatment period. |
 | growth period | 生长期 | none | The crop's own developmental phase. It is not a stage. |
+| variable catalog | 变量目录 | `Catalog`, `packaged_catalog()` | The shared list of standard variable IDs (unit, method, allowed range) that protocols, measurements, snapshots and holdouts use. Append-only; see [Variable catalog](Variable-Catalog.md). |
 | research protocol | 研究协议 | `ResearchProtocol` | Question and hypothesis, treatments and control, experimental unit, allocation, randomization seed, primary endpoint and analysis plan. Kept by version. |
 | run sheet | 运行单 | `RunSheet` | The executable plan of one stage, and the object the operator approves. Any change creates a new version. |
 | approval | 审批 | `Approval` | An operator's recorded decision on a run sheet or another request. |

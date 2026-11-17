@@ -171,10 +171,13 @@ def test_other_measurements_do_not_stand_in_the_way(seeded, operator, row):
 
 
 def second_project_experiment(bench) -> str:
-    """A real second project with a staged experiment of its own."""
+    """A real second project with a staged experiment of its own, declaring the same outcome."""
     designer = bench.designer
     project = bench.workflow.create_project("other series", designer)
-    protocol = make_protocol(project_id=project, id="protocol-2", stages=("vegetative",))
+    variables = ("canopy_area_growth", "yield_g")
+    protocol = make_protocol(
+        project_id=project, id="protocol-2", stages=("vegetative",), variables=variables
+    )
     bench.workflow.save_protocol(protocol, designer)
     round_id = bench.workflow.create_round(project, protocol.id, designer)
     change = {"project_id": project, "protocol_id": "protocol-2", "experiment_id": "experiment-p2"}

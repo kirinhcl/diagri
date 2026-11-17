@@ -36,6 +36,7 @@ def paths(bench: Bench) -> dict[str, list[str]]:
             f"/wb/projects/{project}/conversation",
             f"/wb/holdouts?project_id={project}",
             f"/wb/protocols/protocol-1/analysis?project_id={project}",
+            "/wb/experiments/experiment-stage-1/variables",
         ],
         "stage": stage,
         "round": [f"/wb/rounds/{round_id}", f"/wb/rounds/{round_id}/report"],

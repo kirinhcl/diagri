@@ -27,6 +27,7 @@ growbridge = [
     "native/*.swift", "web/*.html", "web/*.css", "web/*.js",
     "web/workbench/*.js", "web/workbench/*.css", "web/workbench/i18n/*.js",
     "web/workbench/ui/*.js", "web/workbench/pages/*.js",
+    "vocab/*.toml",
 ]
 
 [tool.pytest.ini_options]

@@ -2,6 +2,8 @@
 
 import json
 
+from vocab_support import TEST_CATALOG
+
 from growbridge.archive.models import ManualMeasurement
 from growbridge.research.holdout import HoldoutRegistry
 from growbridge.sim.clock import START
@@ -27,7 +29,7 @@ def _measurement(ident: str, batch: str) -> ManualMeasurement:
 
 
 def _seed(env) -> HoldoutRegistry:
-    registry = HoldoutRegistry(env.db, env.clock)
+    registry = HoldoutRegistry(env.db, env.clock, catalog=TEST_CATALOG)
     registry.register(env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], ["d-1", "d-2"])
     env.stage_for(EXPERIMENT)
     for ident, batch in (

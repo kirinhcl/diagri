@@ -15,6 +15,7 @@ from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
 from growbridge.archive.models import Label, ManualMeasurement, Model
 from growbridge.ports import Denied
+from growbridge.vocab import Catalog, packaged_catalog
 
 MIN_DEVELOPMENT_BATCHES = 2
 
@@ -54,49 +55,60 @@ class Holdout(Model):
 
 
 class OutcomeSource(Protocol):
-    """Whether outcome data of the given batches already exists in a project."""
+    """Which outcome data of the given batches already exists in a project."""
 
-    def has_outcomes(
+    def existing_outcomes(
         self, project_id: str, batch_ids: Collection[str], outcome_fields: Collection[str]
-    ) -> bool: ...
+    ) -> tuple[str, ...]: ...
 
 
 class _ProjectOutcomes:
     def __init__(
         self,
-        matching: Callable[[Collection[str], Collection[str]], Iterable[str]],
+        matching: Callable[[Collection[str]], Iterable[tuple[str, str]]],
         owners_of: Callable[[str], Iterable[str]],
+        catalog: Catalog,
     ):
         self.matching = matching
         self.owners_of = owners_of
+        self.catalog = catalog
 
-    def has_outcomes(
+    def existing_outcomes(
         self, project_id: str, batch_ids: Collection[str], outcome_fields: Collection[str]
-    ) -> bool:
-        """Whether an outcome of a held-out batch is already recorded that may belong to this
-        project: in an experiment one of its stages runs, or in an experiment no stage runs.
+    ) -> tuple[str, ...]:
+        """The sorted, distinct metric names, as recorded, of outcome data of a held-out batch
+        that already exists and may belong to this project: in an experiment one of its stages
+        runs, or in an experiment no stage runs.
 
+        A name counts when it resolves to one of the outcome fields, or when the catalog cannot
+        resolve it at all: an unknown name may be a misspelt outcome, so it is treated as one.
         Data with no owner counts because it cannot be shown to belong to another project, and
         a stage of this project may take that experiment over later; a measurement for an
         experiment is accepted only when a stage owns it, so this is a second line of defence
         for records that predate that rule or arrived another way. A measurement with no batch
         matches (it cannot be placed, and the development filter hides it too).
         """
-        for experiment in self.matching(batch_ids, outcome_fields):
+        fields = {self.catalog.canonical(field) for field in outcome_fields} - {None}
+        found: set[str] = set()
+        for experiment, metric in self.matching(batch_ids):
+            name = self.catalog.canonical(metric)
+            if name is not None and name not in fields:
+                continue
             owners = tuple(self.owners_of(experiment))
             if not owners or project_id in owners:
-                return True
-        return False
+                found.add(metric)
+        return tuple(sorted(found))
 
 
 def project_outcomes(
-    matching: Callable[[Collection[str], Collection[str]], Iterable[str]],
+    matching: Callable[[Collection[str]], Iterable[tuple[str, str]]],
     owners_of: Callable[[str], Iterable[str]],
+    catalog: Catalog | None = None,
 ) -> OutcomeSource:
-    """An ``OutcomeSource``. ``matching(batch_ids, outcome_fields)`` lists the experiments that
-    hold such a measurement (the archive answers it in SQL); ``owners_of(experiment)`` lists the
-    projects whose stages run it (the workflow store)."""
-    return _ProjectOutcomes(matching, owners_of)
+    """An ``OutcomeSource``. ``matching(batch_ids)`` lists the ``(experiment, metric)`` pairs
+    recorded for those batches (the archive answers it in SQL); ``owners_of(experiment)`` lists
+    the projects whose stages run it (the workflow store)."""
+    return _ProjectOutcomes(matching, owners_of, catalog or packaged_catalog())
 
 
 def _named_once(names: Sequence[str]) -> bool:
@@ -137,10 +149,17 @@ def _check_lists(
 
 
 class HoldoutRegistry:
-    def __init__(self, db: Database, clock: Clock, outcomes: OutcomeSource | None = None):
+    def __init__(
+        self,
+        db: Database,
+        clock: Clock,
+        outcomes: OutcomeSource | None = None,
+        catalog: Catalog | None = None,
+    ):
         self.db = db
         self.clock = clock
         self.outcomes = outcomes
+        self.catalog = catalog or packaged_catalog()
         db.migrate("research_holdout", STEPS)
 
     def register(
@@ -156,13 +175,25 @@ class HoldoutRegistry:
         of a held-out batch already exists in the project, that data may already have been seen
         and the registration is refused (``state``). Nothing in the message quotes a value."""
         _check_lists(batch_ids, outcome_fields, development_batch_ids)
-        if self.outcomes is not None and self.outcomes.has_outcomes(
-            project_id, tuple(batch_ids), tuple(outcome_fields)
-        ):
+        unknown = [f for f in outcome_fields if self.catalog.canonical(f) is None]
+        if unknown:
+            raise Denied(
+                "param",
+                "outcome fields not in the variable catalog: " + ", ".join(unknown),
+                reason="holdout_outcome_fields_unknown",
+                params={"fields": unknown},
+            )
+        existing = (
+            self.outcomes.existing_outcomes(project_id, tuple(batch_ids), tuple(outcome_fields))
+            if self.outcomes is not None
+            else ()
+        )
+        if existing:
             raise Denied(
                 "state",
                 "outcome data of these batches already exists in the project and may already "
-                "have been seen: a holdout is registered before its outcome data exists",
+                "have been seen: a holdout is registered before its outcome data exists: "
+                + ", ".join(existing),
                 reason="holdout_outcomes_exist",
                 params={"project_id": project_id},
             )
@@ -234,16 +265,23 @@ class HoldoutRegistry:
         """Predicate for the data path: False for an outcome of a holdout batch.
 
         Registrations are read on every call, so holdouts registered later apply at once. A
-        measurement without a batch cannot be placed and is treated as held out.
+        measurement without a batch cannot be placed and is treated as held out. Metrics are
+        compared by catalog ID; a name the catalog cannot resolve is treated as an outcome, so a
+        misspelt outcome in a held-out batch is hidden (in a development batch it is kept). A
+        holdout whose stored outcome fields do not all resolve (registered before they had to)
+        cannot tell its outcomes apart, so every measurement of its held batches is hidden.
         """
+        catalog = self.catalog
 
         def keep(measurement: ManualMeasurement) -> bool:
+            name = catalog.canonical(measurement.metric)  # None: unknown, treated as an outcome
             rows = self.db.query(
                 "SELECT batch_ids, outcome_fields FROM holdouts WHERE project_id = ?",
                 (project_id,),
             )
             for row in rows:
-                if measurement.metric not in json.loads(row["outcome_fields"]):
+                fields = {catalog.canonical(f) for f in json.loads(row["outcome_fields"])}
+                if name is not None and None not in fields and name not in fields:
                     continue
                 if not measurement.batch or measurement.batch in json.loads(row["batch_ids"]):
                     return False

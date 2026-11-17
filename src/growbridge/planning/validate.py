@@ -16,6 +16,7 @@ from growbridge.planning.findings import block as _block
 from growbridge.planning.findings import hint as _hint
 from growbridge.planning.findings import source_text
 from growbridge.ports import Capabilities, Finding
+from growbridge.vocab import Catalog, packaged_catalog
 
 USER_INPUT_PREFIX = "user:"  # an evidence reference of this form means "the user told us"
 
@@ -136,15 +137,18 @@ def _check_sensors(
     return findings
 
 
-def _is_humidity(rule: FeedbackRule) -> bool:
+def _is_humidity(rule: FeedbackRule, catalog: Catalog) -> bool:
+    variable = catalog.resolve(rule.sensor)
+    if variable is not None and variable.quantity == "relative_humidity":
+        return True
     name = rule.sensor.lower()
     return "humi" in name or name == "rh"
 
 
-def _check_humidity(sheet: RunSheet) -> list[Finding]:
+def _check_humidity(sheet: RunSheet, catalog: Catalog) -> list[Finding]:
     findings = []
     for rule in sheet.feedback_rules:
-        if not _is_humidity(rule):
+        if not _is_humidity(rule, catalog):
             continue
         targets = [rule.action] + ([rule.release] if rule.release else [])
         if any(target.channel is not Channel.EXHAUST for target in targets):
@@ -338,13 +342,17 @@ def _manual_hint(task: ManualTask) -> Finding:
 
 
 def validate_run_sheet(
-    run_sheet: RunSheet, capabilities: Capabilities, safety: SafetyConfig | None = None
+    run_sheet: RunSheet,
+    capabilities: Capabilities,
+    safety: SafetyConfig | None = None,
+    catalog: Catalog | None = None,
 ) -> tuple[Finding, ...]:
+    catalog = catalog or packaged_catalog()
     return (
         *_check_actions(run_sheet, capabilities, safety),
         *_check_pump_ownership(run_sheet),
         *_check_sensors(run_sheet, capabilities, safety),
-        *_check_humidity(run_sheet),
+        *_check_humidity(run_sheet, catalog),
         *_check_rule_conflicts(run_sheet),
         *_check_safety_conflicts(run_sheet, safety),
         *_check_numbers(run_sheet, safety),

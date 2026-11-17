@@ -30,7 +30,14 @@ def _variables(samples: list[dict], measurements: list[dict]) -> list[dict]:
         }
         for m in measurements
     }
-    names = sorted({key for s in samples for key in s["data"]})
+    names = sorted(
+        {
+            key
+            for s in samples
+            if isinstance(s["data"].get("sensor"), dict)
+            for key in s["data"]["sensor"]
+        }
+    )
     sensors = [
         {"name": name, "unit": None, "method": "sensor reading", "origin": "sensor"}
         for name in names
