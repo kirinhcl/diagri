@@ -223,7 +223,12 @@ class AlertBook:
     def get(self, event_id: str) -> Alert:
         row = self.db.one("SELECT * FROM observer_alerts WHERE event_id = ?", (event_id,))
         if row is None:
-            raise Denied("state", f"unknown alert {event_id}")
+            raise Denied(
+                "state",
+                f"unknown alert {event_id}",
+                reason="record_not_found",
+                params={"record_kind": "alert", "record_id": event_id},
+            )
         return _from_row(row)
 
     def resolve(self, kind: str, key: str) -> bool:
@@ -242,7 +247,11 @@ class AlertBook:
 
     def mark_read(self, event_id: str, actor: Actor) -> None:
         if actor.kind != "operator":
-            raise Denied("not_operator", "only an operator can mark an alert as read")
+            raise Denied(
+                "not_operator",
+                "only an operator can mark an alert as read",
+                reason="not_operator",
+            )
         with self.db.transaction():  # the severity read is the one stored at this moment
             current = self.get(event_id)
             self.db.execute(

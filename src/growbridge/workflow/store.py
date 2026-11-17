@@ -191,7 +191,12 @@ class WorkflowStore:
     def round(self, round_id: str) -> RoundRow:
         row = self.db.one("SELECT * FROM wf_rounds WHERE id = ?", (round_id,))
         if row is None:
-            raise Denied("state", f"unknown round {round_id}")
+            raise Denied(
+                "state",
+                f"unknown round {round_id}",
+                reason="record_not_found",
+                params={"record_kind": "round", "record_id": round_id},
+            )
         return RoundRow(**{key: row[key] for key in RoundRow.model_fields})
 
     def round_number(self, round_id: str) -> int:
@@ -229,7 +234,12 @@ class WorkflowStore:
             "SELECT body FROM wf_run_sheets WHERE id = ? AND version = ?", (sheet_id, version)
         )
         if row is None:
-            raise Denied("state", f"unknown run sheet {sheet_id} v{version}")
+            raise Denied(
+                "state",
+                f"unknown run sheet {sheet_id} v{version}",
+                reason="record_not_found",
+                params={"record_kind": "run_sheet", "record_id": sheet_id},
+            )
         return RunSheet.model_validate_json(row["body"])
 
     def run_sheet_digest(self, sheet_id: str, version: int) -> str | None:
@@ -276,7 +286,12 @@ class WorkflowStore:
     def stage(self, stage_id: str) -> StageRow:
         row = self.find_stage(stage_id)
         if row is None:
-            raise Denied("state", f"unknown stage {stage_id}")
+            raise Denied(
+                "state",
+                f"unknown stage {stage_id}",
+                reason="record_not_found",
+                params={"record_kind": "stage", "record_id": stage_id},
+            )
         return row
 
     def update_stage(self, row: StageRow, **changes: Any) -> StageRow:
@@ -287,7 +302,12 @@ class WorkflowStore:
             (*values, row.stage_id, row.rev),
         )
         if cursor.rowcount != 1:
-            raise Denied("state", f"stage {row.stage_id} changed while the request was running")
+            raise Denied(
+                "state",
+                f"stage {row.stage_id} changed while the request was running",
+                reason="stage_changed_concurrently",
+                params={"stage_id": row.stage_id},
+            )
         return self.stage(row.stage_id)
 
     def stages_of_round(self, round_id: str) -> tuple[StageRow, ...]:

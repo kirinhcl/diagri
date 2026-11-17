@@ -75,7 +75,6 @@ PENDING: set[str] = {
     "compute/service.py",
     "control/rights.py",
     "control/service.py",
-    "observer/alerts.py",
     "research/analysis.py",
     "research/holdout.py",
     "research/preregistration.py",
@@ -85,16 +84,7 @@ PENDING: set[str] = {
     "workbench/analysis.py",
     "workbench/api.py",
     "workbench/auth.py",
-    "workbench/compute.py",
-    "workbench/evidence.py",
-    "workbench/holdouts.py",
     "workbench/manual_tasks.py",
-    "workbench/reads.py",
-    "workbench/rounds.py",
-    "workflow/permissions.py",
-    "workflow/recovery.py",
-    "workflow/store.py",
-    "workflow/tasks.py",
 }
 
 

@@ -212,7 +212,12 @@ def _budget_view(budget: ProjectBudget | None, project_id: str) -> dict[str, Any
 def _stage(workflow: WorkflowService, stage_id: str) -> StageRow:
     row = workflow.store.find_stage(stage_id)
     if row is None:
-        raise Denied("state", f"unknown stage {stage_id}")
+        raise Denied(
+            "state",
+            f"unknown stage {stage_id}",
+            reason="record_not_found",
+            params={"record_kind": "stage", "record_id": stage_id},
+        )
     return row
 
 
@@ -319,7 +324,12 @@ def _project_routes(router, operator, workflow, tasks, budget) -> None:
     async def project(project_id: PathId, actor: Operator):
         detail = project_detail(workflow.store, project_id)
         if detail is None:
-            raise Denied("state", f"unknown project {project_id}")
+            raise Denied(
+                "state",
+                f"unknown project {project_id}",
+                reason="record_not_found",
+                params={"record_kind": "project", "record_id": project_id},
+            )
         listed = () if tasks is None else tasks.list(project_id)[:TASK_LIMIT]
         return {
             **detail,

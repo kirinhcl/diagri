@@ -52,6 +52,7 @@ _register(
     ("round_already_ended", ("round_id", "state")),
 )
 _register("state", ("unknown_choice", ("choice",)), action=False)
+
 _register(
     "approval_invalid",
     ("approval_blocking_findings", ("stage_id", "count")),
@@ -65,3 +66,35 @@ _register("safety_conflict", ("safety_conflict", ("stage_id",)))
 _register("interlock", ("pump_unconfirmed", ("device_id",)))
 _register("model_role", ("drafter_only", ("role",)), action=False)
 _register("scope", ("not_this_project", ("project_id",)))
+
+# --- task board, store, recovery, permissions, workbench reads and rounds, alerts --------------
+_register(
+    "state",
+    ("task_transition_not_allowed", ("task_id", "from_status", "to_status")),
+    ("task_end_needs_reason", ("task_id",)),
+    ("task_board_conflict", ("task_id", "parent_task_id")),
+    ("request_id_reused_for_other_goal", ("task_id", "request_id")),
+    ("report_not_published", ("round_id",)),
+    ("report_file_missing", ("round_id",)),
+    ("artifact_digest_mismatch", ("round_id", "artifact_id")),
+    ("round_not_in_project", ("round_id", "project_id")),
+    ("no_check_open", _STAGE),
+    ("archive_not_mounted", ()),
+)
+_register(
+    "budget",
+    ("budget_calls_exhausted", ("project_id",)),
+    ("budget_cost_exhausted", ("project_id",)),
+    ("budget_revision_limit", ("task_id", "max_revisions")),
+    ("delegation_depth_exceeded", ("task_id", "depth", "max_depth")),
+)
+_register("model_role", ("model_no_controls", ()), action=False)
+_register("not_operator", ("not_operator", ()))
+_register("reauth_required", ("reauth_required", ()))
+_register("scope", ("compute_task_unknown", ("task_id",)))
+_register(
+    "param",
+    ("id_length", ("max_length",)),
+    ("protocol_version_range", ("max_version",)),
+    ("numbers_not_finite", ("paths",)),
+)

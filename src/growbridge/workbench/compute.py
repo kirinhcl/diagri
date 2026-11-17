@@ -61,7 +61,12 @@ def add_compute_routes(
         try:
             tasks.get(task_id)
         except Denied:
-            raise Denied("scope", f"unknown task {task_id}") from None
+            raise Denied(
+                "scope",
+                f"unknown task {task_id}",
+                reason="compute_task_unknown",
+                params={"task_id": task_id},
+            ) from None
         compute.set_task_budget(task_id, body.cpu_hours, body.storage_gb)
         (row,) = [t for t in compute.overview()["tasks"] if t["task_id"] == task_id]
         return row

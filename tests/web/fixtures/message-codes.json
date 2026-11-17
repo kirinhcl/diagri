@@ -969,6 +969,155 @@
       ],
       "action": true,
       "of": "scope"
+    },
+    "task_transition_not_allowed": {
+      "params": [
+        "task_id",
+        "from_status",
+        "to_status"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "task_end_needs_reason": {
+      "params": [
+        "task_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "task_board_conflict": {
+      "params": [
+        "task_id",
+        "parent_task_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "request_id_reused_for_other_goal": {
+      "params": [
+        "task_id",
+        "request_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "report_not_published": {
+      "params": [
+        "round_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "report_file_missing": {
+      "params": [
+        "round_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "artifact_digest_mismatch": {
+      "params": [
+        "round_id",
+        "artifact_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "round_not_in_project": {
+      "params": [
+        "round_id",
+        "project_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "no_check_open": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "archive_not_mounted": {
+      "params": [],
+      "action": true,
+      "of": "state"
+    },
+    "budget_calls_exhausted": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "budget"
+    },
+    "budget_cost_exhausted": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "budget"
+    },
+    "budget_revision_limit": {
+      "params": [
+        "task_id",
+        "max_revisions"
+      ],
+      "action": true,
+      "of": "budget"
+    },
+    "delegation_depth_exceeded": {
+      "params": [
+        "task_id",
+        "depth",
+        "max_depth"
+      ],
+      "action": true,
+      "of": "budget"
+    },
+    "model_no_controls": {
+      "params": [],
+      "action": false,
+      "of": "model_role"
+    },
+    "not_operator": {
+      "params": [],
+      "action": true,
+      "of": "not_operator"
+    },
+    "reauth_required": {
+      "params": [],
+      "action": true,
+      "of": "reauth_required"
+    },
+    "compute_task_unknown": {
+      "params": [
+        "task_id"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "id_length": {
+      "params": [
+        "max_length"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "protocol_version_range": {
+      "params": [
+        "max_version"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "numbers_not_finite": {
+      "params": [
+        "paths"
+      ],
+      "action": true,
+      "of": "param"
     }
   }
 }
