@@ -89,4 +89,8 @@ export default {
   "protocol.form.newVersion": "A new version of a saved protocol: it is saved as version {version}. The number is set automatically.",
   "holdout.form.hint": "Held-out batches stay untouched: they are read only for the final check. Development batches are the ones you may look at and tune on.",
   "holdout.form.lineHint": "One per line, at most 50 lines.",
+  "protocol.form.saveAs": "Save as",
+  "protocol.form.saveAsNew": "A new protocol",
+  "protocol.form.saveAsItem": "A new version of {id} (now version {version})",
+  "protocol.form.versionTooLow": "Version {saved} of this protocol is already saved. Use version {next} or higher.",
 };

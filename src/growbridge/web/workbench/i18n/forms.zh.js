@@ -88,4 +88,8 @@ export default {
   "protocol.form.newVersion": "这是已保存协议的新版本，保存为第 {version} 版。版本号自动设定。",
   "holdout.form.hint": "“保留”的批次不会被动用，只在最后检验时读取；“开发”批次则可以查看和调参。",
   "holdout.form.lineHint": "每行一项，最多 50 行。",
+  "protocol.form.saveAs": "保存为",
+  "protocol.form.saveAsNew": "一份新协议",
+  "protocol.form.saveAsItem": "{id} 的新版本（现在是第 {version} 版）",
+  "protocol.form.versionTooLow": "这份协议已经保存到第 {saved} 版。请使用第 {next} 版或更高。",
 };

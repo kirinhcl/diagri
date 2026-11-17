@@ -185,6 +185,7 @@ export default {
   "project.holdouts.batches": "留出批次",
   "project.holdouts.development": "开发批次",
   "project.holdouts.fields": "结局字段",
+  "project.holdouts.json": "留出登记（JSON）",
   "project.holdouts.reads": "读取次数",
   "project.holdouts.register": "登记留出批次",
   "project.holdouts.saved": "已登记留出批次",

@@ -185,6 +185,7 @@ export default {
   "project.holdouts.batches": "Held-out batches",
   "project.holdouts.development": "Development batches",
   "project.holdouts.fields": "Outcome fields",
+  "project.holdouts.json": "Holdout (JSON)",
   "project.holdouts.reads": "Reads",
   "project.holdouts.register": "Register holdout",
   "project.holdouts.saved": "Holdout registered",

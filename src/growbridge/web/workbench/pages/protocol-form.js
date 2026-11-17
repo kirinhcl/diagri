@@ -1,12 +1,12 @@
 // The research protocol as a form: the question, the treatments and allocations as rows, the analysis plan as fields.
 // It never invents science: allocations start empty, the control and every allocation are chosen from the treatment
 // rows, and the id and version are worked out, never typed. It builds exactly the object the JSON fold would send.
+import { ApiError } from "../api.js";
 import codes from "../i18n/codes.en.js";
 import { h } from "../ui/dom.js";
 import { linesField, rowGroup } from "../ui/field-forms.js";
 import { convert, fieldRow, initialText, placeFieldErrors, simpleForm } from "../ui/forms.js";
 
-const MAX_ID_CHARS = 100;
 const DEFAULT_MISSING = 0.2;
 const DEFAULT_DEVIATION = 0.1;
 const FIXED_METHODS = ["paired_block", "two_group"];
@@ -21,12 +21,6 @@ const encode = encodeURIComponent;
 const trimmed = (text, t) => {
   const value = text.trim();
   return value ? { value } : { error: t("form.required") };
-};
-
-const code = (text, t) => {
-  const result = trimmed(text, t);
-  if (result.error || result.value.length <= MAX_ID_CHARS) return result;
-  return { error: t("form.tooLong", { max: MAX_ID_CHARS }) };
 };
 
 const whole = (min) => (text, t) => {
@@ -91,7 +85,8 @@ function fieldsPart({ ctx, name, label, fields, nest = false }) {
 // --- the sections ------------------------------------------------------------------------------
 
 function basicFields(t) {
-  const text = (name, label, extra = {}) => ({ name, label, required: true, maxlength: MAX_ID_CHARS, parse: trimmed, ...extra });
+  // The server asks nothing of the crop, batch and unit text, so neither does the form.
+  const text = (name, label, extra = {}) => ({ name, label, ...extra });
   return [
     { name: "question", label: t("protocol.form.question"), hint: t("protocol.form.questionHint"), type: "textarea", required: true, parse: trimmed },
     { name: "hypothesis", label: t("protocol.form.hypothesis"), type: "textarea" },
@@ -99,7 +94,7 @@ function basicFields(t) {
     text("batch", t("protocol.form.batch")),
     text("experimental_unit", t("protocol.form.unit"), { value: "tent" }),
     { name: "randomization_seed", label: t("protocol.form.seed"), hint: t("protocol.form.seedHint"), type: "number", step: 1, required: true, parse: whole(-Number.MAX_SAFE_INTEGER) },
-    linesField({ name: "stages", label: t("protocol.form.stages"), hint: t("protocol.form.stagesHint"), required: true }),
+    linesField({ name: "stages", label: t("protocol.form.stages"), hint: t("protocol.form.stagesHint") }),
     { name: "rounds", label: t("protocol.form.rounds"), type: "number", step: 1, required: true, parse: whole(1) },
     { name: "blocks", label: t("protocol.form.blocks"), type: "number", step: 1, required: true, parse: whole(1) },
   ];
@@ -107,7 +102,7 @@ function basicFields(t) {
 
 function treatmentFields(t) {
   return [
-    { name: "id", label: t("protocol.form.tid"), hint: t("protocol.form.tidHint"), required: true, parse: code },
+    { name: "id", label: t("protocol.form.tid"), hint: t("protocol.form.tidHint"), required: true, parse: trimmed },
     { name: "name", label: t("protocol.form.tname"), required: true, parse: trimmed },
     { name: "description", label: t("protocol.form.tdesc") },
     { name: "factors", label: t("protocol.form.tfactors"), hint: t("protocol.form.tfactorsHint"), type: "textarea", parse: factors },
@@ -165,11 +160,11 @@ export function buildProtocol(projectId, values, id, version) {
     version,
     question: values.question,
     hypothesis: values.hypothesis ?? "",
-    crop: values.crop,
-    batch: values.batch,
+    crop: values.crop ?? "",
+    batch: values.batch ?? "",
     treatments: values.treatments.map((row) => ({ id: row.id, name: row.name, description: row.description ?? "", factors: row.factors ?? {} })),
     control_treatment_id: values.control_treatment_id,
-    allocations: values.allocations.map((row) => ({ round: row.round, block: row.block, unit: row.unit, treatment_id: row.treatment_id })),
+    allocations: values.allocations.map((row) => ({ round: row.round, block: row.block, unit: row.unit ?? "", treatment_id: row.treatment_id })),
     randomization_seed: values.randomization_seed,
     analysis: {
       primary_endpoint: analysis.primary_endpoint,
@@ -179,10 +174,10 @@ export function buildProtocol(projectId, values, id, version) {
       max_missing_fraction: analysis.max_missing_fraction,
       max_deviation_fraction: analysis.max_deviation_fraction,
     },
-    stages: values.stages,
+    stages: values.stages ?? [],
     rounds: values.rounds,
     blocks: values.blocks,
-    experimental_unit: values.experimental_unit,
+    experimental_unit: values.experimental_unit ?? "tent",
   };
 }
 
@@ -224,8 +219,33 @@ const versionNote = (ctx, rows, id) => {
   return ctx.t(version === 1 ? "protocol.form.newProtocol" : "protocol.form.newVersion", { version });
 };
 
+// "A new protocol", or one of the saved protocols (then the form saves its next version).
+function saveAsField(ctx, rows, protocolId) {
+  const saved = unique(rows.map((row) => row.protocol_id));
+  const options = saved.map((id) => ({ value: id, label: ctx.t("protocol.form.saveAsItem", { id, version: nextVersion(rows, id) - 1 }) }));
+  return { name: "save_as", label: ctx.t("protocol.form.saveAs"), type: "select", value: protocolId, options: [{ value: "", label: ctx.t("protocol.form.saveAsNew") }, ...options] };
+}
+
+// The skeleton the JSON fold starts from: only what is not the operator's to decide is filled (the id, version 1, the server's own defaults).
+export function protocolSkeleton(projectId, rows) {
+  return {
+    id: newProtocolId(projectId, rows), project_id: projectId, version: 1, question: "", hypothesis: "", crop: "", batch: "",
+    treatments: [], control_treatment_id: "", allocations: [], randomization_seed: null,
+    analysis: { primary_endpoint: "", target_effect: null, method: "", exclusion_rules: [], max_missing_fraction: DEFAULT_MISSING, max_deviation_fraction: DEFAULT_DEVIATION },
+    stages: [], rounds: null, blocks: null, experimental_unit: "tent",
+  };
+}
+
+// protocols[] of a fresh project read: the JSON fold may only save a version above the saved ones of its id.
+export function versionRefusal(ctx, rows, protocol) {
+  const saved = nextVersion(rows, protocol?.id) - 1;
+  const version = protocol?.version;
+  if (typeof version !== "number" || saved === 0 || version > saved) return null;
+  return new ApiError(0, "not_approved", ctx.t("protocol.form.versionTooLow", { saved, next: saved + 1 }));
+}
+
 // project: the project read (its protocols[] rows have protocol_id, version, primary_endpoint, method).
-// protocolId: save as another version of this saved protocol; left out, the protocol is a new one.
+// protocolId: the saved protocol the "Save as" choice starts on; left out, the protocol is a new one.
 // onSubmit({protocol}) sends it. The version is worked out when the form is sent, from a fresh read of the project.
 export function protocolForm(ctx, { project, onSubmit, protocolId }) {
   const { t } = ctx;
@@ -243,7 +263,7 @@ export function protocolForm(ctx, { project, onSubmit, protocolId }) {
     fields: [
       { name: "round", label: t("protocol.form.round"), type: "number", step: 1, required: true, parse: whole(1) },
       { name: "block", label: t("protocol.form.block"), type: "number", step: 1, required: true, parse: whole(1) },
-      { name: "unit", label: t("protocol.form.allocUnit"), required: true, parse: code },
+      { name: "unit", label: t("protocol.form.allocUnit") },
       choice("treatment_id", t("protocol.form.allocTreatment")),
     ],
   });
@@ -258,14 +278,20 @@ export function protocolForm(ctx, { project, onSubmit, protocolId }) {
   const send = async (values) => {
     const fresh = await ctx.api.get(`/projects/${encode(project.project_id)}`);
     const rows = array(fresh && fresh.protocols);
-    const id = protocolId || newProtocolId(project.project_id, rows);
+    const id = values.save_as || newProtocolId(project.project_id, rows);
     note.textContent = versionNote(ctx, rows, id);
     await onSubmit({ protocol: buildProtocol(project.project_id, values, id, nextVersion(rows, id)) });
   };
   const form = simpleForm({
-    fields: basicFields(t), parts: [treatments, control, allocations, analysis], ctx, onSubmit: send,
+    fields: [saveAsField(ctx, array(project.protocols), protocolId), ...basicFields(t)], parts: [treatments, control, allocations, analysis], ctx, onSubmit: send,
     draftKey: `protocol:${project.project_id}-form`, submitLabel: t("project.protocols.save"),
   });
-  const note = h("p", { class: "note", text: versionNote(ctx, array(project.protocols), protocolId || newProtocolId(project.project_id, array(project.protocols))) });
+  const rows = array(project.protocols);
+  const select = namedInputs(form, "save_as")[0];
+  const shown = () => versionNote(ctx, rows, select.value || newProtocolId(project.project_id, rows));
+  const note = h("p", { class: "note", text: shown() });
+  select.addEventListener("change", () => {
+    note.textContent = shown();
+  });
   return h("div", { class: "protocol-form" }, note, h("p", { class: "note", text: t("protocol.form.allocationsLead") }), form);
 }

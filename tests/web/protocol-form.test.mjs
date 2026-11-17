@@ -6,10 +6,10 @@ import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import { protocolForm } from "../../src/growbridge/web/workbench/pages/protocol-form.js";
 import { holdoutEditor } from "../../src/growbridge/web/workbench/pages/project-forms.js";
-import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { bindFormContext, formControls, saveAllDrafts } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { assertNoPendingDialogAnswers, resetDialogs } from "./support/dialogs.mjs";
 import { visibleText } from "./support/leaks.mjs";
-import { FIXTURES, testCtx } from "./support/render-page.mjs";
+import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
 
 afterEach(() => {
   assertNoPendingDialogAnswers();
@@ -268,4 +268,130 @@ test("each holdout list needs 1 to 50 items of at most 100 characters", async ()
   formControls(form).set({ batch_ids: ["ok"] });
   await submit(form);
   assert.equal(ctx.api.calls.filter((call) => call.method === "POST").length, 1);
+});
+
+// --- choosing a saved protocol, the JSON fold, the holdout fold ----------------------------------------
+
+const sectionOf = (element, title) => byTag(element, "section").find((node) => byTag(node, "h2")[0]?.textContent === title);
+const foldOf = (node) => byTag(node, "details").find((el) => byTag(el, "summary")[0]?.textContent === en["forms.advanced"]);
+const posts = (ctx, path) => ctx.api.calls.filter((call) => call.method === "POST" && call.path === path);
+
+test("saving as a saved protocol sends its id with the next version, through the page", async () => {
+  const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang: "en" });
+  const section = sectionOf(element, en["project.protocols.title"]);
+  const form = byTag(section, "form")[0];
+  const choose = named(form, "save_as")[0];
+  assert.deepEqual(optionsOf(choose), ["", "protocol-lettuce-light"]);
+  assert.equal(choose.value, "", "it starts on a new protocol");
+  assert.ok(visibleText(section).includes(en["protocol.form.saveAsNew"]));
+  change(choose, "protocol-lettuce-light");
+  assert.match(visibleText(section), /saved as version 2/);
+  fill(form);
+  await submit(form);
+  const [post] = posts(ctx, "/protocols");
+  assert.equal(post.body.protocol.id, "protocol-lettuce-light");
+  assert.equal(post.body.protocol.version, 2);
+});
+
+test("a new protocol is the default choice and gets a new id at version 1", async () => {
+  const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang: "en" });
+  const form = byTag(sectionOf(element, en["project.protocols.title"]), "form")[0];
+  fill(form);
+  await submit(form);
+  const [post] = posts(ctx, "/protocols");
+  assert.equal(post.body.protocol.id, `protocol-2-${TAIL}`);
+  assert.equal(post.body.protocol.version, 1);
+});
+
+test("the JSON fold starts from an empty skeleton and invents nothing", async () => {
+  const { element } = await renderPage("project", { projectId: PROJECT.project_id }, { lang: "en" });
+  const fold = foldOf(sectionOf(element, en["project.protocols.title"]));
+  const value = JSON.parse(byTag(fold, "textarea")[0].value);
+  assert.deepEqual(value.allocations, []);
+  assert.deepEqual(value.treatments, []);
+  assert.deepEqual(value.stages, []);
+  for (const key of ["crop", "batch", "question", "hypothesis"]) assert.equal(value[key], "", key);
+  for (const key of ["randomization_seed", "rounds", "blocks"]) assert.equal(value[key], null, key);
+  assert.equal(value.analysis.target_effect, null);
+  assert.equal(value.version, 1);
+  assert.equal(value.id, `protocol-2-${TAIL}`);
+});
+
+test("the JSON fold refuses a version that is not above the saved ones, before sending", async () => {
+  const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang: "en" });
+  const fold = foldOf(sectionOf(element, en["project.protocols.title"]));
+  const jsonForm = byTag(fold, "form")[0];
+  const area = byTag(fold, "textarea")[0];
+  const edited = (version) => JSON.stringify({ ...JSON.parse(area.value), id: "protocol-lettuce-light", version });
+  area.value = edited(1);
+  await submit(jsonForm);
+  assert.equal(posts(ctx, "/protocols").length, 0);
+  assert.ok(visibleText(jsonForm).includes("Version 1 of this protocol is already saved. Use version 2 or higher."), visibleText(jsonForm));
+  area.value = edited(2);
+  await submit(jsonForm);
+  assert.equal(posts(ctx, "/protocols").length, 1);
+});
+
+test("the holdout fold keeps an Advanced (JSON) editor that posts the same body", async () => {
+  const { ctx, fold } = holdoutForm();
+  const advanced = foldOf(fold);
+  assert.ok(advanced);
+  const area = byTag(advanced, "textarea")[0];
+  assert.deepEqual(JSON.parse(area.value), { project_id: PROJECT.project_id, batch_ids: [], development_batch_ids: [], outcome_fields: [] });
+  area.value = JSON.stringify({ project_id: PROJECT.project_id, batch_ids: ["b"], development_batch_ids: ["d"], outcome_fields: ["f"] });
+  await submit(byTag(advanced, "form")[0]);
+  assert.deepEqual(posts(ctx, "/holdouts")[0].body, { project_id: PROJECT.project_id, batch_ids: ["b"], development_batch_ids: ["d"], outcome_fields: ["f"] });
+});
+
+test("the form asks no more than the server: blank crop, batch, unit and stages go through", async () => {
+  const { form, sent } = await open();
+  fill(form);
+  formControls(form).set({ crop: "", batch: "", experimental_unit: "", stages: [] });
+  await submit(form);
+  assert.equal(sent.length, 1, errorsIn(form).join(","));
+  const { protocol } = sent[0];
+  assert.deepEqual([protocol.crop, protocol.batch, protocol.stages, protocol.experimental_unit], ["", "", [], "tent"]);
+  formControls(form).set({ crop: "c".repeat(300) });
+  await submit(form);
+  assert.equal(sent.length, 2);
+});
+
+// --- the choices follow the treatment rows ---------------------------------------------------------
+
+test("allocation choices follow a treatment rename and clear when it is removed", async () => {
+  const { form } = await open();
+  fill(form);
+  const [treatments, allocations] = groups(form);
+  const picked = () => rowsOf(allocations).map((row) => named(row, "treatment_id")[0].value);
+  assert.deepEqual(picked(), ["high", "control"]);
+  change(named(rowsOf(treatments)[1], "id")[0], "strong");
+  assert.deepEqual(picked(), ["strong", "control"]);
+  assert.deepEqual(optionsOf(named(rowsOf(allocations)[0], "treatment_id")[0]), ["", "control", "strong"]);
+  byTag(rowsOf(treatments)[0], "button").at(-1).dispatchEvent(new Event("click"));
+  assert.deepEqual(picked(), ["strong", ""]);
+  assert.equal(named(form, "control_treatment_id")[0].value, "");
+});
+
+test("a kept draft brings back the rows first, then the control and allocation choices", async () => {
+  const first = await open();
+  fill(first.form);
+  document.body.append(first.element); // only a form on the page is kept
+  saveAllDrafts();
+  const again = await open();
+  const [treatments, allocations] = groups(again.form);
+  assert.deepEqual(rowsOf(treatments).map((row) => named(row, "id")[0].value), ["control", "high"]);
+  assert.equal(named(again.form, "control_treatment_id")[0].value, "control");
+  assert.deepEqual(rowsOf(allocations).map((row) => named(row, "treatment_id")[0].value), ["high", "control"]);
+  assert.deepEqual(optionsOf(named(again.form, "control_treatment_id")[0]), ["", "control", "high"]);
+});
+
+test("a treatment code typed twice is refused beside the second row", async () => {
+  const { form, sent } = await open();
+  fill(form);
+  const [treatments] = groups(form);
+  change(named(rowsOf(treatments)[1], "id")[0], "control");
+  await submit(form);
+  assert.equal(sent.length, 0);
+  assert.deepEqual(errorsIn(rowsOf(treatments)[0]), []);
+  assert.deepEqual(errorsIn(rowsOf(treatments)[1]), [en["protocol.form.tidTwice"]]);
 });
