@@ -153,7 +153,7 @@ def test_freezing_after_a_stage_started_is_refused_and_says_why(seeded, operator
     late = freeze(seeded, operator)
 
     assert late.status_code == 409 and detail(late)["code"] == "state"
-    assert "6.5" in detail(late)["message"]
+    assert "has already started" in detail(late)["message"]
     assert seeded.runner.frozen_info(latest(seeded)) is None
 
 

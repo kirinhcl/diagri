@@ -232,3 +232,52 @@ _register(
     ("quota_retry_limit", ("max_retries",)),
 )
 _register("member", ("member", ()))
+
+# --- research: analysis, holdout, pre-registration, sandbox, snapshots ------------------------
+_register(
+    "param",
+    ("script_not_text", ()),
+    ("script_empty", ()),
+    ("script_too_long", ("max_length",)),
+    ("script_syntax", ("detail",)),
+    ("outcome_fields_invalid", ()),
+)
+_register(
+    "snapshot_incomplete",
+    ("snapshot_not_complete", ("snapshot_id",)),
+    ("snapshot_manifest_changed", ("snapshot_id",)),
+    ("snapshot_files_mismatch", ("snapshot_id",)),
+    ("snapshot_file_changed", ("snapshot_id", "file")),
+)
+_register(
+    "script_hash",
+    ("script_not_protocol_script", ("protocol_id",)),
+    ("script_other_frozen", ("protocol_id",)),
+)
+_register("script_hash", ("script_not_frozen_script", ("protocol_id",)), action=False)
+_register("already_run", ("already_run", ()))
+_register(
+    "state",
+    ("analysis_freeze_too_late", ("protocol_id", "version")),
+    ("analysis_script_not_frozen", ("protocol_id", "version")),
+    ("analysis_workdir_unwritable", ()),
+    ("snapshot_invalidated", ("snapshot_id",)),
+    ("snapshot_predates_freeze", ("snapshot_id",)),
+    ("holdout_outcomes_exist", ("project_id",)),
+    ("holdout_already_registered", ("holdout_id",)),
+)
+_register(
+    "batches",
+    ("batches_no_holdout", ()),
+    ("batches_too_few_development", ("min_batches",)),
+    ("batches_overlap", ()),
+)
+_register(
+    "scope",
+    ("not_this_protocol", ("protocol_id",)),
+    ("mixed_protocol", ()),
+    ("holdout_rows", ("project_id",)),  # the plan names holdout_id; the site holds only the project
+)
+_register("model_unregistered", ("model_unregistered", ()), action=False)
+_register("sandbox_unavailable", ("sandbox_unavailable", ()))
+_register("clock_unsynced", ("clock_unsynced", ()))

@@ -1707,6 +1707,190 @@
       "params": [],
       "action": true,
       "of": "member"
+    },
+    "script_not_text": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "script_empty": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "script_too_long": {
+      "params": [
+        "max_length"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "script_syntax": {
+      "params": [
+        "detail"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "outcome_fields_invalid": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "snapshot_not_complete": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": true,
+      "of": "snapshot_incomplete"
+    },
+    "snapshot_manifest_changed": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": true,
+      "of": "snapshot_incomplete"
+    },
+    "snapshot_files_mismatch": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": true,
+      "of": "snapshot_incomplete"
+    },
+    "snapshot_file_changed": {
+      "params": [
+        "snapshot_id",
+        "file"
+      ],
+      "action": true,
+      "of": "snapshot_incomplete"
+    },
+    "script_not_protocol_script": {
+      "params": [
+        "protocol_id"
+      ],
+      "action": true,
+      "of": "script_hash"
+    },
+    "script_other_frozen": {
+      "params": [
+        "protocol_id"
+      ],
+      "action": true,
+      "of": "script_hash"
+    },
+    "script_not_frozen_script": {
+      "params": [
+        "protocol_id"
+      ],
+      "action": false,
+      "of": "script_hash"
+    },
+    "already_run": {
+      "params": [],
+      "action": true,
+      "of": "already_run"
+    },
+    "analysis_freeze_too_late": {
+      "params": [
+        "protocol_id",
+        "version"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "analysis_script_not_frozen": {
+      "params": [
+        "protocol_id",
+        "version"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "analysis_workdir_unwritable": {
+      "params": [],
+      "action": true,
+      "of": "state"
+    },
+    "snapshot_invalidated": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "snapshot_predates_freeze": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "holdout_outcomes_exist": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "holdout_already_registered": {
+      "params": [
+        "holdout_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "batches_no_holdout": {
+      "params": [],
+      "action": true,
+      "of": "batches"
+    },
+    "batches_too_few_development": {
+      "params": [
+        "min_batches"
+      ],
+      "action": true,
+      "of": "batches"
+    },
+    "batches_overlap": {
+      "params": [],
+      "action": true,
+      "of": "batches"
+    },
+    "not_this_protocol": {
+      "params": [
+        "protocol_id"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "mixed_protocol": {
+      "params": [],
+      "action": true,
+      "of": "scope"
+    },
+    "holdout_rows": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "model_unregistered": {
+      "params": [],
+      "action": false,
+      "of": "model_unregistered"
+    },
+    "sandbox_unavailable": {
+      "params": [],
+      "action": true,
+      "of": "sandbox_unavailable"
+    },
+    "clock_unsynced": {
+      "params": [],
+      "action": true,
+      "of": "clock_unsynced"
     }
   }
 }

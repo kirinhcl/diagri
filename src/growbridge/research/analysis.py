@@ -149,19 +149,36 @@ def _script_text(content: bytes) -> None:
     try:
         text = content.decode("utf-8")
     except UnicodeDecodeError:
-        raise Denied("param", "the analysis script must be UTF-8 text") from None
+        raise Denied(
+            "param", "the analysis script must be UTF-8 text", reason="script_not_text", params={}
+        ) from None
     if not text.strip():
-        raise Denied("param", "the analysis script is empty")
+        raise Denied("param", "the analysis script is empty", reason="script_empty", params={})
     if len(text) > MAX_SCRIPT_CHARS:
-        raise Denied("param", f"the analysis script is longer than {MAX_SCRIPT_CHARS} characters")
+        raise Denied(
+            "param",
+            f"the analysis script is longer than {MAX_SCRIPT_CHARS} characters",
+            reason="script_too_long",
+            params={"max_length": MAX_SCRIPT_CHARS},
+        )
     # Frozen means final: a script that cannot even compile would burn the only attempt.
     # It is compiled here, never executed.
     try:
         compile(text, "analysis.py", "exec")
     except SyntaxError as error:
-        raise Denied("param", f"the analysis script has a syntax error: {error}") from None
+        raise Denied(
+            "param",
+            f"the analysis script has a syntax error: {error}",
+            reason="script_syntax",
+            params={"detail": str(error)},
+        ) from None
     except (ValueError, RecursionError, MemoryError) as error:
-        raise Denied("param", f"the analysis script cannot be compiled: {error}") from None
+        raise Denied(
+            "param",
+            f"the analysis script cannot be compiled: {error}",
+            reason="script_syntax",
+            params={"detail": str(error)},
+        ) from None
 
 
 class ConfirmatoryRunner:
@@ -192,11 +209,21 @@ class ConfirmatoryRunner:
         sha = hashlib.sha256(content).hexdigest()
         declared = protocol.analysis.script_sha256
         if declared is not None and declared != sha:
-            raise Denied("script_hash", "script differs from the hash in the protocol")
+            raise Denied(
+                "script_hash",
+                "script differs from the hash in the protocol",
+                reason="script_not_protocol_script",
+                params={"protocol_id": protocol.id},
+            )
         with self.db.transaction():
             frozen = self._frozen(protocol)
             if frozen is not None and frozen != sha:
-                raise Denied("script_hash", "a different script is already frozen")
+                raise Denied(
+                    "script_hash",
+                    "a different script is already frozen",
+                    reason="script_other_frozen",
+                    params={"protocol_id": protocol.id},
+                )
             if frozen is None:
                 self.db.execute(
                     "INSERT INTO research_scripts(protocol_id, protocol_version, script_sha256, "
@@ -325,7 +352,12 @@ class ConfirmatoryRunner:
         """
         stored = self.frozen_script(protocol)
         if stored is None:
-            raise Denied("state", "no analysis script is frozen for this protocol version")
+            raise Denied(
+                "state",
+                "no analysis script is frozen for this protocol version",
+                reason="analysis_script_not_frozen",
+                params={"protocol_id": protocol.id, "version": protocol.version},
+            )
         self._matches_frozen(protocol, stored[1])
         await asyncio.to_thread(_verify, snapshot, snapshot_dir, admit)
         started = self._begin(protocol, snapshot, stored[1], actor_id)
@@ -345,7 +377,12 @@ class ConfirmatoryRunner:
     def _matches_frozen(self, protocol: ResearchProtocol, content: bytes) -> None:
         # Hash and execute the same bytes: the copy written by ``_begin`` is what the sandbox runs.
         if self._frozen(protocol) != hashlib.sha256(content).hexdigest():
-            raise Denied("script_hash", "script does not match the frozen analysis")
+            raise Denied(
+                "script_hash",
+                "script does not match the frozen analysis",
+                reason="script_not_frozen_script",
+                params={"protocol_id": protocol.id},
+            )
 
     def _begin(
         self, protocol: ResearchProtocol, snapshot: Snapshot, content: bytes, actor_id: str
@@ -361,7 +398,12 @@ class ConfirmatoryRunner:
         except OSError as error:
             LOG.error("cannot prepare the run folder %s", folder, exc_info=error)
             shutil.rmtree(folder, ignore_errors=True)
-            raise Denied("state", "the analysis work folder cannot be written") from None
+            raise Denied(
+                "state",
+                "the analysis work folder cannot be written",
+                reason="analysis_workdir_unwritable",
+                params={},
+            ) from None
         started = self.clock.now()
         sha = hashlib.sha256(content).hexdigest()
         try:
@@ -425,7 +467,12 @@ class ConfirmatoryRunner:
                 (run_id, protocol.id, protocol.version, snapshot.id, sha, at, actor_id or None),
             )
         except sqlite3.IntegrityError:
-            raise Denied("already_run", "this snapshot was already analysed") from None
+            raise Denied(
+                "already_run",
+                "this snapshot was already analysed",
+                reason="already_run",
+                params={},
+            ) from None
 
 
 def _verify(snapshot: Snapshot, snapshot_dir: Path, admit: Callable[[], None] | None) -> None:
@@ -438,19 +485,39 @@ def _verify(snapshot: Snapshot, snapshot_dir: Path, admit: Callable[[], None] | 
 def _check_snapshot(snapshot: Snapshot, snapshot_dir: Path) -> None:
     """Trust the directory, not the object: manifest and every file are re-hashed."""
     if not snapshot.complete:
-        raise Denied("snapshot_incomplete", "snapshot is marked incomplete")
+        raise Denied(
+            "snapshot_incomplete",
+            "snapshot is marked incomplete",
+            reason="snapshot_not_complete",
+            params={"snapshot_id": snapshot.id},
+        )
     root = snapshot_dir.resolve()
     manifest = root / MANIFEST
     if not manifest.is_file() or file_digest(manifest) != snapshot.manifest_sha256:
-        raise Denied("snapshot_incomplete", "snapshot manifest differs from its recorded digest")
+        raise Denied(
+            "snapshot_incomplete",
+            "snapshot manifest differs from its recorded digest",
+            reason="snapshot_manifest_changed",
+            params={"snapshot_id": snapshot.id},
+        )
     present = {
         path.relative_to(root).as_posix()
         for path in root.rglob("*")
         if path.is_file() and path != manifest
     }
     if present != set(snapshot.files):
-        raise Denied("snapshot_incomplete", "snapshot directory and manifest list different files")
+        raise Denied(
+            "snapshot_incomplete",
+            "snapshot directory and manifest list different files",
+            reason="snapshot_files_mismatch",
+            params={"snapshot_id": snapshot.id},
+        )
     for relative, expected in snapshot.files.items():
         path = (root / relative).resolve()
         if not path.is_relative_to(root) or file_digest(path) != expected:
-            raise Denied("snapshot_incomplete", f"snapshot file differs from manifest: {relative}")
+            raise Denied(
+                "snapshot_incomplete",
+                f"snapshot file differs from manifest: {relative}",
+                reason="snapshot_file_changed",
+                params={"snapshot_id": snapshot.id, "file": relative},
+            )
