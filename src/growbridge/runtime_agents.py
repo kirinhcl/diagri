@@ -75,12 +75,11 @@ def make_dispatcher(runtime: Any, client: ModelClient, work_root: Path) -> Dispa
     args = (client, roles, tools, runtime.tasks, runtime.budget, runtime.clock)
     timezone = runtime.settings.report_timezone
 
-    memory = memory_sources(runtime)
-
     def context(task):
         base = project_context(runtime.workflow, runtime.control, timezone, task)
         shown = {item["round_id"] for item in base["rounds"]}
-        return {**base, "history": build_history(memory, task.project_id, shown)}
+        history = build_history(memory_sources(runtime), task.project_id, shown)
+        return {**base, "history": history}
 
     conversation = getattr(runtime, "conversation", None)
     return Dispatcher(*args, runtime.agents_db, context=context, conversation=conversation)
