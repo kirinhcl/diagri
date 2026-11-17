@@ -20,9 +20,9 @@ export function linesField({ name, label, hint, value, maxItems, maxItemLength, 
 
 // Rows of the same fields, usable as one of simpleForm's `parts`: values() gives {[name]: one object
 // per row}, or null (errors shown beside the fields) when a row is not valid; rows() gives the
-// bare array. onRow(entries) runs for each new row (to link its fields to each other). placeErrors(problems, ctx) puts the 422 problems under
+// bare array. onRow(entries) runs for each new row (to link its fields to each other); crossCheck(rows) may refuse rows by what the other rows hold. placeErrors(problems, ctx) puts the 422 problems under
 // <name>.<row index>.<field> beside that row's field and returns the problems it did not place.
-export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity, onRow }) {
+export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity, onRow, crossCheck }) {
   const zone = (ctx.me && ctx.me.timezone) || "UTC";
   const holder = h("div", { class: "row-group-rows" });
   const addButton = h("button", { class: "button", attrs: { type: "button" }, text: addLabel, on: { click: () => addRow({}) } });
@@ -59,7 +59,14 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
       for (const entry of item.entries) setFieldError(entry, "");
       return convert(item.entries, zone, ctx.t);
     });
-    return all.every(Boolean) ? all : null;
+    if (!all.every(Boolean)) return null;
+    // crossCheck(rows) -> [{row, field, error}]: refusals that depend on other rows, shown beside that row's field.
+    const refused = (crossCheck ? crossCheck(all) : []).filter(({ row, field, error }) => {
+      const entry = items[row]?.entries.find((candidate) => candidate.field.name === field);
+      if (entry) setFieldError(entry, error);
+      return Boolean(entry);
+    });
+    return refused.length ? null : all;
   };
   const placeErrors = (problems) => problems.filter((problem) => !placeInRow(problem));
   function placeInRow(problem) {

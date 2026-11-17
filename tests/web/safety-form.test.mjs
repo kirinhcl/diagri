@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
+import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
 import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
-import { visibleText } from "./support/leaks.mjs";
+import { findLeaks, visibleText } from "./support/leaks.mjs";
+import { saveAllDrafts } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { FIXTURES, renderPage } from "./support/render-page.mjs";
 
 afterEach(() => {
@@ -38,7 +40,7 @@ const change = (input, value) => {
 };
 const post = (ctx) => ctx.api.calls.find((call) => call.method === "POST");
 const errorsIn = (node) => byClass(node, "field-error").map((error) => error.textContent).filter(Boolean);
-const DEFAULTS = /(?<![\d.])(35|120|600)(?![\d.])/;
+const DEFAULTS = /(?<![\d.])(35|60|120|240|600)(?![\d.])/;
 
 // One filled rule on a new row: humidity below 30 for 10 s, valid 20 s, fan to the given level.
 function fillRow(row, { level = "3", id = "" } = {}) {
@@ -98,14 +100,15 @@ test("the form builds the same config the JSON editor would send, and the approv
   await submit(form);
   const [dialog] = openDialogs();
   assert.ok(dialog, "the approval dialog opened");
-  assert.match(dialog.textContent, /version: 1 → 2/);
-  assert.match(dialog.textContent, /humi-fan-2/);
+  assert.match(dialog.textContent, /Version: 1 → 2/);
+  assert.match(dialog.textContent, /Rule added: Humidity below 30/);
+  assert.doesNotMatch(dialog.textContent, /[{}"\[]|humi-fan/, "no raw JSON or path in the dialog");
   answerNextDialog(true);
   await settle();
   const approved = FIXTURES["safety.json"].safety;
   const { approved_by: _by, approved_at: _at, ...kept } = approved;
   const added = {
-    id: "humi-fan-2", sensor: "humi", unit: "%", validity_seconds: 20, trigger: { op: "<", value: 30 }, duration_seconds: 10, action: { channel: "fan", level: 3 },
+    id: "humi-fan-1", sensor: "humi", unit: "%", validity_seconds: 20, trigger: { op: "<", value: 30 }, duration_seconds: 10, action: { channel: "fan", level: 3 },
   };
   const sent = post(ctx);
   assert.equal(sent.path, "/safety/approve");
@@ -119,6 +122,8 @@ test("cancelling the approval sends nothing", async () => {
   answerNextDialog(false);
   await settle();
   assert.equal(post(ctx), undefined);
+  assert.equal(byClass(element, "form-status")[0].textContent, "", "a plain cancel says nothing");
+  assert.ok(!byTag(formOf(element), "button").at(-1).disabled, "the button is usable again");
 });
 
 test("a level outside the channel's range is refused beside the field", async () => {
@@ -211,4 +216,119 @@ test("the JSON editor sits closed in an Advanced (JSON) fold and sends through t
   answerNextDialog(true);
   await settle();
   assert.equal(post(ctx).body.config.version, 5);
+});
+
+const approvedWith = (rules) => ({ "safety.json": { safety: { ...FIXTURES["safety.json"].safety, rules } } });
+const rule = (id, sensor, channel) => ({
+  id, sensor, unit: sensor === "temp" ? "C" : "%", validity_seconds: 20, trigger: { op: ">", value: 40 }, duration_seconds: 30, action: { channel, level: 1 },
+});
+const removeRow = (row) => byTag(row, "button").at(-1).dispatchEvent(new Event("click"));
+const approveNow = async (form) => {
+  await submit(form);
+  answerNextDialog(true);
+  await settle();
+};
+
+test("two approvals in a row never send the same version", async () => {
+  const { element, ctx } = await open();
+  let approved = FIXTURES["safety.json"].safety;
+  const read = ctx.api.get;
+  const write = ctx.api.post;
+  ctx.api.get = async (path) => (path === "/safety" ? { safety: structuredClone(approved) } : read(path));
+  ctx.api.post = async (path, body, options) => {
+    approved = { ...body.config, approved_by: "dev", approved_at: 1794800000 };
+    return write(path, body, options);
+  };
+  const form = formOf(element);
+  change(named(form, "temp")[0], "100");
+  await approveNow(form);
+  change(named(form, "temp")[0], "110");
+  await approveNow(form);
+  const [first, second] = ctx.api.calls.filter((call) => call.method === "POST");
+  assert.equal(first.body.config.version, 2);
+  assert.equal(second.body.config.version, 3);
+  assert.match(visibleText(element), /Version 4/, "the shown version follows the approved set");
+});
+
+test("submitting from nothing approved sends version 1 with only the limits that were typed", async () => {
+  const { element, ctx } = await open(NONE);
+  const form = formOf(element);
+  change(named(form, "max_gap_seconds")[0], "30");
+  await approveNow(form);
+  assert.deepEqual(post(ctx).body, { config: { version: 1, rules: [], frozen: { minutes: {}, max_gap_seconds: 30 } } });
+});
+
+test("a generated rule name never repeats another rule's name", async () => {
+  const { element, ctx } = await open({ fixtures: approvedWith([rule("temp-light-1", "temp", "light"), rule("humi-fan-2", "humi", "fan")]) });
+  const form = formOf(element);
+  removeRow(rowsOf(form)[0]);
+  addRule(form);
+  fillRow(rowsOf(form)[1], { id: "" });
+  await approveNow(form);
+  assert.deepEqual(post(ctx).body.config.rules.map((r) => r.id), ["humi-fan-2", "humi-fan-1"]);
+});
+
+test("a typed rule name that another rule already has is refused beside the field", async () => {
+  const { element, ctx } = await open();
+  const form = formOf(element);
+  addRule(form);
+  const row = rowsOf(form)[1];
+  fillRow(row, { id: FIXTURES["safety.json"].safety.rules[0].id });
+  await submit(form);
+  assert.equal(post(ctx), undefined);
+  assert.deepEqual(errorsIn(row), ["Another rule already has this name."]);
+  assert.equal(openDialogs().length, 0);
+});
+
+test("adding a rule and removing a middle one lists plain sentences only, in both languages", async () => {
+  for (const lang of ["zh", "en"]) {
+    const rules = [rule("one-a", "temp", "light"), rule("two-b", "humi", "fan"), rule("three-c", "temp", "exhaust")];
+    const { element } = await open({ lang, fixtures: approvedWith(rules) });
+    const form = formOf(element);
+    removeRow(rowsOf(form)[1]);
+    addRule(form);
+    fillRow(rowsOf(form)[2]);
+    await submit(form);
+    const text = openDialogs()[0].textContent;
+    assert.deepEqual(findLeaks(text), [], lang);
+    assert.doesNotMatch(text, /rules\[|[{}]/, lang);
+    const lines = byTag(openDialogs()[0], "li").map((li) => li.textContent);
+    assert.equal(lines.length, 3, `${lang}: version, one removed, one added; the later rule is unchanged: ${lines.join(" | ")}`);
+    answerNextDialog(false);
+    await settle();
+    resetDialogs();
+  }
+});
+
+test("a server refusal of a rule's whole action lands beside the level field", async () => {
+  const { element, ctx } = await open();
+  const form = formOf(element);
+  const problem = { loc: ["body", "config", "rules", 0, "action"], msg: "level 7 is outside the range", type: "value_error", limits: {} };
+  ctx.api.post = async () => {
+    throw new ApiError(422, "validation", "invalid", [problem]);
+  };
+  await approveNow(form);
+  assert.equal(errorsIn(rowsOf(form)[0]).length, 1);
+});
+
+test("rule rows survive a lost session", async () => {
+  const first = await open(NONE);
+  const form = formOf(first.element);
+  addRule(form);
+  fillRow(rowsOf(form)[0]);
+  document.body.append(first.element);
+  assert.ok(saveAllDrafts() >= 1);
+  const second = await open(NONE);
+  const [row] = rowsOf(formOf(second.element));
+  assert.equal(named(row, "sensor")[0].value, "humi");
+  assert.equal(named(row, "level")[0].value, "3");
+  assert.equal(named(row, "channel")[0].value, "fan");
+});
+
+test("the empty choice of a select says Choose, and the level takes whole steps", async () => {
+  const { element } = await open(NONE);
+  addRule(formOf(element));
+  const [row] = rowsOf(element);
+  for (const name of ["sensor", "op", "channel"]) assert.equal(byTag(named(row, name)[0], "option")[0].textContent, "Choose…");
+  assert.equal(named(row, "level")[0].getAttribute("step"), "1");
 });

@@ -35,4 +35,5 @@ export default {
   "safety.form.noCaps": "读不到设备允许的范围，所以这里不显示范围；服务器仍会检查每个值。",
   "safety.form.useJson": "读不到设备的传感器，也还没有已批准的限值。请使用下面的“高级（JSON）”。",
   "safety.form.noneLead": "还没有批准过任何限值，所以每一项都是空的。请填好每个必填项；允许的范围写在旁边。",
+  "safety.form.duplicateId": "另一条规则已经用了这个名称。",
 };

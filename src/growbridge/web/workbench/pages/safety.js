@@ -6,7 +6,7 @@ import { configDiff } from "../diff.js";
 import { confirmAction } from "../ui/dialog.js";
 import { clear, h } from "../ui/dom.js";
 import { advancedJson } from "../ui/field-forms.js";
-import { errorLines } from "../ui/forms.js";
+import { Cancelled, errorLines } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
 import { frozenRows } from "./safety-frozen.js";
@@ -77,15 +77,17 @@ function notApproved(ctx, outcome, key) {
 // changed in between is never overwritten, because the write replaces the whole config.
 function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
   const label = ctx.t("safety.approve");
-  return async (edited) => {
+  // `input` is the config, or a function making it from the approved set as just read (so a version never repeats).
+  return async (input) => {
     outcome.refused = false;
     await readCurrent();
     const baseline = state.current;
+    const edited = typeof input === "function" ? input(baseline) : input;
     const start = baseline || safetySkeleton();
     const lines = diffLines(visibleChanges(configDiff(start, edited)), ctx.t, { before: start, after: edited });
     const shown = lines.length ? lines : [ctx.t("safety.noChanges")];
     if (!(await confirmAction(ctx.t, { title: ctx.t("safety.confirmTitle"), lines: shown, confirmLabel: label }))) {
-      throw notApproved(ctx, outcome, "safety.cancelled");
+      throw new Cancelled(); // a plain cancel is not a refusal: the form stays silent
     }
     await readCurrent();
     if (baselineChanged(baseline, state.current)) throw notApproved(ctx, outcome, "safety.changedMeanwhile");
@@ -97,11 +99,13 @@ function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
 
 export async function render(ctx) {
   const state = { current: null };
+  const shown = { form: null };
   const currentBox = h("div", { class: "safety-current" });
   const readCurrent = async () => {
     const data = await ctx.api.get("/safety");
     state.current = (data && data.safety) || null;
     clear(currentBox).append(currentView(ctx, state.current));
+    if (shown.form && shown.form.showVersion) shown.form.showVersion(state.current);
   };
   const refreshCurrent = () =>
     readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
@@ -110,6 +114,7 @@ export async function render(ctx) {
   const editorCtx = editorContext(ctx, refreshCurrent, outcome);
   const approve = approver(ctx, state, outcome, readCurrent, refreshCurrent);
   const form = safetyForm(editorCtx, { current: state.current, capabilities: await loadCapabilities(ctx), onSubmit: approve });
+  shown.form = form;
   const advanced = advancedJson({
     ctx: editorCtx,
     label: ctx.t("safety.json"),

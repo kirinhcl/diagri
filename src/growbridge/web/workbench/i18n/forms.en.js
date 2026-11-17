@@ -36,4 +36,5 @@ export default {
   "safety.form.noCaps": "The allowed ranges could not be read from the device, so none are shown; the server still checks every value.",
   "safety.form.useJson": "The device's sensors could not be read and no limits are approved yet. Use the Advanced (JSON) fold below.",
   "safety.form.noneLead": "Nothing is approved yet, so every field starts empty. Fill in each required value; the allowed range is beside it.",
+  "safety.form.duplicateId": "Another rule already has this name.",
 };

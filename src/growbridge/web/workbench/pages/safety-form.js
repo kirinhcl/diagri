@@ -62,7 +62,7 @@ function levelOverview(t, capabilities, channels) {
 
 function ruleFields(ctx, { sensors, channels, capabilities }) {
   const { t } = ctx;
-  const choice = (name, label, options) => ({ name, label, type: "select", required: true, options: [{ value: "", label: "—" }, ...options] });
+  const choice = (name, label, options) => ({ name, label, type: "select", required: true, options: [{ value: "", label: t("form.choose") }, ...options] });
   const seconds = (name, label) => ({ name, label, type: "number", required: true, min: 0, unit: t("safety.form.seconds"), hint: t("safety.form.secondsHint") });
   return [
     { name: "id", label: t("safety.form.ruleName"), hint: t("safety.form.ruleNameHint") },
@@ -72,7 +72,7 @@ function ruleFields(ctx, { sensors, channels, capabilities }) {
     seconds("duration_seconds", t("safety.form.duration")),
     seconds("validity_seconds", t("safety.form.validity")),
     choice("channel", t("safety.form.channel"), channels.map((value) => ({ value, label: labelOr(t, "channel", value) }))),
-    { name: "level", label: t("safety.form.level"), type: "number", required: true, hint: levelOverview(t, capabilities, channels) },
+    { name: "level", label: t("safety.form.level"), type: "number", step: 1, required: true, hint: levelOverview(t, capabilities, channels) },
   ];
 }
 
@@ -114,11 +114,27 @@ const ruleRow = (rule) => ({
   duration_seconds: rule?.duration_seconds, validity_seconds: rule?.validity_seconds, channel: rule?.action?.channel, level: rule?.action?.level,
 });
 
+// The smallest "<sensor>-<channel>-<n>" no other rule (typed, kept or generated) already uses.
+function ruleIds(rows) {
+  const taken = new Set(rows.map((row) => row.id?.trim()).filter(Boolean));
+  return rows.map((row) => {
+    const typed = row.id?.trim();
+    if (typed) return typed;
+    let n = 1;
+    while (taken.has(`${row.sensor}-${row.channel}-${n}`)) n += 1;
+    const id = `${row.sensor}-${row.channel}-${n}`;
+    taken.add(id);
+    return id;
+  });
+}
+
 // Exactly the object the JSON editor would send for the same content (no approver, no time stamp).
-export function buildConfig(current, values, units, frozen) {
+// `latest` is the approved set as read when the person submits, so the version never repeats.
+export function buildConfig(latest, values, units, frozen) {
   const minutes = Object.fromEntries(frozen.filter((sensor) => values[sensor] !== undefined).map((sensor) => [sensor, values[sensor]]));
+  const ids = ruleIds(values.rules);
   const rules = values.rules.map((row, index) => ({
-    id: row.id?.trim() || `${row.sensor}-${row.channel}-${index + 1}`,
+    id: ids[index],
     sensor: row.sensor,
     unit: units[row.sensor],
     validity_seconds: row.validity_seconds,
@@ -126,17 +142,40 @@ export function buildConfig(current, values, units, frozen) {
     duration_seconds: row.duration_seconds,
     action: { channel: row.channel, level: row.level },
   }));
-  return { version: (current?.version ?? 0) + 1, rules, frozen: { minutes, max_gap_seconds: values.max_gap_seconds } };
+  return { version: (latest?.version ?? 0) + 1, rules, frozen: { minutes, max_gap_seconds: values.max_gap_seconds } };
 }
 
-function leadLines(ctx, current, capabilities) {
-  const lines = [h("p", { class: "note", text: ctx.t("safety.form.version", { version: (current?.version ?? 0) + 1 }) })];
+// A typed name that another rule already has: the executor keeps one state per name.
+function duplicateIds(t) {
+  return (rows) => {
+    const seen = new Set();
+    return rows.flatMap((row, index) => {
+      const id = row.id?.trim();
+      if (!id) return [];
+      if (!seen.has(id)) {
+        seen.add(id);
+        return [];
+      }
+      return [{ row: index, field: "id", error: t("safety.form.duplicateId") }];
+    });
+  };
+}
+
+// A refusal of the whole action (the output's level does not fit it) belongs beside the level field.
+const actionToLevel = (problem) => (problem.loc.at(-1) === "action" ? { ...problem, loc: [...problem.loc, "level"] } : problem);
+
+const versionText = (ctx, latest) => ctx.t("safety.form.version", { version: (latest?.version ?? 0) + 1 });
+
+function leadLines(ctx, current, capabilities, versionNote) {
+  const lines = [versionNote];
   if (!current) lines.push(h("p", { class: "note", text: ctx.t("safety.form.noneLead") }));
   if (!capabilities) lines.push(h("p", { class: "note", text: ctx.t("safety.form.noCaps") }));
   return lines;
 }
 
 // capabilities is null when they could not be read: then only the sensors of the approved set are offered, and no range is shown.
+// onSubmit(build) gets a function: build(latest) makes the config from the approved set as it is at send time.
+// The returned element has showVersion(latest) to keep the shown version number current.
 export function safetyForm(ctx, { current, capabilities, onSubmit }) {
   const units = sensorUnits(current, capabilities);
   const frozen = frozenSensors(current, units);
@@ -146,11 +185,17 @@ export function safetyForm(ctx, { current, capabilities, onSubmit }) {
   const group = rowGroup({
     ctx, name: "rules", label: ctx.t("safety.form.rules"), fields: ruleFields(ctx, { sensors: Object.keys(units).sort(), channels, capabilities }),
     rows: rules.map(ruleRow), addLabel: ctx.t("safety.form.addRule"), removeLabel: ctx.t("safety.form.removeRule"),
-    maxRows: Object.keys(units).length ? Infinity : 0, onRow: linkRow(ctx, capabilities, units, channels),
+    maxRows: Object.keys(units).length ? Infinity : 0, onRow: linkRow(ctx, capabilities, units, channels), crossCheck: duplicateIds(ctx.t),
   });
+  const part = { ...group, placeErrors: (problems) => group.placeErrors(problems.map(actionToLevel)) };
   const form = simpleForm({
-    fields: frozenFields(ctx, frozen, current), parts: [group], ctx, draftKey: "safety-form", submitLabel: ctx.t("safety.approve"),
-    onSubmit: (values) => onSubmit(buildConfig(current, values, units, frozen)),
+    fields: frozenFields(ctx, frozen, current), parts: [part], ctx, draftKey: "safety-form", submitLabel: ctx.t("safety.approve"),
+    onSubmit: (values) => onSubmit((latest) => buildConfig(latest, values, units, frozen)),
   });
-  return h("div", { class: "safety-form" }, leadLines(ctx, current, capabilities), form);
+  const versionNote = h("p", { class: "note", text: versionText(ctx, current) });
+  const element = h("div", { class: "safety-form" }, leadLines(ctx, current, capabilities, versionNote), form);
+  element.showVersion = (latest) => {
+    versionNote.textContent = versionText(ctx, latest);
+  };
+  return element;
 }
