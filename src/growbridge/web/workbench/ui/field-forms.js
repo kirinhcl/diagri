@@ -112,9 +112,15 @@ export function fieldsPart({ ctx, name, label, fields, nest = false }) {
     placeFieldErrors(entries, mine, ctx);
     return problems.filter((problem) => !mine.includes(problem));
   };
-  const draft = () => Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
+  // A check box is kept as whether it is ticked: its value is the same text whether ticked or not.
+  const isBox = (entry) => entry.field.type === "checkbox";
+  const draft = () => Object.fromEntries(entries.map((entry) => [entry.field.name, isBox(entry) ? entry.input.checked : entry.input.value]));
   const restore = (saved) => {
-    for (const entry of entries) if (Object.hasOwn(saved, entry.field.name)) entry.input.value = saved[entry.field.name];
+    for (const entry of entries) {
+      if (!Object.hasOwn(saved, entry.field.name)) continue;
+      if (isBox(entry)) entry.input.checked = saved[entry.field.name] === true;
+      else entry.input.value = saved[entry.field.name];
+    }
   };
   return { name, element, values, placeErrors, draft, restore, entries };
 }

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
-import { advancedJson, linesField, rowGroup } from "../../src/growbridge/web/workbench/ui/field-forms.js";
+import { advancedJson, fieldsPart, linesField, rowGroup } from "../../src/growbridge/web/workbench/ui/field-forms.js";
 import { formControls, saveAllDrafts, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { installFakeDom, testCtx } from "./support/render-page.mjs";
 
@@ -276,4 +276,20 @@ test("a draft saved before parts existed (fields only) still restores", async ()
   const { form, group } = draftForm([{ name: "a" }]);
   assert.equal(inputNamed(form, "title")[0].value, "old");
   assert.deepEqual(group.rows(), [{ name: "a" }]);
+});
+
+test("a fields part keeps and brings back a checkbox by whether it is ticked", () => {
+  installFakeDom();
+  const ctx = testCtx({ lang: "en", timezone: "UTC" });
+  const fields = [{ name: "on", label: "On", type: "checkbox" }, { name: "note", label: "Note" }];
+  const part = fieldsPart({ ctx, name: "opts", label: "Options", fields });
+  const [box] = inputNamed(part.element, "on");
+  box.checked = true;
+  box.value = "on"; // what a browser reports for every check box, ticked or not
+  assert.deepEqual(part.draft(), { on: true, note: "" });
+  const other = fieldsPart({ ctx, name: "opts", label: "Options", fields });
+  other.restore({ on: true, note: "x" });
+  assert.equal(inputNamed(other.element, "on")[0].checked, true);
+  other.restore({ on: false });
+  assert.equal(inputNamed(other.element, "on")[0].checked, false);
 });
