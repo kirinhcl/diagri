@@ -1319,6 +1319,162 @@
       ],
       "action": true,
       "of": "approval_invalid"
+    },
+    "not_signed_in": {
+      "params": [],
+      "action": true,
+      "of": "session"
+    },
+    "session_expired": {
+      "params": [],
+      "action": true,
+      "of": "session"
+    },
+    "bad_credentials": {
+      "params": [],
+      "action": true,
+      "of": "session"
+    },
+    "login_locked": {
+      "params": [],
+      "action": true,
+      "of": "locked"
+    },
+    "unknown_address": {
+      "params": [],
+      "action": true,
+      "of": "entry"
+    },
+    "not_from_page": {
+      "params": [],
+      "action": true,
+      "of": "entry"
+    },
+    "session_other_entry": {
+      "params": [],
+      "action": true,
+      "of": "entry"
+    },
+    "onsite_only": {
+      "params": [],
+      "action": true,
+      "of": "entry"
+    },
+    "manual_task_not_due": {
+      "params": [
+        "task_id",
+        "due_at",
+        "opens_at"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "irrigation_past_deadline": {
+      "params": [
+        "task_id",
+        "due_at",
+        "deadline_at"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "irrigation_already_ran": {
+      "params": [
+        "task_id",
+        "due_at"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "irrigation_already_done": {
+      "params": [
+        "task_id",
+        "due_at"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "irrigation_attempts_exhausted": {
+      "params": [
+        "task_id",
+        "stage_id",
+        "attempts"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_started": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "irrigation_stage_not_running": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "unknown_request": {
+      "params": [
+        "request_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "no_such_occurrence": {
+      "params": [
+        "task_id",
+        "due_at"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "not_irrigation": {
+      "params": [
+        "task_id"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "not_this_stage": {
+      "params": [
+        "experiment_id"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "done_at_window": {
+      "params": [
+        "window_seconds"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "skipped_has_time": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "level_out_of_range": {
+      "params": [
+        "channel",
+        "level",
+        "min",
+        "max"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "measurement_rejected": {
+      "params": [
+        "detail"
+      ],
+      "action": false,
+      "of": "param"
     }
   }
 }

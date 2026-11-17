@@ -150,3 +150,43 @@ _register(
     ("safety_needs_approver", ()),
     ("safety_unknown_sensors", ("sensors",)),
 )
+
+# --- workbench entry layer, sign-in, manual writes and measurements, manual tasks --------------
+_register(
+    "session",
+    ("not_signed_in", ()),
+    ("session_expired", ()),
+    ("bad_credentials", ()),
+)
+_register("locked", ("login_locked", ()))
+_register(
+    "entry",
+    ("unknown_address", ()),
+    ("not_from_page", ()),
+    ("session_other_entry", ()),
+    ("onsite_only", ()),
+)
+_register(
+    "state",
+    ("manual_task_not_due", ("task_id", "due_at", "opens_at")),
+    ("irrigation_past_deadline", ("task_id", "due_at", "deadline_at")),
+    ("irrigation_already_ran", ("task_id", "due_at")),
+    ("irrigation_already_done", ("task_id", "due_at")),
+    ("irrigation_attempts_exhausted", ("task_id", "stage_id", "attempts")),
+    ("stage_not_started", ("stage_id",)),
+    ("irrigation_stage_not_running", _STAGE),
+    ("unknown_request", ("request_id",)),
+)
+_register(
+    "scope",
+    ("no_such_occurrence", ("task_id", "due_at")),
+    ("not_irrigation", ("task_id",)),
+    ("not_this_stage", ("experiment_id",)),
+)
+_register(
+    "param",
+    ("done_at_window", ("window_seconds",)),
+    ("skipped_has_time", ()),
+    ("level_out_of_range", ("channel", "level", "min", "max")),
+)
+_register("param", ("measurement_rejected", ("detail",)), action=False)

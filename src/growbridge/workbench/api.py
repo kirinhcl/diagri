@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from typing import Annotated
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import ConfigDict, Field, StrictInt
@@ -18,6 +18,7 @@ from pydantic import ConfigDict, Field, StrictInt
 from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import (
+    LEVEL_RANGES,
     Channel,
     Entry,
     ManualMeasurement,
@@ -134,10 +135,9 @@ class SafetyApproval(Body):
 # --- error mapping -----------------------------------------------------------------------------
 
 
-def refusal(error: Denied) -> JSONResponse:
-    status = STATUS_BY_CODE.get(error.code, 403)
+def refusal(error: Denied, status: int | None = None) -> JSONResponse:
     return JSONResponse(
-        status_code=status,
+        status_code=STATUS_BY_CODE.get(error.code, 403) if status is None else status,
         content={
             "detail": {
                 "code": error.code,
@@ -147,6 +147,11 @@ def refusal(error: Denied) -> JSONResponse:
             }
         },
     )
+
+
+def not_found(error: Denied) -> JSONResponse:
+    """The same body as ``refusal``, answered 404. Return it; raising ``error`` would be a 409."""
+    return refusal(error, 404)
 
 
 class GuardedRoute(APIRoute):
@@ -246,7 +251,9 @@ class Workbench:
     def entry_of(self, request: Request) -> Entry:
         entry = self.find_entry(request)
         if entry is None:
-            raise Denied("entry", "this address is not a registered entry")
+            raise Denied(
+                "entry", "this address is not a registered entry", reason="unknown_address"
+            )
         return entry
 
     def check_browser(self, request: Request) -> None:
@@ -257,7 +264,11 @@ class Workbench:
         host = request.headers.get("host", "")
         allowed = origin in self.origins and origin_matches_host(origin, host)
         if not allowed or request.headers.get("x-growbridge-ui") != "1":
-            raise Denied("entry", "the request did not come from the workbench page")
+            raise Denied(
+                "entry",
+                "the request did not come from the workbench page",
+                reason="not_from_page",
+            )
 
     def model_actor(self, header: str, request: Request) -> Actor:
         scheme, _, value = header.partition(" ")
@@ -266,17 +277,21 @@ class Workbench:
             if hmac.compare_digest(value.strip().encode(), token.encode()):
                 matched = role
         if scheme.lower() != "bearer" or matched is None:
-            raise Denied("session", "authentication required")
+            raise Denied("session", "authentication required", reason="not_signed_in")
         return Actor(kind="model", id=matched, entry=self.find_entry(request))
 
     def operator_actor(self, request: Request) -> Actor:
         token = request.cookies.get(COOKIE)
         if not token:
-            raise Denied("session", "authentication required")
+            raise Denied("session", "authentication required", reason="not_signed_in")
         self.check_browser(request)
         actor = self.operators.actor(token, self.control.recovery_number())
         if actor.entry is not self.entry_of(request):
-            raise Denied("entry", "this session belongs to another entry address")
+            raise Denied(
+                "entry",
+                "this session belongs to another entry address",
+                reason="session_other_entry",
+            )
         return actor
 
     def _dependencies(self) -> None:
@@ -296,7 +311,11 @@ class Workbench:
 
         async def on_site(actor: Annotated[Actor, Depends(operator)]) -> Actor:
             if actor.entry is not Entry.LAN:
-                raise Denied("entry", "this action is only available on the on-site entry")
+                raise Denied(
+                    "entry",
+                    "this action is only available on the on-site entry",
+                    reason="onsite_only",
+                )
             return actor
 
         self.anyone, self.operator, self.fresh, self.on_site = principal, operator, fresh, on_site
@@ -414,7 +433,12 @@ class Workbench:
     def manual_stage(self, stage_id: str) -> StageRuntime:
         stage = self.workflow.stage(stage_id)
         if stage.state is not StageState.MANUAL or stage.manual_right is None:
-            raise Denied("state", "the stage is not under manual control")
+            raise Denied(
+                "state",
+                "the stage is not under manual control",
+                reason="stage_not_in_manual",
+                params={"stage_id": stage_id, "state": stage.state.value},
+            )
         return stage
 
     def action_request(
@@ -442,9 +466,15 @@ class Workbench:
             try:
                 check_level(channel, body.level)
             except ValueError as error:
-                raise rejected(str(error)) from error
+                low, high = LEVEL_RANGES[channel]
+                params = {"channel": channel.value, "level": body.level, "min": low, "max": high}
+                raise rejected(str(error), reason="level_out_of_range", params=params) from error
             if channel is Channel.PUMP and body.level != 0:
-                raise Denied("pump_on_forbidden", "the pump is only started by an irrigation run")
+                raise Denied(
+                    "pump_on_forbidden",
+                    "the pump is only started by an irrigation run",
+                    reason="pump_on_forbidden",
+                )
             stage = self.manual_stage(body.stage_id)
             request = self.action_request(body, stage, actor, channel, body.level)
             return (await self.control.submit(request)).model_dump(mode="json")
@@ -467,7 +497,10 @@ class Workbench:
         async def measurement(body: MeasurementIn, actor: Operator):
             if not self.workflow.store.projects_of_experiment(body.experiment_id):
                 raise Denied(  # every measurement must be traceable to a project
-                    "scope", "a measurement belongs to an experiment of an existing stage"
+                    "scope",
+                    "a measurement belongs to an experiment of an existing stage",
+                    reason="not_this_stage",
+                    params={"experiment_id": body.experiment_id},
                 )
             fields = body.model_dump(exclude={"id"})
             try:
@@ -476,7 +509,11 @@ class Workbench:
                 )
                 self.archive.add_measurement(record)
             except ValueError as error:
-                raise rejected("the measurement was not accepted") from error
+                raise rejected(
+                    "the measurement was not accepted",
+                    reason="measurement_rejected",
+                    params={"detail": str(error)},
+                ) from error
             return {"id": record.id}
 
         @router.post("/safety/approve")
@@ -513,7 +550,14 @@ class Workbench:
         async def receipt(request_id: str, actor: Anyone):
             record = self.control.receipt(request_id)
             if record is None:
-                raise HTTPException(404, "Unknown request id")
+                return not_found(
+                    Denied(
+                        "state",
+                        "Unknown request id",
+                        reason="unknown_request",
+                        params={"request_id": request_id},
+                    )
+                )
             return record.model_dump(mode="json")
 
         if self.alerts is not None:

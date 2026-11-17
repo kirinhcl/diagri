@@ -79,9 +79,6 @@ PENDING: set[str] = {
     "research/sandbox.py",
     "runtime_compute.py",
     "workbench/analysis.py",
-    "workbench/api.py",
-    "workbench/auth.py",
-    "workbench/manual_tasks.py",
 }
 
 

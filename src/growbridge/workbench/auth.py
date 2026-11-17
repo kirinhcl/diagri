@@ -152,7 +152,7 @@ class Operators:
             )
         elif bound != recovery_number:
             self.logout(token)
-            raise Denied("session", "the session is no longer valid")
+            raise Denied("session", "the session is no longer valid", reason="session_expired")
         return Actor(
             kind="operator",
             id=row["name"],
@@ -168,10 +168,10 @@ class Operators:
             "SELECT * FROM operator_sessions WHERE token_hash = ?", (_token_hash(token),)
         )
         if row is None:
-            raise Denied("session", "the session is not valid")
+            raise Denied("session", "the session is not valid", reason="session_expired")
         if row["expires_at"] <= self.clock.now():
             self.logout(token)
-            raise Denied("session", "the session is not valid")
+            raise Denied("session", "the session is not valid", reason="session_expired")
         return row
 
     # --- credential check and rate limit -------------------------------------------------------
@@ -190,7 +190,7 @@ class Operators:
         derived = self._derive(secret if fits else "", salt, cost)
         if row is None or not fits or not hmac.compare_digest(derived, expected):
             self._record_failure(key, source, now)
-            raise Denied("session", "invalid credentials")
+            raise Denied("session", "invalid credentials", reason="bad_credentials")
         self.db.execute("DELETE FROM login_failures WHERE name = ? AND source = ?", (key, source))
 
     def _failures(self, condition: str, params: tuple) -> int:
@@ -203,14 +203,18 @@ class Operators:
         since = now - FAILURE_WINDOW_SECONDS
         pair = self._failures("name = ? AND source = ? AND at > ?", (key, source, since))
         if pair >= MAX_FAILURES:
-            raise Denied("locked", "too many failed attempts; try again later")
+            raise Denied(
+                "locked", "too many failed attempts; try again later", reason="login_locked"
+            )
         if session:
             return
         everywhere = self._failures(
             "name = ? AND source NOT LIKE ? AND at > ?", (key, SESSION_SOURCE + "%", since)
         )
         if everywhere >= MAX_GLOBAL_FAILURES:
-            raise Denied("locked", "too many failed attempts; try again later")
+            raise Denied(
+                "locked", "too many failed attempts; try again later", reason="login_locked"
+            )
 
     def _record_failure(self, key: str, source: str, now: float) -> None:
         with self.db.transaction():
