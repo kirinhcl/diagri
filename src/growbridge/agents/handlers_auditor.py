@@ -15,6 +15,7 @@ from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
     clip,
+    local_time,
     require_bound,
     require_stage_project,
 )
@@ -97,6 +98,7 @@ def _task_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict],
             "task_id": item.task_id,
             "kind": item.kind,
             "due_at": item.due_at,
+            "due_at_local": local_time(item.due_at, deps.timezone),
             "status": state,
             "record": None if record is None else record.model_dump(mode="json"),
         }
@@ -111,7 +113,9 @@ def _kept_measurements(deps: Deps, stage) -> list:
     return [m for m in deps.archive.measurements(stage.experiment_id) if keep is None or keep(m)]
 
 
-def _measurement_rows(kept: list, start: float, end: float) -> tuple[list[dict], int, int]:
+def _measurement_rows(
+    kept: list, start: float, end: float, timezone: str
+) -> tuple[list[dict], int, int]:
     """``(rows, left out by the list limit, timed before the stage)``. Every stage of a round
     shares one experiment, so a measurement timed before this stage started is an earlier
     stage's: it is counted, not listed."""
@@ -122,6 +126,7 @@ def _measurement_rows(kept: list, start: float, end: float) -> tuple[list[dict],
             "metric": m.metric,
             "value": m.value,
             "measured_at": m.measured_at,
+            "measured_at_local": local_time(m.measured_at, timezone),
             "in_window": m.measured_at <= end + MEASUREMENT_GRACE_SECONDS,
         }
         for m in found[-MAX_LISTED:]
@@ -148,15 +153,18 @@ def stage_records(deps: Deps, data: StageInput) -> dict:
     start, end = data_window(stage)
     tasks, tasks_left_out = _task_rows(deps, stage, start, end)
     kept = _kept_measurements(deps, stage)
-    measurements, measurements_left_out, before = _measurement_rows(kept, start, end)
+    measurements, measurements_left_out, before = _measurement_rows(kept, start, end, deps.timezone)
     return {
         "stage": {
             "id": stage.stage_id,
             "state": stage.state.value,
             "started_at": stage.started_at,
+            "started_at_local": local_time(stage.started_at, deps.timezone),
             "ended_at": stage.ended_at,
+            "ended_at_local": local_time(stage.ended_at, deps.timezone),
         },
         "window": [start, end],
+        "window_local": [local_time(start, deps.timezone), local_time(end, deps.timezone)],
         "run_sheet": _run_sheet(stage),
         "manual_tasks": tasks,
         "manual_tasks_left_out": tasks_left_out,

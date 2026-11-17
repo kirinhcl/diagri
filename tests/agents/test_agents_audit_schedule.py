@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -69,6 +70,7 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         return True
 
     return SimpleNamespace(
+        settings=SimpleNamespace(report_timezone="UTC"),
         workflow=stages,
         tasks=board,
         budget=calls,
@@ -354,3 +356,20 @@ def test_an_audit_uses_the_projects_latest_goal_language_or_chinese(db):
     first, second = (t for t in audits(runtime) if t.owner_role == "auditor")
 
     assert (first.language, second.language) == ("zh", "en")
+
+
+def test_an_audit_question_has_no_epoch_seconds_and_says_the_window_in_local_time(db):
+    runtime = rig(db)
+    runtime.settings.report_timezone = "Europe/Helsinki"
+    runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+    schedule_audits(runtime)
+
+    (task,) = audits(runtime)
+
+    assert not re.search(r"\b\d{10}(\.\d+)?\b", task.question)
+    assert re.search(
+        r"Data window \d{4}-\d{2}-\d{2} \d{2}:\d{2} to \d{4}-\d{2}-\d{2} \d{2}:\d{2} "
+        r"\(Europe/Helsinki\)",
+        task.question,
+    )
+    assert STAGE in task.question and "stage day 1" in task.question

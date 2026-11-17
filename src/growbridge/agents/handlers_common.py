@@ -11,8 +11,10 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
@@ -44,6 +46,14 @@ class Deps:
     search: Any = None
     holdout: Any = None
     alerts: Any = None  # the AlertBook; only the auditor's finding tool uses it
+    timezone: str = "UTC"  # the reporting time zone: the models are shown times in it
+
+
+def local_time(epoch: float | None, timezone: str) -> str | None:
+    """``"YYYY-MM-DD HH:MM"`` of an epoch time in ``timezone``; None stays None."""
+    if epoch is None:
+        return None
+    return datetime.fromtimestamp(epoch, ZoneInfo(timezone)).strftime("%Y-%m-%d %H:%M")
 
 
 class ToolInput(BaseModel):

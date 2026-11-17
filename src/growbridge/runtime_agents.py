@@ -11,6 +11,7 @@ from typing import Any
 from growbridge.agents.context import project_context, task_language
 from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.handlers import Deps, build_role_tools
+from growbridge.agents.handlers_common import local_time
 from growbridge.agents.llm import ModelClient
 from growbridge.agents.tools import ROLE_TOOLS, Tool
 from growbridge.archive.ids import new_id
@@ -44,6 +45,7 @@ def role_tools(runtime: Any, work_root: Path) -> dict[str, list[Tool]]:
         search=None,
         holdout=runtime.holdout,
         alerts=runtime.book,
+        timezone=runtime.settings.report_timezone,
     )
     return build_role_tools(deps)
 
@@ -103,12 +105,14 @@ def schedule_audits(runtime: Any) -> int:
     if any(t.trigger_event_id.startswith(prefix) for t in open_audits):
         return 0
     start, end = data_window(stage)
+    zone = runtime.settings.report_timezone
     task = ResearchTask(
         id=new_id("task"),
         project_id=stage.project_id,
         question=(
-            f"Audit stage {stage.stage_id} at {label}. Data window {start:.0f} to {end:.0f} "
-            "(epoch seconds). Compare the run sheet with the records since the last audit."
+            f"Audit stage {stage.stage_id} at {label}. Data window {local_time(start, zone)} to "
+            f"{local_time(end, zone)} ({zone}). "
+            "Compare the run sheet with the records since the last audit."
         ),
         owner_role=AUDIT_ROLE,
         budget=Budget(max_calls=AUDIT_MAX_CALLS, max_cost=1.0),
