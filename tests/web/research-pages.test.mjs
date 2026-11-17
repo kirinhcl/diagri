@@ -121,6 +121,7 @@ test("the verify and enter notices name the card by its claim, cut to 40 charact
   answerNextDialog(true);
   await submitForm(forms[0]);
   assert.equal(notices[0], `证据卡“${cut}”已核实。`);
+  answerNextDialog(true);
   await submitForm(forms[1], { source_class: "paper", citation: "Smith 2020", claim: "Short claim", calibrated: "yes" });
   assert.equal(notices[1], "证据卡“Short claim”已录入并核实。");
   for (const message of notices) assert.ok(!message.includes("card_") && !message.includes("undefined"), message);
@@ -166,6 +167,27 @@ test("an old stuck attempt without a code shows a generic line", async () => {
   const { element } = await renderPage("compute", {}, { now: NOW });
   assert.match(visibleText(element), /这次计算卡住了，原因见技术详情。/);
   assert.match(visibleTextIncludingDetails(element), /No result after 2 h on the cluster/);
+});
+
+test("entering evidence asks first and says the card cannot be changed; cancelling sends nothing", async () => {
+  const { element, ctx } = await renderPage("evidence", {}, { fixtures: cards([CARD]), now: NOW, lang: "en" });
+  const form = walk(element).filter((el) => el.localName === "form")[1];
+  const posts = () => ctx.api.calls.filter((call) => call.method === "POST");
+  const values = { source_class: "paper", citation: "Smith 2020", claim: "Short claim", calibrated: "yes" };
+  formControls(form).set(values);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes("cannot be changed"), dialog.textContent);
+  answerNextDialog(false);
+  await settle();
+  await settle();
+  assert.equal(posts().length, 0, "cancelling sends nothing");
+  answerNextDialog(true);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.equal(posts().length, 1);
 });
 
 test("verifying evidence is a check box that starts unticked, and asks because it cannot change later", async () => {

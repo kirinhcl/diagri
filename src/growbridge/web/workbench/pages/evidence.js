@@ -36,6 +36,7 @@ export function enterFields(ctx) {
 function enterForm(ctx) {
   const submitLabel = ctx.t("evidence.enter");
   const onSubmit = async ({ calibrated, ...rest }) => {
+    await confirmOrCancel(ctx, { title: ctx.t("evidence.enterTitle"), lines: [ctx.t("evidence.enterLine")], confirmLabel: submitLabel });
     const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated === "yes" }, { action: submitLabel });
     afterWrite(ctx, ctx.t("evidence.entered", { claim: claimName(card?.claim ?? rest.claim) }));
   };

@@ -144,6 +144,8 @@ export default {
   "round.choice.redo.line": "Runs this stage again; the data it already has is kept.",
   "round.choice.next.line": "Moves on to the next stage; this stage is not run again.",
   "round.choice.verify.line": "Goes to the data verification of this round.",
+  "evidence.enterTitle": "Enter this evidence card?",
+  "evidence.enterLine": "It is recorded as verified, and it cannot be changed afterwards.",
   "evidence.verifyTitle": "Verify this evidence card?",
   "evidence.verifyLine": "Once verified, this card cannot be changed.",
   "tasks.skipTitle": "Skip this task?",

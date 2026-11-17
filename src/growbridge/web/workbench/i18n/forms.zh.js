@@ -143,6 +143,8 @@ export default {
   "round.choice.redo.line": "再跑一次这个阶段，已有的数据保留。",
   "round.choice.next.line": "进入下一阶段，这个阶段不再重跑。",
   "round.choice.verify.line": "进入这一轮的数据核验。",
+  "evidence.enterTitle": "录入这张证据卡？",
+  "evidence.enterLine": "录入后即视为已核实，之后不能再修改。",
   "evidence.verifyTitle": "核实这张证据卡片？",
   "evidence.verifyLine": "核验后这张卡片不能再改。",
   "tasks.skipTitle": "跳过这项任务？",
