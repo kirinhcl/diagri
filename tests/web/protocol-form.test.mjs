@@ -200,7 +200,8 @@ test("endpoint and method suggest what saved protocols used", async () => {
   const suggestions = (name) => byTag(named(form, name)[0].parentNode, "option").map((option) => option.getAttribute("value"));
   const endpoint = suggestions("primary_endpoint");
   assert.ok(endpoint.includes("canopy_area_growth"), endpoint.join(","));
-  assert.ok(endpoint.includes("temp"), "the sensor metrics are suggested too");
+  for (const code of ["temp", "light", "exhaust", "fan", "humi", "co2"]) assert.ok(!endpoint.includes(code), `${code} is a sensor or device channel, not a plant endpoint`);
+  assert.deepEqual(endpoint, [...new Set(PROJECT.protocols.map((row) => row.primary_endpoint).filter(Boolean))]);
   const method = suggestions("method");
   assert.deepEqual(method.slice(0, 2), ["paired_block", "two_group"]);
   const other = { ...PROJECT, protocols: [{ protocol_id: "p-x", version: 1, primary_endpoint: "fresh_mass", method: "mixed_model" }] };
@@ -394,4 +395,29 @@ test("a treatment code typed twice is refused beside the second row", async () =
   assert.equal(sent.length, 0);
   assert.deepEqual(errorsIn(rowsOf(treatments)[0]), []);
   assert.deepEqual(errorsIn(rowsOf(treatments)[1]), [en["protocol.form.tidTwice"]]);
+});
+
+test("only plain decimals in a factor value become numbers; 0x10, 1e3 and 007 stay text", async () => {
+  const { form, sent } = await open();
+  fill(form);
+  const [treatments] = groups(form);
+  change(named(rowsOf(treatments)[0], "factors")[0], "a=40\nb=-1.5\nc=0x10\nd=1e3\ne=007\nf=0.5\ng=0");
+  await submit(form);
+  assert.deepEqual(sent[0].protocol.treatments[0].factors, { a: 40, b: -1.5, c: "0x10", d: "1e3", e: "007", f: 0.5, g: 0 });
+});
+
+test("the control and allocation choices show the treatment's name; a code only tells equal names apart or stands in for no name", async () => {
+  const { form } = await open();
+  const [treatments] = groups(form);
+  const [first, second] = rowsOf(treatments);
+  change(named(first, "id")[0], "control");
+  change(named(first, "name")[0], "light 40 %");
+  change(named(second, "id")[0], "high");
+  const labels = () => byTag(named(form, "control_treatment_id")[0], "option").map((option) => option.textContent);
+  assert.deepEqual(labels(), [en["form.choose"], "light 40 %", "(high)"], "no name yet: the code stands in, in parentheses");
+  change(named(second, "name")[0], "light 40 %");
+  assert.deepEqual(labels(), [en["form.choose"], "light 40 % (control)", "light 40 % (high)"], "equal names are told apart by code");
+  change(named(second, "name")[0], "light 70 %");
+  assert.deepEqual(labels(), [en["form.choose"], "light 40 %", "light 70 %"]);
+  assert.deepEqual(optionsOf(named(form, "control_treatment_id")[0]), ["", "control", "high"], "values stay the codes");
 });

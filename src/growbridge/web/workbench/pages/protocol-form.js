@@ -2,7 +2,6 @@
 // It never invents science: allocations start empty, the control and every allocation are chosen from the treatment
 // rows, and the id and version are worked out, never typed. It builds exactly the object the JSON fold would send.
 import { ApiError } from "../api.js";
-import codes from "../i18n/codes.en.js";
 import { h } from "../ui/dom.js";
 import { fieldsPart, linesField, rowGroup } from "../ui/field-forms.js";
 import { simpleForm } from "../ui/forms.js";
@@ -10,8 +9,9 @@ import { simpleForm } from "../ui/forms.js";
 const DEFAULT_MISSING = 0.2;
 const DEFAULT_DEVIATION = 0.1;
 const FIXED_METHODS = ["paired_block", "two_group"];
-const METRICS = Object.keys(codes).filter((key) => key.startsWith("metric.")).map((key) => key.slice("metric.".length));
 
+const PLAIN_DECIMAL = /^-?\d+(\.\d+)?$/;
+const LEADING_ZERO = /^-?0\d/;
 const array = (value) => (Array.isArray(value) ? value : []);
 const unique = (values) => [...new Set(values.filter((value) => typeof value === "string" && value !== ""))];
 const encode = encodeURIComponent;
@@ -29,7 +29,7 @@ const whole = (min) => (text, t) => {
   return number < min ? { error: t("form.tooSmall", { min }) } : { value: number };
 };
 
-// "key=value" per line; a value that is a finite number becomes a number, else it stays text.
+// "key=value" per line; a plain decimal ("40", "-1.5") becomes a number, everything else ("0x10", "1e3", "007") stays text.
 function factors(text, t) {
   const found = {};
   for (const line of text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
@@ -38,7 +38,7 @@ function factors(text, t) {
     const raw = at < 0 ? "" : line.slice(at + 1).trim();
     if (!key || !raw) return { error: t("protocol.form.factorLine") };
     if (Object.hasOwn(found, key)) return { error: t("protocol.form.factorTwice") };
-    found[key] = Number.isFinite(Number(raw)) ? Number(raw) : raw;
+    found[key] = PLAIN_DECIMAL.test(raw) && !LEADING_ZERO.test(raw) ? Number(raw) : raw;
   }
   return { value: found };
 }
@@ -51,10 +51,10 @@ function namedInputs(root, name, found = []) {
   return found;
 }
 
-function setOptions(select, ids, t, wanted) {
-  const keep = ids.includes(wanted) ? wanted : "";
+function setOptions(select, choices, t, wanted) {
+  const keep = choices.some((choice) => choice.value === wanted) ? wanted : "";
   const option = (value, text) => h("option", { attrs: { value, selected: value === keep }, text });
-  select.replaceChildren(option("", t("form.choose")), ...ids.map((id) => option(id, id)));
+  select.replaceChildren(option("", t("form.choose")), ...choices.map((choice) => option(choice.value, choice.label)));
   select.value = keep;
 }
 
@@ -105,7 +105,7 @@ function analysisFields(t, project) {
   const rows = array(project.protocols);
   const fraction = (name, label, value) => ({ name, label, hint: t("protocol.form.fractionHint"), type: "number", required: true, min: 0, max: 1, value });
   return [
-    { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t("protocol.form.endpointHint"), required: true, parse: trimmed, suggestions: unique([...rows.map((row) => row.primary_endpoint), ...METRICS]) },
+    { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t("protocol.form.endpointHint"), required: true, parse: trimmed, suggestions: unique(rows.map((row) => row.primary_endpoint)) },
     { name: "target_effect", label: t("protocol.form.effect"), hint: t("protocol.form.effectHint"), type: "number", required: true },
     { name: "method", label: t("protocol.form.method"), hint: t("protocol.form.methodHint"), required: true, parse: trimmed, suggestions: unique([...FIXED_METHODS, ...rows.map((row) => row.method)]) },
     linesField({ name: "exclusion_rules", label: t("protocol.form.exclusions"), hint: t("protocol.form.exclusionsHint") }),
@@ -164,10 +164,17 @@ export function buildProtocol(projectId, values, id, version) {
 // The treatment codes as typed on the rows now, and every choice of one (the control, each allocation) kept in step with them.
 function treatmentLinks(ctx) {
   const state = { treatments: null, holders: [] };
-  const ids = () => (state.treatments ? unique(namedInputs(state.treatments.element, "id").map((input) => input.value.trim())) : []);
-  const choices = () => [{ value: "", label: ctx.t("form.choose") }, ...ids().map((id) => ({ value: id, label: id }))];
+  // One choice per typed code, shown by the treatment's name; the code only tells apart equal names or stands in for no name yet.
+  const treatmentChoices = () => {
+    if (!state.treatments) return [];
+    const codes = namedInputs(state.treatments.element, "id").map((input) => input.value.trim());
+    const names = namedInputs(state.treatments.element, "name").map((input) => input.value.trim());
+    const shown = unique(codes).map((code) => ({ value: code, name: names[codes.indexOf(code)] || "" }));
+    return shown.map(({ value, name }) => ({ value, label: !name ? `(${value})` : shown.filter((other) => other.name === name).length > 1 ? `${name} (${value})` : name }));
+  };
+  const choices = () => [{ value: "", label: ctx.t("form.choose") }, ...treatmentChoices()];
   const refresh = (rename) => {
-    const now = ids();
+    const now = treatmentChoices();
     for (const holder of state.holders) {
       for (const name of ["control_treatment_id", "treatment_id"]) {
         for (const select of namedInputs(holder.element, name)) {
@@ -188,6 +195,9 @@ function treatmentLinks(ctx) {
     };
     input.addEventListener("input", typed);
     input.addEventListener("change", typed);
+    const name = entries.find((entry) => entry.field.name === "name").input;
+    name.addEventListener("input", () => refresh());
+    name.addEventListener("change", () => refresh());
   };
   return { state, choices, refresh, onRow };
 }
