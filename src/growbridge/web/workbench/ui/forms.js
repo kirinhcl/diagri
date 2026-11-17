@@ -379,7 +379,10 @@ export function formControls(form) {
   return { get, set, suggest, focus };
 }
 
-export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own }) {
+// parts: [{element, values(): object | null, placeErrors(problems): problems}] (a rowGroup is one).
+// Their elements follow the fields; their values merge into the submitted object (null blocks the
+// send); on a 422 each part places its own problems first, the form's fields get the rest.
+export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own, parts = [] }) {
   const getCtx = () => contextOf(own);
   const me = getCtx().me;
   const zone = timeZone || (me && me.timezone) || "UTC";
@@ -390,8 +393,10 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     const ctx = getCtx();
     for (const entry of entries) setFieldError(entry, "");
     showStatus(status, [], "info");
-    const values = convert(entries, zone, ctx.t);
-    if (!values) return;
+    const own = convert(entries, zone, ctx.t);
+    const given = parts.map((part) => part.values());
+    if (!own || given.some((value) => value === null)) return;
+    const values = Object.assign({}, own, ...given);
     const raw = rawValues(entries);
     const secretNames = secrets.map((entry) => entry.field.name);
     try {
@@ -401,7 +406,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
       handleFailure(error, ctx, {
         status,
         keepDraft: () => draftKey && saveDraft(draftKey, stripSecrets(raw, secretNames)),
-        showValidation: (fieldErrors, ctx) => placeFieldErrors(entries, fieldErrors, ctx),
+        showValidation: (fieldErrors, ctx) => placeFieldErrors(entries, parts.reduce((left, part) => part.placeErrors(left), fieldErrors), ctx),
       });
     }
   };
@@ -413,7 +418,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
       for (const entry of secrets) entry.input.value = "";
     }
   };
-  const { form, status } = formFrame(submitLabel, entries.map((entry) => entry.row), run, getCtx);
+  const { form, status } = formFrame(submitLabel, [...entries.map((entry) => entry.row), ...parts.map((part) => part.element)], run, getCtx);
   formParts.set(form, { entries, zone, lang: getCtx().lang });
   if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft));
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");

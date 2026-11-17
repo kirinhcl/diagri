@@ -4,7 +4,7 @@ import { hasDraft } from "../drafts.js";
 import { h } from "./dom.js";
 import { convert, fieldRow, initialText, jsonEditor, placeFieldErrors, setFieldError } from "./forms.js";
 
-// A field spec for simpleForm: a text area whose lines become a string[] (blank lines dropped, ends trimmed).
+// A field spec for simpleForm's `fields` (it is a plain field, not a part): a text area whose lines become a string[] (blank lines dropped, ends trimmed).
 export function linesField({ name, label, hint, value, maxItems, maxItemLength, required }) {
   const parse = (text, t) => {
     const items = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -18,8 +18,9 @@ export function linesField({ name, label, hint, value, maxItems, maxItemLength, 
   return { name, label, hint, value, required, type: "textarea", parse };
 }
 
-// Rows of the same fields. values() gives one object per row, or null (errors shown beside the
-// fields) when a row is not valid. placeErrors(problems, ctx) puts the 422 problems under
+// Rows of the same fields, usable as one of simpleForm's `parts`: values() gives {[name]: one object
+// per row}, or null (errors shown beside the fields) when a row is not valid; rows() gives the
+// bare array. placeErrors(problems, ctx) puts the 422 problems under
 // <name>.<row index>.<field> beside that row's field and returns the problems it did not place.
 export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity }) {
   const zone = (ctx.me && ctx.me.timezone) || "UTC";
@@ -51,7 +52,7 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
     for (const row of next) addRow(row);
     while (items.length < minRows) addRow({});
   };
-  const values = () => {
+  const rowValues = () => {
     const all = items.map((item) => {
       for (const entry of item.entries) setFieldError(entry, "");
       return convert(item.entries, zone, ctx.t);
@@ -67,7 +68,11 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
     return placeFieldErrors(item.entries, [inner], ctx).length === 0;
   }
   setRows(rows);
-  return { element, values, setRows, placeErrors };
+  const values = () => {
+    const all = rowValues();
+    return all && { [name]: all };
+  };
+  return { element, values, rows: rowValues, setRows, placeErrors };
 }
 
 // The existing JSON editor, tucked under a closed fold (open only when it brings back a draft).
