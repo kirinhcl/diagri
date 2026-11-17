@@ -11,6 +11,7 @@ from typing import NamedTuple
 import pytest
 
 import growbridge
+from growbridge.api import BRIDGE_ERROR_CODES
 from growbridge.codes import Code
 from growbridge.denial_codes import DENIAL_CODES
 from growbridge.ports import Denied
@@ -55,8 +56,21 @@ def refusal_sites(root: Path) -> list[Site]:
     return found
 
 
+def coded_http_reasons(root: Path) -> set[str]:
+    """The literal ``reason=`` of every ``CodedHTTPError(...)`` call under ``root``."""
+    found: set[str] = set()
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "CodedHTTPError":
+                found |= {
+                    r for k in node.keywords if k.arg == "reason" and (r := _literal(k.value))
+                }
+    return found
+
+
 def sent_elsewhere() -> set[str]:
-    return set()
+    """Reasons sent by ``CodedHTTPError`` calls and by the root app's ``BridgeError`` table."""
+    return coded_http_reasons(SRC) | {reason for _, reason in BRIDGE_ERROR_CODES.values()}
 
 
 # Files that still have a refusal without a reason; each task removes the files it converts.

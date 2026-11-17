@@ -2022,6 +2022,36 @@
       ],
       "action": false,
       "of": "quota"
+    },
+    "origin_not_allowed": {
+      "params": [],
+      "action": true,
+      "of": "entry"
+    },
+    "use_workbench": {
+      "params": [],
+      "action": true,
+      "of": "entry"
+    },
+    "dashboard_not_connected": {
+      "params": [],
+      "action": true,
+      "of": "session"
+    },
+    "link_used": {
+      "params": [],
+      "action": true,
+      "of": "session"
+    },
+    "too_many_pending_connections": {
+      "params": [],
+      "action": true,
+      "of": "locked"
+    },
+    "too_many_sessions": {
+      "params": [],
+      "action": true,
+      "of": "locked"
     }
   }
 }

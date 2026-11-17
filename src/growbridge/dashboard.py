@@ -4,7 +4,7 @@ import hashlib
 import secrets
 import time
 
-from fastapi import HTTPException
+from .httperror import CodedHTTPError
 
 COOKIE = "growbridge_session"
 SESSION_SECONDS = 12 * 3600
@@ -27,7 +27,12 @@ class BrowserSessions:
     def issue(self) -> str:
         self.prune()
         if len(self.codes) >= 64:
-            raise HTTPException(429, "Too many pending browser connections")
+            raise CodedHTTPError(
+                429,
+                "Too many pending browser connections",
+                code="locked",
+                reason="too_many_pending_connections",
+            )
         code = secrets.token_urlsafe(32)
         self.codes[digest(code)] = time.monotonic() + 60
         return code
@@ -35,9 +40,16 @@ class BrowserSessions:
     def redeem(self, code: str) -> str:
         self.prune()
         if self.codes.pop(digest(code), 0) <= time.monotonic():
-            raise HTTPException(401, "Connection link has expired or was already used")
+            raise CodedHTTPError(
+                401,
+                "Connection link has expired or was already used",
+                code="session",
+                reason="link_used",
+            )
         if len(self.sessions) >= 64:
-            raise HTTPException(429, "Too many browser sessions")
+            raise CodedHTTPError(
+                429, "Too many browser sessions", code="locked", reason="too_many_sessions"
+            )
         session = secrets.token_urlsafe(32)
         self.sessions[digest(session)] = time.monotonic() + SESSION_SECONDS
         return session

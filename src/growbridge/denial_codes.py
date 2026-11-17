@@ -322,3 +322,8 @@ _register(
     action=False,
 )
 _register("quota", ("quota_proposal_limit", ("max_proposals",)), action=False)
+
+# --- root app (/api) and its browser sessions (api.py, dashboard.py) ----------------------------
+_register("entry", ("origin_not_allowed", ()), ("use_workbench", ()))
+_register("session", ("dashboard_not_connected", ()), ("link_used", ()))
+_register("locked", ("too_many_pending_connections", ()), ("too_many_sessions", ()), action=True)
