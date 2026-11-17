@@ -67,6 +67,7 @@ against the server's enums and literals.
 | stage.json, run-sheet.json, readings.json, measurements.json, history.json, manual-tasks.json | `/stages/{stage_id}`, `/run-sheet`, `/readings?points=120`, `/measurements`, `/history`, `/manual-tasks` of the ended stage |
 | round-pending.json, stage-pending.json, run-sheet-pending.json, readings-pending.json, measurements-pending.json, history-pending.json, manual-tasks-pending.json | the same reads for `stage-dev`, the dev seed's stage waiting for review |
 | environment.json | `/environment?window=3600&points=360` |
+| device-notes.json | `/devices/{device_id}/notes` |
 | safety.json | `/safety` |
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
