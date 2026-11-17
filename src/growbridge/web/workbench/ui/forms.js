@@ -196,8 +196,8 @@ function optionList(field, value) {
 function control(field, attrs, value) {
   const limits = { min: field.min, max: field.max, maxlength: field.maxlength };
   if (field.type === "checkbox") return h("input", { class: "input-check", attrs: { ...attrs, type: "checkbox", checked: value === "true" } });
-  // `code` fields (a script) are monospace, tall, and never spell-checked.
-  if (field.type === "textarea" && field.code) return h("textarea", { class: "input input-area input-code", attrs: { ...attrs, maxlength: limits.maxlength, rows: 10, spellcheck: "false" }, text: value });
+  // `code` fields (a script) are monospace, tall, never spell-checked, and have no maxlength attribute: a browser would cut a long paste silently, so the length is checked (in code points) beside the field instead.
+  if (field.type === "textarea" && field.code) return h("textarea", { class: "input input-area input-code", attrs: { ...attrs, rows: 10, spellcheck: "false" }, text: value });
   if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs: { ...attrs, maxlength: limits.maxlength }, text: value });
   if (field.type === "select") return h("select", { class: "input", attrs }, optionList(field, value));
   const types = { number: "number", datetime: "datetime-local", password: "password", hidden: "hidden" };
@@ -255,7 +255,7 @@ function limitError(field, value, t) {
   if (typeof value === "number") {
     if (field.min !== undefined && value < field.min) return t("form.tooSmall", { min: field.min });
     if (field.max !== undefined && value > field.max) return t("form.tooBig", { max: field.max });
-  } else if (field.maxlength !== undefined && String(value).length > field.maxlength) {
+  } else if (field.maxlength !== undefined && [...String(value)].length > field.maxlength) {
     return t("form.tooLong", { max: field.maxlength });
   }
   return null;

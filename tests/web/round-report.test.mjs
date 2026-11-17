@@ -342,7 +342,7 @@ test("freezing asks first and says it cannot be undone; cancelling sends nothing
   };
   const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "textarea").length);
   const area = elements(form, "textarea")[0];
-  assert.equal(area.getAttribute("maxlength"), "20000");
+  assert.equal(area.getAttribute("maxlength"), null, "a browser would cut a long paste silently");
   assert.ok(area.classList.contains("input-code"), "monospace");
   assert.ok(visibleText(form).includes("cannot be undone"), visibleText(form));
   assert.equal(elements(form, "details").length, 0, "no JSON fold");
@@ -364,6 +364,33 @@ test("freezing asks first and says it cannot be undone; cancelling sends nothing
   await settle();
   assert.equal(posts.length, 1);
   assert.deepEqual(posts[0].body, { project_id: ROUND.project_id, script: "print(1)" });
+});
+
+test("a freeze script longer than the limit is refused beside the field, nothing is cut and nothing is sent", async () => {
+  const c = testCtx({ lang: "en" });
+  bindFormContext(c);
+  const posts = [];
+  c.api.post = async (path, body) => {
+    posts.push({ path, body });
+    return {};
+  };
+  const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "textarea").length);
+  const long = "a".repeat(20001);
+  formControls(form).set({ script: long });
+  assert.equal(elements(form, "textarea")[0].value, long, "the whole paste stays in the field");
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.equal(posts.length, 0);
+  assert.equal(openDialogs().length, 0, "refused before any confirmation");
+  assert.ok(elements(form, "p").some((p) => p.classList.contains("field-error") && p.textContent.includes("20000")), visibleText(form));
+  formControls(form).set({ script: "\u{1F600}".repeat(15000) });
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.equal(openDialogs().length, 1, "15000 code points fit although they are 30000 UTF-16 units, as Python counts them");
+  answerNextDialog(false);
+  await settle();
+  await settle();
 });
 
 test("the run form starts on 'choose' and asks before the one run a snapshot allows", async () => {
