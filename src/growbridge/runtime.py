@@ -664,7 +664,7 @@ def build_runtime(
         unreadable.append(settings.backup_dir)
     sandbox = make_runtime_sandbox(unreadable)
     outcomes = project_outcomes(  # a holdout may only be registered before its outcomes exist
-        archive.outcome_experiments, flow.store.projects_of_experiment
+        archive.batch_metrics, flow.store.projects_of_experiment
     )
     backups = Backups(
         dict(zip(DATABASES, dbs.values(), strict=True)),

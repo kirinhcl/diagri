@@ -2,6 +2,7 @@ import json
 
 import pytest
 from dispatch_helpers import call, result_blocks, script_calls
+from vocab_support import TEST_CATALOG
 
 from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive import snapshot as snapshots
@@ -774,7 +775,7 @@ async def test_publish_with_a_round_in_the_wrong_state_is_an_error_and_publishes
 
 
 def _registry(env) -> HoldoutRegistry:
-    registry = HoldoutRegistry(env.db, env.clock)
+    registry = HoldoutRegistry(env.db, env.clock, catalog=TEST_CATALOG)
     registry.register(
         env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], ["d-1", "d-2", "d-3"]
     )

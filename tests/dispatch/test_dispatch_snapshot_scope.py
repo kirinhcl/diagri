@@ -4,6 +4,7 @@ import json
 
 import pytest
 from dispatch_helpers import call, script_calls
+from vocab_support import TEST_CATALOG
 
 from growbridge.archive import snapshot as snapshots
 from growbridge.archive.models import ManualMeasurement, SampleRecord
@@ -197,7 +198,7 @@ async def test_a_scripted_run_cannot_reach_a_foreign_snapshot(env):
 
 
 def _holdout(env) -> HoldoutRegistry:
-    registry = HoldoutRegistry(env.db, env.clock)
+    registry = HoldoutRegistry(env.db, env.clock, catalog=TEST_CATALOG)
     registry.register(
         env.project_id, "hold-1", ["batch-h"], ["canopy_area_growth"], ["d-1", "d-2", "d-3"]
     )

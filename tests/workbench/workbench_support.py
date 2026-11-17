@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from vocab_support import TEST_CATALOG
 
 from growbridge.agents.budget import CallBudget
 from growbridge.agents.conversation import ConversationLog
@@ -128,9 +129,9 @@ class Bench:
         self.sandbox = ScriptedSandbox()
         self.runner = ConfirmatoryRunner(self.db, self.clock, self.sandbox, tmp_path / "analysis")
         outcomes = project_outcomes(
-            self.archive.outcome_experiments, self.workflow.store.projects_of_experiment
+            self.archive.batch_metrics, self.workflow.store.projects_of_experiment, TEST_CATALOG
         )
-        self.holdout = HoldoutRegistry(self.db, self.clock, outcomes)
+        self.holdout = HoldoutRegistry(self.db, self.clock, outcomes, TEST_CATALOG)
         self.conversation = ConversationLog(self.db, self.clock)
         # a callable taking this bench: the compute service shares its database and clock
         self.compute = None if compute_factory is None else compute_factory(self)

@@ -10,7 +10,7 @@ from growbridge.ports import Denied
 DEV = ("dev-1", "dev-2")
 
 
-def outcome(batch: str, metric: str = "yield_g") -> ManualMeasurement:
+def outcome(batch: str, metric: str = "canopy_area_growth") -> ManualMeasurement:
     return ManualMeasurement(
         id="m-1",
         experiment_id=f"experiment-{STAGE}",
@@ -33,7 +33,7 @@ async def test_the_assembled_runtime_refuses_a_holdout_whose_outcomes_exist(worl
     runtime.archive.add_measurement(outcome("b3"))
 
     with pytest.raises(Denied) as caught:
-        runtime.holdout.register(project, "h1", ("b3",), ("yield_g",), DEV)
+        runtime.holdout.register(project, "h1", ("b3",), ("canopy_area_growth",), DEV)
 
     assert caught.value.code == "state"
     assert runtime.holdout.holdouts(project) == ()
@@ -44,6 +44,6 @@ async def test_the_assembled_runtime_registers_a_holdout_before_its_outcomes(wor
     project, _round = world.designed_stage(runtime)
     runtime.archive.add_measurement(outcome("b1"))  # a development batch: not in the way
 
-    runtime.holdout.register(project, "h1", ("b3",), ("yield_g",), DEV)
+    runtime.holdout.register(project, "h1", ("b3",), ("canopy_area_growth",), DEV)
 
     assert [h.holdout_id for h in runtime.holdout.holdouts(project)] == ["h1"]

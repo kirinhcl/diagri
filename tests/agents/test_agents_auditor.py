@@ -7,6 +7,7 @@ import json
 import pytest
 from dispatch_env import Env
 from pydantic import ValidationError
+from vocab_support import TEST_CATALOG
 
 from growbridge.agents.handlers_auditor import FindingInput
 from growbridge.agents.handlers_common import bind_task
@@ -73,7 +74,7 @@ def _measure(env, mid: str, measured_at: float, metric="height", batch="b", valu
 
 def _held_out_deps(env):
     """Deps with a holdout of batch ``batch-h``'s ``yield`` outcomes registered."""
-    registry = HoldoutRegistry(env.db, env.clock)
+    registry = HoldoutRegistry(env.db, env.clock, catalog=TEST_CATALOG)
     registry.register(env.project_id, "hold-1", ["batch-h"], ["yield"], ["d-1", "d-2", "d-3"])
     return env.make_deps(alerts=env.book, holdout=registry)
 
