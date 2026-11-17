@@ -66,6 +66,7 @@ against the server's enums and literals.
 | environment.json | `/environment?window=3600&points=360` |
 | capabilities.json | `/capabilities` (synthetic, see below) |
 | safety.json | `/safety` |
+| safety-none.json | `/safety` when no limits are approved yet (`{"safety": null}`, synthetic; give it as `fixtures: {"safety.json": ...}`) |
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
 | compute.json | `/compute` (synthetic) |

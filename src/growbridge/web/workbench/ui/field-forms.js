@@ -20,9 +20,9 @@ export function linesField({ name, label, hint, value, maxItems, maxItemLength, 
 
 // Rows of the same fields, usable as one of simpleForm's `parts`: values() gives {[name]: one object
 // per row}, or null (errors shown beside the fields) when a row is not valid; rows() gives the
-// bare array. placeErrors(problems, ctx) puts the 422 problems under
+// bare array. onRow(entries) runs for each new row (to link its fields to each other). placeErrors(problems, ctx) puts the 422 problems under
 // <name>.<row index>.<field> beside that row's field and returns the problems it did not place.
-export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity }) {
+export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity, onRow }) {
   const zone = (ctx.me && ctx.me.timezone) || "UTC";
   const holder = h("div", { class: "row-group-rows" });
   const addButton = h("button", { class: "button", attrs: { type: "button" }, text: addLabel, on: { click: () => addRow({}) } });
@@ -32,8 +32,10 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
     addButton.toggleAttribute("disabled", items.length >= maxRows);
     for (const item of items) item.remove.toggleAttribute("disabled", items.length <= minRows);
   };
-  function addRow(row) {
-    const entries = fields.map((field) => fieldRow(field, initialText({ ...field, value: row[field.name] }, zone, ctx.lang), zone));
+  function addRow(row, texts = {}) {
+    const start = (field) => (Object.hasOwn(texts, field.name) ? texts[field.name] : initialText({ ...field, value: row[field.name] }, zone, ctx.lang));
+    const entries = fields.map((field) => fieldRow(field, start(field), zone));
+    if (onRow) onRow(entries);
     const remove = h("button", { class: "button", attrs: { type: "button" }, text: removeLabel });
     const el = h("div", { class: "row-group-row" }, entries.map((entry) => entry.row), remove);
     const item = { entries, el, remove };
@@ -72,7 +74,16 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
     const all = rowValues();
     return all && { [name]: all };
   };
-  return { element, values, rows: rowValues, setRows, placeErrors };
+  // The draft is what is typed, as text, so a half-filled row survives a lost session.
+  const rawText = (entry) => (entry.field.type === "checkbox" ? String(entry.input.checked) : entry.input.value);
+  const draft = () => items.map((item) => Object.fromEntries(item.entries.map((entry) => [entry.field.name, rawText(entry)])));
+  const restore = (saved) => {
+    for (const item of items) item.el.remove();
+    items = [];
+    for (const texts of saved) addRow({}, texts);
+    sync();
+  };
+  return { name, element, values, rows: rowValues, setRows, placeErrors, draft, restore };
 }
 
 // The existing JSON editor, tucked under a closed fold (open only when it brings back a draft).

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { advancedJson, linesField, rowGroup } from "../../src/growbridge/web/workbench/ui/field-forms.js";
-import { formControls, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { formControls, saveAllDrafts, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { installFakeDom, testCtx } from "./support/render-page.mjs";
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -246,4 +246,34 @@ test("a server error under a row lands on that row, not on a top-level field of 
   assert.ok(errors[0].hidden, "top-level name stays clean");
   assert.ok(errors[1].hidden && !errors[2].hidden);
   assert.equal(inputNamed(form, "name")[2].getAttribute("aria-invalid"), "true");
+});
+
+function draftForm(rows) {
+  const ctx = testCtx({ lang: "en", timezone: "UTC" });
+  const group = rowGroup({ ctx, name: "treatments", label: "Treatments", fields: [{ name: "name", label: "Row name" }], rows, addLabel: "Add", removeLabel: "Remove" });
+  const form = simpleForm({ fields: [{ name: "title", label: "Title" }], submitLabel: "Save", onSubmit: async () => {}, ctx, draftKey: "rows-draft", parts: [group] });
+  return { form, group };
+}
+
+test("rows edited in a row group are restored after a draft is kept", () => {
+  installFakeDom();
+  const first = draftForm([{ name: "a" }]);
+  inputNamed(first.form, "name")[0].value = "edited";
+  const add = byTag(first.group.element, "button").at(-1);
+  add.dispatchEvent(new Event("click"));
+  inputNamed(first.form, "name")[1].value = "second";
+  document.body.append(first.form);
+  assert.ok(saveAllDrafts() >= 1);
+  const second = draftForm([{ name: "a" }]);
+  assert.deepEqual(inputNamed(second.form, "name").map((input) => input.value), ["edited", "second"]);
+  assert.deepEqual(second.group.rows(), [{ name: "edited" }, { name: "second" }]);
+});
+
+test("a draft saved before parts existed (fields only) still restores", async () => {
+  installFakeDom();
+  const { saveDraft } = await import("../../src/growbridge/web/workbench/drafts.js");
+  saveDraft("rows-draft", { title: "old" });
+  const { form, group } = draftForm([{ name: "a" }]);
+  assert.equal(inputNamed(form, "title")[0].value, "old");
+  assert.deepEqual(group.rows(), [{ name: "a" }]);
 });

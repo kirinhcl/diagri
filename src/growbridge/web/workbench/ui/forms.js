@@ -235,7 +235,7 @@ export function fieldRow(field, value, timeZone) {
     "div",
     { class: "field" },
     h("label", { class: "field-label", attrs: { for: id }, text: field.label }),
-    h("div", { class: "field-control" }, input, field.unit && h("span", { class: "field-unit", text: field.unit }), zone, list),
+    h("div", { class: "field-control" }, input, field.unit !== undefined && h("span", { class: "field-unit", text: field.unit }), zone, list),
     field.hint && h("p", { class: "field-hint", attrs: { id: hintId }, text: field.hint }),
     error,
   );
@@ -339,12 +339,20 @@ export function worthKeeping(start, now) {
   return Object.keys(now).some((name) => now[name] !== start[name]);
 }
 
-function keepOnSessionLoss(form, draftKey, entries, restored) {
+// A part may keep its own draft: draft() gives plain data, restore(data) takes it back. A form with
+// such parts saves {fields, parts: {name: data}}; a draft of plain fields (older) restores as before.
+const partDrafts = (parts) => Object.fromEntries(parts.filter((part) => part.draft).map((part) => [part.name, part.draft()]));
+const packDraft = (parts, fields, partData) => (parts.some((part) => part.draft) ? { fields, parts: partData } : fields);
+const isPackedDraft = (draft) => Boolean(draft) && Object.hasOwn(draft, "fields") && Object.hasOwn(draft, "parts");
+
+function keepOnSessionLoss(form, draftKey, entries, restored, parts) {
   const secretNames = entries.filter((entry) => entry.field.type === "password").map((entry) => entry.field.name);
-  const start = restored ? null : stripSecrets(rawValues(entries), secretNames);
+  const read = () => ({ fields: stripSecrets(rawValues(entries), secretNames), data: partDrafts(parts) });
+  const start = restored ? null : read();
   registerDraftSaver(form, () => {
-    const now = stripSecrets(rawValues(entries), secretNames);
-    if (worthKeeping(start, now)) saveDraft(draftKey, now);
+    const now = read();
+    const same = start && JSON.stringify(start.data) === JSON.stringify(now.data);
+    if (!same || worthKeeping(start && start.fields, now.fields)) saveDraft(draftKey, packDraft(parts, now.fields, now.data));
   });
 }
 
@@ -379,7 +387,7 @@ export function formControls(form) {
   return { get, set, suggest, focus };
 }
 
-// parts: [{element, values(): object | null, placeErrors(problems): problems}] (a rowGroup is one).
+// parts: [{name, element, values(): object | null, placeErrors(problems): problems, draft?(), restore?(data)}] (a rowGroup is one).
 // Their elements follow the fields; their values merge into the submitted object (null blocks the
 // send); on a 422 each part places its own problems first, the form's fields get the rest.
 export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own, parts = [] }) {
@@ -387,7 +395,9 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
   const me = getCtx().me;
   const zone = timeZone || (me && me.timezone) || "UTC";
   const draft = draftKey ? takeDraft(draftKey) : null;
-  const entries = formEntries(fields, draft, zone, getCtx().lang);
+  const packed = isPackedDraft(draft);
+  const entries = formEntries(fields, packed ? draft.fields : draft, zone, getCtx().lang);
+  for (const part of parts) if (packed && part.restore && draft.parts[part.name]) part.restore(draft.parts[part.name]);
   const secrets = entries.filter((entry) => entry.field.type === "password");
   const attempt = async () => {
     const ctx = getCtx();
@@ -398,6 +408,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     if (!own || given.some((value) => value === null)) return;
     const values = Object.assign({}, own, ...given);
     const raw = rawValues(entries);
+    const rowsNow = partDrafts(parts);
     const secretNames = secrets.map((entry) => entry.field.name);
     try {
       await onSubmit(values);
@@ -405,7 +416,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     } catch (error) {
       handleFailure(error, ctx, {
         status,
-        keepDraft: () => draftKey && saveDraft(draftKey, stripSecrets(raw, secretNames)),
+        keepDraft: () => draftKey && saveDraft(draftKey, packDraft(parts, stripSecrets(raw, secretNames), rowsNow)),
         showValidation: (fieldErrors, ctx) => placeFieldErrors(entries, parts.reduce((left, part) => part.placeErrors(left), fieldErrors), ctx),
       });
     }
@@ -420,7 +431,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
   };
   const { form, status } = formFrame(submitLabel, [...entries.map((entry) => entry.row), ...parts.map((part) => part.element)], run, getCtx);
   formParts.set(form, { entries, zone, lang: getCtx().lang });
-  if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft));
+  if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft), parts);
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;
 }

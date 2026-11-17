@@ -1,14 +1,17 @@
 // The approved safety limits and an editor to approve a new set. Approval lists every change first.
 import { ApiError } from "../api.js";
+import { loadCapabilities } from "../capabilities.js";
 import { hasLabel } from "../i18n.js";
 import { configDiff } from "../diff.js";
 import { confirmAction } from "../ui/dialog.js";
 import { clear, h } from "../ui/dom.js";
-import { errorLines, jsonEditor } from "../ui/forms.js";
+import { advancedJson } from "../ui/field-forms.js";
+import { errorLines } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
 import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
+import { safetyForm } from "./safety-form.js";
 import { exactText, frozenLine, ruleSentence } from "./safety-text.js";
 
 export { ruleSentence, unitText } from "./safety-text.js";
@@ -104,21 +107,24 @@ export async function render(ctx) {
     readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
   await readCurrent();
   const outcome = { text: ctx.t("form.done"), refused: false };
-  const editor = jsonEditor({
+  const editorCtx = editorContext(ctx, refreshCurrent, outcome);
+  const approve = approver(ctx, state, outcome, readCurrent, refreshCurrent);
+  const form = safetyForm(editorCtx, { current: state.current, capabilities: await loadCapabilities(ctx), onSubmit: approve });
+  const advanced = advancedJson({
+    ctx: editorCtx,
     label: ctx.t("safety.json"),
     value: state.current || safetySkeleton(),
     submitLabel: ctx.t("safety.approve"),
-    onSubmit: approver(ctx, state, outcome, readCurrent, refreshCurrent),
+    onSubmit: approve,
     draftKey: "safety",
-    ctx: editorContext(ctx, refreshCurrent, outcome),
   });
-  const lead = state.current ? ctx.t("safety.editLead") : ctx.t("safety.skeletonLead");
+  const lead = state.current ? note(ctx.t("safety.editLead")) : null;
   const element = h(
     "div",
     { class: "page safety" },
     pageHead(ctx.t("nav.safety"), ctx.t("safety.lead")),
     section(ctx.t("safety.current"), currentBox),
-    section(ctx.t("safety.edit"), note(lead), editor),
+    section(ctx.t("safety.edit"), lead, form, advanced),
   );
   return { element };
 }
