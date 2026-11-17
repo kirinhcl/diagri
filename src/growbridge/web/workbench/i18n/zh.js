@@ -257,7 +257,7 @@ export default {
   "analysis.freeze": "冻结脚本",
   "analysis.frozen": "已锁定分析脚本",
   "analysis.snapshots": "数据快照",
-  "analysis.noSnapshots": "这个协议下还没有数据快照。",
+  "analysis.noSnapshots": "目前还没有数据快照，因此没有可分析的内容。阶段结束时冻结该阶段的数据，就会生成快照。",
   "analysis.snapshot": "快照",
   "analysis.complete": "是否完整",
   "analysis.runStatus": "运行状态",

@@ -87,11 +87,10 @@ function freezeEditor(ctx, round) {
 function runForm(ctx, round, analysis) {
   const submitLabel = ctx.t("analysis.run");
   const snapshots = array(analysis.snapshots);
+  if (!snapshots.length) return null; // nothing to run on: the snapshots block above already says so
   const label = ctx.t("analysis.snapshot");
   const options = [{ value: "", label: ctx.t("form.choose") }, ...snapshots.map((row) => ({ value: row.snapshot_id, label: displayName(ctx, "snapshot", row) }))];
-  const field = snapshots.length
-    ? { name: "snapshot_id", label, type: "select", options, required: true }
-    : { name: "snapshot_id", label, type: "text", required: true };
+  const field = { name: "snapshot_id", label, type: "select", options, required: true };
   const onSubmit = async ({ snapshot_id: snapshotId }) => {
     const row = snapshots.find((item) => item.snapshot_id === snapshotId);
     const lines = [ctx.t("analysis.runConfirm.line")];

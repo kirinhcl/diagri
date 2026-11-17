@@ -402,6 +402,17 @@ test("the redo confirm line says the stage goes back to review and nothing runs 
   assert.match(zh["round.choice.redo.line"], /运行单/);
 });
 
+test("with no snapshot there is no id field and no run button; one sentence says what makes a snapshot", async () => {
+  const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
+  const c = testCtx({ lang: "en", fixtures: { "analysis.json": { ...ANALYSIS, frozen, snapshots: [] } } });
+  bindFormContext(c);
+  const root = await analysisSection(c, ROUND);
+  assert.equal(elements(root, "input").length, 0, "no id to type");
+  assert.equal(elements(root, "button").some((b) => b.textContent === en["analysis.run"]), false, "no run button");
+  assert.ok(visibleText(root).includes("no data snapshot yet"), visibleText(root));
+  assert.ok(visibleText(root).includes("frozen at the end of a stage"), visibleText(root));
+});
+
 test("the run form starts on 'choose' and asks before the one run a snapshot allows", async () => {
   const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
   const c = testCtx({ lang: "en", fixtures: { "analysis.json": { ...ANALYSIS, frozen } } });

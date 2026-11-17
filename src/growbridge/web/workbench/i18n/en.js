@@ -257,7 +257,7 @@ export default {
   "analysis.freeze": "Freeze script",
   "analysis.frozen": "Analysis script locked",
   "analysis.snapshots": "Data snapshots",
-  "analysis.noSnapshots": "No snapshot exists under this protocol yet.",
+  "analysis.noSnapshots": "There is no data snapshot yet, so there is nothing to analyse. A snapshot is made when a stage's data is frozen at the end of a stage.",
   "analysis.snapshot": "Snapshot",
   "analysis.complete": "Complete",
   "analysis.runStatus": "Run status",
