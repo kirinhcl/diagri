@@ -4,7 +4,7 @@ import { ApiError } from "../api.js";
 import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { confirmOrCancel, simpleForm } from "../ui/forms.js";
-import { displayName, nameDetails } from "../ui/names.js";
+import { displayName, nameDetails, protocolName } from "../ui/names.js";
 import { afterWrite, errorParts, keyValues, note, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 
@@ -71,7 +71,7 @@ function snapshotsView(ctx, analysis) {
 
 function freezeEditor(ctx, round) {
   const submitLabel = ctx.t("analysis.freeze");
-  const protocol = ctx.t("round.protocolValue", { id: round.protocol_id, v: round.protocol_version });
+  const protocol = protocolName(ctx.t, round.protocol_id, round.protocol_version);
   const field = { name: "script", label: ctx.t("analysis.form.script"), type: "textarea", code: true, required: true, maxlength: MAX_SCRIPT_CHARS, hint: ctx.t("analysis.form.scriptHint") };
   const onSubmit = async ({ script }) => {
     const lines = [ctx.t("analysis.freezeConfirm.protocol", { name: protocol }), ctx.t("analysis.freezeConfirm.line")];
@@ -151,11 +151,12 @@ function fold(ctx, { state = null, open = false }, ...children) {
 }
 
 function facts(ctx, round, analysis) {
-  return keyValues([
-    [ctx.t("col.protocol"), ctx.t("round.protocolValue", { id: analysis.protocol_id, v: analysis.version })],
+  const rows = keyValues([
+    [ctx.t("col.protocol"), protocolName(ctx.t, analysis.protocol_id, analysis.version)],
     [ctx.t("analysis.roundVersion"), ctx.t("analysis.versionValue", { v: round.protocol_version })],
     [ctx.t("analysis.started"), ctx.t(analysis.started ? "common.yes" : "common.no")],
   ]);
+  return h("div", {}, rows, techDetails(ctx.t, nameDetails({ protocol_id: analysis.protocol_id }, ctx.t)));
 }
 
 export async function analysisSection(ctx, round) {

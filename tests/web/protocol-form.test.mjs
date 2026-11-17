@@ -4,6 +4,7 @@ import { afterEach, test } from "node:test";
 
 import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
+import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
 import { protocolForm } from "../../src/growbridge/web/workbench/pages/protocol-form.js";
 import { holdoutEditor } from "../../src/growbridge/web/workbench/pages/project-forms.js";
 import { bindFormContext, formControls, saveAllDrafts } from "../../src/growbridge/web/workbench/ui/forms.js";
@@ -294,6 +295,28 @@ test("saving as a saved protocol sends its id with the next version, through the
   const [post] = posts(ctx, "/protocols");
   assert.equal(post.body.protocol.id, "protocol-lettuce-light");
   assert.equal(post.body.protocol.version, 2);
+});
+
+test("the save-as choice and the saved notice call a protocol the console saved by its number, never its id", async () => {
+  const id = `protocol-2-${TAIL}`;
+  const fixtures = { "project.json": { ...PROJECT, protocols: [{ ...PROJECT.protocols[0], protocol_id: id }] } };
+  const answers = { "/protocols": (body) => ({ protocol_id: body.protocol.id, version: body.protocol.version, digest: "d".repeat(64) }) };
+  const cases = [
+    ["en", en, "A new version of Protocol 2 (now version 1)", "Protocol 2, version 2 was saved."],
+    ["zh", zh, "协议 2 的新版本（现在是第 1 版）", "已保存协议 2，第 2 版。"],
+  ];
+  for (const [lang, table, item, saved] of cases) {
+    const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang, fixtures, answers });
+    const notices = [];
+    ctx.notify = (message) => notices.push(message);
+    const form = byTag(sectionOf(element, table["project.protocols.title"]), "form")[0];
+    const choose = named(form, "save_as")[0];
+    assert.deepEqual(byTag(choose, "option").map((option) => option.textContent), [table["protocol.form.saveAsNew"], item]);
+    change(choose, id);
+    fill(form);
+    await submit(form);
+    assert.deepEqual(notices, [saved]);
+  }
 });
 
 test("a new protocol is the default choice and gets a new id at version 1", async () => {

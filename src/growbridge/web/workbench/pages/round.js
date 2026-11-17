@@ -5,7 +5,7 @@ import { messageParts } from "../messages.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
 import { confirmOrCancel, simpleForm } from "../ui/forms.js";
-import { displayName, nameDetails } from "../ui/names.js";
+import { displayName, nameDetails, protocolName } from "../ui/names.js";
 import { inline, richText } from "../ui/rich-text.js";
 import { afterWrite, confirmedButton, errorParts, keyValues, note, pageHead, section, techDetails } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
@@ -27,7 +27,7 @@ function summary(ctx, round) {
   return keyValues([
     [ctx.t("col.state"), statePill(ctx.t, round.state)],
     [ctx.t("round.project"), project],
-    [ctx.t("col.protocol"), ctx.t("round.protocolValue", { id: round.protocol_id, v: round.protocol_version })],
+    [ctx.t("col.protocol"), protocolName(ctx.t, round.protocol_id, round.protocol_version)],
     [ctx.t("round.progress"), `${round.stages_done} / ${round.stage_total}`],
   ]);
 }

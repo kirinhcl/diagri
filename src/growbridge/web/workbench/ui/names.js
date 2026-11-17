@@ -14,8 +14,12 @@ const ID_LABELS = {
   snapshot_id: "tech.id.snapshot_id",
   attempt_id: "tech.id.attempt_id",
   task_id: "tech.id.task_id",
+  protocol_id: "tech.id.protocol_id",
   id: "tech.id.id",
 };
+// The ids the protocol form makes ("protocol-3-ab12cd": a number, then the project id's last six
+// characters) and the simulator's ("protocol-1").
+const MADE_PROTOCOL_ID = /^protocol-(\d+)(?:-.{1,6})?$/;
 
 const has = (value) => value !== undefined && value !== null && value !== "";
 
@@ -75,6 +79,15 @@ export function deviceName(t, id) {
 
 export function displayName(ctx, kind, row) {
   return NAMERS[kind](ctx, row || {});
+}
+
+// A protocol the console made is "Protocol 3"; one whose id a person typed in the JSON fold is called
+// by that text, the only name they gave it. With a version: "Protocol 3, version 2". The id itself
+// goes to the technical details (nameDetails reads `protocol_id`).
+export function protocolName(t, id, version = null) {
+  const made = MADE_PROTOCOL_ID.exec(has(id) ? String(id) : "");
+  const name = made ? t("name.protocol", { n: Number(made[1]) }) : has(id) ? t("name.protocol.typed", { name: id }) : t("name.protocol.unnamed");
+  return has(version) ? t("name.protocol.version", { name, v: version }) : name;
 }
 
 // The ids a row carries, as [label, value] pairs for techDetails. The label is the catalog key

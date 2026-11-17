@@ -92,7 +92,7 @@ export default {
   "holdout.form.lineHint": "每行一项，最多 50 行。",
   "protocol.form.saveAs": "保存为",
   "protocol.form.saveAsNew": "一份新协议",
-  "protocol.form.saveAsItem": "{id} 的新版本（现在是第 {version} 版）",
+  "protocol.form.saveAsItem": "{name} 的新版本（现在是第 {version} 版）",
   "protocol.form.versionTooLow": "这份协议已经保存到第 {saved} 版。请使用第 {next} 版或更高。",
   "analysis.form.script": "分析脚本",
   "analysis.form.scriptHint": "冻结后不能修改，只能用新版本协议重来。",

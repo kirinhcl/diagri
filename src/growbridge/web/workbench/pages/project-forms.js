@@ -6,6 +6,7 @@ import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
 import { advancedJson, linesField } from "../ui/field-forms.js";
 import { simpleForm } from "../ui/forms.js";
+import { protocolName } from "../ui/names.js";
 import { afterWrite } from "../ui/section.js";
 import { protocolForm, protocolSkeleton, versionRefusal } from "./protocol-form.js";
 
@@ -22,7 +23,7 @@ function editFold(ctx, draftKey, build) {
 export function startRoundForm(ctx, project) {
   const protocols = project.protocols || [];
   const label = ctx.t("project.protocol");
-  const options = protocols.map((item) => ({ value: item.protocol_id, label: ctx.t("round.protocolValue", { id: item.protocol_id, v: item.version }) }));
+  const options = protocols.map((item) => ({ value: item.protocol_id, label: protocolName(ctx.t, item.protocol_id, item.version) }));
   const field = protocols.length
     ? { name: "protocol_id", label, type: "select", options, required: true }
     : { name: "protocol_id", label, type: "text", required: true };
@@ -63,7 +64,7 @@ export function protocolEditor(ctx, project) {
   const submitLabel = ctx.t("project.protocols.save");
   const post = async (protocol) => {
     const saved = await ctx.api.post("/protocols", { protocol }, { action: submitLabel });
-    afterWrite(ctx, ctx.t("project.protocols.saved", { id: saved.protocol_id, version: saved.version }));
+    afterWrite(ctx, ctx.t("project.protocols.saved", { protocol: protocolName(ctx.t, saved.protocol_id, saved.version) }));
   };
   // The fold reads the saved versions again before it sends: a stale page can never reuse a version.
   const fromJson = async (protocol) => {

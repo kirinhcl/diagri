@@ -93,7 +93,7 @@ export default {
   "holdout.form.lineHint": "One per line, at most 50 lines.",
   "protocol.form.saveAs": "Save as",
   "protocol.form.saveAsNew": "A new protocol",
-  "protocol.form.saveAsItem": "A new version of {id} (now version {version})",
+  "protocol.form.saveAsItem": "A new version of {name} (now version {version})",
   "protocol.form.versionTooLow": "Version {saved} of this protocol is already saved. Use version {next} or higher.",
   "analysis.form.script": "Analysis script",
   "analysis.form.scriptHint": "Freezing cannot be undone; a change needs a new protocol version.",

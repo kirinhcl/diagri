@@ -5,6 +5,7 @@ import { ApiError } from "../api.js";
 import { h } from "../ui/dom.js";
 import { fieldsPart, linesField, rowGroup } from "../ui/field-forms.js";
 import { simpleForm } from "../ui/forms.js";
+import { protocolName } from "../ui/names.js";
 
 const DEFAULT_MISSING = 0.2;
 const DEFAULT_DEVIATION = 0.1;
@@ -212,7 +213,7 @@ const versionNote = (ctx, rows, id) => {
 // "A new protocol", or one of the saved protocols (then the form saves its next version).
 function saveAsField(ctx, rows, protocolId) {
   const saved = unique(rows.map((row) => row.protocol_id));
-  const options = saved.map((id) => ({ value: id, label: ctx.t("protocol.form.saveAsItem", { id, version: nextVersion(rows, id) - 1 }) }));
+  const options = saved.map((id) => ({ value: id, label: ctx.t("protocol.form.saveAsItem", { name: protocolName(ctx.t, id), version: nextVersion(rows, id) - 1 }) }));
   return { name: "save_as", label: ctx.t("protocol.form.saveAs"), type: "select", value: protocolId, options: [{ value: "", label: ctx.t("protocol.form.saveAsNew") }, ...options] };
 }
 

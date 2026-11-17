@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { displayName, nameDetails, roleLabel } from "../../src/growbridge/web/workbench/ui/names.js";
+import { displayName, nameDetails, protocolName, roleLabel } from "../../src/growbridge/web/workbench/ui/names.js";
 import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
 import { findLeaks, visibleText } from "./support/leaks.mjs";
 
@@ -53,6 +53,28 @@ test("nameDetails lists the ids that exist", () => {
   const rows = nameDetails({ project_id: "p", round_id: "r", id: "i" });
   assert.deepEqual(rows.map(([, v]) => v), ["p", "r", "i"]);
   assert.ok(rows.every(([label]) => typeof label === "string"));
+});
+
+test("nameDetails puts a protocol id in the details under its own label", () => {
+  assert.deepEqual(nameDetails({ round_id: "r", protocol_id: "protocol-1-9abf5a" }, en.t), [["Round id", "r"], ["Protocol id", "protocol-1-9abf5a"]]);
+  assert.deepEqual(nameDetails({ protocol_id: "protocol-1-9abf5a" }, zh.t), [["协议 id", "protocol-1-9abf5a"]]);
+});
+
+test("a protocol the console numbered is called by its number and version, never its id", () => {
+  assert.equal(protocolName(en.t, "protocol-1-9abf5a", 2), "Protocol 1, version 2");
+  assert.equal(protocolName(zh.t, "protocol-1-9abf5a", 2), "协议 1，第 2 版");
+  assert.equal(protocolName(en.t, "protocol-12-ject-1", 1), "Protocol 12, version 1"); // a project id ending "project-1"
+  assert.equal(protocolName(en.t, "protocol-1", 3), "Protocol 1, version 3"); // the simulator's protocol
+  assert.equal(protocolName(en.t, "protocol-1-9abf5a"), "Protocol 1");
+  assert.equal(protocolName(zh.t, "protocol-1-9abf5a", null), "协议 1");
+});
+
+test("a protocol whose id a person typed is called by that text; a missing one is unnamed", () => {
+  assert.equal(protocolName(en.t, "drought", 3), "Protocol “drought”, version 3");
+  assert.equal(protocolName(zh.t, "drought", 3), "协议「drought」，第 3 版");
+  assert.equal(protocolName(en.t, "protocol-2026-drought", 1), "Protocol “protocol-2026-drought”, version 1");
+  assert.equal(protocolName(en.t, null, 2), "Unnamed protocol, version 2");
+  assert.equal(protocolName(zh.t, "", undefined), "未命名协议");
 });
 
 function find(node, match) {
