@@ -203,7 +203,7 @@ Names that people gave are shown and ids stay in the technical details. The trea
 | 403 | every denial code not named in this table | same shape |
 | 409 | denial code `state` | same shape |
 | 429 | denial code `locked` | same shape |
-| 404 | `GET /wb/receipts/{request_id}` with an unknown id | `{"detail": "Unknown request id"}` |
+| 404 | `GET /wb/receipts/{request_id}` with an unknown id | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` outside the range of the channel, a measurement that was not accepted, or a protocol with an id or a version out of range or a number that is not finite | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | a body that does not pass validation, a run sheet with a number that is not finite among them | the validation errors; a NaN or an infinity the request carried is echoed as text |
 

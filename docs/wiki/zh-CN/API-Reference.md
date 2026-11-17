@@ -203,7 +203,7 @@
 | 403 | 本表没有单独列出的其他所有拒绝码 | 同样的结构 |
 | 409 | 拒绝码 `state` | 同样的结构 |
 | 429 | 拒绝码 `locked` | 同样的结构 |
-| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": "Unknown request id"}` |
+| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数 | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
 
