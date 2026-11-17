@@ -52,7 +52,12 @@ def _started_stage(deps: Deps, task_id: str, stage_id: str):
     require_stage_project(deps, stage_id)
     stage = deps.workflow.stage(stage_id)
     if stage.started_at is None:
-        raise Denied("state", f"stage {stage_id} never started; there is no data yet")
+        raise Denied(
+            "state",
+            f"stage {stage_id} never started; there is no data yet",
+            reason="stage_not_started",
+            params={"stage_id": stage_id},
+        )
     return stage
 
 
@@ -154,7 +159,12 @@ def raise_finding(deps: Deps, data: FindingInput) -> dict:
     require_bound(deps, data.task_id)
     require_stage_project(deps, data.stage_id)
     if deps.alerts is None:
-        raise Denied("state", "no alert book is available; the finding cannot be recorded")
+        raise Denied(
+            "state",
+            "no alert book is available; the finding cannot be recorded",
+            reason="alert_book_unavailable",
+            params={},
+        )
     key = f"{data.stage_id}:{sha256(data.summary.encode()).hexdigest()[:12]}"
     message = "\n".join((data.summary, *data.evidence))
     params = {

@@ -1,9 +1,11 @@
 import codes from "./codes.en.js";
+import denials from "./denials.en.js";
 import messages from "./messages.en.js";
 
 export default {
   ...codes,
   ...messages,
+  ...denials,
   "app.title": "DiAGRI Workbench",
   "app.subtitle": "Workbench",
   "common.hello": "Hello, {name}",
@@ -103,8 +105,10 @@ export default {
   "tech.copied": "Copied",
   "tech.copyFailed": "Copy failed; select the text by hand",
   "tech.httpStatus": "HTTP status",
+  "tech.reason": "Reason",
   "tech.code": "Code",
   "tech.serverMessage": "Server message",
+  "tech.validation": "Validation details",
   "tech.params": "Parameters",
   "tech.message": "Error message",
   "tech.recordId": "Record id",

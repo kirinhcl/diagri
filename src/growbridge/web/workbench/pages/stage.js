@@ -107,7 +107,7 @@ function problemBox(nodes) {
 // opened between polls stays open.
 function showResult(part, ctx, result, signatureOf, build) {
   if (result.error) {
-    const said = [errorLines(result.error, ctx.lang, ctx.t), errorDetail(result.error, ctx.t)];
+    const said = [errorLines(result.error, ctx.lang, ctx.t, ctx), errorDetail(result.error, ctx.t)];
     part.show(`error:${JSON.stringify(said)}`, () => problemBox(errorParts(ctx, result.error)));
     return;
   }

@@ -116,7 +116,12 @@ class StageRecovery:
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
         if stage.state not in (S.RECOVERY_CHECK, S.PAUSED, S.MANUAL):
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; no check is open")
+            raise Denied(
+                "state",
+                f"stage {stage_id} is {stage.state.value}; no check is open",
+                reason="onsite_check_not_open",
+                params={"stage_id": stage_id, "state": stage.state.value},
+            )
         await self.control.onsite_check(actor.id, note)
         recovering = stage.state is S.RECOVERY_CHECK
         plan = Plan(

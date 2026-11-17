@@ -54,7 +54,7 @@ async function accepted(env, label) {
 async function refused(env, box, error) {
   showErrors(box, error, env.ctx);
   if (error instanceof ApiError && error.code === "state") {
-    env.ctx.notify(errorLines(error, env.ctx.lang, env.ctx.t).join(" "), "error");
+    env.ctx.notify(errorLines(error, env.ctx.lang, env.ctx.t, env.ctx).join(" "), "error");
     await env.onChanged();
   }
 }
@@ -409,7 +409,7 @@ export function logItem(ctx, title, record) {
 // holds nothing under that request id (yet).
 export function checkParts(ctx, error) {
   if (error instanceof ApiError && error.status === 404) return [ctx.t("receipt.noRecord")];
-  return [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }), errorFold(ctx, error)];
+  return [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t, ctx).join(" ") }), errorFold(ctx, error)];
 }
 
 // The entries of a settled receipt's own fold: the request id and the server's English.

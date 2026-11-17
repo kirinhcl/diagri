@@ -58,7 +58,12 @@ def add_holdout_routes(
 
     def require_project(project_id: str) -> None:
         if not workflow.store.has_project(project_id):
-            raise Denied("scope", f"unknown project {project_id}")
+            raise Denied(
+                "scope",
+                f"unknown project {project_id}",
+                reason="not_this_project",
+                params={"project_id": project_id},
+            )
 
     @router.post("/holdouts")
     async def register_holdout(body: HoldoutIn, actor: Fresh):

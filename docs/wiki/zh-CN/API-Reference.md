@@ -52,7 +52,7 @@
 | 401 | 没带令牌或令牌不对（`Authentication required`）；没有有效会话（`Open the dashboard with growbridge dashboard to connect`）；code 已用过或已过期。 |
 | 403 | `Origin` 不在允许范围内；缺少请求头 `X-GrowBridge-UI`；在 DiAGRI 模式下调用写入路由。 |
 | 404 | `device` 不是 `light`、`exhaust` 或 `fan`。 |
-| 409 | 请求被桥接层拒绝或执行失败（`BridgeError`），例如控制未开启、数据过期、水泵冷却未结束，或 `request_id` 被用于不同的参数。响应体是 `{"detail": "<message>"}`。 |
+| 409 | 请求被桥接层拒绝或执行失败（`BridgeError`），例如控制未开启、数据过期、水泵冷却未结束，或 `request_id` 被用于不同的参数。响应体是 `{"detail": "<message>", "code": <代码或 null>, "reason": <原因或 null>, "params": {}}`；`detail` 仍是字符串，`code`、`reason` 和 `params` 见工作台错误表后面对错误体字段的说明（`PumpOffUnconfirmed` 错误是 `interlock` / `pump_unconfirmed`，`params` 为 `{"device_id": null}`，因为桥接层在这里不知道设备；其余的 `code`、`reason` 为 `null`，`params` 为 `{}`）。 |
 | 422 | 请求体或查询参数没有通过校验。请求里的 NaN 或无穷大会以文本形式回显，例如 `"nan"`。 |
 | 429 | 已有 64 个 code 在等待，或已有 64 个会话。 |
 
@@ -203,9 +203,11 @@
 | 403 | 本表没有单独列出的其他所有拒绝码 | 同样的结构 |
 | 409 | 拒绝码 `state` | 同样的结构 |
 | 429 | 拒绝码 `locked` | 同样的结构 |
-| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": "Unknown request id"}` |
+| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数 | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
+
+每个拒绝都会说明原因。工作台路由的 `detail` 对象多出 `reason`（`denial` 族的一个代码，没有原因的拒绝为 `null`）和 `params`（对象，原因不带参数时为空）：`{"detail": {"code": "<code>", "message": "<text>", "reason": "<reason>", "params": {}}}`。桥接路由的 `detail` 仍是字符串，响应体多出顶层的 `code`、`reason` 和 `params`。粗码和状态码不变，`message` 仍是英文文本。一个原因属于一个粗码（它的 `of`）；控制台按页面语言写出该原因的句子，旧客户端或没有原因时退回到粗码。`tests/web/fixtures/message-codes.json` 的 `denial` 族列出每个原因及其 `params`、`action`（控制台给出的下一步）和 `of`。表单字段在发出请求之前显示的文字由控制台自己给出（`msg.validation.*`），不属于这个 API。模型看到的仍是 `Error: denied (<code>): <message>`，看不到原因。
 
 ## MCP 工具
 

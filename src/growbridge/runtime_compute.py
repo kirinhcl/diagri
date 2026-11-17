@@ -161,8 +161,18 @@ def install_input_guard(runtime: Any) -> None:
         task = runtime.tasks.get(task_id)
         snap = scoped_snapshot(deps, task, ref.partition("/")[0])  # project and holdout first
         if runtime.archive.is_invalid(snap.id):
-            raise Denied("state", f"snapshot {snap.id} was invalidated by a later correction")
+            raise Denied(
+                "state",
+                f"snapshot {snap.id} was invalidated by a later correction",
+                reason="snapshot_invalidated",
+                params={"snapshot_id": snap.id},
+            )
         if not snapshots.verify(runtime.archive, snap.id):
-            raise Denied("snapshot_incomplete", f"snapshot {snap.id} fails verification")
+            raise Denied(
+                "snapshot_incomplete",
+                f"snapshot {snap.id} fails verification",
+                reason="snapshot_fails_verification",
+                params={"snapshot_id": snap.id},
+            )
 
     runtime.compute.input_guard = guard

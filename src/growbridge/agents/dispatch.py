@@ -248,7 +248,12 @@ class Dispatcher:
         role = task.owner_role
         config = self.roles.get(role)
         if config is None:
-            raise Denied("model_role", f"no model configured for role {role!r}")
+            raise Denied(
+                "model_role",
+                f"no model configured for role {role!r}",
+                reason="no_model",
+                params={"role": role},
+            )
         toolset = self._toolset(role, config, reviews)
 
         def observe(reply: ModelReply, outcomes: list[ToolOutcome]) -> None:

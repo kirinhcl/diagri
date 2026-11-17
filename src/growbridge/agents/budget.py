@@ -48,9 +48,19 @@ class CallBudget:
         with self.db.transaction():
             row = self._row(project_id)
             if row["used_calls"] + calls > row["max_calls"]:
-                raise Denied("budget", f"call budget exhausted for project {project_id}")
+                raise Denied(
+                    "budget",
+                    f"call budget exhausted for project {project_id}",
+                    reason="budget_calls_exhausted",
+                    params={"project_id": project_id},
+                )
             if row["used_cost"] >= row["max_cost"]:
-                raise Denied("budget", f"cost budget exhausted for project {project_id}")
+                raise Denied(
+                    "budget",
+                    f"cost budget exhausted for project {project_id}",
+                    reason="budget_cost_exhausted",
+                    params={"project_id": project_id},
+                )
             self.db.execute(
                 "UPDATE call_budget SET used_calls = used_calls + ? WHERE project_id = ?",
                 (calls, project_id),
@@ -84,5 +94,10 @@ class CallBudget:
     def _row(self, project_id: str) -> sqlite3.Row:
         row = self.db.one("SELECT * FROM call_budget WHERE project_id = ?", (project_id,))
         if row is None:
-            raise Denied("budget", f"no budget set for project {project_id}")
+            raise Denied(
+                "budget",
+                f"no budget set for project {project_id}",
+                reason="budget_not_set",
+                params={"project_id": project_id},
+            )
         return row

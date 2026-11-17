@@ -1,9 +1,11 @@
 import codes from "./codes.zh.js";
+import denials from "./denials.zh.js";
 import messages from "./messages.zh.js";
 
 export default {
   ...codes,
   ...messages,
+  ...denials,
   "app.title": "DiAGRI 工作台",
   "app.subtitle": "工作台",
   "common.hello": "你好，{name}",
@@ -103,8 +105,10 @@ export default {
   "tech.copied": "已复制",
   "tech.copyFailed": "复制失败，请手动选择",
   "tech.httpStatus": "HTTP 状态",
+  "tech.reason": "原因代码",
   "tech.code": "代码",
   "tech.serverMessage": "服务器原文",
+  "tech.validation": "校验详情",
   "tech.params": "参数",
   "tech.message": "错误信息",
   "tech.recordId": "记录 id",

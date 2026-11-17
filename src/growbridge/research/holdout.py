@@ -107,16 +107,33 @@ def _check_lists(
     batch_ids: Sequence[str], outcome_fields: Sequence[str], development: Sequence[str]
 ) -> None:
     if not batch_ids or not _named_once(batch_ids):
-        raise Denied("batches", "name at least one held-out batch; names are not empty or repeated")
+        raise Denied(
+            "batches",
+            "name at least one held-out batch; names are not empty or repeated",
+            reason="batches_no_holdout",
+            params={},
+        )
     if len(development) < MIN_DEVELOPMENT_BATCHES or not _named_once(development):
         raise Denied(
             "batches",
             f"name at least {MIN_DEVELOPMENT_BATCHES} development batches, not empty or repeated",
+            reason="batches_too_few_development",
+            params={"min_batches": MIN_DEVELOPMENT_BATCHES},
         )
     if set(batch_ids) & set(development):
-        raise Denied("batches", "a batch cannot be both held out and a development batch")
+        raise Denied(
+            "batches",
+            "a batch cannot be both held out and a development batch",
+            reason="batches_overlap",
+            params={},
+        )
     if not outcome_fields or not _named_once(outcome_fields):
-        raise Denied("param", "name the outcome fields; names are not empty or repeated")
+        raise Denied(
+            "param",
+            "name the outcome fields; names are not empty or repeated",
+            reason="outcome_fields_invalid",
+            params={},
+        )
 
 
 class HoldoutRegistry:
@@ -146,6 +163,8 @@ class HoldoutRegistry:
                 "state",
                 "outcome data of these batches already exists in the project and may already "
                 "have been seen: a holdout is registered before its outcome data exists",
+                reason="holdout_outcomes_exist",
+                params={"project_id": project_id},
             )
         try:
             self.db.execute(
@@ -162,7 +181,12 @@ class HoldoutRegistry:
                 ),
             )
         except sqlite3.IntegrityError:
-            raise Denied("state", f"holdout {holdout_id} is already registered") from None
+            raise Denied(
+                "state",
+                f"holdout {holdout_id} is already registered",
+                reason="holdout_already_registered",
+                params={"holdout_id": holdout_id},
+            ) from None
 
     def holdouts(self, project_id: str) -> tuple[Holdout, ...]:
         rows = self.db.query(
@@ -173,7 +197,12 @@ class HoldoutRegistry:
     def _holdout(self, holdout_id: str) -> sqlite3.Row:
         row = self.db.one("SELECT * FROM holdouts WHERE holdout_id = ?", (holdout_id,))
         if row is None:
-            raise Denied("state", f"holdout {holdout_id} is not registered")
+            raise Denied(
+                "state",
+                f"holdout {holdout_id} is not registered",
+                reason="record_not_found",
+                params={"record_kind": "holdout", "record_id": holdout_id},
+            )
         return row
 
     def filter_development(
@@ -231,7 +260,12 @@ class HoldoutRegistry:
                 (holdout_id, model_sha),
             )
             if model is None:
-                raise Denied("model_unregistered", "register model, features and preprocessing")
+                raise Denied(
+                    "model_unregistered",
+                    "register model, features and preprocessing",
+                    reason="model_unregistered",
+                    params={},
+                )
             earlier = self.db.one(
                 "SELECT COUNT(*) AS n FROM holdout_reads WHERE holdout_id = ?", (holdout_id,)
             )
@@ -272,7 +306,12 @@ def refuse_holdout_rows(
     keep = registry.development_filter(project_id)
     for line in measurements.read_text(encoding="utf-8").splitlines():
         if line and not keep(ManualMeasurement.model_validate_json(line)):
-            raise Denied("scope", f"snapshot {snapshot_id} holds outcomes of a held-out batch")
+            raise Denied(
+                "scope",
+                f"snapshot {snapshot_id} holds outcomes of a held-out batch",
+                reason="holdout_rows",
+                params={"project_id": project_id},
+            )
 
 
 def _holdout(row: sqlite3.Row) -> Holdout:

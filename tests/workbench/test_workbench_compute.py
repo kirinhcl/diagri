@@ -354,3 +354,13 @@ def test_the_overview_lists_the_stuck_attempt_until_it_is_settled(bench, operato
     bench.post(operator, settle_path(stuck.id), {"reason": "gone"})
 
     assert operator.get(OVERVIEW).json()["stuck"] == []
+
+
+def test_compute_task_unknown_carries_the_task(bench, operator):
+    response = bench.post(operator, budget_path("no-such-task"), {"cpu_hours": 1, "storage_gb": 1})
+
+    body = detail(response)
+    assert response.status_code == 403 and body["code"] == "scope"
+    assert body["reason"] == "compute_task_unknown" and body["params"] == {
+        "task_id": "no-such-task"
+    }

@@ -59,7 +59,12 @@ class TaskBoard:
             if existing is not None:
                 return self._load(existing)
             if self.db.one("SELECT 1 FROM task_board WHERE id = ?", (task.id,)) is not None:
-                raise Denied("state", f"task id {task.id} already exists")
+                raise Denied(
+                    "state",
+                    f"task id {task.id} already exists",
+                    reason="task_board_conflict",
+                    params={"task_id": task.id, "parent_task_id": task.parent_task_id},
+                )
             self._check_depth(task)
             stored = task.model_copy(update={"state": S.IN_PROGRESS})
             self.db.execute(
@@ -86,7 +91,12 @@ class TaskBoard:
     def get(self, task_id: str) -> ResearchTask:
         row = self.db.one("SELECT * FROM task_board WHERE id = ?", (task_id,))
         if row is None:
-            raise Denied("state", f"unknown task {task_id}")
+            raise Denied(
+                "state",
+                f"unknown task {task_id}",
+                reason="record_not_found",
+                params={"record_kind": "task", "record_id": task_id},
+            )
         return self._load(row)
 
     def list(self, project_id: str, state: TaskState | None = None) -> tuple[ResearchTask, ...]:
@@ -165,10 +175,21 @@ class TaskBoard:
         with self.db.transaction():
             row = self.db.one("SELECT * FROM task_board WHERE id = ?", (task_id,))
             if row is None:
-                raise Denied("state", f"unknown task {task_id}")
+                raise Denied(
+                    "state",
+                    f"unknown task {task_id}",
+                    reason="record_not_found",
+                    params={"record_kind": "task", "record_id": task_id},
+                )
             count = row["revisions"] + 1
-            if count > self._load(row).budget.max_revisions:
-                raise Denied("budget", f"revision limit reached for task {task_id}")
+            max_revisions = self._load(row).budget.max_revisions
+            if count > max_revisions:
+                raise Denied(
+                    "budget",
+                    f"revision limit reached for task {task_id}",
+                    reason="budget_revision_limit",
+                    params={"task_id": task_id, "max_revisions": max_revisions},
+                )
             self.db.execute("UPDATE task_board SET revisions = ? WHERE id = ?", (count, task_id))
             return count
 
@@ -179,7 +200,12 @@ class TaskBoard:
         seen = self.db.one("SELECT task_id FROM task_events WHERE event_id = ?", (event_id,))
         if seen is not None:
             if seen["task_id"] != task_id:
-                raise Denied("state", f"event {event_id} belongs to another task")
+                raise Denied(
+                    "state",
+                    f"event {event_id} belongs to another task",
+                    reason="task_board_conflict",
+                    params={"task_id": task_id, "parent_task_id": None},
+                )
             return self.get(task_id), False
         task = self.get(task_id)
         self._check_transition(task, to, reason)
@@ -197,22 +223,49 @@ class TaskBoard:
     @staticmethod
     def _check_transition(task: ResearchTask, to: TaskState, reason: str) -> None:
         if task.state in TASK_TERMINAL or to not in _ALLOWED.get(task.state, frozenset()):
-            raise Denied("state", f"task {task.id}: {task.state.value} -> {to.value} not allowed")
+            raise Denied(
+                "state",
+                f"task {task.id}: {task.state.value} -> {to.value} not allowed",
+                reason="task_transition_not_allowed",
+                params={
+                    "task_id": task.id,
+                    "from_status": task.state.value,
+                    "to_status": to.value,
+                },
+            )
         if (task.state, to) in _REASON_REQUIRED and not reason.strip():
-            raise Denied("state", f"task {task.id}: ending from {task.state.value} needs a reason")
+            raise Denied(
+                "state",
+                f"task {task.id}: ending from {task.state.value} needs a reason",
+                reason="task_end_needs_reason",
+                params={"task_id": task.id},
+            )
 
     def _check_depth(self, task: ResearchTask) -> None:
         if task.parent_task_id is None:
             return
         parent = self.get(task.parent_task_id)
         if parent.project_id != task.project_id:
-            raise Denied("state", "parent task belongs to another project")
+            raise Denied(
+                "state",
+                "parent task belongs to another project",
+                reason="task_board_conflict",
+                params={"task_id": task.id, "parent_task_id": task.parent_task_id},
+            )
         depth, cursor = 1, parent
         while cursor.parent_task_id is not None:
             depth += 1
             cursor = self.get(cursor.parent_task_id)
         if depth > parent.budget.max_delegation_depth:
-            raise Denied("budget", f"delegation depth {depth} exceeds the limit")
+            raise Denied(
+                "budget",
+                f"delegation depth {depth} exceeds the limit",
+                reason="budget_depth_limit",
+                params={
+                    "depth": depth,
+                    "max_depth": parent.budget.max_delegation_depth,
+                },
+            )
 
     @staticmethod
     def _load(row: sqlite3.Row) -> ResearchTask:

@@ -101,7 +101,7 @@ export async function render(ctx) {
     clear(currentBox).append(currentView(ctx, state.current));
   };
   const refreshCurrent = () =>
-    readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t).join(" "), "error"));
+    readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
   await readCurrent();
   const outcome = { text: ctx.t("form.done"), refused: false };
   const editor = jsonEditor({

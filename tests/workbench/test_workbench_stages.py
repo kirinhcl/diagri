@@ -280,7 +280,10 @@ def test_unknown_stage_is_a_409_with_a_code_and_message(bench, operator):
     response = act(bench, operator, "approve", stage="stage-missing")
 
     assert response.status_code == 409
-    assert set(detail(response)) == {"code", "message"} and detail(response)["code"] == "state"
+    assert (
+        set(detail(response)) == {"code", "reason", "params", "message"}
+        and detail(response)["code"] == "state"
+    )
 
 
 def test_start_without_an_approval_is_refused(bench, operator):

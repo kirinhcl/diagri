@@ -168,7 +168,7 @@ export function errorFold(ctx, error) {
 // The plain lines of an error as paragraphs, then its fold: what every error box that stays on a
 // page shows.
 export function errorParts(ctx, error) {
-  const lines = errorLines(error, ctx.lang, ctx.t).map((line) => h("p", { text: line }));
+  const lines = errorLines(error, ctx.lang, ctx.t, ctx).map((line) => h("p", { text: line }));
   const fold = errorFold(ctx, error);
   return fold ? [...lines, fold] : lines;
 }

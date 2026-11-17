@@ -158,7 +158,7 @@ test("a refusal of a hidden field is written with the field's label, not its nam
     { name: "metric", label: "Metric", required: true },
     { name: "link", type: "hidden", label: "Corrected record" },
   ];
-  const refusal = new ApiError(422, "validation", "invalid", [{ loc: ["body", "link"], msg: "no such record" }]);
+  const refusal = new ApiError(422, "validation", "invalid", [{ loc: ["body", "link"], msg: "no such record", type: "missing", limits: {} }]);
   const onSubmit = async () => {
     throw refusal;
   };
@@ -167,6 +167,6 @@ test("a refusal of a hidden field is written with the field's label, not its nam
   form.dispatchEvent(new Event("submit"));
   await settle();
   const text = visibleText(form);
-  assert.match(text, /Corrected record: no such record/);
+  assert.match(text, /Corrected record: This is required\./);
   assert.ok(!/\blink\b/.test(text), text);
 });

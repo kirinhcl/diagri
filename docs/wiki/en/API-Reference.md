@@ -52,7 +52,7 @@ Source: `create_app` in [`api.py`](../../../src/growbridge/api.py). There are 14
 | 401 | The token is missing or wrong (`Authentication required`); there is no valid session (`Open the dashboard with growbridge dashboard to connect`); the code was used or has expired. |
 | 403 | The `Origin` is not allowed; the header `X-GrowBridge-UI` is missing; a write route in DiAGRI mode. |
 | 404 | `device` is not `light`, `exhaust` or `fan`. |
-| 409 | The bridge refused or failed the request (`BridgeError`), for example controls disabled, stale data, pump cooldown, or a `request_id` reused with other arguments. The body is `{"detail": "<message>"}`. |
+| 409 | The bridge refused or failed the request (`BridgeError`), for example controls disabled, stale data, pump cooldown, or a `request_id` reused with other arguments. The body is `{"detail": "<message>", "code": <code or null>, "reason": <reason or null>, "params": {}}`; `detail` stays a string, and `code`, `reason` and `params` are the fields of the error body described under the table of the workbench errors (a `PumpOffUnconfirmed` error is `interlock` / `pump_unconfirmed` with `"params": {"device_id": null}`, since the bridge does not know the device there; any other has `null` and `{}`). |
 | 422 | The body or the query did not pass validation. A NaN or an infinity the request carried is echoed back as text, such as `"nan"`. |
 | 429 | 64 codes are waiting, or 64 sessions are open. |
 
@@ -203,9 +203,11 @@ Names that people gave are shown and ids stay in the technical details. The trea
 | 403 | every denial code not named in this table | same shape |
 | 409 | denial code `state` | same shape |
 | 429 | denial code `locked` | same shape |
-| 404 | `GET /wb/receipts/{request_id}` with an unknown id | `{"detail": "Unknown request id"}` |
+| 404 | `GET /wb/receipts/{request_id}` with an unknown id | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` outside the range of the channel, a measurement that was not accepted, or a protocol with an id or a version out of range or a number that is not finite | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | a body that does not pass validation, a run sheet with a number that is not finite among them | the validation errors; a NaN or an infinity the request carried is echoed as text |
+
+Every refusal also says why. In the workbench routes the `detail` object gains `reason` (a code of the `denial` family, `null` for a refusal that has none) and `params` (an object, empty when the reason takes none): `{"detail": {"code": "<code>", "message": "<text>", "reason": "<reason>", "params": {}}}`. In the bridge routes `detail` remains a string and the body gains the top-level `code`, `reason` and `params`. The coarse `code` and the status do not change, and `message` stays the English text. A reason belongs to one coarse code (its `of` entry); the console writes the sentence for the reason in the page language and falls back to the coarse code for an old client or a missing reason. The `denial` family of `tests/web/fixtures/message-codes.json` lists every reason with its `params`, its `action` (the next step the console offers) and `of`. The text a form field shows before a request is sent is the console's own (`msg.validation.*`) and is not part of this API. A model still sees `Error: denied (<code>): <message>`; it does not see the reason.
 
 ## MCP tools
 
