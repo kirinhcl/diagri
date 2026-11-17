@@ -185,3 +185,14 @@ test("the stage page changes a run sheet with a form, the full JSON stays in a c
   const review = FIXTURES["run-sheet-pending.json"];
   assert.equal(JSON.stringify(post.body), JSON.stringify({ round_id: FIXTURES["stage-pending.json"].round_id, run_sheet: review.run_sheet }));
 });
+
+test("the run-sheet form and its JSON fold have different submit buttons, in both languages", async () => {
+  for (const lang of ["en", "zh"]) {
+    const { element, ctx } = await renderPage("stage", { stageId: FIXTURES["stage-pending.json"].stage_id }, { lang });
+    const group = walk(element, (el) => el.localName === "div" && el.getAttribute("data-action") === "draft")[0];
+    const [formButton, jsonButton] = walk(group, (el) => el.localName === "form").map((form) => walk(form, (el) => el.localName === "button" && el.getAttribute("type") === "submit")[0].textContent);
+    assert.notEqual(formButton, jsonButton, lang);
+    assert.equal(formButton, ctx.t("stage.draft.submit"));
+    assert.equal(jsonButton, ctx.t("stage.draft.submitJson"));
+  }
+});

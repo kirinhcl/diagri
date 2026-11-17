@@ -228,20 +228,22 @@ function draftGroup(env) {
   const title = ctx.t("stage.draft");
   if (!review) return group("draft", title, note(ctx.t("stage.approve.unread")));
   const submitLabel = ctx.t("stage.draft.submit");
+  const jsonLabel = ctx.t("stage.draft.submitJson");
   const findings = h("div", { class: "draft-findings", attrs: { hidden: true } });
-  const onSubmit = async (body) => {
+  const sendAs = (action) => async (body) => {
     findings.hidden = true;
-    const answer = await ctx.api.post("/drafts/run-sheet", body, { action: submitLabel });
+    const answer = await ctx.api.post("/drafts/run-sheet", body, { action });
     const list = Array.isArray(answer && answer.findings) ? answer.findings : [];
     findings.replaceChildren(findingsList(ctx, list));
     findings.hidden = list.length === 0;
     if (list.some((finding) => finding.blocking)) throw new ApiError(0, "not_approved", ctx.t("stage.draft.refused"));
-    await accepted(env, submitLabel);
+    await accepted(env, action);
   };
+  const onSubmit = sendAs(submitLabel);
   const key = `run-sheet:${stage.stage_id}`;
   const form = !review.run_sheet ? null : runSheetForm(ctx, { review, roundId: env.roundId, capabilities: env.capabilities || null, onSubmit, draftKey: `${key}-form`, submitLabel });
   const value = { round_id: env.roundId, run_sheet: review.run_sheet };
-  const advanced = advancedJson({ ctx, label: ctx.t("stage.draft.json"), value, onSubmit, draftKey: key, submitLabel });
+  const advanced = advancedJson({ ctx, label: ctx.t("stage.draft.json"), value, onSubmit: sendAs(jsonLabel), draftKey: key, submitLabel: jsonLabel });
   return group("draft", title, note(ctx.t("stage.draft.note")), form, findings, advanced);
 }
 
