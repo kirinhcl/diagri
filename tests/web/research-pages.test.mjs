@@ -191,7 +191,9 @@ test("entering evidence asks first and says the card cannot be changed; cancelli
 });
 
 test("verifying evidence is a check box that starts unticked, and asks because it cannot change later", async () => {
-  const { element, ctx, notices } = await renderPage("evidence", {}, { fixtures: cards([CARD]), now: NOW, lang: "en" }).then((page) => ({ ...page, notices: [] }));
+  const { element, ctx } = await renderPage("evidence", {}, { fixtures: cards([CARD]), now: NOW, lang: "en" });
+  const notices = [];
+  ctx.notify = (message) => notices.push(message);
   const form = walk(element).filter((el) => el.localName === "form")[0];
   const box = walk(form).find((el) => el.localName === "input" && el.getAttribute("type") === "checkbox");
   assert.ok(box, "the attestation is a check box");
@@ -206,16 +208,18 @@ test("verifying evidence is a check box that starts unticked, and asks because i
   await settle();
   await settle();
   assert.equal(posts().length, 0, "cancelling sends nothing");
+  assert.deepEqual(notices, [], "cancelling announces nothing");
   answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   await settle();
   assert.deepEqual(posts().map((call) => call.body), [{ note: "", calibrated: false }]);
+  assert.equal(notices.length, 1, "the confirmed verification is announced once");
   formControls(form).set({ calibrated: "true" });
   answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   await settle();
   assert.deepEqual(posts().map((call) => call.body.calibrated), [false, true]);
-  assert.deepEqual(notices, []);
+  assert.equal(notices.length, 2);
 });
