@@ -3,9 +3,8 @@ import { shortDigest } from "../format.js";
 import { hasLabel, labelOr } from "../i18n.js";
 import { messageParts } from "../messages.js";
 import { hrefFor } from "../router.js";
-import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
-import { simpleForm } from "../ui/forms.js";
+import { confirmOrCancel, simpleForm } from "../ui/forms.js";
 import { displayName, nameDetails } from "../ui/names.js";
 import { inline, richText } from "../ui/rich-text.js";
 import { afterWrite, confirmedButton, errorParts, keyValues, note, pageHead, section, techDetails } from "../ui/section.js";
@@ -49,17 +48,20 @@ export function abortLines(ctx, round) {
   return [ctx.t("round.abortLine", { round: displayName(ctx, "round", round) })];
 }
 
-function askAbort(ctx, round) {
-  return confirmAction(ctx.t, { title: ctx.t("round.abortTitle"), lines: abortLines(ctx, round), confirmLabel: ctx.t("round.abort") });
+// Every choice is asked first: abort in its own words, the others with one line of consequence.
+function choicePrompt(ctx, round, choice) {
+  if (choice === "abort") return { title: ctx.t("round.abortTitle"), lines: abortLines(ctx, round), confirmLabel: ctx.t("round.abort") };
+  const label = ctx.t(`round.choice.${choice}`);
+  return { title: label, lines: [ctx.t(`round.choice.${choice}.line`)], confirmLabel: label };
 }
 
 // Only shown while a stopped stage waits for the operator; the options are the server's choices.
 function choiceForm(ctx, round) {
   const submitLabel = ctx.t("round.choose");
-  const options = CHOICES.map((value) => ({ value, label: ctx.t(`round.choice.${value}`) }));
+  const options = [{ value: "", label: ctx.t("form.choose") }, ...CHOICES.map((value) => ({ value, label: ctx.t(`round.choice.${value}`) }))];
   const field = { name: "choice", label: ctx.t("round.choiceLabel"), type: "select", options, required: true };
   const onSubmit = async ({ choice }) => {
-    if (choice === "abort" && !(await askAbort(ctx, round))) return;
+    await confirmOrCancel(ctx, choicePrompt(ctx, round, choice));
     await ctx.api.post(`/rounds/${encodeURIComponent(round.round_id)}/choice`, { choice }, { action: submitLabel });
     afterWrite(ctx, ctx.t("round.chosen", { choice: ctx.t(`round.choice.${choice}`) }));
   };

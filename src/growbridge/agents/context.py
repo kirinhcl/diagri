@@ -14,13 +14,37 @@ from typing import Any
 
 from growbridge.archive.models import ResearchTask
 from growbridge.planning.treatment import allocated
+from growbridge.research.notes import TEXT_LANGUAGE
 from growbridge.workflow.listing import project_detail
 from growbridge.workflow.states import RoundState
+from growbridge.workflow.tasks import TaskBoard
 
 MAX_ROUNDS = 3
 CLOSED_ROUNDS = frozenset({RoundState.DELIVERED.value, RoundState.ABORTED.value})
 DRAFTING = frozenset({RoundState.DESIGNING.value, RoundState.STAGE_REVIEW.value})
 ROUND_REF = "round:"
+GOAL_ROLE = "orchestrator"  # the role a goal's task belongs to
+GOAL_TRIGGER = "goal:"
+
+
+def task_language(
+    task: ResearchTask | None, board: TaskBoard, project_id: str | None = None
+) -> str:
+    """The language a model writes for the operator in: the task's own, else that of the
+    project's latest goal (a task made before the language was recorded, or a background audit),
+    else the default. The project is the task's, or ``project_id`` when there is no task."""
+    if task is not None and task.language is not None:
+        return task.language
+    project = task.project_id if task is not None else project_id
+    if project is not None:
+        for goal in reversed(board.list(project)):
+            if (
+                goal.owner_role == GOAL_ROLE
+                and goal.trigger_event_id.startswith(GOAL_TRIGGER)
+                and goal.language is not None
+            ):
+                return goal.language
+    return TEXT_LANGUAGE
 
 
 def _new_stage(row: dict[str, Any], stages: Any, protocol: Any) -> dict[str, Any]:

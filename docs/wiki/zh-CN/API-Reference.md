@@ -52,13 +52,13 @@
 | 401 | 没带令牌或令牌不对（`Authentication required`）；没有有效会话（`Open the dashboard with growbridge dashboard to connect`）；code 已用过或已过期。 |
 | 403 | `Origin` 不在允许范围内；缺少请求头 `X-GrowBridge-UI`；在 DiAGRI 模式下调用写入路由。 |
 | 404 | `device` 不是 `light`、`exhaust` 或 `fan`。 |
-| 409 | 请求被桥接层拒绝或执行失败（`BridgeError`），例如控制未开启、数据过期、水泵冷却未结束，或 `request_id` 被用于不同的参数。响应体是 `{"detail": "<message>"}`。 |
+| 409 | 请求被桥接层拒绝或执行失败（`BridgeError`），例如控制未开启、数据过期、水泵冷却未结束，或 `request_id` 被用于不同的参数。响应体是 `{"detail": "<message>", "code": <代码或 null>, "reason": <原因或 null>, "params": {}}`；`detail` 仍是字符串，`code`、`reason` 和 `params` 见工作台错误表后面对错误体字段的说明（`PumpOffUnconfirmed` 错误是 `interlock` / `pump_unconfirmed`，`params` 为 `{"device_id": null}`，因为桥接层在这里不知道设备；其余的 `code`、`reason` 为 `null`，`params` 为 `{}`）。 |
 | 422 | 请求体或查询参数没有通过校验。请求里的 NaN 或无穷大会以文本形式回显，例如 `"nan"`。 |
 | 429 | 已有 64 个 code 在等待，或已有 64 个会话。 |
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 55 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。第一张表末尾的七个读取路由总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 56 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -126,8 +126,9 @@
 | `GET` | `/wb/stages/{stage_id}/history` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/safety` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/capabilities` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 
-最后二十八个路由只给操作员用，其中的十三个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
+最后二十九个路由只给操作员用，其中的十七个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
 下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。
 
@@ -163,9 +164,9 @@
 | `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`；其中 `estimate` 在 `note` 之外还有 `note_code` 和 `note_params`，精确估计的 `note_code` 为空）和 `primary_endpoint`（轮次的协议所定的主要终点指标，协议已不存在时为 `null`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。 |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`：`redo`、`next`、`verify` 或 `abort` | `round_id`、`state` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 无 | `round_id`、`state` |
-| `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`variant`、`params`、`message`、`blocking` 组成的列表：`variant` 为空，或把 `code` 细分到某一句话，`params` 是那句话要写出的值；先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking` |
+| `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`variant`、`params`、`message`、`blocking` 组成的列表：`variant` 为空，或把 `code` 细分到某一句话，`params` 是那句话要写出的值；先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking`、`approval`（阶段没有 `start` 会接受的批准时为 `null`，否则是 `approved_at` 和 `run_sheet_version`；它用的检查和 `start` 完全相同，所以控制台在它为 `null` 时让“开始”保持关闭） |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls`（整数，0 到 1000000）、`max_cost`（美元，0 到 1000000） | `project_id`、`max_calls`、`max_cost`、`remaining_calls`、`remaining_cost` |
-| `POST` | `/wb/goals` | `project_id`、`goal`（去掉首尾空白后 1 到 2000）；可选 `round_id`、`constraints`（最多 20 条，每条 1 到 500）、`request_id` | `task_id`、`state`、`reused`。新目标同时写进项目对话 |
+| `POST` | `/wb/goals` | `project_id`、`goal`（去掉首尾空白后 1 到 2000）；可选 `round_id`、`constraints`（最多 20 条，每条 1 到 500）、`request_id`、`language`（`en` 或 `zh`；控制台发送页面语言，缺省时任务用 `zh` 写） | `task_id`、`state`、`reused`。新目标同时写进项目对话。目标的 `language` 存在它的任务上（`ResearchTask.language`，记录语言之前创建的任务为 `null`），模型从这个目标创建或处理的每个任务都沿用它：模型用这种语言写给操作员看的文字 |
 | `GET` | `/wb/projects/{project_id}/conversation` | 查询参数 `after`（一个 `seq`，默认 0） | `entries`，从旧到新，最多 500 条：`seq`、`task_id`、`role`（`user` 或某个模型角色）、`kind`（`message`、`reply`、`tool`、`status`）、`text`、`detail`（工具调用时有 `input`、`is_error`、`result`，都会截短；`status` 条目有 `reason`，以及说明任务为何结束的 `code` 和 `params`，有代码之前写下的条目没有这两项）、`at` |
 | `POST` | `/wb/protocols/{protocol_id}/analysis` | `project_id`（1 到 100）、`script`（文本，1 到 20000 个字符，只编译、从不运行） | `protocol_id`、`version`、`script_sha256`、`frozen_at`、`note`（冻结的脚本不能更正） |
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 查询参数 `project_id`（1 到 100） | `protocol_id`、`version`、`started`、`frozen`（`null`，或 `script_sha256`、`frozen_at`、`frozen_by`、`script`）、`snapshots`（一组 `snapshot_id`、`experiment_id`、`complete`、`run_status`、`created_at`） |
@@ -181,13 +182,14 @@
 | `GET` | `/wb/compute` | 无 | `balance`（最近一条录入，或 `null`）、`tasks`（如上的行）、`service`（`cpu_hours_cap`、`storage_gb_cap`、`cpu_hours_committed`、`storage_gb_committed`）、`jobs`（进行中的尝试：`attempt_id`、`task_id`、`template_id`、`phase`、`task_state`、`remote_job_id`、`created_at`）、`stuck`（需要人处理的尝试：`attempt_id`、`task_id`、`phase`、`reason`、`reason_code`、`reason_params`、`since`；原因是尝试自己的错误时还有 `error_code` 和 `error_params`；有代码之前存下的行没有代码） |
 | `GET` | `/wb/inbox` | 无 | `items` 和 `truncated`。每个条目有 `kind`（`stage_review`、`stage_manual`、`stage_recovery`、`stage_paused`、`alert`、`compute_stuck`、`round_choice` 或 `task`）、`id`、`project_id`、`round_id`、`since` 和 `detail`，以及名字 `project_name`、`round_number`、`stage_index` 和 `phase`（找不到或该类型没有时为 `null`：`stage_*` 条目四个都有，`round_choice` 条目有 `project_name` 和 `round_number`，`task` 条目有 `project_name`）。每一类最多保留 50 条：告警先按严重程度，同一严重程度内从未被读过的排在再次询问的之前，再按最近一次触发的时间取舍，其他类型取最早的。`alert` 条目的 `detail` 有 `alert_kind`、`severity`、`message`、`count`、`last_at` 和 `never_read`（没有操作员读过它、或读的时候没有记录严重程度时为 `true`）。`alert` 条目的 `detail` 还有告警的 `code` 和 `params`；`compute_stuck` 条目的 `detail` 就是 `/wb/compute` 给出的那一行。`round_choice` 条目的 `detail` 有 `awaiting_choice` 和 `since_from`：`stage_stopped` 表示 `since` 是 `awaiting_choice` 所指阶段停止的时间，`round_created` 表示那个阶段已不存在或没有停止，`since` 是轮次的创建时间。保留下来的条目按最早的在前排列，`truncated` 给出每一类被截掉的条数。 |
 | `GET` | `/wb/projects` | 无 | `projects`：每个项目的摘要，最多 200 个；其中的 `latest_round` 还有 `round_number` |
-| `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前，每个带 `round_number`）和 `protocols`（每个协议的最新版本）、`budget`（`calls_left`、`cost_left`、`used_calls`、`used_cost`、`max_calls` 和 `max_cost`，没有设置预算时为 `null`；`used_cost` 可以超过 `max_cost`，照实显示）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
+| `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前，每个带 `round_number`）和 `protocols`（每个协议的最新版本，每行有 `protocol_id`、`version`、`created_at`，以及取自协议 `analysis` 的 `primary_endpoint` 和 `method`，协议没写时为 `null`）、`budget`（`calls_left`、`cost_left`、`used_calls`、`used_cost`、`max_calls` 和 `max_cost`，没有设置预算时为 `null`；`used_cost` 可以超过 `max_cost`，照实显示）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
 | `GET` | `/wb/stages/{stage_id}/readings` | 查询参数 `points`（2 到 2000，默认 600） | `samples`（由 `timestamp`、`data`、`quality`、`clock_synced`、`flagged` 组成的列表）、`window`（`start`、`end`、`bucket_seconds`，阶段尚未开始时为 `null`）、`total_samples`、`flagged_total` 和 `downsampled`。每个时间桶保留最新的一条样本；`flagged` 是该桶里质量不是 `ok` 或时钟未同步的样本数。`points` 超出范围时返回 422。 |
 | `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是当前阶段，包括它的 `project_name`、`round_number`、`stage_index` 和 `phase`（找不到时各为 `null`）、它的 `state`、每个通道的 `ownership`，以及仅在阶段处于 `running` 时运行单此刻要求的档位 `expected`（其他状态为 `null`）和 `planned`（时间窗内的计划：`light`、`exhaust`、`fan` 各一个 `[时间, 档位]` 点的列表，窗口起点一个、每次计划变化一个；阶段不在运行时为 `{}`；温度和湿度没有计划值）；没有当前阶段时 `stage` 为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | 无 | `stage_id`、`stage_state`、`timezone`、`on_time_seconds`、`early_seconds`、`now`，以及 `occurrences`：运行单的人工任务在阶段时间窗内的每一次（`task_id`、`kind`、`due_at`、`make_up_allowed`、`seconds`），带 `status`（`upcoming`、`open`、`done`、`late`、`skipped`、`missed`）和起作用的那条 `record`（没有时为 `null`）；阶段开始前为空 |
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
 | `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`（含 `frozen`：每个传感器的 `minutes` 和 `max_gap_seconds`），没有批准过时为 `null` |
+| `GET` | `/wb/capabilities` | 无 | `level_ranges`（`light`、`exhaust`、`fan`、`pump` 各一个 `[最小, 最大]`）、`sensors`（设备上报的每个传感器名及其单位）和 `max_pump_seconds`（水泵一次最长运行时间）。取自设备能力和桥接自己的上限；控制台用它们给表单标出范围，读取失败时从不自己填值 |
 
 已保存的协议版本不会被覆盖：`id` 和 `version` 相同而内容不同，会以 `state` 被拒绝。`POST /wb/rounds` 使用最新保存的版本。读取路由给出的 `run_sheet_digest` 就是审批记录里的那个摘要。再设一次预算只改上限，已记录的用量保留。`POST /wb/goals` 创建一个归编排 Agent 所有的研究任务；项目还没有预算，或者预算已经用完时，它以 `budget` 被拒绝。带 `request_id` 时，同一个操作员对同一个项目把同样的请求再发一次，得到的是第一次建的任务，并带 `"reused": true`；同一个 ID 下换了目标文本、轮次或约束条件，会以 `state` 被拒绝。不带 `request_id` 时，每次请求都新建一个任务。这些路由路径里的 ID 为 1 到 100 个字符。分析路由冻结协议最新版本的分析脚本（这个版本下一旦有阶段启动，冻结就以 `state` 被拒绝），并在一份数据快照上把它运行一次；它们的检查顺序见[开展一轮研究](Run-a-Research-Round.md#运行冻结的分析)。
 
@@ -203,7 +205,7 @@
 | 403 | 本表没有单独列出的其他所有拒绝码 | 同样的结构 |
 | 409 | 拒绝码 `state` | 同样的结构 |
 | 429 | 拒绝码 `locked` | 同样的结构 |
-| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": "Unknown request id"}` |
+| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数 | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
 
@@ -223,6 +225,8 @@
 | `GET /wb/admin/locks` | 管理员 | | `locks`、`events` | `admin_only` |
 | `POST /wb/admin/greenhouses/{id}/release` | 管理员，需重新认证 | `note`（1 到 500 字） | `released` | `admin_only`、`greenhouse_busy` |
 | `POST /wb/admin/projects/{project_id}/owner` | 管理员，需重新认证 | `owner`、`note` | `project_id`、`owner` | `admin_only`、`state`（原所有者仍可操作、有未结束阶段，或新所有者不可用） |
+
+每个拒绝都会说明原因。工作台路由的 `detail` 对象多出 `reason`（`denial` 族的一个代码，没有原因的拒绝为 `null`）和 `params`（对象，原因不带参数时为空）：`{"detail": {"code": "<code>", "message": "<text>", "reason": "<reason>", "params": {}}}`。桥接路由的 `detail` 仍是字符串，响应体多出顶层的 `code`、`reason` 和 `params`。粗码和状态码不变，`message` 仍是英文文本。一个原因属于一个粗码（它的 `of`）；控制台按页面语言写出该原因的句子，旧客户端或没有原因时退回到粗码。`tests/web/fixtures/message-codes.json` 的 `denial` 族列出每个原因及其 `params`、`action`（控制台给出的下一步）和 `of`。表单字段在发出请求之前显示的文字由控制台自己给出（`msg.validation.*`），不属于这个 API。模型看到的仍是 `Error: denied (<code>): <message>`，看不到原因。
 
 ## MCP 工具
 

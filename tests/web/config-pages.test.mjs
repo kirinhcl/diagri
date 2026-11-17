@@ -28,33 +28,19 @@ function fieldsOf(className) {
 
 const sorted = (keys) => [...keys].sort();
 
-test("the safety skeleton has exactly the fields of SafetyConfig and what it nests", () => {
-  const skeleton = safetySkeleton();
-  assert.deepEqual(sorted(Object.keys(skeleton)), sorted(fieldsOf("SafetyConfig")));
-  assert.ok(Array.isArray(skeleton.rules) && skeleton.rules.length === 1);
-  const [rule] = skeleton.rules;
-  assert.deepEqual(sorted(Object.keys(rule)), sorted(fieldsOf("ProtectionRule")));
-  assert.deepEqual(sorted(Object.keys(rule.trigger)), sorted(fieldsOf("Condition")));
-  assert.deepEqual(sorted(Object.keys(rule.action)), sorted(fieldsOf("RuleAction")));
-  assert.deepEqual(sorted(Object.keys(skeleton.frozen)), sorted(fieldsOf("FrozenCheck")));
+test("the diff baseline for 'nothing approved' is the empty config and holds no safety value", () => {
+  assert.deepEqual(safetySkeleton(), { version: null, rules: [], frozen: { minutes: {}, max_gap_seconds: null } });
 });
 
-test("every value of the skeleton is null, so submitting it unchanged cannot be approved", () => {
-  const leaves = [];
-  const walk = (value) => {
-    if (Array.isArray(value)) value.forEach(walk);
-    else if (value !== null && typeof value === "object") Object.values(value).forEach(walk);
-    else leaves.push(value);
-  };
-  walk(safetySkeleton());
-  assert.ok(leaves.length >= 10);
-  assert.ok(leaves.every((leaf) => leaf === null));
-});
-
-test("each call returns a fresh skeleton", () => {
-  const first = safetySkeleton();
-  first.rules[0].id = "changed";
-  assert.equal(safetySkeleton().rules[0].id, null);
+test("the baseline's top-level fields are all fields of SafetyConfig, and fresh on each call", () => {
+  const base = safetySkeleton();
+  const allowed = fieldsOf("SafetyConfig");
+  assert.ok(Object.keys(base).every((key) => allowed.includes(key)));
+  assert.deepEqual(sorted(Object.keys(base.frozen)), sorted(fieldsOf("FrozenCheck")));
+  base.rules.push({ id: "changed" });
+  base.frozen.minutes.temp = 1;
+  assert.deepEqual(safetySkeleton().rules, []);
+  assert.deepEqual(safetySkeleton().frozen.minutes, {});
 });
 
 const t = (key) => (key === "safety.absent" ? "(none)" : key);

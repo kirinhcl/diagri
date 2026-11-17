@@ -8,6 +8,7 @@ indistinguishable from a missing one.
 from __future__ import annotations
 
 from growbridge.ports import Actor, Denied
+from growbridge.workflow import denials
 from growbridge.workflow.access import Access, Hidden
 
 
@@ -25,7 +26,7 @@ def stage_write(
 ) -> None:
     if access is None:
         return
-    unknown = hidden or (lambda: Denied("state", f"unknown stage {stage_id}"))
+    unknown = hidden or (lambda: denials.unknown("stage", stage_id))
     stage = access.store.find_stage(stage_id)
     if stage is None:
         raise unknown()

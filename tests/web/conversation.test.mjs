@@ -181,6 +181,15 @@ test("a tool call that arrives after a tool group joins that group", async () =>
   assert.deepEqual(reads.map((path) => path.split("after=")[1]), ["0", "2", "4", "5"]);
 });
 
+test("the conversation sends the console language with a goal", async () => {
+  const sent = [];
+  const { send } = chatWith([[]], async (path, body) => (sent.push({ path, body }), { task_id: "task_new" }));
+  await send("Please check the data.");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].path, "/goals");
+  assert.equal(sent[0].body.language, "zh");
+});
+
 test("a sent message shows a pending line until its own task answers", async () => {
   let answer;
   const answered = new Promise((resolve) => (answer = resolve));

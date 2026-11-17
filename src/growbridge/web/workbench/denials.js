@@ -18,7 +18,7 @@ const ROWS = [
   ["approval_invalid", "这个阶段没有有效的批准，或批准后内容已变化。", "处理运行单上的问题后，重新批准这个阶段。", "The stage has no valid approval, or it changed after it was approved.", "Resolve the findings on the run sheet and approve the stage again."],
   ["state", "对象不存在、当前状态不允许这个操作，或请求执行时它已经变了。", "刷新页面看最新状态，再决定是否重试。", "The item does not exist, is not in a state that allows this, or changed while the request ran.", "Refresh the page to see the current state, then decide whether to try again."],
   ["safety_conflict", "安全配置里的保护规则作用在运行单没有交给主机控制的通道上。", "修改运行单（生成新版本）或安全配置，然后重新批准。", "A protection rule in the safety configuration acts on a channel the run sheet does not hand to the host.", "Change the run sheet (a new version) or the safety configuration, then approve again."],
-  ["budget", "项目的调用或费用预算已用完，或还没设置。", "先停下。请由操作员设置或提高项目预算，或亲自决定这个任务。", "The project's call or cost budget is used up, or was never set.", "Stop. An operator should set or raise the budget, or decide the task personally."],
+  ["budget", "项目的调用或费用预算已用完，或还没设置。", "请在项目页的预算一栏设置或提高预算；在此之前，模型的工作会暂停。", "The project's call or cost budget is used up, or was never set.", "Set or raise the budget in the project's budget section; model work stays paused until then."],
   ["session", "没有登录，或登录已失效。", "请重新登录。", "You are not signed in, or the session has ended.", "Sign in again."],
   ["member", "提交人没有对应的 CSC 项目成员身份。", "只有启用了计算服务才会出现；请联系管理员核对成员映射。", "The submitter is not mapped to a CSC project member.", "Only seen when the compute service is on. Ask an administrator to check the member mapping."],
   ["quota", "计算额度不够，或已达到重试上限。", "请联系管理员核对任务预算和项目余额。", "There is not enough compute budget, or the retry limit is reached.", "Ask an administrator to check the task budget and project balance."],

@@ -26,6 +26,7 @@ from typing import Any
 from growbridge.archive.db import Database
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Model
+from growbridge.compute import refusals
 from growbridge.compute.backend import (
     BackendError,
     BackendUnavailable,
@@ -126,13 +127,13 @@ class Attempt(Model):
 def _check_text(name: str, spec: ParamSpec, value: str) -> None:
     limit = min(spec.max_length or MAX_TEXT_CHARS, MAX_TEXT_CHARS)
     if len(value) > limit:
-        raise Denied("param", f"{name} is longer than {limit} characters")
+        raise refusals.param_too_long(name, limit)
     if any(ord(char) < 32 or ord(char) == 127 for char in value):
-        raise Denied("param", f"{name} must not contain control characters")
+        raise refusals.param_bad_characters(name)
     if spec.pattern is not None and re.fullmatch(spec.pattern, value) is None:
-        raise Denied("param", f"{name} does not match its pattern")
+        raise refusals.param_bad_format(name)
     if spec.choices is not None and value not in spec.choices:
-        raise Denied("param", f"{name} must be one of {list(spec.choices)}")
+        raise refusals.param_not_in_choices(name, spec.choices)
 
 
 def _check_value(name: str, spec: ParamSpec, value: Any) -> Any:
@@ -143,14 +144,14 @@ def _check_value(name: str, spec: ParamSpec, value: Any) -> Any:
         "bool": isinstance(value, bool),
     }[spec.kind]
     if not ok:
-        raise Denied("param", f"{name} must be {spec.kind}")
+        raise refusals.param_wrong_type(name, spec.kind)
     if spec.kind == "float" and not math.isfinite(value):
-        raise Denied("param", f"{name} must be a finite number")
+        raise refusals.param_not_finite(name)
     if spec.kind in ("int", "float") and (
         (spec.minimum is not None and value < spec.minimum)
         or (spec.maximum is not None and value > spec.maximum)
     ):
-        raise Denied("param", f"{name} outside {spec.minimum}..{spec.maximum}")
+        raise refusals.param_out_of_range(name, spec.minimum, spec.maximum)
     if spec.kind == "str":
         _check_text(name, spec, value)
     return value
@@ -173,22 +174,22 @@ def validate_params(template: JobTemplate, params: Mapping[str, Any]) -> dict[st
     """Return the parameters with defaults filled in, or raise ``Denied("param")``."""
     unknown = sorted(set(params) - set(template.parameters))
     if unknown:
-        raise Denied("param", f"unknown parameters {unknown}")
+        raise refusals.param_unknown_fields(unknown)
     result: dict[str, Any] = {}
     for name, spec in template.parameters.items():
         if name in params:
             result[name] = _check_value(name, spec, params[name])
         elif spec.default is None:
-            raise Denied("param", f"{name} is required")
+            raise refusals.param_required(name)
         else:
             result[name] = spec.default
     return result
 
 
-def _require_amount(value: Any, what: str) -> None:
+def _require_amount(value: Any, what: str, field: str) -> None:
     ok = isinstance(value, int | float) and not isinstance(value, bool)
     if not ok or not math.isfinite(value) or value < 0:
-        raise Denied("param", f"{what} must be a finite, non-negative number")
+        raise refusals.param_negative_amount(field, what)
 
 
 def _limit_columns(error: OutputTooLarge) -> dict[str, str]:
@@ -210,7 +211,7 @@ def validate_inputs(inputs: Mapping[str, str]) -> dict[str, str]:
     for name, path in inputs.items():
         parts = Path(path).parts
         if not path or Path(path).is_absolute() or ".." in parts:
-            raise Denied("param", f"input {name} must be a relative path inside the snapshot")
+            raise refusals.param_bad_input_path(name)
     return dict(inputs)
 
 
@@ -240,8 +241,8 @@ class ComputeService:
 
     # -- budgets --------------------------------------------------------------------------
     def set_task_budget(self, task_id: str, cpu_hours: float, storage_gb: float) -> None:
-        for value in (cpu_hours, storage_gb):
-            _require_amount(value, "a task budget")
+        for field, value in (("cpu_hours", cpu_hours), ("storage_gb", storage_gb)):
+            _require_amount(value, "a task budget", field)
         self.db.execute(
             "INSERT INTO compute_task_budgets VALUES (?, ?, ?) ON CONFLICT(task_id)"
             " DO UPDATE SET cpu_hours = excluded.cpu_hours, storage_gb = excluded.storage_gb",
@@ -250,7 +251,7 @@ class ComputeService:
 
     def record_balance(self, cpu_hours: float, entered_by: str, note: str = "") -> None:
         """An operator's reading of the project's remaining cpu hours (appended, never edited)."""
-        _require_amount(cpu_hours, "a balance")
+        _require_amount(cpu_hours, "a balance", "cpu_hours")
         self.db.execute(
             "INSERT INTO compute_balances(balance, recorded_at, entered_by, note)"
             " VALUES (?, ?, ?, ?)",
@@ -271,7 +272,7 @@ class ComputeService:
         budget = self.db.one("SELECT * FROM compute_task_budgets WHERE task_id = ?", (task_id,))
         balance = self.db.one("SELECT * FROM compute_balances ORDER BY id DESC LIMIT 1")
         if budget is None or balance is None:
-            raise Denied("quota", "no task budget or project balance recorded")
+            raise refusals.quota_not_recorded(task_id)
         sums = "SUM(reserved_cpu + used_cpu) AS c, SUM(reserved_storage + used_storage) AS s"
         task = self.db.one(f"SELECT {sums} FROM compute_attempts WHERE task_id = ?", (task_id,))
         every = self.db.one(f"SELECT {sums} FROM compute_attempts")
@@ -281,27 +282,35 @@ class ComputeService:
             (balance["recorded_at"],),
         )
         cpu, gb = template.max_cpu_hours, template.max_storage_gb
+        left = {  # what each limit still allows, per resource
+            "task": (budget["cpu_hours"] - (task["c"] or 0),
+                     budget["storage_gb"] - (task["s"] or 0)),
+            "cap": (self.service_cpu_cap - (every["c"] or 0),
+                    self.service_storage_cap - (every["s"] or 0)),
+            "balance": balance["balance"] - (exposure["c"] or 0),
+        }  # fmt: skip
+        over_task, over_cap = refusals.quota_over_task_budget, refusals.quota_over_service_cap
         checks = [
-            ("cpu hours over task budget", cpu, budget["cpu_hours"] - (task["c"] or 0)),
-            ("storage over task budget", gb, budget["storage_gb"] - (task["s"] or 0)),
-            ("cpu hours over service cap", cpu, self.service_cpu_cap - (every["c"] or 0)),
-            ("storage over service cap", gb, self.service_storage_cap - (every["s"] or 0)),
-            ("cpu hours over project balance", cpu, balance["balance"] - (exposure["c"] or 0)),
-        ]
-        for label, need, available in checks:
+            (over_task, "cpu_hours", cpu, left["task"][0]),
+            (over_task, "storage_gb", gb, left["task"][1]),
+            (over_cap, "cpu_hours", cpu, left["cap"][0]),
+            (over_cap, "storage_gb", gb, left["cap"][1]),
+            (refusals.quota_over_balance, "cpu_hours", cpu, left["balance"]),
+        ]  # fmt: skip
+        for refuse, resource, need, available in checks:
             if need > available:
-                raise Denied("quota", f"{label}: need {need}, available {available}")
+                raise refuse(resource, need, available)
 
     # -- lookup helpers -------------------------------------------------------------------
     def _member(self, submitter: str) -> str:
         if submitter not in self.members:
-            raise Denied("member", f"{submitter} is not mapped to a CSC project member")
+            raise refusals.member_unmapped(submitter)
         return self.members[submitter]
 
     def _load(self, attempt_id: str) -> Attempt:
         row = self.db.one("SELECT * FROM compute_attempts WHERE id = ?", (attempt_id,))
         if row is None:
-            raise Denied("state", f"unknown attempt {attempt_id}")
+            raise refusals.attempt_not_found(attempt_id)
         data = dict(row)
         data.pop("settled_at")
         for key in ("params", "inputs", "checksums", "error_params"):
@@ -312,7 +321,7 @@ class ComputeService:
         self._member(submitter)
         attempt = self._load(attempt_id)
         if attempt.submitter != submitter:
-            raise Denied("scope", "the attempt belongs to another submitter")
+            raise refusals.attempt_other_submitter(attempt_id)
         return attempt
 
     def _update(
@@ -416,7 +425,7 @@ class ComputeService:
         csc_user = self._member(submitter)
         template = self.templates.get(template_id)
         if template is None:
-            raise Denied("param", f"unknown template {template_id}")
+            raise refusals.template_not_found(template_id)
         clean = validate_params(template, params)
         refs = validate_inputs(inputs)
         local = await self._check_inputs(task_id, refs)  # before anything is reserved
@@ -435,14 +444,14 @@ class ComputeService:
             return {}
         guard = self.input_guard
         if self.input_root is None or guard is None:
-            raise Denied("param", "inputs are unavailable: no input root or scope guard installed")
+            raise refusals.inputs_unavailable()
         root, found = self.input_root.resolve(), {}
         for name, ref in refs.items():
             await asyncio.to_thread(guard, task_id, ref)
             path = (root / ref).resolve()  # follows links: one that leaves the snapshot is refused
             scope = (root / ref.partition("/")[0]).resolve()  # the snapshot the guard accepted
             if not path.is_relative_to(scope) or not path.exists():
-                raise Denied("param", f"input {name} is not available")
+                raise refusals.param_input_missing(name)
             found[name] = str(path)
         return found
 
@@ -484,7 +493,7 @@ class ComputeService:
             (root_id, root_id),
         )
         if row["n"] >= template.max_retries:
-            raise Denied("quota", f"retry limit of {template.max_retries} reached")
+            raise refusals.quota_retry_limit(template.max_retries)
 
     async def _launch(
         self, attempt: Attempt, template: JobTemplate, local: Mapping[str, str]
@@ -553,7 +562,7 @@ class ComputeService:
     async def cancel(self, attempt_id: str, submitter: str) -> None:
         attempt = self._owned(attempt_id, submitter)
         if attempt.phase not in ("prepared", "reconcile", *POLLED):
-            raise Denied("state", f"cannot cancel an attempt in phase {attempt.phase}")
+            raise refusals.attempt_not_cancellable(attempt_id, attempt.phase)
         job_id = attempt.remote_job_id
         if job_id is None:
             found = await self.backend.find_by_name(attempt.job_name)
@@ -636,7 +645,7 @@ class ComputeService:
         known; one whose usage is already charged keeps that charge. Who and why are recorded."""
         reason = reason.strip()
         if not reason:
-            raise Denied("param", "a reason is required")
+            raise refusals.param_required("reason", "a reason is required")
         attempt = self._load(attempt_id)
         who = {"settled_by": actor, "settle_reason": reason}
         note = f"settled by an operator: {reason}"
@@ -657,9 +666,10 @@ class ComputeService:
                 **settled_code,
             )  # fmt: skip
         else:
-            raise Denied("state", f"an attempt in phase {attempt.phase} is already final")
+            raise refusals.attempt_already_final(attempt_id, attempt.phase)
         if not done:
-            raise Denied("state", "the attempt was settled by someone else meanwhile")
+            message = "the attempt was settled by someone else meanwhile"
+            raise refusals.attempt_settled_by_operator(attempt_id, message)
         await self._remote_cleanup(attempt, cancel=attempt.phase in LIVE)
         return self._load(attempt_id)
 
@@ -669,9 +679,10 @@ class ComputeService:
     ) -> dict[str, str]:
         attempt = self._owned(attempt_id, submitter)
         if attempt.phase not in FETCHABLE or not attempt.remote_job_id:
-            raise Denied("state", f"nothing to fetch in phase {attempt.phase}")
+            raise refusals.attempt_nothing_to_fetch(attempt_id, attempt.phase)
         if attempt.settled_by:  # the operator's decision is final; a submitter cannot reopen it
-            raise Denied("state", "an operator settled this attempt: it is final")
+            message = "an operator settled this attempt: it is final"
+            raise refusals.attempt_settled_by_operator(attempt_id, message)
         limit = self._output_limit(attempt)
         try:
             reported = await self.backend.fetch(attempt.remote_job_id, out_dir, limit)
@@ -697,12 +708,15 @@ class ComputeService:
             attempt_id, phase=phase, checksums=json.dumps(reported), **CLEARED
         )
         if not recorded and self._load(attempt_id).settled_by:  # not a parallel fetch's win
-            await self._discard(out_dir, reported)  # unrecorded files are not left behind
-            raise Denied("state", "an operator settled this attempt during the fetch")
+            await self._discard(
+                attempt_id, out_dir, reported
+            )  # unrecorded files are not left behind
+            message = "an operator settled this attempt during the fetch"
+            raise refusals.attempt_settled_by_operator(attempt_id, message)
         return reported
 
     @staticmethod
-    async def _discard(out_dir: Path, reported: Mapping[str, str]) -> None:
+    async def _discard(attempt_id: str, out_dir: Path, reported: Mapping[str, str]) -> None:
         """Remove exactly the files a fetch brought home; ``_verify`` has already confined
         every name to ``out_dir``, and anything else in the directory is left alone."""
 
@@ -713,9 +727,8 @@ class ComputeService:
         try:
             await asyncio.to_thread(remove)
         except OSError as error:
-            raise Denied(
-                "state", f"settled during the fetch; the downloaded files remain ({error})"
-            ) from error
+            message = f"settled during the fetch; the downloaded files remain ({error})"
+            raise refusals.attempt_settled_by_operator(attempt_id, message) from error
 
     def _record_fetch(self, attempt_id: str, **columns: Any) -> bool:
         """Write a fetch's outcome, unless an operator settled the attempt meanwhile."""
@@ -724,12 +737,12 @@ class ComputeService:
     def _output_limit(self, attempt: Attempt) -> int:
         """The most bytes a fetch may bring home: the storage the attempt reserved."""
         if is_output_limit(attempt.error, attempt.error_code) and attempt.phase == "needs_review":
-            raise Denied("state", "the outputs are over the limit: an operator has to settle it")
+            raise refusals.attempt_outputs_over_limit(attempt.id)
         gigabytes = attempt.storage_limit_gb
         if gigabytes is None:  # an attempt from before the limit was stored
             template = self.templates.get(attempt.template_id)
             if template is None:
-                raise Denied("state", "no storage limit is known for this attempt: settle it")
+                raise refusals.attempt_no_storage_limit(attempt.id, attempt.template_id)
             gigabytes = template.max_storage_gb
         return int(gigabytes * BYTES_PER_GB)
 
@@ -753,10 +766,12 @@ class ComputeService:
         attempt = self._load(attempt_id)
         csc_user = self._member(attempt.submitter)
         if attempt.phase != "failed":
-            raise Denied("state", f"only a failed attempt can be retried, not {attempt.phase}")
+            raise refusals.attempt_not_retryable(attempt_id, attempt.phase)
         template = self.templates.get(attempt.template_id)
         if template is None or template.version != attempt.template_version:
-            raise Denied("param", "the template version of the attempt is no longer registered")
+            raise refusals.template_version_unregistered(
+                attempt.template_id, attempt.template_version
+            )
         params = validate_params(template, {**attempt.params, **adjustments})
         local = await self._check_inputs(attempt.task_id, attempt.inputs)  # still in scope?
         changed = any(

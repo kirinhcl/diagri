@@ -7,7 +7,8 @@ checks each rule's routes with two operators. A new read route needs an entry an
   gets the route's own answer for an id that does not exist.
 - device: the lock holder of the local greenhouse (and administrators).
 - alerts, inbox, compute: filtered item by item.
-- public: every signed-in operator (evidence cards are literature, not anyone's data).
+- public: every signed-in operator (evidence cards are literature, and the device's capabilities
+  are the hardware's fixed ranges the forms check against: neither is anyone's data).
 - self: the caller's own session and locks. admin: administrators only.
 """
 
@@ -15,6 +16,7 @@ READ_RULES: dict[str, str] = {
     "/wb/alerts": "alerts",
     "/wb/compute": "compute",
     "/wb/environment": "device",
+    "/wb/capabilities": "public",
     "/wb/evidence": "public",
     "/wb/holdouts": "project",
     "/wb/inbox": "inbox",

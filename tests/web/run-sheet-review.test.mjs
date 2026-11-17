@@ -163,3 +163,36 @@ test("a name a planner chose is shown in quotes", () => {
   assert.ok(text.includes("\u201clight-on\u201d") || text.includes('"light-on"'), text);
   assertNoLeaks(findingsList(ctx, fx), exemptStrings("stage"));
 });
+
+const walk = (node, match) => [...(match(node) ? [node] : []), ...[...(node.children || [])].flatMap((child) => walk(child, match))];
+const settleAll = async () => {
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+};
+
+test("the stage page changes a run sheet with a form, the full JSON stays in a closed fold, and an unchanged form posts the sheet as read", async () => {
+  const { element, ctx } = await renderPage("stage", { stageId: FIXTURES["stage-pending.json"].stage_id }, { lang: "en" });
+  const group = walk(element, (el) => el.localName === "div" && el.getAttribute("data-action") === "draft")[0];
+  const forms = walk(group, (el) => el.localName === "form");
+  assert.equal(forms.length, 2, "the form and the JSON editor");
+  const fold = walk(group, (el) => el.localName === "details")[0];
+  assert.equal(fold.hasAttribute("open"), false, "the JSON fold starts closed");
+  assert.ok(walk(fold, (el) => el.localName === "form").length === 1 && walk(fold, (el) => el.localName === "summary")[0].textContent === ctx.t("forms.advanced"));
+  forms[0].dispatchEvent(new Event("submit", { cancelable: true }));
+  await settleAll();
+  const post = ctx.api.calls.find((call) => call.method === "POST" && call.path === "/drafts/run-sheet");
+  assert.ok(post, "the form posts the draft");
+  const review = FIXTURES["run-sheet-pending.json"];
+  assert.equal(JSON.stringify(post.body), JSON.stringify({ round_id: FIXTURES["stage-pending.json"].round_id, run_sheet: review.run_sheet }));
+});
+
+test("the run-sheet form and its JSON fold have different submit buttons, in both languages", async () => {
+  for (const lang of ["en", "zh"]) {
+    const { element, ctx } = await renderPage("stage", { stageId: FIXTURES["stage-pending.json"].stage_id }, { lang });
+    const group = walk(element, (el) => el.localName === "div" && el.getAttribute("data-action") === "draft")[0];
+    const [formButton, jsonButton] = walk(group, (el) => el.localName === "form").map((form) => walk(form, (el) => el.localName === "button" && el.getAttribute("type") === "submit")[0].textContent);
+    assert.notEqual(formButton, jsonButton, lang);
+    assert.equal(formButton, ctx.t("stage.draft.submit"));
+    assert.equal(jsonButton, ctx.t("stage.draft.submitJson"));
+  }
+});

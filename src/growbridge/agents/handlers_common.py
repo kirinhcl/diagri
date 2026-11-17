@@ -11,8 +11,10 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, NoReturn
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
@@ -44,6 +46,14 @@ class Deps:
     search: Any = None
     holdout: Any = None
     alerts: Any = None  # the AlertBook; only the auditor's finding tool uses it
+    timezone: str = "UTC"  # the reporting time zone: the models are shown times in it
+
+
+def local_time(epoch: float | None, timezone: str) -> str | None:
+    """``"YYYY-MM-DD HH:MM"`` of an epoch time in ``timezone``; None stays None."""
+    if epoch is None:
+        return None
+    return datetime.fromtimestamp(epoch, ZoneInfo(timezone)).strftime("%Y-%m-%d %H:%M")
 
 
 class ToolInput(BaseModel):
@@ -62,7 +72,7 @@ def actor_for(role: str) -> Actor:
 
 
 def unavailable(what: str) -> NoReturn:
-    raise Denied("unavailable", f"no {what} configured")
+    raise Denied("unavailable", f"no {what} configured", reason="unavailable", params={})
 
 
 async def resolve(value: Any) -> Any:
@@ -118,10 +128,20 @@ def require_round(deps: Deps, round_id: str, expected: RoundState, project_id: s
     Checked before anything is created, so a refusal leaves no orphan snapshot or report.
     """
     if deps.workflow.store.round(round_id).project_id != project_id:
-        raise Denied("scope", f"round {round_id} does not belong to this project")
+        raise Denied(
+            "scope",
+            f"round {round_id} does not belong to this project",
+            reason="not_this_project",
+            params={"project_id": project_id},
+        )
     state = deps.workflow.round_state(round_id)
     if state is not expected:
-        raise Denied("state", f"round {round_id} is {state.value}; this needs {expected.value}")
+        raise Denied(
+            "state",
+            f"round {round_id} is {state.value}; this needs {expected.value}",
+            reason="round_wrong_phase",
+            params={"round_id": round_id, "state": state.value, "needed_state": expected.value},
+        )
 
 
 def experiment_project(deps: Deps, experiment_id: str) -> str | None:
@@ -165,7 +185,12 @@ def bound_task(deps: Deps) -> ResearchTask:
     """The task of the running dispatch; a call outside one is refused."""
     task_id = _BOUND.get()
     if task_id is None:
-        raise Denied("scope", "no task is running: tools only work inside a dispatched run")
+        raise Denied(
+            "scope",
+            "no task is running: tools only work inside a dispatched run",
+            reason="no_run",
+            params={},
+        )
     return deps.tasks.get(task_id)
 
 
@@ -173,7 +198,12 @@ def require_bound(deps: Deps, task_id: str) -> ResearchTask:
     """``task_id`` from the model must be the running task, and nothing else."""
     task = bound_task(deps)
     if task_id != task.id:
-        raise Denied("scope", "task_id is not the task this run was started for")
+        raise Denied(
+            "scope",
+            "task_id is not the task this run was started for",
+            reason="not_this_run",
+            params={},
+        )
     return task
 
 
@@ -181,7 +211,12 @@ def require_project(deps: Deps, project_id: str) -> ResearchTask:
     """A project named by the model must be the running task's project."""
     task = bound_task(deps)
     if project_id != task.project_id:
-        raise Denied("scope", "that project is not the project of this run")
+        raise Denied(
+            "scope",
+            "that project is not the project of this run",
+            reason="not_this_project",
+            params={"project_id": project_id},
+        )
     return task
 
 
@@ -201,7 +236,12 @@ def require_experiment_project(deps: Deps, experiment_id: str) -> None:
     """An experiment named by the model must have exactly one owner: the run's project."""
     owner = experiment_project(deps, experiment_id)
     if owner is None or owner != bound_task(deps).project_id:
-        raise Denied("scope", "that experiment is not available to this run")
+        raise Denied(
+            "scope",
+            "that experiment is not available to this run",
+            reason="not_this_run",
+            params={},
+        )
 
 
 def _refuse_holdout_rows(deps: Deps, snap: Snapshot, project_id: str) -> None:
@@ -218,6 +258,11 @@ def scoped_snapshot(deps: Deps, task: ResearchTask, snapshot_id: str) -> Snapsho
     """
     snap = deps.archive.snapshot(snapshot_id)
     if snap is None or experiment_project(deps, snap.experiment_id) != task.project_id:
-        raise Denied("scope", f"snapshot {snapshot_id} is not available to task {task.id}")
+        raise Denied(
+            "scope",
+            f"snapshot {snapshot_id} is not available to task {task.id}",
+            reason="not_this_run",
+            params={},
+        )
     _refuse_holdout_rows(deps, snap, task.project_id)
     return snap

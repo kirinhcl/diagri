@@ -30,6 +30,8 @@ def require_stages_after(
             "state",
             f"snapshot {snapshot_id} holds data of a stage that started before the analysis "
             f"script was frozen: {RULE}",
+            reason="snapshot_predates_freeze",
+            params={"snapshot_id": snapshot_id},
         )
 
 
@@ -48,4 +50,6 @@ def require_measurements_after(
             "state",
             f"snapshot {snapshot_id} holds a measurement recorded before the analysis script "
             f"was frozen: {RULE}",
+            reason="snapshot_predates_freeze",
+            params={"snapshot_id": snapshot_id},
         )

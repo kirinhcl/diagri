@@ -57,6 +57,15 @@ def _token_hash(token: str) -> str:
     return hashlib.sha256((token or "").encode()).hexdigest()
 
 
+class AccountRefused(ValueError):
+    """An account change ``Operators`` refuses; ``case`` names which one, so the workbench can say
+    why (``workbench/admin.py``). Still a ``ValueError`` for the command line and older callers."""
+
+    def __init__(self, case: str, message: str):
+        super().__init__(message)
+        self.case = case
+
+
 class Operators:
     """Operator accounts and their workbench sessions."""
 
@@ -73,13 +82,13 @@ class Operators:
         unknown role."""
         name = name.strip()
         if not name or len(name) > NAME_LIMIT:
-            raise ValueError(f"an operator name is 1..{NAME_LIMIT} characters")
+            raise AccountRefused("name_length", f"an operator name is 1..{NAME_LIMIT} characters")
         if role not in ROLES:
-            raise ValueError(f"a role is one of {', '.join(ROLES)}")
+            raise AccountRefused("role", f"a role is one of {', '.join(ROLES)}")
         salt, key = self._hashed(secret)
         with self.db.transaction():
             if self.db.one("SELECT 1 FROM operators WHERE name = ?", (name,)) is not None:
-                raise ValueError(f"operator {name!r} already exists")
+                raise AccountRefused("name_taken", f"operator {name!r} already exists")
             self.db.execute(
                 "INSERT INTO operators(name, salt, hash, n, created_at, role) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
@@ -88,7 +97,9 @@ class Operators:
 
     def _hashed(self, secret: str) -> tuple[bytes, bytes]:
         if not MIN_SECRET_LENGTH <= len(secret) <= MAX_SECRET_LENGTH:
-            raise ValueError(f"a secret is {MIN_SECRET_LENGTH}..{MAX_SECRET_LENGTH} characters")
+            raise AccountRefused(
+                "secret_length", f"a secret is {MIN_SECRET_LENGTH}..{MAX_SECRET_LENGTH} characters"
+            )
         salt = secrets.token_bytes(SALT_BYTES)
         return salt, self._derive(secret, salt, self.scrypt_n)
 
@@ -107,7 +118,9 @@ class Operators:
         with self.db.transaction():
             self._require_known(name)
             if by == name:
-                raise ValueError("an administrator cannot disable their own account")
+                raise AccountRefused(
+                    "own_account", "an administrator cannot disable their own account"
+                )
             if self.role(name) == "admin" and self.active(name):
                 others = self.db.one(
                     "SELECT COUNT(*) AS n FROM operators"
@@ -115,7 +128,9 @@ class Operators:
                     (name,),
                 )
                 if others["n"] == 0:
-                    raise ValueError("the last active administrator cannot be disabled")
+                    raise AccountRefused(
+                        "last_admin", "the last active administrator cannot be disabled"
+                    )
             self.db.execute(
                 "UPDATE operators SET disabled_at = ? WHERE name = ?", (self.clock.now(), name)
             )
@@ -141,7 +156,7 @@ class Operators:
 
     def _require_known(self, name: str) -> None:
         if self.db.one("SELECT 1 FROM operators WHERE name = ?", (name,)) is None:
-            raise ValueError(f"no operator {name!r}")
+            raise AccountRefused("unknown_operator", f"no operator {name!r}")
 
     @staticmethod
     def _derive(secret: str, salt: bytes, n: int) -> bytes:
@@ -207,7 +222,7 @@ class Operators:
         row = self._session(token)
         if not self.active(row["name"]):
             self.logout(token)
-            raise Denied("session", "the session is no longer valid")
+            raise Denied("session", "the session is no longer valid", reason="session_expired")
         bound = row["recovery_number"]
         if bound is None:
             self.db.execute(
@@ -217,7 +232,7 @@ class Operators:
             )
         elif bound != recovery_number:
             self.logout(token)
-            raise Denied("session", "the session is no longer valid")
+            raise Denied("session", "the session is no longer valid", reason="session_expired")
         return Actor(
             kind="operator",
             id=row["name"],
@@ -234,10 +249,10 @@ class Operators:
             "SELECT * FROM operator_sessions WHERE token_hash = ?", (_token_hash(token),)
         )
         if row is None:
-            raise Denied("session", "the session is not valid")
+            raise Denied("session", "the session is not valid", reason="session_expired")
         if row["expires_at"] <= self.clock.now():
             self.logout(token)
-            raise Denied("session", "the session is not valid")
+            raise Denied("session", "the session is not valid", reason="session_expired")
         return row
 
     # --- credential check and rate limit -------------------------------------------------------
@@ -259,7 +274,7 @@ class Operators:
         refused = row is None or row["disabled_at"] is not None  # same work either way
         if refused or not fits or not hmac.compare_digest(derived, expected):
             self._record_failure(key, source, now)
-            raise Denied("session", "invalid credentials")
+            raise Denied("session", "invalid credentials", reason="bad_credentials")
         self.db.execute("DELETE FROM login_failures WHERE name = ? AND source = ?", (key, source))
 
     def _failures(self, condition: str, params: tuple) -> int:
@@ -272,14 +287,24 @@ class Operators:
         since = now - FAILURE_WINDOW_SECONDS
         pair = self._failures("name = ? AND source = ? AND at > ?", (key, source, since))
         if pair >= MAX_FAILURES:
-            raise Denied("locked", "too many failed attempts; try again later")
+            raise Denied(
+                "locked",
+                "too many failed attempts; try again later",
+                reason="login_locked",
+                params={"window_seconds": FAILURE_WINDOW_SECONDS},
+            )
         if session:
             return
         everywhere = self._failures(
             "name = ? AND source NOT LIKE ? AND at > ?", (key, SESSION_SOURCE + "%", since)
         )
         if everywhere >= MAX_GLOBAL_FAILURES:
-            raise Denied("locked", "too many failed attempts; try again later")
+            raise Denied(
+                "locked",
+                "too many failed attempts; try again later",
+                reason="login_locked",
+                params={"window_seconds": FAILURE_WINDOW_SECONDS},
+            )
 
     def _record_failure(self, key: str, source: str, now: float) -> None:
         with self.db.transaction():

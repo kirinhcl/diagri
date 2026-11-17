@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from growbridge.observer.alerts import Alert
 from growbridge.ports import Actor, Denied
+from growbridge.workflow import denials
 from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.store import StageRow, WorkflowStore
 
@@ -42,7 +43,12 @@ class Access:
         if actor.kind != "operator" or self.store.project_owner(project_id) == actor.id:
             return
         if self.is_admin(actor) and self.store.has_project(project_id):
-            raise Denied("not_owner", "administrators do not act on another operator's project")
+            raise Denied(
+                "not_owner",
+                "administrators do not act on another operator's project",
+                reason="not_owner",
+                params={"project_id": project_id},
+            )
         raise hidden()
 
     def require_stage(
@@ -52,17 +58,27 @@ class Access:
             return
         self.require_project(actor, stage.project_id, hidden)
         if self.locks.holder_of_device(stage.device_id) != actor.id:
-            raise Denied("not_lock_holder", "lock the stage's greenhouse first")
+            raise Denied(
+                "not_lock_holder",
+                "lock the stage's greenhouse first",
+                reason="stage_greenhouse_not_held",
+                params={"stage_id": stage.stage_id},
+            )
 
     def require_sheet_device(self, project_id: str, device_id: str) -> None:
         """Whoever drafts (an operator or a model), the project's owner holds the greenhouse."""
         owner = self.store.project_owner(project_id)
         if owner is None or self.locks.holder_of_device(device_id) != owner:
-            raise Denied("not_lock_holder", "the project's owner does not hold this greenhouse")
+            raise Denied(
+                "not_lock_holder",
+                "the project's owner does not hold this greenhouse",
+                reason="owner_lacks_greenhouse",
+                params={"project_id": project_id, "device_id": device_id},
+            )
 
     def require_admin(self, actor: Actor) -> None:
         if not self.is_admin(actor):
-            raise Denied("admin_only", "only an administrator can do this")
+            raise Denied("admin_only", "only an administrator can do this", reason="admin_only")
 
     # --- seeing --------------------------------------------------------------------------------
 
@@ -107,14 +123,14 @@ def guard_stage(
     access: Access | None, actor: Actor, stage: StageRow, emergency: bool = False
 ) -> None:
     if access is not None:
-        hidden = lambda: Denied("state", f"unknown stage {stage.stage_id}")  # noqa: E731
+        hidden = lambda: denials.unknown("stage", stage.stage_id)  # noqa: E731
         access.require_stage(actor, stage, hidden, emergency)
 
 
 def guard_round(access: Access | None, actor: Actor, store: WorkflowStore, round_id: str) -> None:
     if access is not None:
         project_id = store.round(round_id).project_id
-        hidden = lambda: Denied("state", f"unknown round {round_id}")  # noqa: E731
+        hidden = lambda: denials.unknown("round", round_id)  # noqa: E731
         access.require_project(actor, project_id, hidden)
 
 

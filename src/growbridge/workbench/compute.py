@@ -62,7 +62,12 @@ def add_compute_routes(
 
     @router.post("/compute/tasks/{task_id}/budget")
     async def set_budget(task_id: PathId, body: BudgetIn, actor: Fresh):
-        unknown = Denied("scope", f"unknown task {task_id}")
+        unknown = Denied(  # another's task answers as one that does not exist
+            "scope",
+            f"unknown task {task_id}",
+            reason="compute_task_unknown",
+            params={"task_id": task_id},
+        )
         try:
             task = tasks.get(task_id)
         except Denied:

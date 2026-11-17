@@ -120,7 +120,11 @@ class EnvironmentView:
         self.access, self.actor, self.workflow = access, actor, workflow
         self.full = access is None or access.is_admin(actor)
         if not self.full and not access.sees_device(actor, access.local_device):
-            raise Denied("not_lock_holder", "lock this greenhouse to see its environment")
+            raise Denied(
+                "not_lock_holder",
+                "lock this greenhouse to see its environment",
+                reason="local_greenhouse_not_held",
+            )
 
     def since(self, start: float) -> float:
         if self.full:
@@ -160,8 +164,19 @@ def add_environment_routes(
     clock: Clock,
     alerts: AlertBook | None = None,
     access: Access | None = None,
+    *,
+    max_pump_seconds: float,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
+
+    @router.get("/capabilities")
+    async def capabilities(actor: Operator):
+        caps = control.capabilities()
+        return {
+            "level_ranges": {c.value: list(r) for c, r in caps.level_ranges.items()},
+            "sensors": caps.sensors,
+            "max_pump_seconds": max_pump_seconds,
+        }
 
     @router.get("/environment")
     async def environment(

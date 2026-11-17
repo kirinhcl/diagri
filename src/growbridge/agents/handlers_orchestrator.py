@@ -11,6 +11,7 @@ from growbridge.agents.handlers_common import (
     ToolInput,
     bound_task,
     clip,
+    local_time,
     require_bound,
     require_project,
     require_round_project,
@@ -109,6 +110,8 @@ def _stored(deps: Deps, task: ResearchTask) -> dict:
             "state",
             f"trigger_event_id {task.trigger_event_id!r} already belongs to task {stored.id} "
             f"(owner {stored.owner_role}); nothing was created. Use a new trigger_event_id.",
+            reason="request_id_reused_for_other_goal",
+            params={"task_id": stored.id, "request_id": task.trigger_event_id},
         )
     return {
         "task_id": stored.id,
@@ -144,13 +147,18 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             "state": stage.state.value,
             "experiment_id": stage.experiment_id,
             "started_at": stage.started_at,
+            "started_at_local": local_time(stage.started_at, deps.timezone),
             "paused_at": stage.paused_at,
+            "paused_at_local": local_time(stage.paused_at, deps.timezone),
             "end_pending": stage.end_pending,
-            "history": list(deps.workflow.history(data.stage_id))[-HISTORY_TAIL:],
+            "history": [
+                {**entry, "at_local": local_time(entry["at"], deps.timezone)}
+                for entry in list(deps.workflow.history(data.stage_id))[-HISTORY_TAIL:]
+            ],
         }
 
     def create_task(data: CreateTaskInput) -> dict:
-        require_project(deps, data.project_id)
+        running = require_project(deps, data.project_id)
         task = ResearchTask(
             id=new_id("task"),
             project_id=data.project_id,
@@ -162,6 +170,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             constraints=data.constraints,
             input_refs=data.input_refs,
             expected_artifacts=data.expected_artifacts,
+            language=running.language,
         )
         return _stored(deps, task)
 
@@ -183,6 +192,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             # a handoff always hangs under the running task, named or not: only then does the
             # dispatcher hand its end back as the follow-up the tool result promises
             parent_task_id=running.id,
+            language=running.language,
         )
         return _stored(deps, task)
 
@@ -249,7 +259,9 @@ def _visible_task(deps: Deps, task_id: str) -> ResearchTask:
     try:
         cursor = deps.tasks.get(task_id)
     except Denied:
-        raise Denied("scope", "that task is not available to this run") from None
+        raise Denied(
+            "scope", "that task is not available to this run", reason="not_this_run", params={}
+        ) from None
     if f"{TASK_REF}{task_id}" in bound.input_refs and cursor.project_id == bound.project_id:
         return cursor
     while cursor.project_id == bound.project_id:
@@ -258,7 +270,9 @@ def _visible_task(deps: Deps, task_id: str) -> ResearchTask:
         if cursor.parent_task_id is None:
             break
         cursor = deps.tasks.get(cursor.parent_task_id)
-    raise Denied("scope", "that task is not available to this run")
+    raise Denied(
+        "scope", "that task is not available to this run", reason="not_this_run", params={}
+    )
 
 
 def _own_artifact(deps: Deps, artifact_id: str):
@@ -271,7 +285,12 @@ def _own_artifact(deps: Deps, artifact_id: str):
         except Denied:
             owner = None
     if artifact is None or owner is None or owner.project_id != bound_task(deps).project_id:
-        raise Denied("scope", f"artifact {artifact_id} is not available to this run")
+        raise Denied(
+            "scope",
+            f"artifact {artifact_id} is not available to this run",
+            reason="not_this_run",
+            params={},
+        )
     return artifact
 
 
@@ -280,9 +299,19 @@ def _read(deps: Deps, artifact_id: str) -> dict:
     path = deps.archive.root.joinpath(artifact.path).resolve()
     roots = (deps.work_root.resolve(), deps.archive.root.resolve())
     if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
-        raise Denied("scope", f"artifact {artifact_id} is outside the project data")
+        raise Denied(
+            "scope",
+            f"artifact {artifact_id} is outside the project data",
+            reason="not_this_run",
+            params={},
+        )
     if file_digest(path) != artifact.sha256:
-        raise Denied("state", f"artifact {artifact_id} no longer matches its recorded digest")
+        raise Denied(
+            "state",
+            f"artifact {artifact_id} no longer matches its recorded digest",
+            reason="artifact_digest_mismatch",
+            params={"round_id": None, "artifact_id": artifact_id},
+        )
     with path.open("rb") as handle:
         raw = handle.read(MAX_ARTIFACT_BYTES + 1)
     text = raw[:MAX_ARTIFACT_BYTES].decode(errors="replace")

@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { afterEach, test } from "node:test";
 
 import { activityLog } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
 import { AHEAD_SECONDS, irrigationNotice, irrigationPrompt, plannedIrrigation, rowActions, tasksView, visibleRows } from "../../src/growbridge/web/workbench/pages/stage-tasks.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { installFakeDom, testCtx } from "./support/render-page.mjs";
 
 installFakeDom();
+
+afterEach(() => {
+  assertNoPendingDialogAnswers();
+  resetDialogs();
+});
 
 const NOW = 100_000;
 const row = (fields) => ({ task_id: "water", kind: "irrigation", seconds: 5, status: "open", record: null, due_at: NOW, ...fields });
@@ -215,4 +221,53 @@ test("irrigation notices name the task, not the request", async () => {
   await plannedIrrigation(env, row({ task_id: "irrigate-daily", seconds: 600 }));
   assert.match(notices[0].message, /^已浇水并记录：浇水（.+ 到期）$/);
   assert.ok(!notices[0].message.includes("wb-77"));
+});
+
+// --- skipping asks, with an optional reason (TSK-03) ----------------------------------------------
+const skipButton = (element) => elements(element, "button").find((button) => ["跳过", "Skip"].includes(button.textContent));
+
+test("skipping asks for an optional reason and sends it as the note; cancelling sends nothing", async () => {
+  const { element, ctx, notices } = view("en");
+  const posts = () => ctx.api.calls.filter((call) => call.method === "POST");
+  skipButton(element).dispatchEvent(new Event("click"));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes("A later record replaces this one"), dialog.textContent);
+  assert.ok(elements(dialog, "input").some((input) => input.getAttribute("maxlength") === "200"));
+  answerNextDialog(false);
+  await settle();
+  await settle();
+  assert.equal(posts().length, 0);
+  assert.equal(notices.length, 0);
+  skipButton(element).dispatchEvent(new Event("click"));
+  await settle();
+  answerNextDialog("  pump is broken  ");
+  await settle();
+  await settle();
+  assert.deepEqual(posts().map((call) => call.body), [{ task_id: "irrigate-daily", due_at: NOW, outcome: "skipped", note: "pump is broken" }]);
+  assert.equal(notices.length, 1);
+  skipButton(element).dispatchEvent(new Event("click"));
+  await settle();
+  answerNextDialog("");
+  await settle();
+  await settle();
+  assert.deepEqual(posts()[1].body, { task_id: "irrigate-daily", due_at: NOW, outcome: "skipped" });
+});
+
+test("a done row offers no skip", () => {
+  const { element } = view("en");
+  const rows = elements(element, "tr").slice(1);
+  const done = rows.find((tr) => tr.textContent.includes("Done"));
+  assert.ok(done, "the done row");
+  assert.ok(!elements(done, "button").some((button) => button.textContent === "Skip"));
+  assert.ok(elements(rows.find((tr) => tr !== done), "button").some((button) => button.textContent === "Skip"));
+});
+
+test("the task row shows the reason given", () => {
+  const record = { ...RECORD, outcome: "skipped", note: "pump <b>broken</b>" };
+  const skipped = body({ occurrences: [row({ status: "skipped", record })] });
+  const ctx = testCtx({ lang: "en", now: NOW });
+  const element = tasksView({ ctx, stage: { stage_id: "stage-1" }, onChanged: async () => {} }, skipped);
+  assert.ok(visibleText(element).includes("pump <b>broken</b>"), visibleText(element));
+  assert.equal(elements(element, "b").length, 0, "escaped as text");
 });

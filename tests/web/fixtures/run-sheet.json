@@ -1,6 +1,10 @@
 {
   "stage_id": "stage-round_9d38ffa4ca3049948194e0b60315c650-1",
   "state": "ended",
+  "approval": {
+    "approved_at": 1794780100.5,
+    "run_sheet_version": 1
+  },
   "run_sheet_version": 1,
   "run_sheet_digest": "8bc36a6fecbfc3e7344f8a6fb741b5a27b115a31e8397e272a64f1c3c8fef37f",
   "run_sheet": {

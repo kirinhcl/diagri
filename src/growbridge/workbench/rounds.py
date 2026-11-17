@@ -9,7 +9,7 @@ refused with ``model_role``, reads included.
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Protocol
+from typing import Annotated, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
@@ -21,8 +21,10 @@ from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, no
 from growbridge.archive.store import Archive
 from growbridge.planning.validate import check_evidence
 from growbridge.ports import Actor, Denied
+from growbridge.research.notes import TEXT_LANGUAGE
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.scope import project_read, project_write, stage_read
+from growbridge.workflow import denials
 from growbridge.workflow.access import Access
 from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
@@ -86,6 +88,7 @@ class GoalIn(Body):
         default=(), max_length=MAX_CONSTRAINTS
     )
     request_id: str | None = Field(default=None, pattern=REQUEST_ID)
+    language: Literal["en", "zh"] | None = None
 
 
 class ChoiceIn(Body):
@@ -121,13 +124,28 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
     rnd = workflow.store.round(round_id)
     artifact = None if rnd.report_artifact_id is None else archive.artifact(rnd.report_artifact_id)
     if artifact is None or artifact.kind != "research_report":
-        raise Denied("state", f"round {round_id} has no published report")
+        raise Denied(
+            "state",
+            f"round {round_id} has no published report",
+            reason="report_not_published",
+            params={"round_id": round_id},
+        )
     path = archive.root.joinpath(artifact.path).resolve()
     data_dir = archive.root.resolve().parent
     if not path.is_relative_to(data_dir) or not path.is_file():
-        raise Denied("state", f"the report file of round {round_id} is missing")
+        raise Denied(
+            "state",
+            f"the report file of round {round_id} is missing",
+            reason="report_file_missing",
+            params={"round_id": round_id},
+        )
     if path.stat().st_size > MAX_REPORT_BYTES or file_digest(path) != artifact.sha256:
-        raise Denied("state", f"the report of round {round_id} no longer matches its digest")
+        raise Denied(
+            "state",
+            f"the report of round {round_id} no longer matches its digest",
+            reason="artifact_digest_mismatch",
+            params={"round_id": round_id, "artifact_id": artifact.id},
+        )
     protocol = workflow.store.protocol(rnd.protocol_id, rnd.protocol_version)
     return {
         "round_id": round_id,
@@ -152,9 +170,15 @@ def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | Non
     if archive is not None:
         cards = {card.id: card for card in archive.evidence()}
         findings = (*findings, *check_evidence(sheet, cards))
+    approval = workflow.current_approval(stage_id)
     return {
         "stage_id": stage.stage_id,
         "state": stage.state.value,
+        "approval": (
+            {"approved_at": approval.approved_at, "run_sheet_version": approval.run_sheet_version}
+            if approval is not None
+            else None
+        ),
         "run_sheet_version": sheet.version,
         "run_sheet_digest": sheet.digest(),
         "run_sheet": sheet.model_dump(mode="json"),
@@ -168,12 +192,24 @@ def checked_protocol(protocol: ResearchProtocol) -> ResearchProtocol:
     leaves open: an id too long for a key, a version out of range, a NaN or an infinity. (The
     body's ``allow_inf_nan`` does not reach nested models.)"""
     if not all(1 <= len(key) <= MAX_ID_CHARS for key in (protocol.id, protocol.project_id)):
-        raise rejected(f"protocol and project ids have 1 to {MAX_ID_CHARS} characters")
+        raise rejected(
+            f"protocol and project ids have 1 to {MAX_ID_CHARS} characters",
+            reason="id_length",
+            params={"max_length": MAX_ID_CHARS},
+        )
     if not 1 <= protocol.version <= MAX_PROTOCOL_VERSION:
-        raise rejected(f"the protocol version is between 1 and {MAX_PROTOCOL_VERSION}")
+        raise rejected(
+            f"the protocol version is between 1 and {MAX_PROTOCOL_VERSION}",
+            reason="protocol_version_range",
+            params={"max_version": MAX_PROTOCOL_VERSION},
+        )
     spoiled = non_finite_paths(protocol.model_dump())
     if spoiled:
-        raise rejected(f"protocol numbers must be finite; not at {', '.join(spoiled)}")
+        raise rejected(
+            f"protocol numbers must be finite; not at {', '.join(spoiled)}",
+            reason="numbers_not_finite",
+            params={"paths": list(spoiled)},
+        )
     return protocol
 
 
@@ -190,7 +226,12 @@ def goal_task(body: GoalIn, actor: Actor, workflow: WorkflowService) -> Research
     refs: tuple[str, ...] = ()
     if body.round_id is not None:
         if workflow.store.round(body.round_id).project_id != body.project_id:
-            raise Denied("state", f"round {body.round_id} is not in project {body.project_id}")
+            raise Denied(
+                "state",
+                f"round {body.round_id} is not in project {body.project_id}",
+                reason="round_not_in_project",
+                params={"round_id": body.round_id, "project_id": body.project_id},
+            )
         refs = (f"round:{body.round_id}",)
     key = body.request_id or new_id("goal")
     return ResearchTask(
@@ -203,6 +244,7 @@ def goal_task(body: GoalIn, actor: Actor, workflow: WorkflowService) -> Research
         correlation_id=new_id("goal"),
         constraints=body.constraints,
         input_refs=refs,
+        language=body.language or TEXT_LANGUAGE,
     )
 
 
@@ -238,7 +280,7 @@ def _steering_routes(
 
     def visible_round(round_id: str, actor: Actor) -> None:
         project_id = workflow.store.round(round_id).project_id  # unknown round: refused
-        unknown = Denied("state", f"unknown round {round_id}")
+        unknown = denials.unknown("round", round_id)
         project_read(access, actor, project_id, lambda: unknown)
 
     @router.get("/rounds/{round_id}")
@@ -250,12 +292,16 @@ def _steering_routes(
     async def read_report(round_id: PathId, actor: Operator):
         visible_round(round_id, actor)
         if archive is None:
-            raise Denied("state", "no archive is mounted: reports cannot be read")
+            raise Denied(
+                "state",
+                "no archive is mounted: reports cannot be read",
+                reason="archive_not_mounted",
+            )
         return report_json(workflow, archive, round_id)
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):
-        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
+        stage_read(access, actor, stage_id, lambda: denials.unknown("stage", stage_id))
         return review_json(workflow, stage_id, archive)
 
     @router.post("/rounds/{round_id}/choice")
@@ -285,26 +331,29 @@ def _model_routes(
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
     def require_project(project_id: str, actor: Actor, write: bool = True) -> None:
-        unknown = Denied("state", f"unknown project {project_id}")
+        unknown = denials.unknown("project", project_id)  # another's answers as a missing one
         if not workflow.store.has_project(project_id):
             raise unknown
         check = project_write if write else project_read
         check(access, actor, project_id, lambda: unknown)
 
     def require_round(round_id: str | None, actor: Actor) -> None:
-        """A goal's round: another operator's is answered as an unknown round."""
+        """A goal's round: another operator's is answered as an unknown round (the same refusal
+        ``WorkflowStore.round`` gives for a round that does not exist)."""
         if round_id is None or access is None:
             return
         owner_project = workflow.store.round(round_id).project_id  # unknown round: refused
-        project_write(
-            access, actor, owner_project, lambda: Denied("state", f"unknown round {round_id}")
-        )
+        project_write(access, actor, owner_project, lambda: denials.unknown("round", round_id))
 
     def require_budget_left(project_id: str) -> None:
         """Before a task is made that could never call a model."""
         calls, cost = budget.remaining(project_id)  # refused with ``budget`` when none was set
-        if calls <= 0 or cost <= 0:
-            raise Denied("budget", f"nothing is left of the call budget of project {project_id}")
+        message = f"nothing is left of the call budget of project {project_id}"
+        params = {"project_id": project_id}
+        if calls <= 0:
+            raise Denied("budget", message, reason="budget_calls_exhausted", params=params)
+        if cost <= 0:
+            raise Denied("budget", message, reason="budget_cost_exhausted", params=params)
 
     @router.post("/projects/{project_id}/budget")
     async def set_budget(project_id: PathId, body: BudgetIn, actor: Fresh):
@@ -328,7 +377,12 @@ def _model_routes(
         stored = tasks.create(task)  # one task per trigger: a repeat returns the first
         reused = stored.id != task.id
         if reused and not same_goal(stored, task):
-            raise Denied("state", "this request id was already used for another goal")
+            raise Denied(
+                "state",
+                "this request id was already used for another goal",
+                reason="request_id_reused_for_other_goal",
+                params={"task_id": stored.id, "request_id": body.request_id},
+            )
         if conversation is not None and not reused:
             detail = {"operator": actor.id, "round_id": body.round_id}
             conversation.add(body.project_id, "user", "message", body.goal, stored.id, detail)

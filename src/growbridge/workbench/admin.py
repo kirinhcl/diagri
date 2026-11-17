@@ -10,14 +10,21 @@ write right is bound to the old owner. Every write needs a recent re-authenticat
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
 
 from growbridge.ports import Actor, Denied
-from growbridge.workbench.auth import Operators
+from growbridge.workbench.auth import (
+    MAX_SECRET_LENGTH,
+    MIN_SECRET_LENGTH,
+    NAME_LIMIT,
+    ROLES,
+    Operators,
+)
 from growbridge.workbench.common import Body, rejected
 from growbridge.workbench.greenhouses import greenhouse_rows
 from growbridge.workbench.rounds import PathId
+from growbridge.workflow import denials
 from growbridge.workflow.access import Access
 from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.store import WorkflowStore
@@ -64,16 +71,53 @@ def _transferable(operators: Operators, store: WorkflowStore, project_id: str, o
 
     def check() -> None:
         if not store.has_project(project_id):
-            raise Denied("state", f"unknown project {project_id}")
+            raise denials.unknown("project", project_id)
         current = store.project_owner(project_id)
         if current is not None and operators.active(current):
-            raise Denied("state", "the owner can still act: disable the account first")
+            raise Denied(
+                "state",
+                "the owner can still act: disable the account first",
+                reason="owner_still_active",
+                params={"project_id": project_id, "owner": current},
+            )
         if store.project_unfinished(project_id):
-            raise Denied("state", "stop the project's unfinished stages first")
+            raise Denied(
+                "state",
+                "stop the project's unfinished stages first",
+                reason="project_has_unfinished_stages",
+                params={"project_id": project_id},
+            )
         if not operators.active(owner):
-            raise Denied("state", f"{owner} is not an active operator")
+            raise Denied(
+                "state",
+                f"{owner} is not an active operator",
+                reason="operator_not_active",
+                params={"name": owner},
+            )
 
     return check
+
+
+def _account_refused(error: ValueError, name: str) -> HTTPException:
+    """The refusal for an account change ``Operators`` turned down, by the case it names."""
+    message, case = str(error), getattr(error, "case", None)
+    if case == "name_length":
+        return rejected(message, reason="operator_name_length", params={"max_length": NAME_LIMIT})
+    if case == "secret_length":
+        bounds = {"min_length": MIN_SECRET_LENGTH, "max_length": MAX_SECRET_LENGTH}
+        return rejected(message, reason="secret_length", params=bounds)
+    if case == "role":
+        choices = {"field": "role", "choices": list(ROLES)}
+        return rejected(message, reason="param_not_in_choices", params=choices)
+    if case == "name_taken":
+        return rejected(message, reason="operator_exists", params={"name": name})
+    if case == "unknown_operator":
+        return rejected(message, reason="operator_unknown", params={"name": name})
+    if case == "own_account":
+        return rejected(message, reason="own_account")
+    if case == "last_admin":
+        return rejected(message, reason="last_admin")
+    return rejected(message, reason="account_change_refused", params={"detail": message})
 
 
 def _accounts_routes(router, fresh, operators, store, admin) -> None:
@@ -89,7 +133,7 @@ def _accounts_routes(router, fresh, operators, store, admin) -> None:
         try:
             operators.add(body.name, body.secret, body.role)
         except ValueError as error:
-            raise rejected(str(error)) from error
+            raise _account_refused(error, body.name.strip()) from error
         return {"name": body.name.strip(), "role": body.role}
 
     @router.post("/admin/operators/disable")
@@ -97,7 +141,7 @@ def _accounts_routes(router, fresh, operators, store, admin) -> None:
         try:
             operators.disable(body.name, by=actor.id)
         except ValueError as error:
-            raise rejected(str(error)) from error
+            raise _account_refused(error, body.name) from error
         return {"disabled": body.name}
 
     @router.post("/admin/operators/secret")
@@ -105,7 +149,7 @@ def _accounts_routes(router, fresh, operators, store, admin) -> None:
         try:
             operators.reset_secret(body.name, body.secret)
         except ValueError as error:
-            raise rejected(str(error)) from error
+            raise _account_refused(error, body.name) from error
         return {"reset": body.name}
 
 

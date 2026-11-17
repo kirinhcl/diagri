@@ -28,7 +28,7 @@ from growbridge.archive.models import (
     SafetyConfig,
     WriteRight,
 )
-from growbridge.control import rights
+from growbridge.control import refusals, rights
 from growbridge.control.device import SENSORS, DeviceIO, Outcome
 from growbridge.control.ledger import (
     FLAG_INTERLOCK,
@@ -106,14 +106,14 @@ class ControlService:
 
     def register_host(self) -> None:
         if not self.ledger.register_host(self.device_id, self.host_id, self.clock.now()):
-            raise Denied("host_unregistered", "another host is registered for this device")
+            raise refusals.other_host_registered(self.device_id)
 
     def host_registered(self) -> bool:
         return self.ledger.host_of(self.device_id) == self.host_id
 
     def _require_host(self) -> None:
         if not self.host_registered():
-            raise Denied("host_unregistered", "this host is not the registered write host")
+            raise refusals.not_write_host(self.device_id)
 
     def recovery_number(self) -> int:
         return self.ledger.recovery()
@@ -146,7 +146,7 @@ class ControlService:
         try:
             return await self.device.read_state(self.clock.now())
         except (BridgeError, ConnectionError, OSError) as error:
-            raise Denied("not_connected", str(error)) from error
+            raise refusals.state_unreadable(self.device_id, error) from error
 
     async def differences(self, expected: Mapping[Channel, int]) -> tuple[Difference, ...]:
         state = await self.read_state()
@@ -167,13 +167,13 @@ class ControlService:
     def grant(self, kind: RightKind, scope: RightScope, operator: str | None = None) -> int:
         self._require_host()
         if scope.device_id != self.device_id:
-            raise Denied("scope", f"{scope.device_id} is not the controlled device")
+            raise refusals.unknown_device(scope.device_id)
         with self.db.transaction():
             recovery = self.ledger.recovery()
             right = rights.build_right(kind, scope, operator, recovery, self.clock.now())
             held = self.ledger.active_rights(self.device_id, recovery, RightKind.STAGE)
             if held and kind in rights.ORDINARY_KINDS:
-                raise Denied("right_held", "a stage write right is already held for this device")
+                raise refusals.right_held(self.device_id, held[0].stage_id)
             return self.ledger.add_right(right)
 
     def right(self, number: int) -> WriteRight | None:
@@ -211,13 +211,10 @@ class ControlService:
 
     def approve_safety(self, config: SafetyConfig, operator: str) -> int:
         if not operator.strip():
-            raise Denied("approval_invalid", "the safety configuration needs an approver")
+            raise refusals.safety_needs_approver()
         unknown = sorted(set(config.frozen.minutes) - set(SENSORS))
         if unknown:  # a misspelt name would silently switch that sensor's frozen check off
-            raise Denied(
-                "approval_invalid",
-                f"frozen thresholds name sensors the device does not have: {', '.join(unknown)}",
-            )
+            raise refusals.safety_unknown_sensors(unknown)
         self._require_host()
         now = self.clock.now()
         approved = config.model_copy(update={"approved_by": operator, "approved_at": now})
@@ -347,7 +344,7 @@ class ControlService:
 
     async def onsite_check(self, operator: str, note: str) -> None:
         if not operator.strip():
-            raise Denied("not_operator", "an on-site check needs an identified operator")
+            raise refusals.onsite_needs_operator()
         now = self.clock.now()
         with self.db.transaction():
             settled = self._settle_unknown(now)
@@ -424,24 +421,24 @@ class ControlService:
         limit = self.bridge.settings.max_pump_seconds
         valid = isinstance(seconds, (int, float)) and not isinstance(seconds, bool)
         if not valid or not math.isfinite(seconds) or not 0 < seconds <= limit:
-            raise Denied("scope", f"irrigation must run for more than 0 and at most {limit} s")
+            raise refusals.irrigation_seconds_range(seconds, limit)
         if request.channel is not Channel.PUMP or request.level != 1:
-            raise Denied("scope", "irrigation switches the pump on (channel pump, level 1)")
+            raise refusals.irrigation_wrong_request()
 
     def _check_cooldown(self) -> None:
         last = self.ledger.meta(META_LAST_IRRIGATION)
         cooldown = self.bridge.settings.pump_cooldown_seconds
         if self._cycle is not None:
-            raise Denied("cooldown", "an irrigation is already running")
+            raise refusals.irrigation_running(self.device_id)
         if last and self.clock.now() - float(last) < cooldown:
-            raise Denied("cooldown", f"the pump needs {cooldown} s between irrigations")
+            raise refusals.irrigation_too_soon(cooldown, float(last), self.clock.now())
 
     def _known(self, request_id: str, fingerprint: str) -> ActionRecord | None:
         found = self.ledger.action(request_id)
         if found is None:
             return None
         if found[1] != fingerprint:
-            raise Denied("request_id_reused", f"{request_id} was used for other arguments")
+            raise refusals.request_id_reused(request_id)
         return found[0]
 
     def _authorize(
@@ -449,16 +446,16 @@ class ControlService:
     ) -> WriteRight:
         """Every check that must hold when an action is queued and again when it is sent."""
         if not self.bridge.settings.controls_enabled:
-            raise Denied("controls_disabled", "controls are disabled in the local configuration")
+            raise refusals.controls_disabled()
         self._require_host()
         right = rights.check_valid(
-            self.ledger.right(request.right_number), self.device_id, self.ledger.recovery()
+            self.ledger.right(request.right_number),
+            self.device_id,
+            self.ledger.recovery(),
+            request.right_number,
         )
         if starts_pump and not _may_irrigate(right, request, planned):
-            raise Denied(
-                "right_invalid",
-                "irrigation needs a manual write right, or the stage right for a planned one",
-            )
+            raise refusals.right_wrong_kind(right.number)
         rights.check_scope(right, request)
         if not starts_pump:
             rights.check_pump_not_started(request)
@@ -470,21 +467,23 @@ class ControlService:
         if kind is RightKind.PROTECTION:
             return
         if not self.ready:
-            raise Denied("unsettled", "the control service has not finished starting up")
+            raise refusals.still_starting()
         if self.interlocked():
             if kind is RightKind.CARE and channel is not Channel.PUMP and self.transport_stopped():
                 return
-            raise Denied("interlock", "pump off is unconfirmed; ordinary writes are blocked")
+            raise refusals.pump_unconfirmed(self.device_id)
         if not self.transport_stopped():
-            raise Denied("unsettled", "the old write path is not confirmed stopped")
-        if kind in rights.ORDINARY_KINDS and self.ledger.unsettled():
-            raise Denied("unsettled", "an earlier action has an unknown result")
+            raise refusals.old_path_running()
+        unsettled = self.ledger.unsettled() if kind in rights.ORDINARY_KINDS else []
+        if unsettled:
+            raise refusals.unknown_result(len(unsettled))
 
     def _check_link(self, kind: RightKind) -> None:
         if not self.bridge.connected:
-            raise Denied("not_connected", "no live BLE connection")
-        if kind in rights.ORDINARY_KINDS and self.bridge.health()["stale"]:
-            raise Denied("stale", "fresh device telemetry is required before an ordinary write")
+            raise refusals.no_live_link(self.device_id)
+        health = self.bridge.health() if kind in rights.ORDINARY_KINDS else None
+        if health is not None and health["stale"]:
+            raise refusals.stale(self.device_id, health["age_seconds"])
 
     def _recheck(
         self,
@@ -495,7 +494,7 @@ class ControlService:
     ) -> None:
         current = self.receipt(record.request_id)
         if current is None or current.state is not ActionState.PENDING:
-            raise Denied("right_invalid", "the queued action was voided before it was sent")
+            raise refusals.right_voided(request.right_number)
         try:
             self._authorize(request, starts_pump, planned)
             if starts_pump:

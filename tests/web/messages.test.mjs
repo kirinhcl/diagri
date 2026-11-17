@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { VALIDATION_TYPES } from "../../src/growbridge/web/workbench/validation.js";
 import { readFileSync } from "node:fs";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
@@ -8,7 +9,7 @@ import { formatterFor, messageParts, messageView } from "../../src/growbridge/we
 import { testCtx } from "./support/render-page.mjs";
 
 const CODES = JSON.parse(readFileSync(new URL("./fixtures/message-codes.json", import.meta.url), "utf8"));
-const FAMILIES = ["alert", "finding", "receipt", "task_end", "compute_error", "compute_stuck", "chat_end", "estimate"];
+const FAMILIES = ["alert", "finding", "receipt", "task_end", "compute_error", "compute_stuck", "chat_end", "estimate", "denial"];
 const SAMPLE = "{sensor} {op} {value} for {duration_seconds}, {level}";
 const PLACEHOLDER = /\{(\w+)\}/g;
 const names = (text) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]);
@@ -21,7 +22,7 @@ function ctxWithSample(lang, options) {
   return { ...ctx, t };
 }
 
-test("the code file names exactly the 8 families", () => {
+test("the code file names exactly the 9 families", () => {
   assert.deepEqual(Object.keys(CODES).sort(), [...FAMILIES].sort());
 });
 
@@ -56,6 +57,11 @@ test("every message text in the catalogs belongs to a registered code", () => {
   for (const table of [en, zh]) {
     for (const key of Object.keys(table).filter((k) => k.startsWith("msg."))) {
       const base = key.replace(/\.action$/, "");
+      if (base.startsWith("msg.validation.")) {
+        // request-body validation texts are keyed by Pydantic's type, not by a registered code
+        assert.ok([...VALIDATION_TYPES, "other"].includes(base.slice("msg.validation.".length)), key);
+        continue;
+      }
       const family = Object.keys(CODES).find((f) => base.startsWith(`msg.${f}.`));
       assert.ok(family, key);
       assert.ok(base.slice(`msg.${family}.`.length) in CODES[family], key);

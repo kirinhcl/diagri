@@ -219,9 +219,19 @@ def build_toolset(role: str, tools: Sequence[Tool], allowed: Sequence[str] = ())
     """
     role_set = ROLE_TOOLS.get(role)
     if role_set is None:
-        raise Denied("model_role", f"{role!r} is not a model role")
+        raise Denied(
+            "model_role",
+            f"{role!r} is not a model role",
+            reason="unknown_role",
+            params={"role": role},
+        )
     for name in allowed:
         if name in CONTROL_TOOLS or name not in role_set:
-            raise Denied("model_role", f"role {role!r} may not use tool {name!r}")
+            raise Denied(
+                "model_role",
+                f"role {role!r} may not use tool {name!r}",
+                reason="tool_not_allowed",
+                params={"role": role},
+            )
     wanted = set(allowed) if allowed else role_set
     return Toolset(role, [t for t in tools if t.name in wanted and t.name not in CONTROL_TOOLS])

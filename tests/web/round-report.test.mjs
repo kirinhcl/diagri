@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { afterEach, test } from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
@@ -9,10 +9,16 @@ import MESSAGES_ZH from "../../src/growbridge/web/workbench/i18n/messages.zh.js"
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { analysisSection, analysisState, runView } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
 import { abortLines, estimateText, render, reportLists, reportView } from "../../src/growbridge/web/workbench/pages/round.js";
-import { bindFormContext } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { displayName } from "../../src/growbridge/web/workbench/ui/names.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
+
+afterEach(() => {
+  assertNoPendingDialogAnswers();
+  resetDialogs();
+});
 
 const ctx = { t: makeT("en") };
 const ROUND = FIXTURES["round.json"];
@@ -249,8 +255,8 @@ test("snapshots are named by date and completeness, their ids in the details", a
   const name = displayName(c, "snapshot", snapshot);
   const text = visibleText(root);
   assert.equal(count(text, name), 2, "the table row and the run form's option");
-  assert.deepEqual(elements(root, "option").map((option) => option.textContent), [name]);
-  assert.deepEqual(elements(root, "option").map((option) => option.getAttribute("value")), [snapshot.snapshot_id]);
+  assert.deepEqual(elements(root, "option").map((option) => option.textContent), ["请选择…", name]);
+  assert.deepEqual(elements(root, "option").map((option) => option.getAttribute("value")), ["", snapshot.snapshot_id]);
   assert.ok(text.includes(zh["analysis.runState.none"]) && !/\bnone\b/.test(text), text);
   for (const id of [snapshot.snapshot_id, snapshot.experiment_id]) {
     assert.ok(!text.includes(id), id);
@@ -296,6 +302,8 @@ test("after a run the analysis opens again on its result, once", async () => {
   c.api.post = async () => ({ run_id: "run_5c98", status: "succeeded", exit_code: 0, timed_out: false, stdout: "", stderr: "" });
   const first = await analysisSection(c, ROUND);
   const form = elements(first, "form").find((node) => elements(node, "select").length);
+  formControls(form).set({ snapshot_id: ANALYSIS.snapshots[0].snapshot_id });
+  answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   const again = await analysisSection(c, ROUND);
@@ -313,6 +321,8 @@ test("after a freeze the analysis opens again, for that round only", async () =>
   c.api.post = async () => ({});
   const first = await analysisSection(c, ROUND);
   const form = elements(first, "form").find((node) => elements(node, "textarea").length);
+  formControls(form).set({ script: "x = 1" });
+  answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   const other = await analysisSection(c, { ...ROUND, round_id: "round_other" });
@@ -320,6 +330,124 @@ test("after a freeze the analysis opens again, for that round only", async () =>
   const again = await analysisSection(c, ROUND);
   assert.notEqual(again.getAttribute("open"), null);
   assert.equal((await analysisSection(c, ROUND)).getAttribute("open"), null, "opened once");
+});
+
+test("freezing asks first and says it cannot be undone; cancelling sends nothing", async () => {
+  const c = testCtx({ lang: "en" });
+  bindFormContext(c);
+  const posts = [];
+  c.api.post = async (path, body) => {
+    posts.push({ path, body });
+    return {};
+  };
+  const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "textarea").length);
+  const area = elements(form, "textarea")[0];
+  assert.equal(area.getAttribute("maxlength"), null, "a browser would cut a long paste silently");
+  assert.ok(area.classList.contains("input-code"), "monospace");
+  assert.ok(visibleText(form).includes("cannot be undone"), visibleText(form));
+  assert.equal(elements(form, "details").length, 0, "no JSON fold");
+  formControls(form).set({ script: "print(1)" });
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes("Freeze this analysis script?"), dialog.textContent);
+  assert.ok(dialog.textContent.includes("can no longer be changed"), dialog.textContent);
+  answerNextDialog(false);
+  await settle();
+  await settle();
+  assert.equal(posts.length, 0);
+  assert.equal(visibleText(form).includes("Done"), false);
+  assert.equal(elements(form, "button").every((b) => !b.disabled), true);
+  answerNextDialog(true);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].body, { project_id: ROUND.project_id, script: "print(1)" });
+});
+
+test("a freeze script longer than the limit is refused beside the field, nothing is cut and nothing is sent", async () => {
+  const c = testCtx({ lang: "en" });
+  bindFormContext(c);
+  const posts = [];
+  c.api.post = async (path, body) => {
+    posts.push({ path, body });
+    return {};
+  };
+  const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "textarea").length);
+  const long = "a".repeat(20001);
+  formControls(form).set({ script: long });
+  assert.equal(elements(form, "textarea")[0].value, long, "the whole paste stays in the field");
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.equal(posts.length, 0);
+  assert.equal(openDialogs().length, 0, "refused before any confirmation");
+  assert.ok(elements(form, "p").some((p) => p.classList.contains("field-error") && p.textContent.includes("20000")), visibleText(form));
+  formControls(form).set({ script: "\u{1F600}".repeat(15000) });
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.equal(openDialogs().length, 1, "15000 code points fit although they are 30000 UTF-16 units, as Python counts them");
+  answerNextDialog(false);
+  await settle();
+  await settle();
+});
+
+test("the redo confirm line says the stage goes back to review and nothing runs until a new run sheet is approved", () => {
+  assert.doesNotMatch(en["round.choice.redo.line"], /runs this stage again/i);
+  assert.match(en["round.choice.redo.line"], /review/);
+  assert.match(en["round.choice.redo.line"], /run sheet/);
+  assert.doesNotMatch(zh["round.choice.redo.line"], /再跑一次/);
+  assert.match(zh["round.choice.redo.line"], /待审批/);
+  assert.match(zh["round.choice.redo.line"], /运行单/);
+});
+
+test("with no snapshot there is no id field and no run button; one sentence says what makes a snapshot", async () => {
+  const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
+  const c = testCtx({ lang: "en", fixtures: { "analysis.json": { ...ANALYSIS, frozen, snapshots: [] } } });
+  bindFormContext(c);
+  const root = await analysisSection(c, ROUND);
+  assert.equal(elements(root, "input").length, 0, "no id to type");
+  assert.equal(elements(root, "button").some((b) => b.textContent === en["analysis.run"]), false, "no run button");
+  assert.ok(visibleText(root).includes("no data snapshot yet"), visibleText(root));
+  assert.ok(visibleText(root).includes("frozen at the end of a stage"), visibleText(root));
+});
+
+test("the run form starts on 'choose' and asks before the one run a snapshot allows", async () => {
+  const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
+  const c = testCtx({ lang: "en", fixtures: { "analysis.json": { ...ANALYSIS, frozen } } });
+  bindFormContext(c);
+  const posts = [];
+  c.api.post = async (path, body) => {
+    posts.push({ path, body });
+    return { run_id: "run_1", status: "succeeded", exit_code: 0, timed_out: false, stdout: "", stderr: "" };
+  };
+  const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "select").length);
+  const options = elements(form, "option");
+  assert.equal(options[0].textContent, "Choose…");
+  assert.equal(options[0].getAttribute("value"), "");
+  const select = elements(form, "select")[0];
+  assert.equal(select.value, "");
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.equal(posts.length, 0, "a blank choice is refused");
+  const [snapshot] = ANALYSIS.snapshots;
+  formControls(form).set({ snapshot_id: snapshot.snapshot_id });
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes("only one confirmatory analysis"), dialog.textContent);
+  assert.ok(dialog.textContent.includes(displayName(c, "snapshot", snapshot)), dialog.textContent);
+  assert.ok(!dialog.textContent.includes(snapshot.snapshot_id), "no id");
+  answerNextDialog(false);
+  await settle();
+  await settle();
+  assert.equal(posts.length, 0);
+  answerNextDialog(true);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.deepEqual(posts.map((p) => p.path), ["/analysis/runs"]);
 });
 
 // --- final review: an effect of a thousand or more has no exponent (F13) -------------------------
@@ -375,4 +503,40 @@ test("the estimate names the measured quantity", () => {
   assert.ok(visibleText(view).includes("指标：「canopy_area_growth」"));
   const none = reportView(testCtx({ lang: "zh" }), withEstimate(TOO_FEW, { primary_endpoint: null }));
   assert.ok(!visibleText(none).includes("指标"));
+});
+
+// --- the round choice asks, every choice with its own consequence (RND-04) -----------------------
+test("the round choice starts on 'choose' and every choice is asked with its consequence", async () => {
+  const waiting = { ...ROUND, state: "running", awaiting_choice: ROUND.stages[0].stage_id };
+  const { element, ctx: page } = await renderPage("round", { roundId: ROUND.round_id }, { lang: "en", fixtures: { "round.json": waiting } });
+  const form = elements(sectionTitled(element, en["round.choiceTitle"]), "form")[0];
+  const options = elements(form, "option");
+  assert.equal(options[0].textContent, "Choose…");
+  assert.equal(options[0].getAttribute("value"), "");
+  assert.equal(elements(form, "select")[0].value, "");
+  const posts = () => page.api.calls.filter((call) => call.method === "POST");
+  const submit = async () => {
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    await settle();
+  };
+  await submit();
+  assert.equal(posts().length, 0, "a blank choice is refused");
+  for (const choice of ["redo", "next", "verify", "abort"]) {
+    formControls(form).set({ choice });
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    const [dialog] = openDialogs();
+    if (choice !== "abort") assert.ok(en[`round.choice.${choice}.line`], `${choice} has its own line`);
+    assert.ok(dialog.textContent.includes(en[`round.choice.${choice}.line`] || displayName(page, "round", waiting)), `${choice}: ${dialog.textContent}`);
+    answerNextDialog(false);
+    await settle();
+    await settle();
+    assert.equal(posts().length, 0, `${choice}: cancelling sends nothing`);
+    assert.equal(visibleText(form).includes("Chosen"), false);
+  }
+  formControls(form).set({ choice: "redo" });
+  answerNextDialog(true);
+  await submit();
+  assert.deepEqual(posts().map((call) => call.body), [{ choice: "redo" }]);
 });

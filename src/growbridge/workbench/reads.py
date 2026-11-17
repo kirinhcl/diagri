@@ -24,6 +24,7 @@ from growbridge.ports import Actor, ControlPort, Denied
 from growbridge.workbench.environment import add_environment_routes
 from growbridge.workbench.rounds import PathId, ProjectBudget
 from growbridge.workbench.scope import project_read, stage_read, visible_task
+from growbridge.workflow import denials
 from growbridge.workflow.access import Access
 from growbridge.workflow.listing import (
     count_rounds_awaiting_choice,
@@ -223,7 +224,12 @@ def _budget_view(budget: ProjectBudget | None, project_id: str) -> dict[str, Any
 def _stage(workflow: WorkflowService, stage_id: str) -> StageRow:
     row = workflow.store.find_stage(stage_id)
     if row is None:
-        raise Denied("state", f"unknown stage {stage_id}")
+        raise Denied(
+            "state",
+            f"unknown stage {stage_id}",
+            reason="record_not_found",
+            params={"record_kind": "stage", "record_id": stage_id},
+        )
     return row
 
 
@@ -297,19 +303,34 @@ def add_read_routes(
     budget: ProjectBudget | None = None,
     alerts: AlertBook | None = None,
     compute: ComputeService | None = None,
+    max_pump_seconds: float,
     access: Access | None = None,
 ) -> None:
     _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock, access)
     _project_routes(router, operator, workflow, tasks, budget, access)
     _stage_read_routes(router, operator, workflow, archive, clock, access)
-    add_environment_routes(router, operator, workflow, archive, control, clock, alerts, access)
+    add_environment_routes(
+        router,
+        operator,
+        workflow,
+        archive,
+        control,
+        clock,
+        alerts,
+        access,
+        max_pump_seconds=max_pump_seconds,
+    )
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
     @router.get("/safety")
     async def safety(actor: Operator):
         if access is not None and not access.sees_device(actor, access.local_device):
-            raise Denied("not_lock_holder", "lock this greenhouse to read its safety limits")
+            raise Denied(
+                "not_lock_holder",
+                "lock this greenhouse to read its safety limits",
+                reason="local_greenhouse_not_held",
+            )
         config = control.safety()
         return {"safety": None if config is None else config.model_dump(mode="json")}
 
@@ -353,11 +374,16 @@ def _project_routes(router, operator, workflow, tasks, budget, access=None) -> N
 
     @router.get("/projects/{project_id}")
     async def project(project_id: PathId, actor: Operator):
-        unknown = Denied("state", f"unknown project {project_id}")
+        unknown = denials.unknown("project", project_id)
         project_read(access, actor, project_id, lambda: unknown)
         detail = project_detail(workflow.store, project_id)
         if detail is None:
-            raise Denied("state", f"unknown project {project_id}")
+            raise Denied(
+                "state",
+                f"unknown project {project_id}",
+                reason="record_not_found",
+                params={"record_kind": "project", "record_id": project_id},
+            )
         listed = () if tasks is None else tasks.list(project_id)[:TASK_LIMIT]
         return {
             **detail,
@@ -371,7 +397,7 @@ def _stage_read_routes(router, operator, workflow, archive, clock, access=None) 
     cache = ReadingsCache(clock)
 
     def _visible(stage_id: str, actor: Actor) -> StageRow:
-        stage_read(access, actor, stage_id, lambda: Denied("state", f"unknown stage {stage_id}"))
+        stage_read(access, actor, stage_id, lambda: denials.unknown("stage", stage_id))
         return _stage(workflow, stage_id)
 
     @router.get("/stages/{stage_id}/readings")

@@ -88,7 +88,12 @@ class EvidenceRoutes:
         try:
             record = self.archive.verify_evidence(card_id, actor.id, body.note, body.calibrated)
         except ValueError:
-            raise Denied("state", f"unknown evidence card {card_id}") from None
+            raise Denied(
+                "state",
+                f"unknown evidence card {card_id}",
+                reason="record_not_found",
+                params={"record_kind": "evidence_card", "record_id": card_id},
+            ) from None
         return {
             "card_id": record.card_id,
             "verified": True,

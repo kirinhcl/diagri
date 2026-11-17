@@ -9,7 +9,7 @@ from dispatch_env import Env
 from pydantic import ValidationError
 
 from growbridge.agents.handlers_auditor import FindingInput
-from growbridge.agents.handlers_common import bind_task
+from growbridge.agents.handlers_common import bind_task, local_time
 from growbridge.agents.handlers_researcher import InspectInput, _inspect, stage_preview
 from growbridge.agents.tools import build_toolset
 from growbridge.archive.db import Database
@@ -255,3 +255,37 @@ async def test_get_stage_records_matches_alerts_by_scope_not_prefix(env):
     body = _body(await _call(env, "get_stage_records", stage_id="stage-1"))
 
     assert [a["message"] for a in body["open_alerts"]] == ["mine"]
+
+
+async def test_stage_records_and_run_status_carry_local_times_beside_epochs(env):
+    await _start(env)
+    _measure(env, "m-in", START + 1)
+    env.clock.advance(5)
+    deps = env.make_deps(alerts=env.book, timezone="Europe/Helsinki")
+    expected = local_time(START, "Europe/Helsinki")
+
+    body = _body(await _call(env, "get_stage_records", deps, stage_id="stage-1"))
+
+    assert body["stage"]["started_at"] == START
+    assert body["stage"]["started_at_local"] == expected
+    assert body["stage"]["ended_at_local"] is None
+    assert body["window_local"][0] == expected
+    assert body["window_local"][1] == local_time(body["window"][1], "Europe/Helsinki")
+    assert body["measurements"][0]["measured_at_local"] == local_time(START + 1, "Europe/Helsinki")
+    for row in body["manual_tasks"]:
+        assert row["due_at_local"] == local_time(row["due_at"], "Europe/Helsinki")
+
+    status = _body(await env.invoke("orchestrator", "get_run_status", deps, stage_id="stage-1"))
+
+    assert status["started_at"] == START and status["started_at_local"] == expected
+    assert status["paused_at_local"] is None
+    assert status["history"]
+    for entry in status["history"]:
+        assert entry["at_local"] == local_time(entry["at"], "Europe/Helsinki")
+
+
+def test_local_time_formats_in_the_reporting_time_zone_and_passes_none_through():
+    assert local_time(0, "UTC") == "1970-01-01 00:00"
+    assert local_time(0, "Europe/Helsinki") == "1970-01-01 02:00"
+    assert local_time(1_785_000_000.0, "Europe/Helsinki") == "2026-07-25 20:20"
+    assert local_time(None, "Europe/Helsinki") is None

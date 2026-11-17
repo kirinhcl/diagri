@@ -30,6 +30,7 @@ from growbridge.ports import (
     StageEventKind,
     StageRuntime,
 )
+from growbridge.workflow import denials
 from growbridge.workflow.access import Access, guard_project, guard_round, guard_sheet, guard_stage
 from growbridge.workflow.permissions import require_kind, require_operator
 from growbridge.workflow.recovery import StageRecovery
@@ -43,7 +44,6 @@ from growbridge.workflow.store import (
     StageRow,
     WorkflowStore,
     care_if_missing,
-    describe,
     end_actions_plan,
     expiry_plan,
     held,
@@ -102,7 +102,7 @@ class WorkflowService(StageRecovery):
     def create_project(self, name: str, actor: Actor) -> str:
         require_kind(actor, DESIGNERS)
         if not name.strip():
-            raise Denied("state", "a project needs a name")
+            raise denials.project_name_required()
         project_id = new_id("project")
         owner = actor.id if actor.kind == "operator" else None
         self.store.add_project(project_id, name, self.clock.now(), owner)
@@ -111,27 +111,29 @@ class WorkflowService(StageRecovery):
     def save_protocol(self, protocol: ResearchProtocol, actor: Actor) -> ResearchProtocol:
         require_kind(actor, DESIGNERS)
         if not self.store.has_project(protocol.project_id):
-            raise Denied("state", f"unknown project {protocol.project_id}")
-        unknown = Denied("state", f"unknown project {protocol.project_id}")
+            message = f"unknown project {protocol.project_id}"
+            raise denials.record_not_found("project", protocol.project_id, message)
+        # a project the caller may not see answers exactly as one that does not exist
+        unknown = denials.record_not_found(
+            "project", protocol.project_id, f"unknown project {protocol.project_id}"
+        )
         guard_project(self.access, actor, protocol.project_id, lambda: unknown)
         saved = self.store.protocol(protocol.id, protocol.version)
         if saved is None:
             self.store.put_protocol(protocol, self.clock.now())
             return protocol
         if saved.digest() != protocol.digest():
-            raise Denied(
-                "state", f"protocol {protocol.id} v{protocol.version} exists: bump version"
-            )
+            raise denials.protocol_version_exists(protocol.id, protocol.version)
         return saved
 
     def create_round(self, project_id: str, protocol_id: str, actor: Actor) -> str:
         require_kind(actor, DESIGNERS)
         guard_project(
-            self.access, actor, project_id, lambda: Denied("state", f"unknown project {project_id}")
+            self.access, actor, project_id, lambda: denials.unknown("project", project_id)
         )
         protocol = self.store.latest_protocol(protocol_id, project_id)
         if protocol is None:
-            raise Denied("state", f"no protocol {protocol_id} saved for project {project_id}")
+            raise denials.protocol_not_found(protocol_id, project_id)
         round_id = new_id("round")
         row = RoundRow(
             id=round_id,
@@ -148,14 +150,16 @@ class WorkflowService(StageRecovery):
     ) -> tuple[Finding, ...]:
         require_kind(actor, DRAFTERS)
         if actor.kind == "model" and actor.id != MODEL_DRAFTER:
-            raise Denied("model_role", f"only the {MODEL_DRAFTER} files run sheets")
+            raise denials.drafter_only(MODEL_DRAFTER)
         rnd = self.store.round(round_id)
         guard_round(self.access, actor, self.store, round_id)
         if rnd.state not in (RoundState.DESIGNING, RoundState.STAGE_REVIEW) or rnd.awaiting_choice:
-            raise Denied("state", f"round is {rnd.state.value}; no run sheet can be submitted")
+            raise denials.round_not_accepting_run_sheets(rnd)
         owner = (run_sheet.project_id, run_sheet.protocol_id, run_sheet.protocol_version)
         if owner != (rnd.project_id, rnd.protocol_id, rnd.protocol_version):
-            raise Denied("state", "run sheet does not belong to this round's project and protocol")
+            kind = "project" if run_sheet.project_id != rnd.project_id else "protocol"
+            message = "run sheet does not belong to this round's project and protocol"
+            raise denials.run_sheet_mismatch(run_sheet.id, kind, message)
         self._check_experiment_owner(run_sheet)
         findings = self._findings(run_sheet, round_id)
         if any(finding.blocking for finding in findings):
@@ -175,9 +179,7 @@ class WorkflowService(StageRecovery):
         """An experiment id belongs to one project; its data is scoped by that ownership."""
         for stage in self.store.stages_in(S):
             if stage.experiment_id == sheet.experiment_id and stage.project_id != sheet.project_id:
-                raise Denied(
-                    "scope", f"experiment {sheet.experiment_id} belongs to another project"
-                )
+                raise denials.not_this_project(sheet.project_id, sheet.experiment_id)
 
     def _findings(self, run_sheet: RunSheet, round_id: str) -> tuple[Finding, ...]:
         """The program checks, and whether the sheet applies the treatment of ``round_id``."""
@@ -187,12 +189,13 @@ class WorkflowService(StageRecovery):
         rnd = self.store.round(round_id)  # the round's protocol, whatever the sheet names
         protocol = self.store.protocol(rnd.protocol_id, rnd.protocol_version)
         if protocol is None:  # a round is only created for a saved protocol
-            raise Denied("state", f"protocol {rnd.protocol_id} is not saved")
+            message = f"protocol {rnd.protocol_id} is not saved"
+            raise denials.record_not_found("protocol", rnd.protocol_id, message)
         return (*own, *check_treatment(run_sheet, protocol, self.store.round_number(round_id)))
 
     def _add_stage(self, rnd: RoundRow, sheet: RunSheet) -> None:
         if self.store.run_sheet_digest(sheet.id, sheet.version) is not None:
-            raise Denied("state", f"run sheet {sheet.id} v{sheet.version} is already in use")
+            raise denials.run_sheet_version_in_use(sheet.id, sheet.version)
         now = self.clock.now()
         self.store.put_run_sheet(sheet, rnd.id, now)
         self.store.add_stage(
@@ -213,24 +216,23 @@ class WorkflowService(StageRecovery):
     def _replace_run_sheet(self, rnd: RoundRow, stage: StageRow, sheet: RunSheet) -> None:
         """A new version while waiting for review voids the approval of the old one (App. B)."""
         if stage.round_id != rnd.id:  # another round's stage: say nothing about it
-            raise Denied("state", f"stage id {stage.stage_id} is already used")
+            raise denials.stage_id_in_use(stage.stage_id)
         if stage.state is not S.PENDING_REVIEW:
-            raise Denied("state", f"stage {stage.stage_id} is {stage.state.value}; use a switch")
+            raise denials.run_sheet_needs_switch(stage)
         bound = (stage.project_id, stage.experiment_id, stage.device_id)
         if (sheet.project_id, sheet.experiment_id, sheet.device_id) != bound:
             # rights follow the sheet's device while checks read the stage row: keep them equal
-            raise Denied(
-                "state", "a replacement run sheet keeps the stage's project, experiment and device"
-            )
+            raise denials.run_sheet_rebinds_stage(stage.stage_id)
         current = self._sheet(stage)
         if sheet.version == current.version:
             if sheet.digest() != current.digest():
-                raise Denied("state", "same run sheet version with other content: bump version")
+                raise denials.run_sheet_version_conflict(sheet.id, sheet.version)
             return
         if sheet.version < current.version:
-            raise Denied("state", f"run sheet v{sheet.version} is older than v{current.version}")
+            message = f"run sheet v{sheet.version} is older than v{current.version}"
+            raise denials.run_sheet_too_old(sheet.id, sheet.version, current.version, message)
         if self.store.run_sheet_digest(sheet.id, sheet.version) is not None:
-            raise Denied("state", f"run sheet {sheet.id} v{sheet.version} is already in use")
+            raise denials.run_sheet_version_in_use(sheet.id, sheet.version)
         now = self.clock.now()
         self.store.put_run_sheet(sheet, rnd.id, now)
         self.store.void_approvals(stage.stage_id, now)
@@ -240,7 +242,8 @@ class WorkflowService(StageRecovery):
         """Re-check a stage waiting for review; an approval that no longer fits is voided."""
         stage = self.store.stage(stage_id)
         if stage.state is not S.PENDING_REVIEW:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}")
+            message = f"stage {stage_id} is {stage.state.value}"
+            raise denials.stage_not_awaiting_approval(stage, message)
         sheet = self._sheet(stage)
         findings = self._findings(sheet, stage.round_id)
         approval = self.store.valid_approval(stage_id)
@@ -259,12 +262,15 @@ class WorkflowService(StageRecovery):
         stage = self.store.stage(stage_id)
         guard_stage(self.access, actor, stage)
         if stage.state is not S.PENDING_REVIEW:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; nothing to approve")
+            message = f"stage {stage_id} is {stage.state.value}; nothing to approve"
+            raise denials.stage_not_awaiting_approval(stage, message)
         sheet = self._sheet(stage)
         if expected_digest is not None and expected_digest != sheet.digest():
-            raise Denied("state", "the run sheet changed since it was reviewed")
-        if any(finding.blocking for finding in self._findings(sheet, stage.round_id)):
-            raise Denied("approval_invalid", "the run sheet has blocking findings")
+            raise denials.run_sheet_changed_since_review(stage_id, expected_digest, sheet.digest())
+        blocking = [f for f in self._findings(sheet, stage.round_id) if f.blocking]
+        if blocking:
+            message = "the run sheet has blocking findings"
+            raise denials.approval_blocking_findings(stage_id, message, len(blocking))
         approval = self._approval_for(sheet, actor, now)
         with self.db.transaction():
             self.store.void_approvals(stage_id, now)
@@ -295,7 +301,8 @@ class WorkflowService(StageRecovery):
         stage = self.store.stage(stage_id)
         guard_stage(self.access, actor, stage)
         if stage.state is not S.PENDING_REVIEW:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; stop it instead")
+            message = f"stage {stage_id} is {stage.state.value}; stop it instead"
+            raise denials.stage_not_awaiting_approval(stage, message)
         plan = Plan(
             S.STOPPED, "revoke_approval", round_effect="stopped", extra=self._voider(stage_id)
         )
@@ -304,29 +311,55 @@ class WorkflowService(StageRecovery):
     def _voider(self, stage_id: str) -> Hook:
         return lambda _row: self.store.void_approvals(stage_id, self.clock.now())
 
-    def _approval_problem(self, approval: Approval, stage: StageRow, sheet: RunSheet) -> str:
-        """Why the approval no longer fits this stage; empty when it still does."""
+    def _approval_problem(
+        self, approval: Approval, stage: StageRow, sheet: RunSheet
+    ) -> Denied | None:
+        """Why the approval no longer fits this stage; None when it still does."""
         capability = self.control.capabilities().version
+        changed, other = denials.approval_run_sheet_changed, denials.approval_other_target
         checks = (
-            (approval.run_sheet_digest != sheet.digest(), "run sheet content changed"),
-            (approval.run_sheet_version != sheet.version, "run sheet version changed"),
-            (approval.stage_id != stage.stage_id, "approved for another stage"),
-            (approval.experiment_id != stage.experiment_id, "approved for another experiment"),
-            (approval.device_id != sheet.device_id, "approved for another device"),
-            (approval.capability_version != capability, "device capabilities changed"),
-            (approval.recovery_number != self.control.recovery_number(), "recovery number changed"),
+            (approval.run_sheet_digest != sheet.digest(), changed, "run sheet content changed"),
+            (approval.run_sheet_version != sheet.version, changed, "run sheet version changed"),
+            (approval.stage_id != stage.stage_id, other, "approved for another stage"),
+            (
+                approval.experiment_id != stage.experiment_id,
+                other,
+                "approved for another experiment",
+            ),
+            (approval.device_id != sheet.device_id, other, "approved for another device"),
+            (
+                approval.capability_version != capability,
+                denials.capabilities_changed,
+                "device capabilities changed",
+            ),
+            (
+                approval.recovery_number != self.control.recovery_number(),
+                denials.approval_recovery_changed,
+                "recovery number changed",
+            ),
         )
-        return next((message for broken, message in checks if broken), "")
+        return next(
+            (make(stage.stage_id, message) for broken, make, message in checks if broken), None
+        )
+
+    def current_approval(self, stage_id: str) -> Approval | None:
+        """The stage's valid approval when ``start`` would still accept it (same check, no writes);
+        None when there is none or it no longer fits the stage, run sheet or device."""
+        stage = self.store.stage(stage_id)
+        approval = self.store.valid_approval(stage_id)
+        if approval is None or self._approval_problem(approval, stage, self._sheet(stage)):
+            return None
+        return approval
 
     def _check_approval(self, stage: StageRow, sheet: RunSheet) -> None:
         approval = self.store.valid_approval(stage.stage_id)
         if approval is None:
-            raise Denied("approval_invalid", "no valid approval for this stage")
+            raise denials.approval_none_valid(stage.stage_id)
         problem = self._approval_problem(approval, stage, sheet)
         if problem:
             with self.db.transaction():
                 self.store.void_approvals(stage.stage_id, self.clock.now())
-            raise Denied("approval_invalid", problem)
+            raise problem
 
     # --- stage control -------------------------------------------------------------------------
 
@@ -338,7 +371,7 @@ class WorkflowService(StageRecovery):
         if stage.state is S.RUNNING:
             return self._runtime(stage)
         if stage.state is not S.PENDING_REVIEW:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; it cannot start")
+            raise denials.stage_not_startable(stage)
         sheet = self._sheet(stage)
         self._check_approval(stage, sheet)
         self._check_startable(stage, sheet)
@@ -357,11 +390,11 @@ class WorkflowService(StageRecovery):
 
     def _check_startable(self, stage: StageRow, sheet: RunSheet) -> None:
         if conflicts := self.control.safety_conflicts(sheet):
-            raise Denied("safety_conflict", "; ".join(conflicts))
+            raise denials.safety_conflict(stage.stage_id, conflicts)
         if self.control.interlocked():
-            raise Denied("interlock", "the pump interlock is on; check the device on site")
-        if self.store.device_busy(stage.device_id, stage.stage_id):
-            raise Denied("state", "another stage on this device is still live or being checked")
+            raise denials.pump_unconfirmed(stage.device_id)
+        if other := self.store.live_stage_on(stage.device_id, stage.stage_id):
+            raise denials.device_busy(stage, other)
 
     def _release_care(self, holders: tuple[StageRow, ...]) -> None:
         for holder in holders:
@@ -374,7 +407,7 @@ class WorkflowService(StageRecovery):
         if stage.state is S.PAUSED:
             return self._runtime(stage)
         if stage.state is not S.RUNNING:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; it cannot pause")
+            raise denials.stage_not_pausable(stage)
         plan = Plan(
             S.PAUSED,
             "pause",
@@ -392,16 +425,16 @@ class WorkflowService(StageRecovery):
         if stage.state is S.RUNNING:
             return self._runtime(stage)
         if stage.state is not S.PAUSED:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; it cannot resume")
+            raise denials.stage_not_resumable(stage)
         sheet = self._sheet(stage)
         self._check_approval(stage, sheet)
         if self.control.interlocked():
-            raise Denied("interlock", "the pump interlock is on; check the device on site")
-        if await self.control.reconcile_unsettled():
-            raise Denied("state", "actions with unknown results must be settled first")
+            raise denials.pump_unconfirmed(stage.device_id)
+        if unsettled := await self.control.reconcile_unsettled():
+            raise denials.unsettled_actions(stage_id, len(unsettled))
         diffs = await self.control.differences(sheet.expected_levels(self.clock.now()))
         if diffs:
-            raise Denied("state", f"device differs from the run sheet: {describe(diffs)}")
+            raise denials.device_differs_from_run_sheet(stage_id, diffs)
         plan = Plan(
             S.RUNNING,
             "resume",
@@ -416,7 +449,7 @@ class WorkflowService(StageRecovery):
         stage = self.store.stage(stage_id)
         guard_stage(self.access, actor, stage, emergency=True)
         if stage.state in STAGE_TERMINAL:
-            raise Denied("state", f"stage {stage_id} is already {stage.state.value}")
+            raise denials.stage_already_ended(stage)
         plan = Plan(
             S.STOPPED,
             "stop",
@@ -437,7 +470,7 @@ class WorkflowService(StageRecovery):
         if stage.state is S.MANUAL:
             return self._runtime(stage)
         if stage.state not in (S.RUNNING, S.PAUSED):
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; cannot take over")
+            raise denials.stage_not_takeoverable(stage)
         await self.control.reconcile_unsettled()  # settle what can be settled before manual writes
         plan = Plan(
             S.MANUAL,
@@ -460,7 +493,7 @@ class WorkflowService(StageRecovery):
         stage = self.store.stage(stage_id)
         guard_stage(self.access, actor, stage)
         if stage.state is not S.MANUAL or stage.manual_right is None:
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; nothing to hand back")
+            raise denials.stage_not_in_manual(stage)
         sheet = self._sheet(stage)
         # read first: if the device cannot be read the stage keeps its manual right
         diffs = await self.control.differences(sheet.expected_levels(self.clock.now()))
@@ -519,7 +552,7 @@ class WorkflowService(StageRecovery):
         stage = self.store.stage(stage_id)
         guard_stage(self.access, actor, stage)
         if stage.state not in (S.RUNNING, S.PAUSED):
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; cannot switch")
+            raise denials.stage_not_switchable(stage)
         self._check_switch(stage, run_sheet)
         approval = self._approval_for(run_sheet, actor, now)
 
@@ -550,20 +583,28 @@ class WorkflowService(StageRecovery):
     def _check_switch(self, stage: StageRow, sheet: RunSheet) -> None:
         owner = (sheet.stage_id, sheet.experiment_id, sheet.project_id, sheet.device_id)
         if owner != (stage.stage_id, stage.experiment_id, stage.project_id, stage.device_id):
-            raise Denied("state", "the new run sheet belongs to another stage or device")
+            kind = "device" if sheet.device_id != stage.device_id else "stage"
+            message = "the new run sheet belongs to another stage or device"
+            raise denials.run_sheet_mismatch(sheet.id, kind, message)
         rnd = self.store.round(stage.round_id)
         if (sheet.protocol_id, sheet.protocol_version) != (rnd.protocol_id, rnd.protocol_version):
-            raise Denied("state", "the new run sheet belongs to another protocol than the round")
+            message = "the new run sheet belongs to another protocol than the round"
+            raise denials.run_sheet_mismatch(sheet.id, "protocol", message)
         if sheet.version <= stage.run_sheet_version:
-            raise Denied("state", "the new run sheet needs a higher version")
+            message = "the new run sheet needs a higher version"
+            current = stage.run_sheet_version
+            raise denials.run_sheet_too_old(sheet.id, sheet.version, current, message)
         if self.store.run_sheet_digest(sheet.id, sheet.version) is not None:
-            raise Denied("state", f"run sheet {sheet.id} v{sheet.version} is already in use")
+            raise denials.run_sheet_version_in_use(sheet.id, sheet.version)
         if stage.recovery_number != self.control.recovery_number():
-            raise Denied("approval_invalid", "recovery number changed; the stage needs review")
-        if any(finding.blocking for finding in self._findings(sheet, stage.round_id)):
-            raise Denied("approval_invalid", "the new run sheet has blocking findings")
+            message = "recovery number changed; the stage needs review"
+            raise denials.approval_recovery_changed(stage.stage_id, message)
+        blocking = [f for f in self._findings(sheet, stage.round_id) if f.blocking]
+        if blocking:
+            message = "the new run sheet has blocking findings"
+            raise denials.approval_blocking_findings(stage.stage_id, message, len(blocking))
         if conflicts := self.control.safety_conflicts(sheet):
-            raise Denied("safety_conflict", "; ".join(conflicts))
+            raise denials.safety_conflict(stage.stage_id, conflicts)
 
     # --- events from the executor and the observer ---------------------------------------------
 
@@ -620,7 +661,7 @@ class WorkflowService(StageRecovery):
         guard_round(self.access, actor, self.store, round_id)
         rnd = self.store.round(round_id)
         if rnd.awaiting_choice is None or rnd.state in ROUND_TERMINAL:
-            raise Denied("state", "no stopped stage is waiting for a choice")
+            raise denials.no_choice_pending(round_id)
         if choice == "abort":
             return await self.abort_round(round_id, actor)
         changes: dict[str, Any] = {"awaiting_choice": None, "state": RoundState.STAGE_REVIEW}
@@ -628,10 +669,10 @@ class WorkflowService(StageRecovery):
             changes["state"] = RoundState.DATA_VERIFICATION
         elif choice == "next":
             if rnd.stages_done + 1 >= self.store.stage_total(rnd):
-                raise Denied("state", "no stage is left to move on to; verify the data instead")
+                raise denials.no_next_stage(round_id)
             changes["stages_done"] = rnd.stages_done + 1
         elif choice != "redo":
-            raise Denied("state", f"unknown choice {choice!r}")
+            raise denials.unknown_choice(choice)
         return self.store.update_round(round_id, **changes).state
 
     async def abort_round(self, round_id: str, actor: Actor) -> RoundState:
@@ -639,7 +680,7 @@ class WorkflowService(StageRecovery):
         guard_round(self.access, actor, self.store, round_id)
         rnd = self.store.round(round_id)
         if rnd.state in ROUND_TERMINAL:
-            raise Denied("state", f"round is already {rnd.state.value}")
+            raise denials.round_already_ended(round_id, rnd.state.value)
         for stage in self.store.stages_of_round(round_id):
             for number in held(stage.right_number, stage.manual_right, stage.care_right):
                 await self.control.handover(number, "round aborted")
@@ -647,7 +688,7 @@ class WorkflowService(StageRecovery):
             guard_round(self.access, actor, self.store, round_id)  # transferred meanwhile?
             fresh = self.store.round(round_id)
             if fresh.state in ROUND_TERMINAL:
-                raise Denied("state", f"round is already {fresh.state.value}")
+                raise denials.round_already_ended(round_id, fresh.state.value)
             for stage in self.store.stages_of_round(round_id):
                 self.store.abort_stage(stage, self.clock.now())
             changes = {"state": RoundState.ABORTED, "awaiting_choice": None}
@@ -747,7 +788,7 @@ class WorkflowService(StageRecovery):
         """The stage as stored, refused when it changed since ``stage`` was read."""
         fresh = self.store.stage(stage.stage_id)
         if fresh.rev != stage.rev:
-            raise Denied("state", f"stage {stage.stage_id} changed while the request was running")
+            raise denials.stage_changed_concurrently(stage.stage_id)
         return fresh
 
     def _commit(

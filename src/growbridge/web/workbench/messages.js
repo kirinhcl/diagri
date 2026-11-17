@@ -31,6 +31,15 @@ const count = guarded(isNum, (ctx, v) => formatNumber(v, 0, ctx.lang));
 const level = guarded(isNum, (ctx, v, params) => levelText(ctx.t, params?.channel, v));
 const duration = guarded(isNum, (ctx, v) => formatDuration(ctx.t, v));
 const clock = guarded(isNum, (ctx, v) => timeText(ctx, v));
+const MAX_DECIMALS = 6;
+const AMOUNT_DECIMALS = 2;
+
+// A bound as it is: as many decimals as the number itself has, up to six.
+const plainNumber = guarded(isNum, (ctx, v) => {
+  const decimals = Math.min(MAX_DECIMALS, (String(v).split(".")[1] || "").length);
+  return formatNumber(v, decimals, ctx.lang);
+});
+const amount = guarded(isNum, (ctx, v, params) => `${formatNumber(v, AMOUNT_DECIMALS, ctx.lang)} ${labelOr(ctx.t, "computeUnit", params?.resource)}`);
 
 function sensorValue(ctx, v, params) {
   if (!isNum(v)) return DASH;
@@ -56,6 +65,24 @@ const EXACT = {
   value: sensorValue,
   op: labelled("safety.op"),
   state: labelled("state"),
+  phase: labelled("state"),
+  needed_state: labelled("state"),
+  status: labelled("tasks.status"),
+  from_status: labelled("tasks.status"),
+  to_status: labelled("tasks.status"),
+  record_kind: labelled("recordKind"),
+  resource: labelled("computeUnit"),
+  expected_kind: labelled("paramKind"),
+  need_amount: amount,
+  available_amount: amount,
+  minimum: plainNumber,
+  maximum: plainNumber,
+  bound: plainNumber,
+  field: quote,
+  file: quote,
+  names: listOf((ctx, x) => quote(ctx, x)),
+  choices: listOf((ctx, x) => quote(ctx, x)),
+  sensors: listOf((ctx, x) => (isText(x) ? labelOr(ctx.t, "metric", x) : DASH)),
   action_state: labelled("receipt"),
   event: labelled("history.event"),
   role: guarded(isText, (ctx, v) => roleLabel(ctx.t, v)),
@@ -73,8 +100,8 @@ const EXACT = {
 };
 const LEVEL_NAMES = ["level", "min", "max", "expected", "protection_level"];
 const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name"];
-// counts: these names and every name ending in "_count" (e.g. file_count, limit_count)
-const COUNT_NAMES = ["count", "blocks", "min_blocks", "flips", "failed", "priority", "round", "mode", "top_rowid", "cursor"];
+// counts: these names, every name ending in "_count" (e.g. file_count, limit_count), and max_*/min_*
+const COUNT_NAMES = ["version", "current_version", "attempts", "depth", "count", "blocks", "min_blocks", "flips", "failed", "priority", "round", "mode", "top_rowid", "cursor"];
 const BYTE_NAMES = ["bytes", "limit"];
 const TIME_NAMES = ["window_start", "window_end"];
 
@@ -85,7 +112,7 @@ export function formatterFor(name) {
   if (typeof name !== "string" || ID_NAME.test(name)) return null;
   if (name === "seconds" || name.endsWith("_seconds")) return duration;
   if (name.endsWith("_at") || TIME_NAMES.includes(name)) return clock;
-  if (name.endsWith("_count") || COUNT_NAMES.includes(name)) return count;
+  if (name.endsWith("_count") || /^(max|min)_/.test(name) || COUNT_NAMES.includes(name)) return count;
   if (LEVEL_NAMES.includes(name)) return level;
   if (QUOTED_NAMES.includes(name)) return quote;
   if (BYTE_NAMES.includes(name)) return bytes;

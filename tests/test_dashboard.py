@@ -168,3 +168,112 @@ async def test_dashboard_query_bounds(bridge, settings, path):
         headers={"Authorization": f"Bearer {settings.token}"},
     ) as client:
         assert (await client.get(path)).status_code == 422
+
+
+def coded(response, status, detail, code, reason, params=None):
+    """A root-app error: ``detail`` is still the old plain string, the rest sits beside it."""
+    assert response.status_code == status
+    body = response.json()
+    assert body["detail"] == detail and isinstance(body["detail"], str)
+    assert (body["code"], body["reason"], body["params"]) == (code, reason, params or {})
+
+
+async def test_a_page_write_from_another_origin_is_origin_not_allowed(bridge, settings):
+    client, _, _, _ = await browser_client(bridge, settings)
+    async with aclosing(client):
+        response = await client.post(
+            "/control/light",
+            json={"request_id": "origin-0001", "level": 20},
+            headers={"Origin": "https://unrelated.example", "X-GrowBridge-UI": "1"},
+        )
+    coded(response, 403, "Browser origin is not allowed", "entry", "origin_not_allowed")
+
+
+async def test_a_page_write_without_the_control_header_is_not_from_page(bridge, settings):
+    client, _, _, _ = await browser_client(bridge, settings)
+    async with aclosing(client):
+        response = await client.post(
+            "/control/light",
+            json={"request_id": "header-0001", "level": 20},
+            headers={"Origin": settings.url},
+        )
+    coded(response, 403, "Browser control header is required", "entry", "not_from_page")
+
+
+async def test_no_session_is_dashboard_not_connected(bridge, settings):
+    app = create_app(settings, bridge[0])
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url=settings.url
+    ) as client:
+        response = await client.get("/status")
+    coded(
+        response,
+        401,
+        "Open the dashboard with growbridge dashboard to connect",
+        "session",
+        "dashboard_not_connected",
+    )
+
+
+async def test_a_used_link_is_link_used(bridge, settings):
+    client, _, code, _ = await browser_client(bridge, settings)
+    async with aclosing(client):
+        again = await client.post(
+            "/ui/session/redeem", json={"code": code}, headers={"Origin": settings.url}
+        )
+    coded(
+        again,
+        401,
+        "Connection link has expired or was already used",
+        "session",
+        "link_used",
+    )
+
+
+async def test_too_many_pending_links_is_too_many_pending_connections(bridge, settings):
+    app = create_app(settings, bridge[0])
+    app.state.browser_sessions.codes = {str(i): time.monotonic() + 60 for i in range(64)}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url=settings.url
+    ) as client:
+        response = await client.post(
+            "/ui/session", headers={"Authorization": f"Bearer {settings.token}"}
+        )
+    coded(
+        response,
+        429,
+        "Too many pending browser connections",
+        "locked",
+        "too_many_pending_connections",
+    )
+
+
+async def test_too_many_sessions_is_too_many_sessions(bridge, settings):
+    app = create_app(settings, bridge[0])
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url=settings.url
+    ) as client:
+        link = await client.post(
+            "/ui/session", headers={"Authorization": f"Bearer {settings.token}"}
+        )
+        app.state.browser_sessions.sessions = {str(i): time.monotonic() + 60 for i in range(64)}
+        response = await client.post(
+            "/ui/session/redeem",
+            json={"code": link.json()["code"]},
+            headers={"Origin": settings.url},
+        )
+    coded(response, 429, "Too many browser sessions", "locked", "too_many_sessions")
+
+
+async def test_the_closed_write_endpoints_are_use_workbench(bridge, settings):
+    closed = settings.model_copy(update={"auto_research": True})
+    app = create_app(closed, bridge[0], workbench=None)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url=settings.url
+    ) as client:
+        response = await client.post(
+            "/control/light",
+            json={"request_id": "closed-0001", "level": 20},
+            headers={"Authorization": f"Bearer {settings.token}"},
+        )
+    coded(response, 403, "Device writes go through the workbench", "entry", "use_workbench")

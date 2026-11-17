@@ -1,15 +1,19 @@
 // The approved safety limits and an editor to approve a new set. Approval lists every change first.
 import { ApiError } from "../api.js";
+import { loadCapabilities } from "../capabilities.js";
+import { formatNumber } from "../format.js";
 import { hasLabel } from "../i18n.js";
 import { configDiff } from "../diff.js";
 import { confirmAction } from "../ui/dialog.js";
 import { clear, h } from "../ui/dom.js";
-import { errorLines, jsonEditor } from "../ui/forms.js";
+import { advancedJson } from "../ui/field-forms.js";
+import { Cancelled, errorLines } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
 import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
+import { safetyForm } from "./safety-form.js";
 import { exactText, frozenLine, ruleSentence } from "./safety-text.js";
 
 export { ruleSentence, unitText } from "./safety-text.js";
@@ -66,24 +70,36 @@ function editorContext(ctx, refreshCurrent, outcome) {
 }
 
 // Not approved, and said in the refusal style (not as a success): the form shows a thrown error that way.
-function notApproved(ctx, outcome, key) {
+function notApproved(ctx, outcome, key, vars) {
   outcome.refused = true;
-  return new ApiError(0, "not_approved", ctx.t(key));
+  return new ApiError(0, "not_approved", ctx.t(key, vars));
+}
+
+// JSON typed by hand carries its own version: it must be above the approved one, or two sets would share a number.
+function versionRefusal(ctx, outcome, edited, latest) {
+  const next = (latest?.version ?? 0) + 1;
+  if (typeof edited?.version === "number" && edited.version >= next) return null;
+  const numbers = { current: formatNumber(latest?.version ?? 0, 0, ctx.lang), next: formatNumber(next, 0, ctx.lang) };
+  return notApproved(ctx, outcome, "safety.form.versionTooLow", numbers);
 }
 
 // The limits are read again right before the diff and again after the operator confirms; a set that
 // changed in between is never overwritten, because the write replaces the whole config.
 function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
   const label = ctx.t("safety.approve");
-  return async (edited) => {
+  // `input` is the config, or a function making it from the approved set as just read (so a version never repeats).
+  return async (input, { fromJson = false } = {}) => {
     outcome.refused = false;
     await readCurrent();
     const baseline = state.current;
+    const edited = typeof input === "function" ? input(baseline) : input;
+    const tooLow = fromJson ? versionRefusal(ctx, outcome, edited, baseline) : null;
+    if (tooLow) throw tooLow;
     const start = baseline || safetySkeleton();
     const lines = diffLines(visibleChanges(configDiff(start, edited)), ctx.t, { before: start, after: edited });
     const shown = lines.length ? lines : [ctx.t("safety.noChanges")];
     if (!(await confirmAction(ctx.t, { title: ctx.t("safety.confirmTitle"), lines: shown, confirmLabel: label }))) {
-      throw notApproved(ctx, outcome, "safety.cancelled");
+      throw new Cancelled(); // a plain cancel is not a refusal: the form stays silent
     }
     await readCurrent();
     if (baselineChanged(baseline, state.current)) throw notApproved(ctx, outcome, "safety.changedMeanwhile");
@@ -93,16 +109,21 @@ function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
   };
 }
 
+// The fold starts from the approved set with the next version number, so an unedited send never repeats a version.
+const foldValue = (current) => (current ? { ...current, version: current.version + 1 } : safetySkeleton());
+
 export async function render(ctx) {
   const state = { current: null };
+  const shown = { form: null };
   const currentBox = h("div", { class: "safety-current" });
   const readCurrent = async () => {
     const data = await ctx.api.get("/safety");
     state.current = (data && data.safety) || null;
     clear(currentBox).append(currentView(ctx, state.current));
+    if (shown.form && shown.form.showVersion) shown.form.showVersion(state.current);
   };
   const refreshCurrent = () =>
-    readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t).join(" "), "error"));
+    readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
   try {
     await readCurrent();
   } catch (error) {
@@ -110,21 +131,25 @@ export async function render(ctx) {
     return { element: lockFirst(ctx, ctx.t("nav.safety")) };
   }
   const outcome = { text: ctx.t("form.done"), refused: false };
-  const editor = jsonEditor({
+  const editorCtx = editorContext(ctx, refreshCurrent, outcome);
+  const approve = approver(ctx, state, outcome, readCurrent, refreshCurrent);
+  const form = safetyForm(editorCtx, { current: state.current, capabilities: await loadCapabilities(ctx), onSubmit: approve });
+  shown.form = form;
+  const advanced = advancedJson({
+    ctx: editorCtx,
     label: ctx.t("safety.json"),
-    value: state.current || safetySkeleton(),
+    value: foldValue(state.current),
     submitLabel: ctx.t("safety.approve"),
-    onSubmit: approver(ctx, state, outcome, readCurrent, refreshCurrent),
+    onSubmit: (json) => approve(json, { fromJson: true }),
     draftKey: "safety",
-    ctx: editorContext(ctx, refreshCurrent, outcome),
   });
-  const lead = state.current ? ctx.t("safety.editLead") : ctx.t("safety.skeletonLead");
+  const lead = state.current ? note(ctx.t("safety.editLead")) : null;
   const element = h(
     "div",
     { class: "page safety" },
     pageHead(ctx.t("nav.safety"), ctx.t("safety.lead")),
     section(ctx.t("safety.current"), currentBox),
-    section(ctx.t("safety.edit"), note(lead), editor),
+    section(ctx.t("safety.edit"), lead, form, advanced),
   );
   return { element };
 }

@@ -60,7 +60,12 @@ def add_holdout_routes(
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
 
     def require_project(project_id: str, actor: Actor, write: bool = True) -> None:
-        unknown = Denied("scope", f"unknown project {project_id}")
+        unknown = Denied(  # another's project answers as one that does not exist
+            "scope",
+            f"unknown project {project_id}",
+            reason="not_this_project",
+            params={"project_id": project_id},
+        )
         if not workflow.store.has_project(project_id):
             raise unknown
         check = project_write if write else project_read

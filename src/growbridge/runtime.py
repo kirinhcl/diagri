@@ -143,7 +143,12 @@ def register_write_host(settings: Settings, clock: Clock | None = None) -> str:
     db = Database(settings.data_dir / "control.sqlite3")
     try:
         if not Ledger(db).register_host(str(settings.device), host_id, clock.now()):
-            raise Denied("host_unregistered", "another host is registered for this device")
+            raise Denied(
+                "host_unregistered",
+                "another host is registered for this device",
+                reason="other_host_registered",
+                params={"device_id": str(settings.device)},
+            )
     finally:
         db.close()
     return host_id

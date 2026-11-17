@@ -22,11 +22,21 @@ def build_right(
     channels = scope.channels
     if kind in LISTED_LEVEL_KINDS:
         if not scope.levels:
-            raise Denied("scope", f"a {kind.value} right must list the values it may write")
+            raise Denied(
+                "scope",
+                f"a {kind.value} right must list the values it may write",
+                reason="right_incomplete",
+                params={"right_id": None},
+            )
         if not channels:
             channels = tuple(dict.fromkeys(level.channel for level in scope.levels))
     if kind is RightKind.MANUAL and not (operator and operator.strip()):
-        raise Denied("right_invalid", "a manual right is bound to an authenticated operator")
+        raise Denied(
+            "right_invalid",
+            "a manual right is bound to an authenticated operator",
+            reason="right_needs_operator",
+            params={"right_id": None},
+        )
     return WriteRight(
         number=0,
         kind=kind,
@@ -42,37 +52,84 @@ def build_right(
     )
 
 
-def check_valid(right: WriteRight | None, device_id: str, recovery: int) -> WriteRight:
+def check_valid(right: WriteRight | None, device_id: str, recovery: int, number: int) -> WriteRight:
     if right is None:
-        raise Denied("right_invalid", "unknown write right")
+        raise Denied(
+            "right_invalid",
+            "unknown write right",
+            reason="right_unknown",
+            params={"right_id": number},
+        )
     if right.revoked_at is not None:
-        raise Denied("right_invalid", f"write right {right.number} was revoked")
+        raise Denied(
+            "right_invalid",
+            f"write right {right.number} was revoked",
+            reason="right_revoked",
+            params={"right_id": right.number},
+        )
     if right.recovery_number != recovery or right.device_id != device_id:
-        raise Denied("right_invalid", f"write right {right.number} is from an earlier recovery")
+        raise Denied(
+            "right_invalid",
+            f"write right {right.number} is from an earlier recovery",
+            reason="right_from_old_recovery",
+            params={"right_id": right.number},
+        )
     return right
 
 
 def check_scope(right: WriteRight, request: ActionRequest) -> None:
     """The request must stay inside the channels, values, stage and operator of the right."""
     if request.channel not in right.channels:
-        raise Denied("scope", f"{request.channel.value} is outside write right {right.number}")
+        raise Denied(
+            "scope",
+            f"{request.channel.value} is outside write right {right.number}",
+            reason="right_channel",
+            params={"right_id": right.number, "channel": request.channel.value},
+        )
     try:
         check_level(request.channel, request.level)
     except ValueError as error:
-        raise Denied("scope", str(error)) from error
+        raise Denied(
+            "scope",
+            str(error),
+            reason="right_value",
+            params={
+                "right_id": right.number,
+                "channel": request.channel.value,
+                "level": request.level,
+            },
+        ) from error
     if right.kind in LISTED_LEVEL_KINDS:
         wanted = RuleAction(channel=request.channel, level=request.level)
         if wanted not in right.levels:
-            raise Denied("scope", f"{request.channel.value}={request.level} is not a listed value")
+            raise Denied(
+                "scope",
+                f"{request.channel.value}={request.level} is not a listed value",
+                reason="right_value",
+                params={
+                    "right_id": right.number,
+                    "channel": request.channel.value,
+                    "level": request.level,
+                },
+            )
     for name in ("experiment_id", "stage_id", "operator"):
         claimed, granted = getattr(request, name), getattr(right, name)
         if claimed is not None and granted is not None and claimed != granted:
-            raise Denied("scope", f"{name} does not match write right {right.number}")
+            raise Denied(
+                "scope",
+                f"{name} does not match write right {right.number}",
+                reason="right_binding",
+                params={"right_id": right.number, "stage_id": right.stage_id},
+            )
 
 
 def check_pump_not_started(request: ActionRequest) -> None:
     if request.channel is Channel.PUMP and request.level != 0:
-        raise Denied("pump_on_forbidden", "only an operator-triggered irrigation starts the pump")
+        raise Denied(
+            "pump_on_forbidden",
+            "only an operator-triggered irrigation starts the pump",
+            reason="pump_on_forbidden",
+        )
 
 
 def intent(

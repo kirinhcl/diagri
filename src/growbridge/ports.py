@@ -26,6 +26,7 @@ from growbridge.archive.models import (
     SampleRecord,
     WriteRight,
 )
+from growbridge.codes import checked_denial
 from growbridge.workflow.states import StageState
 
 
@@ -42,11 +43,26 @@ class Denied(Exception):
     ``unavailable`` (an optional backend is not configured), ``locked`` (login rate limit),
     ``lock_taken``, ``greenhouse_busy``, ``not_owner``, ``not_lock_holder``, ``admin_only``
     (multi-user workbench).
+
+    ``reason`` refines the coarse ``code`` into a case the console can explain, and ``params``
+    holds the values that case needs; both are registered in ``growbridge.denial_codes``. A
+    reason that is missing or registered wrongly is logged, never raised.
     """
 
-    def __init__(self, code: str, message: str = ""):
+    def __init__(
+        self,
+        code: str,
+        message: str = "",
+        *,
+        reason: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ):
         super().__init__(message or code)
         self.code = code
+        self.reason = reason
+        self.params: dict[str, object] = (
+            checked_denial(code, reason, params or {}) if reason else dict(params or {})
+        )
 
 
 class Actor(Model):

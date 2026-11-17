@@ -52,7 +52,12 @@ class GreenhouseLocks:
     def greenhouse(self, greenhouse_id: str) -> Greenhouse:
         house = self.registry.get(greenhouse_id)
         if house is None:
-            raise Denied("state", f"unknown greenhouse {greenhouse_id}")
+            raise Denied(
+                "state",
+                f"unknown greenhouse {greenhouse_id}",
+                reason="greenhouse_unknown",
+                params={"greenhouse_id": greenhouse_id},
+            )
         return house
 
     def _row(self, greenhouse_id: str) -> Any:
@@ -107,14 +112,19 @@ class GreenhouseLocks:
         """Lock every greenhouse in ``ids`` for ``holder``, or none of them."""
         wanted = tuple(ids)
         if not wanted or len(set(wanted)) != len(wanted):
-            raise Denied("state", "name each greenhouse once")
+            raise Denied("state", "name each greenhouse once", reason="greenhouses_named_twice")
         for greenhouse_id in wanted:
             self.greenhouse(greenhouse_id)
         now = self.clock.now()
         with self.db.transaction():
             taken = [gid for gid in wanted if self._row(gid) is not None]
             if taken:
-                raise Denied("lock_taken", f"already locked: {', '.join(taken)}")
+                raise Denied(
+                    "lock_taken",
+                    f"already locked: {', '.join(taken)}",
+                    reason="greenhouses_taken",
+                    params={"greenhouse_ids": taken},
+                )
             for greenhouse_id in wanted:
                 self.db.execute(
                     "INSERT INTO greenhouse_locks VALUES (?, ?, ?)", (greenhouse_id, holder, now)
@@ -135,9 +145,19 @@ class GreenhouseLocks:
         house = self.greenhouse(greenhouse_id)
         row = self._row(greenhouse_id)
         if row is None or (not force and row["holder"] != actor):
-            raise Denied("not_lock_holder", f"you do not hold greenhouse {greenhouse_id}")
+            raise Denied(
+                "not_lock_holder",
+                f"you do not hold greenhouse {greenhouse_id}",
+                reason="greenhouse_not_held",
+                params={"greenhouse_id": greenhouse_id},
+            )
         if self.store.device_unfinished(house.device_id):
-            raise Denied("greenhouse_busy", "a stage on this greenhouse has not ended or stopped")
+            raise Denied(
+                "greenhouse_busy",
+                "a stage on this greenhouse has not ended or stopped",
+                reason="greenhouse_busy",
+                params={"greenhouse_id": greenhouse_id},
+            )
         return row
 
     async def release(

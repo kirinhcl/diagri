@@ -82,7 +82,7 @@ function signOutButton(ctx) {
       await ctx.api.post("/logout");
       ctx.navigate(hrefFor("login"));
     } catch (error) {
-      ctx.notify(errorLines(error, ctx.lang, ctx.t).join(" "), "error");
+      ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error");
     } finally {
       button.disabled = false;
     }
