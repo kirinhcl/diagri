@@ -274,6 +274,7 @@ class Runtime:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
         extra = {"conversation": self.conversation, **workbench_access(self.access_parts)}
+        extra["notes"] = self.notes
         return create_workbench(*args, role_tokens or {}, *more, **extra)
 
     @property
