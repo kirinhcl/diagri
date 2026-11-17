@@ -375,7 +375,7 @@ a {
 .field-hint { margin: 0; font-size: 12px; color: var(--muted); }
 .field-unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .input-check { width: 18px; height: 18px; }
-.row-group { border: 1px solid var(--line, #d8ddd9); border-radius: 6px; padding: 10px 12px; margin: 0; display: grid; gap: 10px; }
+.row-group, .field-group { border: 1px solid var(--line, #d8ddd9); border-radius: 6px; padding: 10px 12px; margin: 0; display: grid; gap: 10px; }
 .row-group-row { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px dashed var(--line, #d8ddd9); }
 .input {
   width: 100%;

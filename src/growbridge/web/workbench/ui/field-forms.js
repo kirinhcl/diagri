@@ -22,7 +22,8 @@ export function linesField({ name, label, hint, value, maxItems, maxItemLength, 
 // per row}, or null (errors shown beside the fields) when a row is not valid; rows() gives the
 // bare array. onRow(entries) runs for each new row (to link its fields to each other); crossCheck(rows) may refuse rows by what the other rows hold. placeErrors(problems, ctx) puts the 422 problems under
 // <name>.<row index>.<field> beside that row's field and returns the problems it did not place.
-export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity, onRow, crossCheck }) {
+// onChange() runs after rows are added, removed or restored (also while the group is being built).
+export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, removeLabel, minRows = 0, maxRows = Infinity, onRow, crossCheck, onChange }) {
   const zone = (ctx.me && ctx.me.timezone) || "UTC";
   const holder = h("div", { class: "row-group-rows" });
   const addButton = h("button", { class: "button", attrs: { type: "button" }, text: addLabel, on: { click: () => addRow({}) } });
@@ -43,10 +44,12 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
       items = items.filter((other) => other !== item);
       el.remove();
       sync();
+      if (onChange) onChange();
     });
     items = [...items, item];
     holder.append(el);
     sync();
+    if (onChange) onChange();
   }
   const setRows = (next) => {
     for (const item of items) item.el.remove();
@@ -89,6 +92,7 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
     items = [];
     for (const texts of saved) addRow({}, texts);
     sync();
+    if (onChange) onChange();
   };
   return { name, element, values, rows: rowValues, setRows, placeErrors, draft, restore };
 }

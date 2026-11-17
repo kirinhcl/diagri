@@ -1,11 +1,16 @@
-// The write forms of the project page: start a round, set the budget, save a protocol, give a goal,
-// register a holdout. All but the first wait closed under "Edit…".
+// The write forms of the project page: start a round, set the budget, save a protocol, register a holdout.
+// Goals are set in the project conversation, not here. All but the first wait closed under "Edit…".
 import { hasDraft } from "../drafts.js";
 import { formatMoney, formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
-import { jsonEditor, simpleForm } from "../ui/forms.js";
+import { advancedJson, linesField } from "../ui/field-forms.js";
+import { simpleForm } from "../ui/forms.js";
 import { afterWrite } from "../ui/section.js";
+import { protocolForm } from "./protocol-form.js";
+
+const MAX_HOLDOUT_ITEMS = 50; // the server's HoldoutIn limits
+const MAX_HOLDOUT_CHARS = 100;
 
 // A write form closed under "Edit…"; it opens by itself when it brings back a draft not yet sent.
 function editFold(ctx, draftKey, build) {
@@ -74,35 +79,36 @@ export function budgetForm(ctx, project) {
   return editFold(ctx, `budget:${project.project_id}`, (draftKey) => simpleForm({ fields, submitLabel, onSubmit, draftKey, ctx }));
 }
 
+// The protocol as a form; the whole JSON stays under "Advanced (JSON)" with the old draft key, so an old JSON draft still comes back.
 export function protocolEditor(ctx, project) {
   const submitLabel = ctx.t("project.protocols.save");
-  const value = protocolExample(project.project_id, (project.protocols || []).length + 1);
-  const onSubmit = async (protocol) => {
+  const post = async (protocol) => {
     const saved = await ctx.api.post("/protocols", { protocol }, { action: submitLabel });
     afterWrite(ctx, ctx.t("project.protocols.saved", { id: saved.protocol_id, version: saved.version }));
   };
-  const label = ctx.t("project.protocols.json");
-  return editFold(ctx, `protocol:${project.project_id}`, (draftKey) => jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx }));
+  const jsonKey = `protocol:${project.project_id}`;
+  const open = hasDraft(jsonKey) || hasDraft(`${jsonKey}-form`);
+  const value = protocolExample(project.project_id, (project.protocols || []).length + 1);
+  const form = protocolForm(ctx, { project, onSubmit: ({ protocol }) => post(protocol) });
+  const advanced = advancedJson({ ctx, label: ctx.t("project.protocols.json"), value, onSubmit: post, draftKey: jsonKey, submitLabel });
+  return h("details", { class: "edit-fold", attrs: { open } }, h("summary", { text: ctx.t("project.edit") }), form, advanced);
 }
 
-export function goalEditor(ctx, project) {
-  const submitLabel = ctx.t("project.goals.submit");
-  const value = { project_id: project.project_id, goal: "", constraints: [] };
-  const onSubmit = async (goal) => {
-    await ctx.api.post("/goals", goal, { action: submitLabel });
-    afterWrite(ctx, ctx.t("project.goals.saved"));
-  };
-  const label = ctx.t("project.goals.json");
-  return editFold(ctx, `goal:${project.project_id}`, (draftKey) => jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx }));
-}
-
+// Three lists, one batch or field per line; the server takes 1 to 50 of each, up to 100 characters per line.
 export function holdoutEditor(ctx, project) {
   const submitLabel = ctx.t("project.holdouts.register");
-  const value = { project_id: project.project_id, batch_ids: [], development_batch_ids: [], outcome_fields: [] };
-  const onSubmit = async (holdout) => {
-    await ctx.api.post("/holdouts", holdout, { action: submitLabel });
+  const list = (name, label) => linesField({ name, label, required: true, maxItems: MAX_HOLDOUT_ITEMS, maxItemLength: MAX_HOLDOUT_CHARS, hint: ctx.t("holdout.form.lineHint") });
+  const fields = [
+    list("batch_ids", ctx.t("project.holdouts.batches")),
+    list("development_batch_ids", ctx.t("project.holdouts.development")),
+    list("outcome_fields", ctx.t("project.holdouts.fields")),
+  ];
+  const onSubmit = async (values) => {
+    await ctx.api.post("/holdouts", { project_id: project.project_id, ...values }, { action: submitLabel });
     afterWrite(ctx, ctx.t("project.holdouts.saved"));
   };
-  const label = ctx.t("project.holdouts.json");
-  return editFold(ctx, `holdout:${project.project_id}`, (draftKey) => jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx }));
+  return editFold(ctx, `holdout:${project.project_id}-form`, (draftKey) => [
+    h("p", { class: "note", text: ctx.t("holdout.form.hint") }),
+    simpleForm({ fields, submitLabel, onSubmit, draftKey, ctx }),
+  ]);
 }
