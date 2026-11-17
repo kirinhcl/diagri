@@ -67,7 +67,7 @@
 - `decisions`：最新在前，最多 8 条：审批（操作人、时间、是否作废）、暂停/停止/接管/交还（操作人、原因）、停止后的选择、中止（含操作人）。
 
 报告的三种降级：
-- 报告或其快照被标为依赖失效（`archive.is_invalid(artifact_id)` 或 `is_invalid(snapshot_id)`）：`report` 只给 `{"invalid": true, "label": ...}`，不给结论和数字。
+- 报告、其登记的快照或 `evidence_chain` 里引用的任一快照被标为依赖失效（一份报告可合并多个快照，但只登记最弱的一个）：`report` 只给 `{"invalid": true, "label": ...}`，不给结论和数字。
 - 报告用过保留集评估：只给 `{"held_out": true, "label": ...}`。与 `find_prior_runs` 对保留集结果的过滤一致。报告发布时在报告 JSON 里新增 `holdout_id`（没用则为 null）；新增此字段之前发布的报告，若所在项目登记过保留集，按"用过"处理。
 - 报告文件读不到或 SHA-256 与登记不符：`{"unavailable": true}`。
 
