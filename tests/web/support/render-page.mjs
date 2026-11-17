@@ -45,6 +45,7 @@ const ROUTES = [
   [/^\/protocols\/[^/]+\/analysis$/, () => "analysis.json"],
   [/^\/stages\/([^/]+)(\/[a-z-]+)?$/, ([id, part], pending) => stageFixture(id, part, pending)],
   [/^\/environment$/, () => "environment.json"],
+  [/^\/capabilities$/, () => "capabilities.json"],
   [/^\/safety$/, () => "safety.json"],
   [/^\/alerts$/, () => "alerts.json"],
   [/^\/evidence$/, () => "evidence.json"],

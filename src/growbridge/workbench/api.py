@@ -225,7 +225,14 @@ class Workbench:
         self._record_routes()
         self._read_routes()
         reads = (self.router, self.operator, workflow, archive, control, self.clock)
-        add_read_routes(*reads, tasks=tasks, budget=budget, alerts=alerts, compute=compute)
+        add_read_routes(
+            *reads,
+            tasks=tasks,
+            budget=budget,
+            alerts=alerts,
+            compute=compute,
+            max_pump_seconds=settings.max_pump_seconds,
+        )
         add_round_routes(
             self.router, self.operator, self.fresh, workflow, tasks, budget, archive, conversation
         )

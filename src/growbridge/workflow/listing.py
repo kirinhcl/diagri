@@ -5,6 +5,7 @@ Fixed SQL, values bound with ``?``. Nothing here writes.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from growbridge.workflow.store import WorkflowStore
@@ -45,6 +46,20 @@ def project_summaries(store: WorkflowStore, limit: int = 200) -> list[dict[str, 
     return summaries
 
 
+def _analysis_summary(body: str) -> dict[str, str | None]:
+    """The primary endpoint and method of a stored protocol body, ``None`` when it has none."""
+    try:
+        analysis = json.loads(body).get("analysis")
+    except (ValueError, AttributeError):
+        analysis = None
+    analysis = analysis if isinstance(analysis, dict) else {}
+    return {key: _text_or_none(analysis.get(key)) for key in ("primary_endpoint", "method")}
+
+
+def _text_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | None:
     """One project with its rounds (newest first, each with its ``round_number``) and latest
     protocol versions."""
@@ -59,7 +74,7 @@ def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | No
         (project_id,),
     )
     protocols = store.db.query(
-        "SELECT p.id, p.version, p.created_at FROM wf_protocols p"
+        "SELECT p.id, p.version, p.created_at, p.body FROM wf_protocols p"
         " WHERE p.project_id = ? AND p.version = (SELECT MAX(q.version) FROM wf_protocols q"
         " WHERE q.id = p.id AND q.project_id = p.project_id)"
         " ORDER BY p.created_at, p.id",
@@ -82,7 +97,12 @@ def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | No
             for row in rounds
         ],
         "protocols": [
-            {"protocol_id": row["id"], "version": row["version"], "created_at": row["created_at"]}
+            {
+                "protocol_id": row["id"],
+                "version": row["version"],
+                "created_at": row["created_at"],
+                **_analysis_summary(row["body"]),
+            }
             for row in protocols
         ],
     }

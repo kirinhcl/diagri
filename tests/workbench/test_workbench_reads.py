@@ -14,6 +14,7 @@ READS = [
     "/wb/stages/s/measurements",
     "/wb/stages/s/history",
     "/wb/safety",
+    "/wb/capabilities",
 ]
 
 
@@ -400,3 +401,35 @@ def test_inbox_lists_fifty_tasks_counts_the_rest_and_dates_only_those(bench, ope
     assert sum(i["kind"] == "task" for i in body["items"]) == 50
     assert body["truncated"]["task"] == 10
     assert asked and max(asked) <= 50
+
+
+def test_capabilities_answers_level_ranges_sensors_and_the_pump_cap(bench, operator):
+    from growbridge.archive.models import LEVEL_RANGES
+
+    body = operator.get("/wb/capabilities").json()
+
+    assert body["level_ranges"] == {c.value: list(r) for c, r in LEVEL_RANGES.items()}
+    assert body["sensors"] == bench.control.capabilities().sensors
+    assert body["max_pump_seconds"] == bench.settings.max_pump_seconds
+
+
+def test_a_review_says_whether_the_current_run_sheet_is_approved(bench, operator):
+    bench.pending()
+    assert operator.get("/wb/stages/stage-1/run-sheet").json()["approval"] is None
+
+    approved = bench.approve(operator).json()
+    body = operator.get("/wb/stages/stage-1/run-sheet").json()
+    assert body["approval"] == {"approved_at": approved["approved_at"], "run_sheet_version": 1}
+
+    bench.workflow.submit_run_sheet(bench.round_id, bench.sheet(version=2), bench.designer)
+    assert operator.get("/wb/stages/stage-1/run-sheet").json()["approval"] is None
+
+
+def test_project_protocol_rows_carry_endpoint_and_method(bench, operator):
+    bench.seed_round()
+    row = operator.get(f"/wb/projects/{bench.project_id}").json()["protocols"][0]
+    protocol = bench.workflow.store.protocol(row["protocol_id"], row["version"])
+
+    assert row["primary_endpoint"] == protocol.analysis.primary_endpoint
+    assert row["method"] == protocol.analysis.method
+    assert row["primary_endpoint"] and row["method"]
