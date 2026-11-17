@@ -37,7 +37,7 @@ A research protocol must declare its `variables`, a list of catalog IDs. Saving 
 
 - the list is empty or names an ID twice;
 - an ID is not in the catalog, is an alias, or is deprecated and was not declared by an earlier version of this protocol;
-- the primary endpoint is not among the declared variables;
+- the primary endpoint is not among the declared variables, or is not a manual variable (it is analysed from manual measurements only);
 - a treatment's factor key is not a catalog factor ID.
 
 So a new experiment's variables must be in the catalog before its protocol is saved. If one is missing, add it to the catalog first (append-only, new version, lock updated).

@@ -91,6 +91,7 @@
 | `POST` | `/wb/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `scope`、`param` |
 | `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
+| `GET` | `/wb/experiments/{experiment_id}/variables` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`scope` |
 | `GET` | `/wb/receipts/{request_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `GET` | `/wb/alerts` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `POST` | `/wb/alerts/{event_id}/read` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
@@ -123,7 +124,6 @@
 | `GET` | `/wb/stages/{stage_id}/readings` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/environment` | 操作员 | 局域网、覆盖网络 | 否 | — |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
-| `GET` | `/wb/experiments/{experiment_id}/variables` | 操作员 | 局域网、覆盖网络 | 否 | `scope` |
 | `GET` | `/wb/stages/{stage_id}/history` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/safety` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
@@ -190,7 +190,7 @@
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
 | `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`（含 `frozen`：每个传感器的 `minutes` 和 `max_gap_seconds`），没有批准过时为 `null` |
 
-`GET /wb/experiments/{experiment_id}/variables` 返回该实验的测量可以使用的变量：`{"experiment_id": "...", "variables": [{"id", "label_en", "label_zh", "unit", "method", "min", "max", "deprecated"}]}`，按 `id` 排序。没有任何阶段运行的实验以 `scope` 拒绝。`POST /wb/measurements` 在以下情况以 422 `param` 拒绝并列出每一个问题：实验没有声明变量、指标未声明（列出已声明的 ID）、变量种类不对、单位不对（给出正确单位）、数值超出 `min` 和 `max`（闭区间）。`POST /wb/protocols` 在以下情况以 422 `param` 拒绝并列出每一个问题：`variables` 为空或有重复、某个 ID 未知、是别名、或已弃用而更早的版本没有声明过、主要终点未声明、处理的因子键不是目录里的因子 ID。见[变量目录](Variable-Catalog.md)。
+`GET /wb/experiments/{experiment_id}/variables` 返回该实验的测量可以使用的变量，也就是已声明的人工变量（已声明的 sensor 或 factor 变量不在其中）：`{"experiment_id": "...", "variables": [{"id", "label_en", "label_zh", "unit", "method", "min", "max", "deprecated"}]}`，按 `id` 排序。操作员和角色令牌都可以读取。没有任何阶段运行的实验以 `scope` 拒绝。`POST /wb/measurements` 在以下情况以 422 `param` 拒绝并列出每一个问题：实验没有声明变量、指标未声明（列出已声明的 ID）、变量种类不对、单位不对（给出正确单位）、数值超出 `min` 和 `max`（闭区间）。`POST /wb/protocols` 在以下情况以 422 `param` 拒绝并列出每一个问题：`variables` 为空或有重复、某个 ID 未知、是别名、或已弃用而更早的版本没有声明过、主要终点未声明或不是人工变量、处理的因子键不是目录里的因子 ID。见[变量目录](Variable-Catalog.md)。
 
 已保存的协议版本不会被覆盖：`id` 和 `version` 相同而内容不同，会以 `state` 被拒绝。`POST /wb/rounds` 使用最新保存的版本。读取路由给出的 `run_sheet_digest` 就是审批记录里的那个摘要。再设一次预算只改上限，已记录的用量保留。`POST /wb/goals` 创建一个归编排 Agent 所有的研究任务；项目还没有预算，或者预算已经用完时，它以 `budget` 被拒绝。带 `request_id` 时，同一个操作员对同一个项目把同样的请求再发一次，得到的是第一次建的任务，并带 `"reused": true`；同一个 ID 下换了目标文本、轮次或约束条件，会以 `state` 被拒绝。不带 `request_id` 时，每次请求都新建一个任务。这些路由路径里的 ID 为 1 到 100 个字符。分析路由冻结协议最新版本的分析脚本（这个版本下一旦有阶段启动，冻结就以 `state` 被拒绝），并在一份数据快照上把它运行一次；它们的检查顺序见[开展一轮研究](Run-a-Research-Round.md#运行冻结的分析)。
 

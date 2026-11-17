@@ -245,12 +245,12 @@ The console's **Live environment** page shows the newest reading of every sensor
 
 ### Record a measurement
 
-On the console, the measurement form offers the experiment's declared variables as a dropdown of metrics (with a "choose a variable" placeholder when there is more than one), and the unit comes from the variable. Over HTTP, `GET /wb/experiments/EXPERIMENT_ID/variables` lists them. `POST /wb/measurements` is refused with 422 `param`, listing every problem found:
+On the console, the measurement form offers the experiment's declared manual variables as a dropdown of metrics (with a "choose a variable" placeholder when there is more than one), and the unit comes from the variable; when there is none, a note takes the place of the form. Over HTTP, `GET /wb/experiments/EXPERIMENT_ID/variables` lists them. `POST /wb/measurements` is refused with 422 `param`, listing every problem found:
 
 | Problem | What to do |
 | --- | --- |
-| No declared variables: the protocols of the experiment declare none | An experiment whose protocols declare no variables cannot record measurements. Save a protocol version that declares them. |
-| The metric is not declared | The message lists the declared IDs. Use one of them, or declare the variable in a new protocol version. |
+| No declared variables: the protocols of the experiment declare none | An experiment whose protocols declare no variables cannot record measurements. Save a protocol version that declares them and run a new round with it: a new version applies to an experiment only once a stage of a new round runs it under that version. |
+| The metric is not declared | The message lists the declared IDs. Use one of them, or declare the variable in a new protocol version and run a new round with it. |
 | Wrong kind | The variable is a sensor or factor, not a manual one (`manual` kind). Pick a manual variable. |
 | Wrong unit | The message names the right unit. Send the value in that unit. |
 | Value outside `min` and `max` | The bounds are inclusive. Check the reading; do not widen the catalog to fit a bad value. |
