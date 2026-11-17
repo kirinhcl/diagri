@@ -93,4 +93,12 @@ export default {
   "protocol.form.saveAsNew": "A new protocol",
   "protocol.form.saveAsItem": "A new version of {id} (now version {version})",
   "protocol.form.versionTooLow": "Version {saved} of this protocol is already saved. Use version {next} or higher.",
+  "analysis.form.script": "Analysis script",
+  "analysis.form.scriptHint": "Freezing cannot be undone; a change needs a new protocol version.",
+  "analysis.freezeConfirm.title": "Freeze this analysis script?",
+  "analysis.freezeConfirm.protocol": "Protocol: {name}",
+  "analysis.freezeConfirm.line": "Once frozen, this protocol version's analysis is fixed and can no longer be changed.",
+  "analysis.runConfirm.title": "Run the confirmatory analysis?",
+  "analysis.runConfirm.line": "A snapshot allows only one confirmatory analysis; once it has run it cannot be redone.",
+  "analysis.runConfirm.snapshot": "Snapshot: {name}",
 };

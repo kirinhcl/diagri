@@ -254,7 +254,6 @@ export default {
   "analysis.frozenAt": "Frozen at",
   "analysis.frozenBy": "Frozen by",
   "analysis.frozenNote": "The script is frozen and cannot be corrected. To change the analysis, save a new protocol version and freeze a script for it.",
-  "analysis.freezeJson": "Script request (JSON)",
   "analysis.freeze": "Freeze script",
   "analysis.frozen": "Analysis script locked",
   "analysis.snapshots": "Data snapshots",

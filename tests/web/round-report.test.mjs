@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { afterEach, test } from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
@@ -9,10 +9,16 @@ import MESSAGES_ZH from "../../src/growbridge/web/workbench/i18n/messages.zh.js"
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { analysisSection, analysisState, runView } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
 import { abortLines, estimateText, render, reportLists, reportView } from "../../src/growbridge/web/workbench/pages/round.js";
-import { bindFormContext } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { displayName } from "../../src/growbridge/web/workbench/ui/names.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
+
+afterEach(() => {
+  assertNoPendingDialogAnswers();
+  resetDialogs();
+});
 
 const ctx = { t: makeT("en") };
 const ROUND = FIXTURES["round.json"];
@@ -249,8 +255,8 @@ test("snapshots are named by date and completeness, their ids in the details", a
   const name = displayName(c, "snapshot", snapshot);
   const text = visibleText(root);
   assert.equal(count(text, name), 2, "the table row and the run form's option");
-  assert.deepEqual(elements(root, "option").map((option) => option.textContent), [name]);
-  assert.deepEqual(elements(root, "option").map((option) => option.getAttribute("value")), [snapshot.snapshot_id]);
+  assert.deepEqual(elements(root, "option").map((option) => option.textContent), ["请选择", name]);
+  assert.deepEqual(elements(root, "option").map((option) => option.getAttribute("value")), ["", snapshot.snapshot_id]);
   assert.ok(text.includes(zh["analysis.runState.none"]) && !/\bnone\b/.test(text), text);
   for (const id of [snapshot.snapshot_id, snapshot.experiment_id]) {
     assert.ok(!text.includes(id), id);
@@ -296,6 +302,8 @@ test("after a run the analysis opens again on its result, once", async () => {
   c.api.post = async () => ({ run_id: "run_5c98", status: "succeeded", exit_code: 0, timed_out: false, stdout: "", stderr: "" });
   const first = await analysisSection(c, ROUND);
   const form = elements(first, "form").find((node) => elements(node, "select").length);
+  formControls(form).set({ snapshot_id: ANALYSIS.snapshots[0].snapshot_id });
+  answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   const again = await analysisSection(c, ROUND);
@@ -313,6 +321,8 @@ test("after a freeze the analysis opens again, for that round only", async () =>
   c.api.post = async () => ({});
   const first = await analysisSection(c, ROUND);
   const form = elements(first, "form").find((node) => elements(node, "textarea").length);
+  formControls(form).set({ script: "x = 1" });
+  answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   const other = await analysisSection(c, { ...ROUND, round_id: "round_other" });
@@ -320,6 +330,77 @@ test("after a freeze the analysis opens again, for that round only", async () =>
   const again = await analysisSection(c, ROUND);
   assert.notEqual(again.getAttribute("open"), null);
   assert.equal((await analysisSection(c, ROUND)).getAttribute("open"), null, "opened once");
+});
+
+test("freezing asks first and says it cannot be undone; cancelling sends nothing", async () => {
+  const c = testCtx({ lang: "en" });
+  bindFormContext(c);
+  const posts = [];
+  c.api.post = async (path, body) => {
+    posts.push({ path, body });
+    return {};
+  };
+  const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "textarea").length);
+  const area = elements(form, "textarea")[0];
+  assert.equal(area.getAttribute("maxlength"), "20000");
+  assert.ok(area.classList.contains("input-code"), "monospace");
+  assert.ok(visibleText(form).includes("cannot be undone"), visibleText(form));
+  assert.equal(elements(form, "details").length, 0, "no JSON fold");
+  formControls(form).set({ script: "print(1)" });
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes("Freeze this analysis script?"), dialog.textContent);
+  assert.ok(dialog.textContent.includes("can no longer be changed"), dialog.textContent);
+  answerNextDialog(false);
+  await settle();
+  await settle();
+  assert.equal(posts.length, 0);
+  assert.equal(visibleText(form).includes("Done"), false);
+  assert.equal(elements(form, "button").every((b) => !b.disabled), true);
+  answerNextDialog(true);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.equal(posts.length, 1);
+  assert.deepEqual(posts[0].body, { project_id: ROUND.project_id, script: "print(1)" });
+});
+
+test("the run form starts on 'choose' and asks before the one run a snapshot allows", async () => {
+  const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
+  const c = testCtx({ lang: "en", fixtures: { "analysis.json": { ...ANALYSIS, frozen } } });
+  bindFormContext(c);
+  const posts = [];
+  c.api.post = async (path, body) => {
+    posts.push({ path, body });
+    return { run_id: "run_1", status: "succeeded", exit_code: 0, timed_out: false, stdout: "", stderr: "" };
+  };
+  const form = elements(await analysisSection(c, ROUND), "form").find((node) => elements(node, "select").length);
+  const options = elements(form, "option");
+  assert.equal(options[0].textContent, "Choose…");
+  assert.equal(options[0].getAttribute("value"), "");
+  const select = elements(form, "select")[0];
+  assert.equal(select.value, "");
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.equal(posts.length, 0, "a blank choice is refused");
+  const [snapshot] = ANALYSIS.snapshots;
+  formControls(form).set({ snapshot_id: snapshot.snapshot_id });
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes("only one confirmatory analysis"), dialog.textContent);
+  assert.ok(dialog.textContent.includes(displayName(c, "snapshot", snapshot)), dialog.textContent);
+  assert.ok(!dialog.textContent.includes(snapshot.snapshot_id), "no id");
+  answerNextDialog(false);
+  await settle();
+  await settle();
+  assert.equal(posts.length, 0);
+  answerNextDialog(true);
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  await settle();
+  assert.deepEqual(posts.map((p) => p.path), ["/analysis/runs"]);
 });
 
 // --- final review: an effect of a thousand or more has no exponent (F13) -------------------------

@@ -92,4 +92,12 @@ export default {
   "protocol.form.saveAsNew": "一份新协议",
   "protocol.form.saveAsItem": "{id} 的新版本（现在是第 {version} 版）",
   "protocol.form.versionTooLow": "这份协议已经保存到第 {saved} 版。请使用第 {next} 版或更高。",
+  "analysis.form.script": "分析脚本",
+  "analysis.form.scriptHint": "冻结后不能修改，只能用新版本协议重来。",
+  "analysis.freezeConfirm.title": "冻结这份分析脚本？",
+  "analysis.freezeConfirm.protocol": "协议：{name}",
+  "analysis.freezeConfirm.line": "冻结后这个协议版本的分析就固定了，不能再改。",
+  "analysis.runConfirm.title": "运行确认性分析？",
+  "analysis.runConfirm.line": "每个快照只能做一次确认性分析，做完不能重做。",
+  "analysis.runConfirm.snapshot": "快照：{name}",
 };

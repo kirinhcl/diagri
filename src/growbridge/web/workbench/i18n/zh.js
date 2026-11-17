@@ -254,7 +254,6 @@ export default {
   "analysis.frozenAt": "冻结时间",
   "analysis.frozenBy": "冻结人",
   "analysis.frozenNote": "脚本已冻结，不能修改。要改分析，请保存新的协议版本并为它冻结脚本。",
-  "analysis.freezeJson": "冻结请求（JSON）",
   "analysis.freeze": "冻结脚本",
   "analysis.frozen": "已锁定分析脚本",
   "analysis.snapshots": "数据快照",

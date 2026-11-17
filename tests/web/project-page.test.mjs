@@ -1,7 +1,7 @@
 // The projects list and the project page: names instead of ids, the page's order and folds, the
 // budget's numbers, and save notices that say what was saved.
 import assert from "node:assert/strict";
-import test from "node:test";
+import { afterEach, test } from "node:test";
 
 import { saveDraft } from "../../src/growbridge/web/workbench/drafts.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
@@ -9,8 +9,14 @@ import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
 import { budgetView } from "../../src/growbridge/web/workbench/pages/project.js";
 import { analysisSection } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
 import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, resetDialogs } from "./support/dialogs.mjs";
 import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
+
+afterEach(() => {
+  assertNoPendingDialogAnswers();
+  resetDialogs();
+});
 
 const PROJECT = FIXTURES["project.json"];
 const ROUND = PROJECT.rounds[0];
@@ -257,8 +263,10 @@ test("compute, round and analysis writes say what was done", async () => {
   const ctx = { ...testCtx({ lang: "zh" }), notify: (message) => notices.push(message) };
   bindFormContext(ctx);
   const [freeze, run] = elements(await analysisSection(ctx, FIXTURES["round.json"]), "form");
-  await submit(freeze);
-  await submit(run);
+  answerNextDialog(true);
+  await submit(freeze, { script: "print(1)" });
+  answerNextDialog(true);
+  await submit(run, { snapshot_id: FIXTURES["analysis.json"].snapshots[0].snapshot_id });
   assert.deepEqual(notices, ["已锁定分析脚本", "已运行确认性分析"]);
 });
 
