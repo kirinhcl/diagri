@@ -648,7 +648,9 @@ def build_runtime(
         dbs["workflow"],
         clock,
         control,
-        validate=lambda sheet: validate_run_sheet(sheet, control.capabilities(), control.safety()),
+        validate=lambda sheet: validate_run_sheet(
+            sheet, control.capabilities(), control.safety(), flow.catalog
+        ),
         on_intervention=mirror,
     )
     storage = StorageGuard(data_dir, STORAGE_LOW_BYTES, STORAGE_CRITICAL_BYTES, shutil.disk_usage)
@@ -664,7 +666,7 @@ def build_runtime(
         unreadable.append(settings.backup_dir)
     sandbox = make_runtime_sandbox(unreadable)
     outcomes = project_outcomes(  # a holdout may only be registered before its outcomes exist
-        archive.batch_metrics, flow.store.projects_of_experiment
+        archive.batch_metrics, flow.store.projects_of_experiment, flow.catalog
     )
     backups = Backups(
         dict(zip(DATABASES, dbs.values(), strict=True)),
@@ -693,7 +695,7 @@ def build_runtime(
         observer=observer,
         reports=ReportStore(dbs["observer"]),
         runner=ConfirmatoryRunner(dbs["agents"], clock, sandbox, data_dir / "analysis"),
-        holdout=HoldoutRegistry(dbs["agents"], clock, outcomes),
+        holdout=HoldoutRegistry(dbs["agents"], clock, outcomes, flow.catalog),
         sandbox=sandbox,
         operators=Operators(dbs["workflow"], clock),
         compute=_compute(

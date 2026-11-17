@@ -84,7 +84,9 @@ def findings_json(findings: Iterable[Finding]) -> list[dict]:
 def check_sheet(deps: Deps, sheet: RunSheet, round_id: str | None = None) -> tuple[Finding, ...]:
     """The program checks, and whether the sheet applies its round's treatment (a model's sheet
     must; without ``round_id`` it must apply one of the protocol's treatments)."""
-    own = validate_run_sheet(sheet, deps.control.capabilities(), deps.control.safety())
+    own = validate_run_sheet(
+        sheet, deps.control.capabilities(), deps.control.safety(), deps.workflow.catalog
+    )
     store = deps.workflow.store
     protocol = store.protocol(sheet.protocol_id, sheet.protocol_version)
     if protocol is None:
