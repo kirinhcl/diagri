@@ -17,6 +17,7 @@ from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
     clip,
+    local_time,
     require_round,
     resolve,
     scoped_snapshot,
@@ -215,7 +216,13 @@ def stage_preview(deps: Deps, stage) -> dict:
     # every stage of a round shares one experiment: a measurement timed before this stage
     # started is an earlier stage's, so it is counted, not judged
     outside = [m for m in left_out if m["measured_at"] >= start]
-    summary["measurements_outside_window"] = outside[:MAX_LISTED_OUTSIDE]
+    zone = deps.timezone  # the model is shown times in it, beside the epochs (RND-18)
+    summary["window_local"] = [local_time(at, zone) for at in summary["window"]]
+    summary["gaps_local"] = [[local_time(a, zone), local_time(b, zone)] for a, b in summary["gaps"]]
+    summary["measurements_outside_window"] = [
+        {**m, "measured_at_local": local_time(m["measured_at"], zone)}
+        for m in outside[:MAX_LISTED_OUTSIDE]
+    ]
     summary["measurements_outside_count"] = len(outside)
     summary["measurements_before_stage"] = len(left_out) - len(outside)
     summary["manual_tasks"] = _manual_summary(deps, stage)
