@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { afterEach, test } from "node:test";
 
-import { confirmAction } from "../../src/growbridge/web/workbench/ui/dialog.js";
-import { Cancelled, confirmOrCancel, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
-import { answerNextDialog, openDialogs } from "./support/dialogs.mjs";
+import { askSecret, confirmAction } from "../../src/growbridge/web/workbench/ui/dialog.js";
+import { takeDraft } from "../../src/growbridge/web/workbench/drafts.js";
+import { Cancelled, confirmOrCancel, jsonEditor, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { testCtx } from "./support/render-page.mjs";
 
 const PROMPT = { title: "Stop the round?", lines: ["It ends now.", "Nothing is lost."] };
+
+afterEach(() => {
+  try {
+    assertNoPendingDialogAnswers();
+  } finally {
+    resetDialogs();
+  }
+});
 
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
@@ -32,6 +41,16 @@ test("an answer given before the dialog opens, or a text answer, is applied when
   assert.equal(await confirmAction(ctx.t, PROMPT), true);
   answerNextDialog("because");
   assert.equal(await confirmAction(ctx.t, PROMPT), true);
+});
+
+test("a string answer is typed into the dialog's text box and confirmed", async () => {
+  const ctx = testCtx({ lang: "en" });
+  answerNextDialog("pw");
+  assert.equal(await askSecret(ctx.t, "Stop"), "pw");
+  const pending = askSecret(ctx.t);
+  await tick();
+  answerNextDialog(null);
+  assert.equal(await pending, null);
 });
 
 function confirmingForm(ctx, onSubmit) {
@@ -75,4 +94,21 @@ test("a confirmed form still says done", async () => {
   await submit(form);
   assert.equal(status(form).hidden, false);
   assert.equal(status(form).textContent, ctx.t("form.done"));
+});
+
+test("a cancelled confirm keeps no draft and says nothing, in a simple form and a JSON editor", async () => {
+  const ctx = testCtx({ lang: "en" });
+  const cancelled = async () => {
+    throw new Cancelled();
+  };
+  const simple = simpleForm({ fields: [{ name: "note", label: "Note", type: "text" }], submitLabel: "Go", onSubmit: cancelled, draftKey: "cancel-simple", ctx });
+  const editor = jsonEditor({ label: "Body", value: {}, submitLabel: "Go", onSubmit: cancelled, draftKey: "cancel-json", ctx });
+  for (const form of [simple, editor]) {
+    await submit(form);
+    assert.equal(status(form).hidden, true);
+    assert.equal(status(form).textContent, "");
+    assert.equal(submitButton(form).disabled, false);
+  }
+  assert.equal(takeDraft("cancel-simple"), null);
+  assert.equal(takeDraft("cancel-json"), null);
 });

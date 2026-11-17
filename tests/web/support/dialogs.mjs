@@ -18,3 +18,17 @@ export function answerNextDialog(answer) {
 export function openDialogs() {
   return documentOrThrow().openDialogElements();
 }
+
+// Every test file that answers dialogs must call both of these in afterEach: the fake document is
+// shared by the whole file, so a stale answer would silently decide a later test's dialog.
+export function assertNoPendingDialogAnswers() {
+  const left = typeof document === "undefined" ? [] : document.dialogAnswers;
+  if (left.length) throw new Error(`${left.length} queued dialog answer(s) were never used`);
+}
+
+// Clears the queue and closes (cancelling) any dialog still open.
+export function resetDialogs() {
+  if (typeof document === "undefined") return;
+  document.dialogAnswers.length = 0;
+  for (const dialog of document.openDialogElements()) dialog.close();
+}
