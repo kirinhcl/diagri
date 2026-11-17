@@ -228,3 +228,27 @@ async def test_a_stage_id_used_in_another_round_does_not_tell_its_state(world, p
 
     assert denied.value.code == "state"
     assert "running" not in str(denied.value) and "already used" in str(denied.value)
+
+
+async def test_a_refused_abort_gets_the_finished_stages_care_back(world, people):
+    await people.running()
+    await world.svc.stop_stage("stage-1", people.alice)
+    old = world.svc.store.stage("stage-1").care_right
+    original = world.control.handover
+
+    async def transfer_meanwhile(number, reason):
+        world.control.handover = original
+        await original(number, reason)
+        store = world.svc.store
+        store.set_project_owner(
+            world.project_id, "carol", "root", "alice left", world.clock.now(), lambda: None
+        )
+
+    world.control.handover = transfer_meanwhile
+    with pytest.raises(Denied):
+        await world.svc.abort_round(world.round_id, people.alice)
+
+    await world.svc.restore_care()  # what the runtime does on every tick
+
+    care = world.svc.store.stage("stage-1").care_right
+    assert care is not None and care != old

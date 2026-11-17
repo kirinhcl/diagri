@@ -218,7 +218,7 @@ Mounted when `multi_user` is on ([`workbench/greenhouses.py`](../../../src/growb
 | `GET /wb/greenhouses` | operator | | `greenhouses`: `id`, `name`, `state` (`free`, `mine`, `taken`), `locked_at`; administrators also get `holder` | |
 | `POST /wb/greenhouses/lock` | operator, re-auth | `greenhouse_ids` (1 to 64) | `locked` | `lock_taken`, `state` |
 | `POST /wb/greenhouses/{id}/release` | operator holding it | | `released` | `not_lock_holder`, `greenhouse_busy`, `state` |
-| `GET /wb/admin/operators` | administrator | | `operators`: `name`, `role`, `created_at`, `disabled_at`, `unfinished_stages` | `admin_only` |
+| `GET /wb/admin/operators` | administrator | | `operators`: `name`, `role`, `created_at`, `disabled_at`, `unfinished_stages`; `events` (the latest 200, newest first): `name`, `action` (`add`, `disable`, `reset_secret`), `actor` (`null`: the command line), `detail` (the role an account was added with), `at` | `admin_only` |
 | `POST /wb/admin/operators` | administrator, re-auth | `name`, `secret`, `role` | `name`, `role` | `admin_only`, `param` |
 | `POST /wb/admin/operators/disable` | administrator, re-auth | `name` | `disabled` | `admin_only`, `param` |
 | `POST /wb/admin/operators/secret` | administrator, re-auth | `name`, `secret` | `reset` | `admin_only`, `param` |

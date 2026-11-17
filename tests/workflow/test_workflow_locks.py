@@ -218,3 +218,48 @@ async def test_release_during_recovery_keeps_care_away(world, locks):
     await world.svc.on_restart()
 
     assert world.svc.store.stage(stage).care_right is None
+
+
+async def test_a_refused_release_gets_its_care_back(world, locks):
+    # the release handed care back, then lost to a new stage: it changed nothing, so care
+    # comes back on the next restore instead of waiting for a stage that may never start
+    stage = await _ended_with_care(world)
+    old = world.svc.store.stage(stage).care_right
+    locks.lock("alice", ["gh-01"])
+    original = world.control.handover
+
+    async def racing(number, reason):
+        world.control.handover = original
+        await original(number, reason)
+        _file_in_new_round(world, "stage-2")
+
+    world.control.handover = racing
+    with pytest.raises(Denied):
+        await locks.release("gh-01", "alice")
+
+    await world.svc.restore_care()  # what the runtime does on every tick
+
+    row = world.svc.store.stage(stage)
+    assert row.care_right is not None and row.care_right != old
+    assert row.care_released is False
+
+
+async def test_a_release_that_fails_after_the_hand_back_gets_its_care_back(
+    world, locks, monkeypatch
+):
+    # not only a refusal: any failure after care was handed back leaves no dead right behind
+    stage = await _ended_with_care(world)
+    old = world.svc.store.stage(stage).care_right
+    locks.lock("alice", ["gh-01"])
+
+    def broken(*_args):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(locks, "_finish_release", broken)
+    with pytest.raises(RuntimeError):
+        await locks.release("gh-01", "alice")
+
+    await world.svc.restore_care()
+
+    row = world.svc.store.stage(stage)
+    assert row.care_right is not None and row.care_right != old

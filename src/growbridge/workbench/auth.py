@@ -46,7 +46,12 @@ STEPS = (
     "ALTER TABLE login_failures ADD COLUMN source TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE operators ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
     "ALTER TABLE operators ADD COLUMN disabled_at REAL",
+    # Who added, disabled or reset whose account, and when (append-only; actor NULL: the command
+    # line). A secret reset lets an administrator sign in as that account, so it is never silent.
+    "CREATE TABLE operator_events(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, "
+    "action TEXT NOT NULL, actor TEXT, detail TEXT, at REAL NOT NULL)",
 )
+EVENT_LIMIT = 200  # the account history a listing shows, newest first
 ROLES = ("user", "admin")
 
 _NO_SALT = bytes(SALT_BYTES)  # stands in for an unknown name so the work done stays the same
@@ -77,7 +82,7 @@ class Operators:
 
     # --- accounts ------------------------------------------------------------------------------
 
-    def add(self, name: str, secret: str, role: str = "user") -> None:
+    def add(self, name: str, secret: str, role: str = "user", *, by: str | None = None) -> None:
         """Register an operator; ``ValueError`` for a duplicate, empty name, weak secret or an
         unknown role."""
         name = name.strip()
@@ -94,6 +99,7 @@ class Operators:
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (name, salt, key, self.scrypt_n, self.clock.now(), role),
             )
+            self._record(name, "add", by, role)
 
     def _hashed(self, secret: str) -> tuple[bytes, bytes]:
         if not MIN_SECRET_LENGTH <= len(secret) <= MAX_SECRET_LENGTH:
@@ -135,9 +141,10 @@ class Operators:
                 "UPDATE operators SET disabled_at = ? WHERE name = ?", (self.clock.now(), name)
             )
             self.db.execute("DELETE FROM operator_sessions WHERE name = ?", (name,))
+            self._record(name, "disable", by)
 
-    def reset_secret(self, name: str, secret: str) -> None:
-        """Replace an operator's secret and end their sessions."""
+    def reset_secret(self, name: str, secret: str, *, by: str | None = None) -> None:
+        """Replace an operator's secret and end their sessions; recorded with ``by``."""
         salt, key = self._hashed(secret)
         with self.db.transaction():
             self._require_known(name)
@@ -146,6 +153,23 @@ class Operators:
                 (salt, key, self.scrypt_n, name),
             )
             self.db.execute("DELETE FROM operator_sessions WHERE name = ?", (name,))
+            self._record(name, "reset_secret", by)
+
+    def _record(self, name: str, action: str, by: str | None, detail: str | None = None) -> None:
+        self.db.execute(
+            "INSERT INTO operator_events(name, action, actor, detail, at) VALUES (?, ?, ?, ?, ?)",
+            (name, action, by, detail, self.clock.now()),
+        )
+
+    def events(self, limit: int = EVENT_LIMIT) -> list[dict]:
+        """The account history, newest first: ``name``, ``action`` (add, disable, reset_secret),
+        ``actor`` (``None``: the command line), ``detail`` (the role an account was added with)
+        and ``at``."""
+        rows = self.db.query(
+            "SELECT name, action, actor, detail, at FROM operator_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        return [dict(row) for row in rows]
 
     def listing(self) -> list[dict]:
         """Every account without its secret, oldest first."""

@@ -408,6 +408,15 @@ class WorkflowStore:
             (device_id, *done),
         )
 
+    def drop_care(self, stage_id: str, care_right: int) -> None:
+        """Forget a care right a command handed back and was then refused for, so the next
+        ``restore_care`` issues care again; a stage whose care changed meanwhile keeps it."""
+        self.db.execute(
+            "UPDATE wf_stages SET care_right = NULL, rev = rev + 1"
+            " WHERE stage_id = ? AND care_right = ?",
+            (stage_id, care_right),
+        )
+
     def care_holder(self, device_id: str) -> StageRow | None:
         row = self.db.one(
             "SELECT * FROM wf_stages WHERE device_id = ? AND care_right IS NOT NULL"

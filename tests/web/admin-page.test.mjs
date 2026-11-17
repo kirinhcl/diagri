@@ -19,6 +19,15 @@ test("the administration page lists accounts, locks and their history", async ()
   }
 });
 
+test("the administration page lists account changes and who made them", async () => {
+  const { element } = await renderPage("admin", {}, { lang: "en" });
+  const text = visibleText(element);
+
+  for (const expected of ["Account history", "Password reset", "Account disabled", "Account added", "the command line"]) {
+    assert.match(text, new RegExp(expected));
+  }
+});
+
 test("the sidebar offers greenhouses only with multi-user, and administration only to administrators", () => {
   assert.ok(!pages({ multi_user: false, role: "admin" }).includes("greenhouses"));
   assert.ok(!pages(null).includes("admin"));

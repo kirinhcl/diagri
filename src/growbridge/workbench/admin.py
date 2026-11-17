@@ -126,12 +126,12 @@ def _accounts_routes(router, fresh, operators, store, admin) -> None:
 
     @router.get("/admin/operators")
     async def accounts(actor: Admin):
-        return {"operators": _accounts(operators, store)}
+        return {"operators": _accounts(operators, store), "events": operators.events()}
 
     @router.post("/admin/operators")
     async def add(body: OperatorIn, actor: Fresh, _admin: Admin):
         try:
-            operators.add(body.name, body.secret, body.role)
+            operators.add(body.name, body.secret, body.role, by=actor.id)
         except ValueError as error:
             raise _account_refused(error, body.name.strip()) from error
         return {"name": body.name.strip(), "role": body.role}
@@ -147,7 +147,7 @@ def _accounts_routes(router, fresh, operators, store, admin) -> None:
     @router.post("/admin/operators/secret")
     async def secret(body: SecretIn, actor: Fresh, _admin: Admin):
         try:
-            operators.reset_secret(body.name, body.secret)
+            operators.reset_secret(body.name, body.secret, by=actor.id)
         except ValueError as error:
             raise _account_refused(error, body.name) from error
         return {"reset": body.name}

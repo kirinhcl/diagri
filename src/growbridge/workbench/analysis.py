@@ -159,14 +159,19 @@ class AnalysisRoutes:
 
         The version comes from the rounds that have a stage for the snapshot's experiment, not
         from the latest saved version. An experiment shared by rounds of more than one version
-        (or of another protocol) is ambiguous and refused.
+        (or of another protocol) is ambiguous and refused. Protocols are stored by id and version,
+        so another project may hold other versions of the same id: a snapshot of another
+        project's experiment is refused as one of another protocol, since its version, frozen
+        script and holdout are that project's.
         """
         snap = self.archive.snapshot(snapshot_id)
-        versions = (
-            () if snap is None else self.workflow.store.protocol_versions_of(snap.experiment_id)
-        )
+        store = self.workflow.store
+        versions = () if snap is None else store.protocol_versions_of(snap.experiment_id)
         mine = [version for protocol_id, version in versions if protocol_id == line.id]
-        if snap is None or not mine:
+        ours = snap is not None and line.project_id in store.projects_of_experiment(
+            snap.experiment_id
+        )
+        if snap is None or not mine or not ours:
             raise Denied(
                 "scope",
                 f"snapshot {snapshot_id} is not a snapshot of this protocol",

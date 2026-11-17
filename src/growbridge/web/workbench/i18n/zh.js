@@ -715,4 +715,10 @@ export default {
   "admin.newOwner": "新所有者",
   "admin.transferLead": "打开多用户之前建的项目没有所有者，只有管理员能看到；所有者被停用的项目也无人能操作。项目没有未结束的阶段时，可以在这里把它转给一个在用的账号（项目编号见「项目」页）。",
   "admin.transferred": "已把项目转给 {owner}。",
+  "admin.accountEvents": "账号记录",
+  "admin.noAccountEvents": "还没有账号变更。",
+  "admin.accountEvent.add": "添加账号",
+  "admin.accountEvent.disable": "停用账号",
+  "admin.accountEvent.reset": "重置密码",
+  "admin.byCommandLine": "命令行",
 };
