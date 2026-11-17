@@ -1,6 +1,6 @@
 // Open alerts: how bad, how often, since when, and who has read them.
 import { h } from "../ui/dom.js";
-import { errorBox, note, pageHead, section, showErrors, timeCell, timeText } from "../ui/section.js";
+import { errorBox, note, nowSeconds, pageHead, section, showErrors, timeCell, timeText } from "../ui/section.js";
 import { labelOr } from "../i18n.js";
 import { severityPill } from "../ui/status.js";
 import { table } from "../ui/table.js";
@@ -8,7 +8,6 @@ import { alertCell } from "./alert-text.js";
 import { isNotMounted } from "./not-mounted.js";
 
 const SEVERITY_ORDER = ["info", "warning", "critical"]; // mildest first
-const nowSeconds = () => Date.now() / 1000;
 export const REASK_SECONDS = 24 * 3600; // observer/alerts.py REASK_SECONDS
 
 // The inbox's rule (observer/alerts.py awaits_reading): unread, or worse than the severity it was
@@ -30,15 +29,15 @@ export function readLine(ctx, alert) {
 }
 
 // Offered again only because the day has passed: it did not get worse, and was read.
-function olderThanReask(alert) {
+function olderThanReask(ctx, alert) {
   const readAt = SEVERITY_ORDER.indexOf(alert.read_severity);
   const worse = readAt >= 0 && SEVERITY_ORDER.indexOf(alert.severity) > readAt;
-  return Boolean(alert.read_by) && !worse && alertWaiting(alert, nowSeconds());
+  return Boolean(alert.read_by) && !worse && alertWaiting(alert, nowSeconds(ctx));
 }
 
 function readCell(ctx, alert) {
   const said = readLine(ctx, alert);
-  if (!alertWaiting(alert, nowSeconds())) return h("p", { class: "block-note", text: said });
+  if (!alertWaiting(alert, nowSeconds(ctx))) return h("p", { class: "block-note", text: said });
   const box = errorBox();
   const label = ctx.t("alerts.markRead");
   const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
@@ -56,7 +55,7 @@ function readCell(ctx, alert) {
     ctx.notify(ctx.t("alerts.wasRead"), "ok");
     ctx.reload();
   });
-  const why = olderThanReask(alert) ? h("p", { class: "cell-sub", text: ctx.t("alerts.askAgain") }) : null;
+  const why = olderThanReask(ctx, alert) ? h("p", { class: "cell-sub", text: ctx.t("alerts.askAgain") }) : null;
   return h("div", { class: "action" }, h("p", { class: "block-note", text: said }), why, button, box);
 }
 

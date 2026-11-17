@@ -79,6 +79,15 @@ test("a read without a recorded severity is not called worse; a day-old read say
   assert.doesNotMatch(visibleText(fresh.element), /超过一天/);
 });
 
+test("whether a read alert is asked about again goes by the page's clock, not the browser's", async (t) => {
+  t.mock.method(Date, "now", () => (NOW + 10 * 86400) * 1000); // the browser's clock is ten days ahead
+  const fresh = await renderPage("alerts", {}, { fixtures: withAlerts([{ read_by: "alice", read_at: NOW - 300, read_severity: "warning" }]), now: NOW });
+  const text = visibleText(fresh.element);
+  assert.match(text, /alice .* 已读/);
+  assert.doesNotMatch(text, /超过一天/);
+  assert.doesNotMatch(text, /标为已读/);
+});
+
 // Alerts that carry a code and params (Task 7): sentences, a next step, a link, the server's words in the details.
 const fixtureAlert = (kind) => FIXTURES["alerts.json"].alerts.find((row) => row.kind === kind);
 const rowsOf = (element) => walk(element).filter((el) => el.localName === "tr");
