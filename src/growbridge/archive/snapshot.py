@@ -14,6 +14,7 @@ from growbridge.archive.ids import canonical_json, file_digest, new_id
 from growbridge.archive.models import ManualMeasurement, Model, SampleRecord, Snapshot
 from growbridge.archive.store import Archive
 from growbridge.ports import Denied
+from growbridge.vocab import Catalog, packaged_catalog
 
 MANIFEST = "manifest.json"
 
@@ -229,6 +230,7 @@ def preview(
     min_coverage: float = 0.9,
     measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
     measurement_grace: float = 0.0,
+    catalog: Catalog | None = None,
 ) -> dict[str, Any]:
     """What ``freeze`` would see in the window, summarised; writes nothing.
 
@@ -243,9 +245,10 @@ def preview(
     coverage, gaps = coverage_of(
         [_sample_time(s) for s in trusted], start, end, expected_interval, max_gap
     )
+    catalog = catalog or packaged_catalog()
     by_metric: dict[str, list[ManualMeasurement]] = {}
     for m in data["measurements"]:
-        by_metric.setdefault(m.metric, []).append(m)
+        by_metric.setdefault(catalog.canonical(m.metric) or m.metric, []).append(m)
     return {
         "window": [start, end],
         "expected_interval_seconds": expected_interval,

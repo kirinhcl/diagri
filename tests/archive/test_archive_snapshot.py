@@ -257,3 +257,16 @@ def test_manifest_records_zero_exclusions_without_a_filter(archive, clock):
 
     manifest = json.loads((archive.root / "snapshots" / frozen.id / "manifest.json").read_text())
     assert manifest["measurements_excluded"] == 0
+
+
+def test_preview_groups_alias_with_id(archive):
+    fill(archive, 11)
+    for index, metric in enumerate(("temp", "air_temperature", "heigth")):
+        item = measurement(f"m{index}").model_copy(update={"metric": metric, "unit": "Cel"})
+        archive.add_measurement(item)
+
+    summary = snap.preview(archive, "exp-1", START, START + 10 * STEP, STEP, STEP * 1.5)
+
+    groups = summary["measurements"]
+    assert set(groups) == {"air_temperature", "heigth"}
+    assert groups["air_temperature"]["plants"] == 1

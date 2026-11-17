@@ -186,6 +186,7 @@ def stage_preview(deps: Deps, stage) -> dict:
         DEFAULT_MIN_COVERAGE,
         measurement_filter=keep,
         measurement_grace=MEASUREMENT_GRACE_SECONDS,
+        catalog=deps.workflow.catalog,
     )
     start, end = limits[0], limits[1]
     left_out = snapshots.outside_window(

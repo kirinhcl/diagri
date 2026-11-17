@@ -864,8 +864,10 @@ def test_a_started_round_left_out_of_the_report_still_counts_as_missing(env):
     frozen = Frozen((), {"e1": 1, "e2": 2}, rows)
     metric = env.protocol.analysis.primary_endpoint
 
-    assert _missing_fraction(env.protocol, frozen, metric, frozenset()) == 0
-    assert _missing_fraction(env.protocol, frozen, metric, frozenset({3})) == pytest.approx(1 / 3)
+    assert _missing_fraction(env.protocol, frozen, metric, frozenset(), env.workflow.catalog) == 0
+    assert _missing_fraction(
+        env.protocol, frozen, metric, frozenset({3}), env.workflow.catalog
+    ) == pytest.approx(1 / 3)
 
 
 async def test_started_round_numbers_lists_the_rounds_with_a_started_stage(env):
@@ -895,6 +897,16 @@ async def test_server_notes_are_stored_with_their_code_in_both_languages(env):
     assert [n["text"]["zh"] for n in reasons] == report["reasons"]
     assert report["conclusion_texts"] == {"en": "uncertain", "zh": "不确定"}
     assert _payload(outcome)["server_notes"][0].keys() == {"en", "zh"}
+
+
+async def test_a_misspelled_metric_is_reported_as_unresolved(env):
+    task = env.task("researcher")
+    env.archive.add_measurement(_measurement("e1", 9.0, "typo", metric="heigth"))
+
+    outcome = await _publish(env, task.id, _rounds(env))
+
+    (found,) = [n for n in _report(env, outcome)["notes"] if n["code"] == "unresolved_metrics"]
+    assert found["params"]["count"] == 1
 
 
 def _with_tasks(env, number: int, done: int, planned: int = 4, frozen_at=None) -> dict:

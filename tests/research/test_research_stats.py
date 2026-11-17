@@ -218,3 +218,34 @@ def test_a_sampled_estimate_names_its_flips_and_exact_has_no_code():
     assert sampled.note_code == "sampled_p"
     assert sampled.note_params == {"flips": 20_000, "blocks": 25}
     assert exact.note_code == "" and exact.note_params == {} and exact.note == ""
+
+
+def test_alias_and_id_give_the_same_table():
+    protocol = make_protocol()
+    by_alias = [
+        measurement(0, "exp-1", "p1", 1.0, metric="temp", unit="Cel"),
+        measurement(1, "exp-1", "p2", 3.0, metric="air_temperature", unit="Cel"),
+    ]
+    by_id = [m.model_copy(update={"metric": "air_temperature"}) for m in by_alias]
+
+    table = unit_table(by_alias, protocol.allocations, "air_temperature", ROUND_OF)
+
+    assert (
+        table.values == unit_table(by_id, protocol.allocations, "air_temperature", ROUND_OF).values
+    )
+    assert table.values
+    assert table.unresolved == ()
+
+
+def test_unresolved_names_never_merge_and_are_counted():
+    protocol = make_protocol()
+    rows = [
+        measurement(0, "exp-1", "p1", 1.0, metric="height"),
+        measurement(1, "exp-1", "p2", 9.0, metric="heigth"),
+    ]
+
+    table = unit_table(rows, protocol.allocations, "height", ROUND_OF)
+
+    assert table.unresolved == (rows[0].id, rows[1].id)
+    only_first = unit_table(rows[:1], protocol.allocations, "height", ROUND_OF)
+    assert table.values == only_first.values

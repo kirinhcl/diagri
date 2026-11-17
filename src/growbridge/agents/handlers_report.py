@@ -46,6 +46,7 @@ from growbridge.research.analysis import (
 from growbridge.research.notes import Note, note
 from growbridge.research.report import publish_research_report
 from growbridge.research.stats import UnitTable, paired_block_estimate, unit_table
+from growbridge.vocab import Catalog
 from growbridge.workflow.states import RoundState, TaskState
 
 ROLE = "researcher"
@@ -133,8 +134,8 @@ def _freeze_inputs(deps: Deps, task: ResearchTask, data: PublishInput) -> Frozen
     return Frozen(tuple(snaps), round_of, tuple(rows))
 
 
-def _data_rounds(frozen: Frozen, metric: str) -> set[int]:
-    return {frozen.round_of[m.experiment_id] for m in frozen.rows if m.metric == metric}
+def _data_rounds(frozen: Frozen, metric: str, catalog: Catalog) -> set[int]:
+    return {frozen.round_of[m.experiment_id] for m in frozen.rows if catalog.same(m.metric, metric)}
 
 
 def _unit_count(protocol: ResearchProtocol, treatment: str, rounds: set[int]) -> int:
@@ -149,7 +150,11 @@ def _confounded(protocol: ResearchProtocol, rounds: set[int]) -> bool:
 
 
 def _missing_fraction(
-    protocol: ResearchProtocol, frozen: Frozen, metric: str, started: frozenset[int]
+    protocol: ResearchProtocol,
+    frozen: Frozen,
+    metric: str,
+    started: frozenset[int],
+    catalog: Catalog,
 ) -> float:
     """The share of planned units without an endpoint value, among the rounds that ran.
 
@@ -160,7 +165,7 @@ def _missing_fraction(
     """
     positions: dict[int, set[str]] = {}
     for m in frozen.rows:
-        if m.metric == metric:
+        if catalog.same(m.metric, metric):
             positions.setdefault(frozen.round_of[m.experiment_id], set()).add(m.position)
     ran = set(frozen.round_of.values()) | started
     planned = {(a.round, a.unit) for a in protocol.allocations if a.round in ran}
@@ -344,14 +349,17 @@ def _facts(
     manual: ManualCheck,
 ) -> AnalysisFacts:
     metric = protocol.analysis.primary_endpoint
-    rounds = _data_rounds(frozen, metric)
+    rounds = _data_rounds(frozen, metric, deps.workflow.catalog)
     control = protocol.control_treatment_id
     replicates = min(
         _unit_count(protocol, control, rounds), _unit_count(protocol, data.treatment_id, rounds)
     )
     worst_coverage = min(s.coverage for s in frozen.snaps)
     started = deps.workflow.store.started_round_numbers(protocol.project_id, protocol.id)
-    missing = max(_missing_fraction(protocol, frozen, metric, started), 1 - worst_coverage)
+    missing = max(
+        _missing_fraction(protocol, frozen, metric, started, deps.workflow.catalog),
+        1 - worst_coverage,
+    )
     flags = data.flags
     return AnalysisFacts(
         independent_replicates=replicates,
@@ -401,12 +409,18 @@ def _require_registered_runs(deps: Deps, protocol: ResearchProtocol, frozen: Fro
             )
 
 
-def _table(protocol: ResearchProtocol, data: PublishInput, frozen: Frozen) -> UnitTable:
+def _table(deps: Deps, protocol: ResearchProtocol, data: PublishInput, frozen: Frozen) -> UnitTable:
     if data.treatment_id not in {t.id for t in protocol.treatments}:
         raise Denied("param", f"unknown treatment {data.treatment_id}")
     metric = protocol.analysis.primary_endpoint
     try:
-        return unit_table(frozen.rows, protocol.allocations, metric, frozen.round_of)
+        return unit_table(
+            frozen.rows,
+            protocol.allocations,
+            metric,
+            frozen.round_of,
+            catalog=deps.workflow.catalog,
+        )
     except ValueError as exc:
         raise Denied("param", str(exc)) from None
 
@@ -466,7 +480,7 @@ def publish(deps: Deps, data: PublishInput) -> dict:
     frozen = _freeze_inputs(deps, task, data)
     protocol = _data_protocol(deps, task, data, frozen)
     _require_registered_runs(deps, protocol, frozen)
-    table = _table(protocol, data, frozen)
+    table = _table(deps, protocol, data, frozen)
     check = _treatment_check(deps, protocol, frozen)
     manual = _manual_check(deps, frozen)
     facts = _facts(deps, protocol, data, frozen, table, check, manual)
@@ -478,6 +492,8 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         decision = _capped(decision, UNCHECKED_NOTE)
     estimate = paired_block_estimate(table.values, protocol.control_treatment_id, data.treatment_id)
     notes = [note("unallocated_measurements", count=len(table.dropped))] if table.dropped else []
+    if table.unresolved:
+        notes.append(note("unresolved_metrics", count=len(table.unresolved)))
     notes += check.notes() + manual.notes()
     weakest = min(frozen.snaps, key=lambda s: (s.complete, s.coverage))
     artifact, state = publish_research_report(
