@@ -210,7 +210,8 @@ test("the stage waiting for review renders from the -pending fixtures", async ()
   const { element, ctx } = await renderPage("stage", { stageId: FIXTURES["stage-pending.json"].stage_id });
   assert.ok(visibleText(element).length > 20);
   const files = ctx.api.calls.map((call) => call.fixture);
-  assert.ok(files.length > 0 && files.every((file) => /-pending\.json$/.test(String(file))), files.join(", "));
+  // the device's level ranges (for the run-sheet form) are not stage-specific
+  assert.ok(files.length > 0 && files.every((file) => /-pending\.json$|^capabilities\.json$/.test(String(file))), files.join(", "));
 });
 
 test("no exemption is left for the second batch", () => {

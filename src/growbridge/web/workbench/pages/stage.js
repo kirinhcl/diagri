@@ -11,6 +11,7 @@ import { errorDetail, errorLines } from "../ui/forms.js";
 import { deviceName, displayName, nameDetails } from "../ui/names.js";
 import { errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
 import { statePill, statePillKeeper } from "../ui/status.js";
+import { loadCapabilities } from "../capabilities.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
 import { measurementForm, measurementsView } from "./stage-measurements.js";
@@ -296,7 +297,7 @@ export async function render(shellCtx, params) {
     }
   });
   page.head = headView(ctx, first.stage, refresh);
-  page.env = { ctx, log: page.log, onChanged: refresh };
+  page.env = { ctx, log: page.log, onChanged: refresh, capabilities: await loadCapabilities(ctx) };
   const onRecorded = async (message) => {
     ctx.notify(message, "ok");
     await refresh();

@@ -97,6 +97,28 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
   return { name, element, values, rows: rowValues, setRows, placeErrors, draft, restore };
 }
 
+// A titled group of plain fields that joins simpleForm as a part: values() is {name: {...}} when `nest`, else the bare object.
+export function fieldsPart({ ctx, name, label, fields, nest = false }) {
+  const zone = (ctx.me && ctx.me.timezone) || "UTC";
+  const entries = fields.map((field) => fieldRow(field, initialText(field, zone, ctx.lang), zone));
+  const element = h("fieldset", { class: "field-group" }, h("legend", { text: label }), entries.map((entry) => entry.row));
+  const names = new Set(fields.map((field) => field.name));
+  const values = () => {
+    const found = convert(entries, zone, ctx.t);
+    return found && (nest ? { [name]: found } : found);
+  };
+  const placeErrors = (problems) => {
+    const mine = problems.filter((problem) => problem.loc.some((part) => names.has(part)));
+    placeFieldErrors(entries, mine, ctx);
+    return problems.filter((problem) => !mine.includes(problem));
+  };
+  const draft = () => Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
+  const restore = (saved) => {
+    for (const entry of entries) if (Object.hasOwn(saved, entry.field.name)) entry.input.value = saved[entry.field.name];
+  };
+  return { name, element, values, placeErrors, draft, restore, entries };
+}
+
 // The existing JSON editor, tucked under a closed fold (open only when it brings back a draft).
 export function advancedJson({ ctx, label, value, onSubmit, draftKey, submitLabel }) {
   const open = Boolean(draftKey) && hasDraft(draftKey);

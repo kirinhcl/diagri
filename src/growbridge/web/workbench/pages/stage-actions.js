@@ -7,11 +7,13 @@ import { answerLost, pollReceipt, RECEIPT_LIMIT_MS } from "../receipts.js";
 import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage-rules.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
-import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
+import { advancedJson } from "../ui/field-forms.js";
+import { errorLines, simpleForm } from "../ui/forms.js";
 import { messageParts, messageView } from "../messages.js";
 import { displayName } from "../ui/names.js";
 import { formatDuration, levelText, shortDigest } from "../format.js";
 import { differenceText } from "./stage-diff.js";
+import { runSheetForm } from "./run-sheet-form.js";
 import { errorBox, errorFold, note, replaceParts, showErrors, techDetails, timeText } from "../ui/section.js";
 
 // A manual write may only switch the pump off; irrigation is what switches it on.
@@ -223,10 +225,11 @@ function draftGroup(env) {
     if (list.some((finding) => finding.blocking)) throw new ApiError(0, "not_approved", ctx.t("stage.draft.refused"));
     await accepted(env, submitLabel);
   };
+  const key = `run-sheet:${stage.stage_id}`;
+  const form = !review.run_sheet ? null : runSheetForm(ctx, { review, roundId: env.roundId, capabilities: env.capabilities || null, onSubmit, draftKey: `${key}-form`, submitLabel });
   const value = { round_id: env.roundId, run_sheet: review.run_sheet };
-  const label = ctx.t("stage.draft.json");
-  const editor = jsonEditor({ label, value, submitLabel, onSubmit, draftKey: `run-sheet:${stage.stage_id}`, ctx });
-  return group("draft", title, note(ctx.t("stage.draft.note")), editor, findings);
+  const advanced = advancedJson({ ctx, label: ctx.t("stage.draft.json"), value, onSubmit, draftKey: key, submitLabel });
+  return group("draft", title, note(ctx.t("stage.draft.note")), form, findings, advanced);
 }
 
 // --- running and paused ---------------------------------------------------------------------------

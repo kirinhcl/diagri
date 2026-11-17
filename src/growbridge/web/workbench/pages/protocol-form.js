@@ -4,8 +4,8 @@
 import { ApiError } from "../api.js";
 import codes from "../i18n/codes.en.js";
 import { h } from "../ui/dom.js";
-import { linesField, rowGroup } from "../ui/field-forms.js";
-import { convert, fieldRow, initialText, placeFieldErrors, simpleForm } from "../ui/forms.js";
+import { fieldsPart, linesField, rowGroup } from "../ui/field-forms.js";
+import { simpleForm } from "../ui/forms.js";
 
 const DEFAULT_MISSING = 0.2;
 const DEFAULT_DEVIATION = 0.1;
@@ -59,28 +59,6 @@ function setOptions(select, ids, t, wanted) {
 }
 
 // --- a few fields as one part (the form's own parts are the rows and these) ----------------------
-
-// A titled group of plain fields that joins simpleForm as a part: values() is {name: {...}} when `nest`, else the bare object.
-function fieldsPart({ ctx, name, label, fields, nest = false }) {
-  const zone = (ctx.me && ctx.me.timezone) || "UTC";
-  const entries = fields.map((field) => fieldRow(field, initialText(field, zone, ctx.lang), zone));
-  const element = h("fieldset", { class: "field-group" }, h("legend", { text: label }), entries.map((entry) => entry.row));
-  const names = new Set(fields.map((field) => field.name));
-  const values = () => {
-    const found = convert(entries, zone, ctx.t);
-    return found && (nest ? { [name]: found } : found);
-  };
-  const placeErrors = (problems) => {
-    const mine = problems.filter((problem) => problem.loc.some((part) => names.has(part)));
-    placeFieldErrors(entries, mine, ctx);
-    return problems.filter((problem) => !mine.includes(problem));
-  };
-  const draft = () => Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
-  const restore = (saved) => {
-    for (const entry of entries) if (Object.hasOwn(saved, entry.field.name)) entry.input.value = saved[entry.field.name];
-  };
-  return { name, element, values, placeErrors, draft, restore, entries };
-}
 
 // --- the sections ------------------------------------------------------------------------------
 
