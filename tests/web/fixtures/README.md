@@ -68,8 +68,8 @@ against the server's enums and literals.
 | round-pending.json, stage-pending.json, run-sheet-pending.json, readings-pending.json, measurements-pending.json, history-pending.json, manual-tasks-pending.json | the same reads for `stage-dev`, the dev seed's stage waiting for review |
 | environment.json | `/environment?window=3600&points=360` |
 | capabilities.json | `/capabilities` (synthetic, see below) |
-| safety.json | `/safety` |
-| safety-none.json | `/safety` when no limits are approved yet (`{"safety": null}`, synthetic; give it as `fixtures: {"safety.json": ...}`) |
+| safety.json | `/safety` (`highest_version` added by hand, see below) |
+| safety-none.json | `/safety` when no limits are approved yet (`{"safety": null, "highest_version": null}`, synthetic; give it as `fixtures: {"safety.json": ...}`) |
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
 | compute.json | `/compute` (synthetic) |
@@ -112,3 +112,11 @@ by hand to the shape of `src/growbridge/workbench/api.py`. Both experiments' pro
 primary endpoint `canopy_area_growth` (the dev seed's `protocol-1` is `make_protocol`, which declares
 it), so each file lists that one variable with the packaged catalog's labels, unit `cm2/d` and
 method. The measurements captured before the catalog keep their recorded unit `cm2/day`.
+
+## safety.json and safety-none.json (server input checks after batch 3)
+
+`/safety` gained `highest_version`, the highest safety version ever approved on the device, in force
+or not (`null` before the first approval); a new approval must go above it. Added by hand, not
+captured: safety.json's set is version 1 and the only one approved, so its `highest_version` is `1`;
+safety-none.json has nothing approved, so `null`. A recovery leaves `safety` null while
+`highest_version` keeps its number; safety-form.test.mjs gives that case inline.

@@ -41,6 +41,7 @@ class FakeControl:
         self.conflicts: tuple[str, ...] = ()
         self.is_connected = True
         self.safety_config: SafetyConfig | None = make_safety(approved_by="op-1", approved_at=1.0)
+        self.highest_version: int | None = self.safety_config.version  # settable, like the rest
         self.levels: dict[Channel, int] = {}
         self.rights: dict[int, WriteRight] = {}
         self.revoked: set[int] = set()
@@ -181,8 +182,13 @@ class FakeControl:
     def safety(self) -> SafetyConfig | None:
         return self.safety_config
 
+    def highest_safety_version(self) -> int | None:
+        return self.highest_version
+
     def approve_safety(self, config: SafetyConfig, operator: str) -> int:
+        """Stores whatever it is given: the version rule is ``ControlService``'s."""
         self.safety_config = config.model_copy(update={"approved_by": operator})
+        self.highest_version = max(self.highest_version or 0, config.version)
         return self.grant(RightKind.PROTECTION, RightScope(device_id=DEVICE), operator)
 
     def safety_conflicts(self, run_sheet: RunSheet) -> tuple[str, ...]:

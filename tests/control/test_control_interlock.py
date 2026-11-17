@@ -205,7 +205,7 @@ async def test_control_safety_needs_reapproval_after_recovery_bump(rig):
     rig.service.bump_recovery("restore")
     assert rig.service.safety() is None
     assert rig.service.protection_right() is None
-    number = rig.service.approve_safety(make_safety(), "alice")
+    number = rig.service.approve_safety(make_safety(version=2), "alice")  # versions only go up
     record = await rig.service.submit(rig.request(number, Channel.LIGHT, 0))
     assert record.state is ActionState.CONFIRMED
 

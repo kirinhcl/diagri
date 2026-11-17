@@ -307,6 +307,34 @@ def test_safety_config_with_a_number_that_is_not_finite_is_422_and_nothing_chang
     assert bench.control.safety_config.version == 1  # the approved configuration is unchanged
 
 
+def test_safety_config_with_a_repeated_rule_id_is_422_beside_the_repeat(bench, operator):
+    body = safety_body()
+    rule = body["config"]["rules"][0]
+    body["config"]["rules"] = [rule, {**rule, "action": {"channel": "fan", "level": 0}}]
+
+    response = bench.post(operator, "/wb/safety/approve", body)
+
+    assert response.status_code == 422
+    [problem] = response.json()["detail"]
+    assert problem["type"] == "duplicate"
+    assert problem["loc"] == ["body", "config", "rules", 1, "id"]
+    assert bench.control.safety_config.version == 1
+
+
+@pytest.mark.parametrize("field", ["validity_seconds", "duration_seconds"])
+def test_safety_config_with_a_negative_rule_time_is_422_beside_it(bench, operator, field):
+    body = safety_body()
+    body["config"]["rules"][0][field] = -1
+
+    response = bench.post(operator, "/wb/safety/approve", body)
+
+    assert response.status_code == 422
+    [problem] = response.json()["detail"]
+    assert (problem["type"], problem["ctx"]) == ("greater_than_equal", {"ge": 0})
+    assert problem["loc"] == ["body", "config", "rules", 0, field]
+    assert bench.control.safety_config.version == 1
+
+
 # --- alerts ------------------------------------------------------------------------------------
 
 

@@ -174,6 +174,8 @@ export default {
   "msg.denial.safety_needs_approver.action": "Sign in as an operator and approve it again.",
   "msg.denial.safety_unknown_sensors": "The safety configuration names sensors this device does not have: {sensors}.",
   "msg.denial.safety_unknown_sensors.action": "Remove those sensors from the frozen-value thresholds, then approve again.",
+  "msg.denial.safety_version_not_above": "Version {version} of the safety limits is not above version {current_version}, the highest approved so far.",
+  "msg.denial.safety_version_not_above.action": "Approve again with a version above {current_version}; the form numbers it for you.",
   "msg.denial.not_signed_in": "You are not signed in.",
   "msg.denial.not_signed_in.action": "Sign in with your operator name and password, then try again.",
   "msg.denial.session_expired": "Your session has ended.",
@@ -451,6 +453,7 @@ export default {
   "msg.validation.too_short": "Must have at least {min_length} items.",
   "msg.validation.too_long": "Must have at most {max_length} items.",
   "msg.validation.value_error": "This value is not accepted; the technical details give the reason.",
+  "msg.validation.duplicate": "An earlier entry already uses this; each one must be different.",
   "msg.validation.json_invalid": "The text is not valid JSON.",
   "msg.validation.other": "This entry could not be accepted.",
 };

@@ -287,3 +287,22 @@ async def test_operator_steers_a_stopped_round_through_http_routes_only(world, s
     assert stage["state"] == "stopped" and stage["right_number"] is None
     refused = await client.post(f"/wb/rounds/{round_id}/abort", json={}, headers=PAGE)
     assert refused.status_code == 409 and refused.json()["detail"]["code"] == "state"
+
+
+async def test_a_safety_version_is_approved_once_and_the_read_names_the_highest(site):
+    """The control service behind the app: approving a version again is a state refusal, and
+    after a recovery (nothing in force) the read still names the version to go above."""
+    runtime, client = site
+    await post(client, "/wb/login", {"name": OPERATOR, "secret": SECRET})
+    config = make_safety(version=2).model_dump(mode="json")
+    await post(client, "/wb/safety/approve", {"config": config})
+
+    again = await client.post("/wb/safety/approve", json={"config": config}, headers=PAGE)
+
+    assert again.status_code == 409
+    detail = again.json()["detail"]
+    assert (detail["code"], detail["reason"]) == ("state", "safety_version_not_above")
+    assert detail["params"] == {"version": 2, "current_version": 2}
+    await runtime.bump_recovery("restore")
+    await post(client, "/wb/login", {"name": OPERATOR, "secret": SECRET})  # a recovery signs out
+    assert await get(client, "/wb/safety") == {"safety": None, "highest_version": 2}

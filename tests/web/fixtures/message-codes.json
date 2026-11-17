@@ -1328,6 +1328,14 @@
       "action": true,
       "of": "approval_invalid"
     },
+    "safety_version_not_above": {
+      "params": [
+        "version",
+        "current_version"
+      ],
+      "action": true,
+      "of": "state"
+    },
     "not_signed_in": {
       "params": [],
       "action": true,

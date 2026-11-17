@@ -253,7 +253,7 @@ async def test_recovery_bump_voids_approvals_and_sessions_until_safety_is_reappr
 
     await world.beat(runtime, 1)  # the safety config of the old number is not valid
     assert flow.stage(STAGE).state is StageState.RECOVERY_CHECK
-    runtime.control.approve_safety(make_safety(), OPERATOR)
+    runtime.control.approve_safety(make_safety(version=2), OPERATOR)  # versions only go up
     await world.beat(runtime, 1)
     assert flow.stage(STAGE).state is StageState.PENDING_REVIEW
 

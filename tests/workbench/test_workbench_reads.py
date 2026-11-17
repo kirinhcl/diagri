@@ -257,9 +257,21 @@ def test_an_unknown_stage_is_a_state_refusal(operator):
 
 def test_safety_is_null_until_approved(bench, operator):
     bench.control.safety_config = None  # the recording control starts out approved
-    assert operator.get("/wb/safety").json() == {"safety": None}
-    bench.control.approve_safety(make_safety(), "alice")
+    assert operator.get("/wb/safety").json()["safety"] is None
+    bench.control.approve_safety(make_safety(version=2), "alice")
     assert operator.get("/wb/safety").json()["safety"] is not None
+
+
+def test_safety_names_the_highest_version_approved_also_when_none_is_in_force(bench, operator):
+    """After a recovery nothing is in force, yet a new approval must still go above every
+    version approved before: the console numbers its next set from this."""
+    bench.control.safety_config = None
+    bench.control.highest_version = 4
+
+    assert operator.get("/wb/safety").json() == {"safety": None, "highest_version": 4}
+
+    bench.control.approve_safety(make_safety(version=5), "alice")
+    assert operator.get("/wb/safety").json()["highest_version"] == 5
 
 
 def test_me_reports_the_timezone(operator):

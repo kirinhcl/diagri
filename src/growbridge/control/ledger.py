@@ -10,6 +10,7 @@ from typing import Any
 
 from growbridge.archive.db import Database
 from growbridge.archive.models import (
+    STORED,
     ActionRecord,
     ActionState,
     Channel,
@@ -194,7 +195,18 @@ class Ledger:
         )
         if row is None:
             return None
-        return SafetyConfig.model_validate_json(row["config"]), int(row["recovery_number"])
+        config = SafetyConfig.model_validate_json(row["config"], context=STORED)
+        return config, int(row["recovery_number"])
+
+    def highest_safety_version(self) -> int | None:
+        """The highest version ever approved on this device, in force or not (None before the
+        first). Older versions of GrowBridge let the number go down, so this is not always the
+        latest row's."""
+        row = self.db.one(
+            "SELECT MAX(CAST(json_extract(config, '$.version') AS INTEGER)) AS version"
+            " FROM control_safety"
+        )
+        return None if row is None or row["version"] is None else int(row["version"])
 
 
 def _right(row: Any) -> WriteRight:

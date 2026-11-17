@@ -437,6 +437,29 @@ test("the fold leaves no draft unless the operator typed in it", async () => {
   }
 });
 
+// After a recovery nothing is in force, yet the server refuses any version it approved before.
+const AFTER_RECOVERY = { fixtures: { "safety.json": { safety: null, highest_version: 4 } } };
+
+test("with nothing in force the form numbers the new set above the highest version approved before", async () => {
+  const { element, ctx } = await open(AFTER_RECOVERY);
+  assert.match(visibleText(element), /Version 5/);
+  const form = formOf(element);
+  change(named(form, "max_gap_seconds")[0], "30");
+  await approveNow(form);
+  assert.equal(post(ctx).body.config.version, 5);
+});
+
+test("the fold refuses a version not above the highest approved, also when nothing is in force", async () => {
+  const { element, ctx } = await open(AFTER_RECOVERY);
+  const area = byTag(foldOf(element), "textarea")[0];
+  area.value = JSON.stringify({ ...JSON.parse(area.value), version: 4 });
+  await submit(foldForm(element));
+  assert.equal(openDialogs().length, 0, "refused before the dialog");
+  assert.equal(post(ctx), undefined);
+  const status = byClass(foldOf(element), "form-status")[0];
+  assert.ok(status.textContent.includes(ctx.t("safety.form.versionTooLow", { current: "4", next: "5" })), status.textContent);
+});
+
 test("a set that changed between the two reads is never overwritten, and the refusal is shown", async () => {
   const { element, ctx } = await open();
   const read = ctx.api.get;

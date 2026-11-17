@@ -146,6 +146,30 @@ async def test_a_run_sheet_number_that_is_not_finite_is_an_error_and_nothing_is_
     assert env.workflow.store.find_stage("stage-1") is None
 
 
+def _repeat_a_timed_action(sheet: dict) -> None:
+    sheet["timed_actions"] = [*sheet["timed_actions"], sheet["timed_actions"][0]]
+
+
+def _fan_retained_out_of_range(sheet: dict) -> None:
+    fan = next(plan for plan in sheet["channels"] if plan["channel"] == "fan")
+    fan["retained_level"] = 40  # the fan stops at 10
+
+
+@pytest.mark.parametrize("spoil", [_repeat_a_timed_action, _fan_retained_out_of_range])
+@pytest.mark.parametrize("tool", ["save_plan_draft", "validate_run_sheet"])
+async def test_a_run_sheet_the_console_form_would_refuse_is_an_error_and_nothing_is_saved(
+    env, tool, spoil
+):
+    sheet = env.sheet_json()
+    spoil(sheet)
+    fields = {"round_id": env.round_id} if tool == "save_plan_draft" else {}
+
+    outcome = await env.invoke("planner", tool, run_sheet=sheet, **fields)
+
+    assert outcome.is_error and "invalid input" in outcome.content
+    assert env.workflow.store.find_stage("stage-1") is None
+
+
 async def test_unknown_round_is_an_error_result_not_an_exception(env):
     outcome = await env.invoke(
         "planner", "save_plan_draft", round_id="round-missing", run_sheet=env.sheet_json()

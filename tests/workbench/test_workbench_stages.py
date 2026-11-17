@@ -292,6 +292,55 @@ def test_draft_with_a_number_that_is_not_finite_is_rejected(bench, operator, cal
     assert bench.workflow.store.find_stage("stage-1") is None
 
 
+REPEATED_ROWS = {  # list -> (its rows, the field that names a row)
+    "timed_actions": ([{"id": "on", "channel": "light", "at": "06:00", "level": 60}], "id"),
+    "manual_tasks": ([{"id": "photo", "kind": "photo", "at": "09:00"}], "id"),
+    "end_actions": ([{"channel": "light", "level": 0}], "channel"),
+}
+
+
+@pytest.mark.parametrize("name", sorted(REPEATED_ROWS))
+@pytest.mark.parametrize("caller", ["model", "operator"])
+def test_a_draft_that_repeats_a_row_is_422_beside_the_repeat_and_nothing_is_stored(
+    bench, operator, caller, name
+):
+    round_id = bench.seed_round()
+    rows, key = REPEATED_ROWS[name]
+    sheet = {**bench.sheet().model_dump(mode="json"), name: [*rows, rows[0]]}
+    client, headers = (bench.lan, bench.model()) if caller == "model" else (operator, {})
+    body = {"round_id": round_id, "run_sheet": sheet}
+
+    response = bench.post(client, "/wb/drafts/run-sheet", body, headers=headers)
+
+    assert response.status_code == 422
+    [problem] = response.json()["detail"]
+    assert problem["type"] == "duplicate"
+    assert problem["loc"] == ["body", "run_sheet", name, len(rows), key]
+    assert bench.workflow.store.find_stage("stage-1") is None
+
+
+@pytest.mark.parametrize(
+    ("level", "kind", "bound"),
+    [(11, "less_than_equal", {"le": 10}), (-1, "greater_than_equal", {"ge": 0})],
+)
+def test_a_draft_with_a_retained_level_outside_its_channel_is_422_beside_it(
+    bench, operator, level, kind, bound
+):
+    round_id = bench.seed_round()
+    sheet = bench.sheet().model_dump(mode="json")
+    index = next(i for i, plan in enumerate(sheet["channels"]) if plan["channel"] == "fan")
+    sheet["channels"][index]["retained_level"] = level  # the fan runs 0..10
+    body = {"round_id": round_id, "run_sheet": sheet}
+
+    response = bench.post(operator, "/wb/drafts/run-sheet", body)
+
+    assert response.status_code == 422
+    [problem] = response.json()["detail"]
+    assert (problem["type"], problem["ctx"]) == (kind, bound)
+    assert problem["loc"] == ["body", "run_sheet", "channels", index, "retained_level"]
+    assert bench.workflow.store.find_stage("stage-1") is None
+
+
 def test_draft_for_an_unknown_round_is_a_state_conflict(bench):
     bench.seed_round()
     body = {"round_id": "round_missing", "run_sheet": bench.sheet().model_dump(mode="json")}

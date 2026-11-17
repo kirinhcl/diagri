@@ -6,13 +6,23 @@ version. Only structural rules live here; whether a run sheet is safe to run is 
 """
 
 import math
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
+from pydantic_core import InitErrorDetails, PydanticCustomError, ValidationError
 
 from growbridge.archive.ids import content_digest
 from growbridge.workflow.states import TaskState
@@ -54,6 +64,54 @@ def require_finite(model: BaseModel, what: str) -> None:
     spoiled = non_finite_paths(model.model_dump())
     if spoiled:
         raise ValueError(f"{what} numbers must be finite; not at {', '.join(spoiled)}")
+
+
+# The validation context of a record read back from storage. Checks added after records were
+# first stored apply only to input: a stored record is never rewritten, so it must keep loading
+# even when it breaks one of them. Pass it at every read of a stored safety configuration or
+# run sheet: ``model_validate_json(body, context=STORED)``.
+STORED: Mapping[str, bool] = MappingProxyType({"stored": True})
+
+
+def is_input(info: ValidationInfo) -> bool:
+    """False while a stored record is read back (``context=STORED``); True for everything else."""
+    context = info.context
+    return not (isinstance(context, Mapping) and context.get("stored") is True)
+
+
+def refuse_repeats(rows: Iterable[BaseModel], key: str, title: str) -> None:
+    """A row whose ``key`` an earlier row already has is refused at that row's ``key``, so the
+    console puts the problem beside the repeated field. A ``ValidationError`` raised inside a
+    field validator joins the outer error with the field's location in front of its own."""
+    seen: set[Any] = set()
+    repeats: list[InitErrorDetails] = []
+    for index, row in enumerate(rows):
+        value = getattr(row, key)
+        if value in seen:
+            text = str(value.value if isinstance(value, StrEnum) else value)
+            error = PydanticCustomError(
+                "duplicate", "{value} is already used by an earlier row", {"value": text}
+            )
+            repeats.append(InitErrorDetails(type=error, loc=(index, key), input=text))
+        seen.add(value)
+    if repeats:
+        raise ValidationError.from_exception_data(title, repeats)
+
+
+def refuse_below(value: float, low: float) -> None:
+    """The error ``Field(ge=low)`` gives, for a bound only input is held to."""
+    if value < low:
+        raise PydanticCustomError(
+            "greater_than_equal", "Input should be greater than or equal to {ge}", {"ge": low}
+        )
+
+
+def refuse_above(value: float, high: float) -> None:
+    """The error ``Field(le=high)`` gives, for a bound only input is held to."""
+    if value > high:
+        raise PydanticCustomError(
+            "less_than_equal", "Input should be less than or equal to {le}", {"le": high}
+        )
 
 
 class Channel(StrEnum):
@@ -192,6 +250,13 @@ class ProtectionRule(Model):
     duration_seconds: float
     action: RuleAction
 
+    @field_validator("validity_seconds", "duration_seconds")
+    @classmethod
+    def _not_negative(cls, value: float, info: ValidationInfo) -> float:
+        if is_input(info):  # input only: a stored configuration still loads
+            refuse_below(value, 0)
+        return value
+
 
 MAX_FROZEN_MINUTES = 1440.0
 MAX_FROZEN_GAP_SECONDS = 3600.0
@@ -237,6 +302,15 @@ class SafetyConfig(Model):
     approved_by: str | None = None
     approved_at: float | None = None
 
+    @field_validator("rules")
+    @classmethod
+    def _unique_ids(
+        cls, rules: tuple[ProtectionRule, ...], info: ValidationInfo
+    ) -> tuple[ProtectionRule, ...]:
+        if is_input(info):  # the executor keeps one state per rule id
+            refuse_repeats(rules, "id", "SafetyConfig")
+        return rules
+
     @model_validator(mode="after")
     def _finite(self) -> "SafetyConfig":
         require_finite(self, "Safety configuration")
@@ -249,6 +323,16 @@ class ChannelPlan(Model):
     retained_level: int | None = None  # state the channel may keep while paused or offline
     max_tolerance_seconds: float | None = None
     onsite_handling: str = ""
+
+    @field_validator("retained_level")
+    @classmethod
+    def _in_range(cls, level: int | None, info: ValidationInfo) -> int | None:
+        channel = info.data.get("channel")  # absent when the channel itself was refused
+        if level is not None and channel is not None and is_input(info):
+            low, high = LEVEL_RANGES[channel]
+            refuse_below(level, low)
+            refuse_above(level, high)
+        return level
 
 
 MAX_PLANNED_IRRIGATION_SECONDS = 60.0  # the upper bound of max_pump_seconds in the settings
@@ -347,6 +431,16 @@ class RunSheet(Model):
     care_rules: tuple[CareRule, ...] = ()
     manual_tasks: tuple[ManualTask, ...] = ()
     end_actions: tuple[RuleAction, ...] = ()
+
+    @field_validator("timed_actions", "manual_tasks", "end_actions")
+    @classmethod
+    def _unique_rows(cls, rows: tuple[Model, ...], info: ValidationInfo) -> tuple[Model, ...]:
+        """A row's id names it in the action records and task records; an end action has no id,
+        and its channel names it (``end:<channel>``)."""
+        if is_input(info):
+            key = "channel" if info.field_name == "end_actions" else "id"
+            refuse_repeats(rows, key, "RunSheet")
+        return rows
 
     @model_validator(mode="after")
     def _structure(self) -> "RunSheet":

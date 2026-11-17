@@ -15,6 +15,7 @@ from typing import Any, Literal
 
 from growbridge.archive.db import Database
 from growbridge.archive.models import (
+    STORED,
     Approval,
     Channel,
     Model,
@@ -291,7 +292,7 @@ class WorkflowStore:
                 reason="record_not_found",
                 params={"record_kind": "run_sheet", "record_id": sheet_id},
             )
-        return RunSheet.model_validate_json(row["body"])
+        return RunSheet.model_validate_json(row["body"], context=STORED)
 
     def run_sheet_digest(self, sheet_id: str, version: int) -> str | None:
         row = self.db.one(

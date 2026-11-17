@@ -201,6 +201,10 @@ class ControlService:
             return None
         return stored[0]
 
+    def highest_safety_version(self) -> int | None:
+        """The bar a new approval's version must clear, also when nothing is in force."""
+        return self.ledger.highest_safety_version()
+
     def protection_right(self) -> int | None:
         if self.safety() is None:
             return None
@@ -218,7 +222,10 @@ class ControlService:
         self._require_host()
         now = self.clock.now()
         approved = config.model_copy(update={"approved_by": operator, "approved_at": now})
-        with self.db.transaction():
+        with self.db.transaction():  # the check and the insert are one step
+            highest = self.ledger.highest_safety_version() or 0
+            if config.version <= highest:  # each approved set keeps its own number
+                raise refusals.safety_version_not_above(config.version, highest)
             recovery = self.ledger.recovery()
             self.ledger.save_safety(approved, recovery, operator, now)
             number = self._issue_protection(approved, recovery, now)
