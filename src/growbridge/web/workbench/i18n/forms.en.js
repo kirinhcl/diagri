@@ -37,4 +37,5 @@ export default {
   "safety.form.useJson": "The device's sensors could not be read and no limits are approved yet. Use the Advanced (JSON) fold below.",
   "safety.form.noneLead": "Nothing is approved yet, so every field starts empty. Fill in each required value; the allowed range is beside it.",
   "safety.form.duplicateId": "Another rule already has this name.",
+  "safety.form.versionTooLow": "The version must be above the approved {current}; change it to {next} and submit again.",
 };

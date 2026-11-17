@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
-import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
+import { clearDrafts, hasDraft, saveDraft } from "../../src/growbridge/web/workbench/drafts.js";
 import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { findLeaks, visibleText } from "./support/leaks.mjs";
 import { saveAllDrafts } from "../../src/growbridge/web/workbench/ui/forms.js";
@@ -356,30 +356,85 @@ test("a raw dialog line names the rule that changed, not the first one", async (
   await settle();
 });
 
-test("a second approval through the fold sends the next version, and typed edits in the fold are kept", async () => {
-  const { element, ctx } = await open();
+// A page whose approved set follows every approval, as the server's would.
+async function pageWithState(options = {}) {
+  const page = await open(options);
+  const { ctx } = page;
   let approved = FIXTURES["safety.json"].safety;
   const read = ctx.api.get;
   const write = ctx.api.post;
   ctx.api.get = async (path) => (path === "/safety" ? { safety: structuredClone(approved) } : read(path));
-  ctx.api.post = async (path, body, options) => {
+  ctx.api.post = async (path, body, options2) => {
     approved = { ...body.config, approved_by: "dev", approved_at: 1794800000 };
-    return write(path, body, options);
+    return write(path, body, options2);
   };
-  change(named(formOf(element), "temp")[0], "100");
-  await approveNow(formOf(element));
+  return page;
+}
+const posted = (ctx) => ctx.api.calls.filter((call) => call.method === "POST").map((call) => call.body.config.version);
+const foldForm = (element) => byTag(foldOf(element), "form")[0];
+
+test("two edited approvals in a row through the fold: the second must raise the version", async () => {
+  const { element, ctx } = await pageWithState();
   const area = byTag(foldOf(element), "textarea")[0];
-  assert.equal(JSON.parse(area.value).version, 3, "the fold now starts from the approved set");
-  await submit(byTag(foldOf(element), "form")[0]);
+  assert.equal(JSON.parse(area.value).version, 2, "the fold starts from the approved set with the next version");
+  await submit(foldForm(element));
   answerNextDialog(true);
   await settle();
-  const posts = ctx.api.calls.filter((call) => call.method === "POST");
-  assert.deepEqual(posts.map((call) => call.body.config.version), [2, 3]);
-  area.value = "{ typed";
-  await submit(formOf(element));
-  assert.equal(area.value, "{ typed", "unsent edits in the fold stay");
+  assert.deepEqual(posted(ctx), [2]);
+  await submit(foldForm(element)); // still carries version 2
+  assert.equal(openDialogs().length, 0, "refused before the dialog");
+  assert.deepEqual(posted(ctx), [2]);
+  const status = byClass(foldOf(element), "form-status")[0];
+  assert.ok(status.textContent.includes(ctx.t("safety.form.versionTooLow", { current: "2", next: "3" })), status.textContent);
+  area.value = JSON.stringify({ ...JSON.parse(area.value), version: 3 });
+  await submit(foldForm(element));
+  answerNextDialog(true);
+  await settle();
+  assert.deepEqual(posted(ctx), [2, 3]);
+});
+
+test("the version message is in both languages and names the version needed", async () => {
+  for (const lang of ["zh", "en"]) {
+    const { element, ctx } = await open({ lang });
+    const area = byTag(foldOf(element), "textarea")[0];
+    area.value = JSON.stringify({ ...JSON.parse(area.value), version: 1 });
+    await submit(foldForm(element));
+    assert.equal(post(ctx), undefined);
+    const status = byClass(foldOf(element), "form-status")[0].textContent;
+    assert.ok(status.includes(ctx.t("safety.form.versionTooLow", { current: "1", next: "2" })), `${lang}: ${status}`);
+    assert.match(status, /2/);
+  }
+});
+
+test("a restored fold draft survives a form approval and a cancelled fold submission", async () => {
+  const draft = JSON.stringify({ version: 9, rules: [], frozen: { minutes: {}, max_gap_seconds: 5 } });
+  saveDraft("safety", { text: draft });
+  const { element, ctx } = await pageWithState();
+  assert.ok(foldOf(element).hasAttribute("open"));
+  const area = byTag(foldOf(element), "textarea")[0];
+  assert.equal(area.value, draft);
+  await approveNow(formOf(element));
+  assert.equal(area.value, draft, "an approval through the form leaves the draft alone");
+  await submit(foldForm(element));
   answerNextDialog(false);
   await settle();
+  assert.equal(area.value, draft);
+  assert.deepEqual(posted(ctx), [2]);
+});
+
+test("the fold leaves no draft unless the operator typed in it", async () => {
+  const { element } = await pageWithState();
+  document.body.append(element);
+  try {
+    await approveNow(formOf(element));
+    saveAllDrafts();
+    assert.equal(hasDraft("safety"), false);
+    byTag(foldOf(element), "textarea")[0].value = "{ typed";
+    saveAllDrafts();
+    assert.equal(hasDraft("safety"), true);
+  } finally {
+    element.remove();
+  }
 });
 
 test("a set that changed between the two reads is never overwritten, and the refusal is shown", async () => {
