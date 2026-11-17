@@ -363,7 +363,7 @@ test("the level field's range follows the chosen channel", async () => {
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   assert.deepEqual(sent, []);
-  assert.match(visibleText(form), /请输入 10 或更小的数/);
+  assert.match(visibleText(form), /请输入不大于 10 的数/);
   level.value = "2.5";
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
