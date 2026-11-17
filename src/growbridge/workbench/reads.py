@@ -328,7 +328,11 @@ def add_read_routes(
                 reason="local_greenhouse_not_held",
             )
         config = control.safety()
-        return {"safety": None if config is None else config.model_dump(mode="json")}
+        return {
+            "safety": None if config is None else config.model_dump(mode="json"),
+            # also when nothing is in force (after a recovery): a new set must go above it
+            "highest_version": control.highest_safety_version(),
+        }
 
 
 def _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock, access=None) -> None:

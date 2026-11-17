@@ -271,19 +271,19 @@ test("a 422 on a rule's duration does not land on the run length", async () => {
   assert.equal(errorsIn(section(ctx, form, "runsheet.form.duration")).length, 0);
 });
 
-test("a stored retained level out of range does not block an unchanged form; a changed one is refused", async () => {
+test("a stored retained level out of range is refused before sending, changed or not, as the server refuses it", async () => {
   const review = reviewWith((sheet) => {
     sheet.channels[2].retained_level = 40; // the fan stops at 10
   });
   const { ctx, form, sent } = open({ review });
-  await submit(form);
-  assert.equal(sent.length, 1);
-  assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(review.run_sheet));
   const channels = rowsOf(section(ctx, form, "runsheet.form.channels"));
-  change(field(channels[2], "retained_level"), "41");
+  await submit(form);
+  assert.equal(sent.length, 0);
+  assert.equal(errorsIn(channels[2]).length, 1);
+  change(field(channels[2], "retained_level"), "10");
   await submit(form);
   assert.equal(sent.length, 1);
-  assert.equal(errorsIn(channels[2]).length, 1);
+  assert.equal(sent[0].run_sheet.channels[2].retained_level, 10);
 });
 
 test("a draft kept on another run sheet is dropped with a note, never put on the new one", async () => {

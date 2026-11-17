@@ -153,6 +153,7 @@ _register(
     ("safety_needs_approver", ()),
     ("safety_unknown_sensors", ("sensors",)),
 )
+_register("state", ("safety_version_not_above", ("version", "current_version")))
 
 # --- workbench entry layer, sign-in, manual writes and measurements, manual tasks --------------
 _register(

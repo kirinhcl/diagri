@@ -89,7 +89,7 @@
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | 操作员 | 局域网、覆盖网络 | 否 | `scope`（没有这次任务）、`state`（阶段未开始，或离到期还有一小时以上）、`param`（`done_at`） |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | 操作员 | 仅局域网 | 否 | `entry`（不在局域网入口上）、`scope`（不是计划内浇水）、`state`（阶段不在 `running`、未到期、已过截止时间、已完成，或这次任务已经开过泵）、`cooldown`、写入类拒绝码 |
 | `POST` | `/wb/measurements` | 操作员 | 局域网、覆盖网络 | 否 | `scope`、`param` |
-| `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered` |
+| `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered`、`state` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
 | `GET` | `/wb/experiments/{experiment_id}/variables` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`scope` |
 | `GET` | `/wb/receipts/{request_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
@@ -133,7 +133,7 @@
 
 最后二十九个路由只给操作员用，其中的十七个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
-下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。
+下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。输入时它们还拒绝控制台表单拒绝的内容：`SafetyConfig` 里与前面某条规则重复的 `id`，以及负的 `validity_seconds` 或 `duration_seconds`（0 可以）；`RunSheet` 里在 `timed_actions` 内或 `manual_tasks` 内重复的 `id`，与前面某个结束动作同一通道的结束动作（结束动作没有 `id`，动作记录里用通道称呼它，即 `end:<channel>`），以及超出该通道范围的 `retained_level`（范围是 `archive/models.py` 里的 `LEVEL_RANGES`，也就是 `GET /wb/capabilities` 给出的范围）。每一种都是落在出错字段上的 `422` 校验错误，例如 `["body", "run_sheet", "timed_actions", 2, "id"]`，类型是 `duplicate`（`ctx.value` 是重复的值）或 `greater_than_equal` / `less_than_equal`（`ctx.ge` / `ctx.le` 是界限）；模型工具返回错误结果，什么都不保存，也不批准。这些检查之前存下的安全配置和运行单照常原样读出：存储读取时带校验上下文 `STORED`，它只免去这些输入检查。
 
 | 方法 | 路径 | 请求体 | 返回 |
 | --- | --- | --- | --- |
@@ -155,7 +155,7 @@
 | `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | `task_id`、`due_at`、可选 `note`；请求号由这次任务推导（请求体里的 `request_id` 会被忽略），所以重试只返回第一次运行，不会再开一次泵。在阶段写入权下让水泵运行该任务的 `seconds`，阶段继续运行（见[控制与安全模型](Control-and-Safety-Model.md)）；完整且得到确认的运行记为已完成，被截断或没有得到确认的运行记为 `partial`，带 `ran_seconds` 和 `ended_early`。 | `action`（`ActionRecord`，带 `ran_seconds` 和 `ended_early`）和 `task`（这次任务；运行没有到达设备时为 `null`） |
 | `POST` | `/wb/irrigation` | `stage_id`、`request_id`、`seconds`（大于 0，不超过 60，且不超过 `max_pump_seconds`）、可选 `note`（最长 200） | 对应的 `ActionRecord` |
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
-| `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值） | `protection_right` |
+| `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值）。`config.version` 必须高于这台设备以前批准过的每一个版本，不论是否仍然生效（即 `GET /wb/safety` 的 `highest_version`；第一次至少为 1），否则路由以 `state` 拒绝（409，原因 `safety_version_not_above`，参数 `version` 和 `current_version`），什么都不保存 | `protection_right` |
 | `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id`、`project_id` 和 `state_at`（角色令牌得到的运行信息和以前一样，没有 `round_id`）。操作员还得到 `project_name`、`round_number`、`stage_index` 和 `phase`，含义同轮次；找不到时各为 `null` |
 | `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警。每条在英文 `message` 之外还有 `code`（`alert` 族的消息码；有代码之前存下的告警为 `null`）和 `params`（对象，代码没有参数时为空）。 |
@@ -193,7 +193,7 @@
 | `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | 无 | `stage_id`、`stage_state`、`timezone`、`on_time_seconds`、`early_seconds`、`now`，以及 `occurrences`：运行单的人工任务在阶段时间窗内的每一次（`task_id`、`kind`、`due_at`、`make_up_allowed`、`seconds`），带 `status`（`upcoming`、`open`、`done`、`late`、`skipped`、`missed`）和起作用的那条 `record`（没有时为 `null`）；阶段开始前为空 |
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
-| `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`（含 `frozen`：每个传感器的 `minutes` 和 `max_gap_seconds`），没有批准过时为 `null` |
+| `GET` | `/wb/safety` | 无 | `safety`：已批准的 `SafetyConfig`（含 `frozen`：每个传感器的 `minutes` 和 `max_gap_seconds`），没有批准过时为 `null`；`highest_version`：这台设备批准过的最高版本，没有生效的配置时（例如恢复之后）也照样给出，第一次批准之前为 `null`。新的批准必须高于它 |
 | `GET` | `/wb/capabilities` | 无 | `level_ranges`（`light`、`exhaust`、`fan`、`pump` 各一个 `[最小, 最大]`）、`sensors`（设备上报的每个传感器名及其单位）和 `max_pump_seconds`（水泵一次最长运行时间）。取自设备能力和桥接自己的上限；控制台用它们给表单标出范围，读取失败时从不自己填值 |
 
 `GET /wb/experiments/{experiment_id}/variables` 返回该实验的测量可以使用的变量，也就是已声明的人工变量（已声明的 sensor 或 factor 变量不在其中）：`{"experiment_id": "...", "variables": [{"id", "label_en", "label_zh", "unit", "method", "min", "max", "deprecated"}]}`，按 `id` 排序。操作员和角色令牌都可以读取。没有任何阶段运行的实验以 `scope` 拒绝。`POST /wb/measurements` 在以下情况以 422 `param` 拒绝并列出每一个问题：实验没有声明变量、指标未声明（列出已声明的 ID）、变量种类不对、单位不对（给出正确单位）、数值超出 `min` 和 `max`（闭区间）。`POST /wb/protocols` 在以下情况以 422 `param` 拒绝并列出每一个问题：`variables` 为空或有重复、某个 ID 未知、是别名、或已弃用而更早的版本没有声明过、主要终点未声明或不是人工变量、处理的因子键不是目录里的因子 ID。见[变量目录](Variable-Catalog.md)。
@@ -214,7 +214,7 @@
 | 429 | 拒绝码 `locked` | 同样的结构 |
 | 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
-| 422 | 请求体没有通过校验，包括运行单里有非有限的数 | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
+| 422 | 请求体没有通过校验，包括运行单里有非有限的数，以及安全配置或运行单里有重复的 id 或超出范围的值（见上面关于模型的一段） | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
 
 ### 多用户路由
 

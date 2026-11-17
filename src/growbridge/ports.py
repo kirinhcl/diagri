@@ -331,8 +331,13 @@ class ControlPort(Protocol):
 
     def safety(self) -> SafetyConfig | None: ...
 
+    def highest_safety_version(self) -> int | None:
+        """The highest safety version ever approved, in force or not; a new one goes above it."""
+        ...
+
     def approve_safety(self, config: SafetyConfig, operator: str) -> int:
-        """Store the separately approved safety config; returns its protection right."""
+        """Store the separately approved safety config; returns its protection right. Refuses
+        a version not above ``highest_safety_version`` (``safety_version_not_above``)."""
         ...
 
     def safety_conflicts(self, run_sheet: RunSheet) -> tuple[str, ...]:

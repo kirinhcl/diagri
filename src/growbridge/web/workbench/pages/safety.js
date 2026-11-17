@@ -83,17 +83,23 @@ function versionRefusal(ctx, outcome, edited, latest) {
   return notApproved(ctx, outcome, "safety.form.versionTooLow", numbers);
 }
 
+// The version a new set must go above: the highest ever approved, which the server names also when
+// nothing is in force (after a recovery). An older server names only the set in force.
+const highestOf = (state) => Math.max(state.current?.version ?? 0, state.highest ?? 0);
+// What the version helpers read (`latest.version`): the highest, whether or not a set is in force.
+const numbered = (state) => ({ version: highestOf(state) });
+
 // The limits are read again right before the diff and again after the operator confirms; a set that
 // changed in between is never overwritten, because the write replaces the whole config.
 function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
   const label = ctx.t("safety.approve");
-  // `input` is the config, or a function making it from the approved set as just read (so a version never repeats).
+  // `input` is the config, or a function making it from the version as just read (so a version never repeats).
   return async (input, { fromJson = false } = {}) => {
     outcome.refused = false;
     await readCurrent();
     const baseline = state.current;
-    const edited = typeof input === "function" ? input(baseline) : input;
-    const tooLow = fromJson ? versionRefusal(ctx, outcome, edited, baseline) : null;
+    const edited = typeof input === "function" ? input(numbered(state)) : input;
+    const tooLow = fromJson ? versionRefusal(ctx, outcome, edited, numbered(state)) : null;
     if (tooLow) throw tooLow;
     const start = baseline || safetySkeleton();
     const lines = diffLines(visibleChanges(configDiff(start, edited)), ctx.t, { before: start, after: edited });
@@ -110,17 +116,19 @@ function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
 }
 
 // The fold starts from the approved set with the next version number, so an unedited send never repeats a version.
-const foldValue = (current) => (current ? { ...current, version: current.version + 1 } : safetySkeleton());
+const foldValue = (state) => (state.current ? { ...state.current, version: highestOf(state) + 1 } : safetySkeleton());
 
 export async function render(ctx) {
-  const state = { current: null };
+  const state = { current: null, highest: null };
   const shown = { form: null };
   const currentBox = h("div", { class: "safety-current" });
+  const showVersion = () => shown.form && shown.form.showVersion && shown.form.showVersion(numbered(state));
   const readCurrent = async () => {
     const data = await ctx.api.get("/safety");
     state.current = (data && data.safety) || null;
+    state.highest = Number.isInteger(data?.highest_version) ? data.highest_version : null;
     clear(currentBox).append(currentView(ctx, state.current));
-    if (shown.form && shown.form.showVersion) shown.form.showVersion(state.current);
+    showVersion();
   };
   const refreshCurrent = () =>
     readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
@@ -135,10 +143,11 @@ export async function render(ctx) {
   const approve = approver(ctx, state, outcome, readCurrent, refreshCurrent);
   const form = safetyForm(editorCtx, { current: state.current, capabilities: await loadCapabilities(ctx), onSubmit: approve });
   shown.form = form;
+  showVersion(); // the form starts from the set in force; the number goes above the highest ever approved
   const advanced = advancedJson({
     ctx: editorCtx,
     label: ctx.t("safety.json"),
-    value: foldValue(state.current),
+    value: foldValue(state),
     submitLabel: ctx.t("safety.approve"),
     onSubmit: (json) => approve(json, { fromJson: true }),
     draftKey: "safety",

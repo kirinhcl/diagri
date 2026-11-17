@@ -11,6 +11,7 @@ export const VALIDATION_TYPES = Object.freeze([
   "greater_than", "greater_than_equal", "less_than", "less_than_equal", "finite_number",
   "literal_error", "enum", "list_type", "dict_type", "too_short", "too_long",
   "value_error", "json_invalid",
+  "duplicate", // the server's own: a row repeats an earlier row's id (a run sheet's end action: its channel)
 ]);
 
 const DASH = "—";

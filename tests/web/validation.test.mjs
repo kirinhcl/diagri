@@ -39,6 +39,12 @@ test("a number bound says the bound as written", () => {
   assert.ok(!problemText(en, { type: "greater_than", limits: {} }).includes("{"));
 });
 
+test("a repeated entry says an earlier one already uses it, in both languages", () => {
+  const info = { type: "duplicate", limits: { value: "light-on" }, msg: "light-on is already used by an earlier row" };
+  assert.equal(problemText(testCtx({ lang: "en" }), info), "An earlier entry already uses this; each one must be different.");
+  assert.equal(problemText(testCtx({ lang: "zh" }), info), "前面已有一项用了这个值；每一项都要不同。");
+});
+
 test("a path in the JSON editor reads as positions: item numbers count from 1, keys stay as typed", () => {
   assert.equal(positionText(testCtx({ lang: "zh" }), ["body", "treatments", 0, "id"]), "「treatments」 › 第 1 项 › 「id」");
   assert.equal(positionText(testCtx({ lang: "en" }), ["body", "treatments", 2, "id"]), "“treatments” › item 3 › “id”");

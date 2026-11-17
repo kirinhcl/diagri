@@ -66,6 +66,18 @@ def safety_unknown_sensors(names: list[str]) -> Denied:
     )
 
 
+def safety_version_not_above(version: int, current_version: int) -> Denied:
+    """``current_version`` is the highest version ever approved on the device (0 before the
+    first), in force or not: a repeated number would make two approved sets look the same."""
+    return Denied(
+        "state",
+        f"safety configuration version {version} is not above version {current_version},"
+        " the highest approved so far",
+        reason="safety_version_not_above",
+        params={"version": version, "current_version": current_version},
+    )
+
+
 def onsite_needs_operator() -> Denied:
     return Denied(
         "not_operator",

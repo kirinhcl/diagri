@@ -174,6 +174,8 @@ export default {
   "msg.denial.safety_needs_approver.action": "请用操作员账号登录后再批准。",
   "msg.denial.safety_unknown_sensors": "安全配置里写了这台设备没有的传感器：{sensors}。",
   "msg.denial.safety_unknown_sensors.action": "请把它们从“读数不变”阈值里去掉，再批准。",
+  "msg.denial.safety_version_not_above": "安全限值的版本 {version} 不高于已批准过的最高版本 {current_version}。",
+  "msg.denial.safety_version_not_above.action": "请用高于 {current_version} 的版本再批准；表单会自动编号。",
   "msg.denial.not_signed_in": "你还没有登录。",
   "msg.denial.not_signed_in.action": "请用操作员名字和密码登录后再试。",
   "msg.denial.session_expired": "登录已经结束。",
@@ -451,6 +453,7 @@ export default {
   "msg.validation.too_short": "至少要有 {min_length} 项",
   "msg.validation.too_long": "最多只能有 {max_length} 项",
   "msg.validation.value_error": "这个值不被接受；原因见技术详情。",
+  "msg.validation.duplicate": "前面已有一项用了这个值；每一项都要不同。",
   "msg.validation.json_invalid": "这段文字不是有效的 JSON",
   "msg.validation.other": "这一项无法被接受",
 };

@@ -146,10 +146,8 @@ function lengthPart({ ctx, key, prefix, label, hint, stored }) {
 
 function channelFields(ctx, plan, range) {
   const { t } = ctx;
-  // The server has no range check on a channel plan, so the range is checked only for a value the operator changed.
-  const stored = String(plan.retained_level);
-  const parse = (text, translate) => levelParse(text === stored ? null : range)(text, translate);
-  const level = { name: "retained_level", label: t("runsheet.form.retained"), hint: t("runsheet.form.retainedHint"), type: "number", step: 1, parse, value: plan.retained_level };
+  // The server refuses a retained level outside its channel's range, also one stored before it checked, so the form does too.
+  const level = { name: "retained_level", label: t("runsheet.form.retained"), hint: t("runsheet.form.retainedHint"), type: "number", step: 1, parse: levelParse(range), value: plan.retained_level };
   const tolerance = { name: "max_tolerance_seconds", label: t("runsheet.form.tolerance"), unit: t("runsheet.form.seconds"), type: "number", min: 0, parse: plainNumber, value: plan.max_tolerance_seconds };
   return [level, tolerance];
 }
