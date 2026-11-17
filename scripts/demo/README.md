@@ -113,3 +113,7 @@ The tests are in `tests/test_demo_tools.py`.
   recorder types the secret into it, and the video shows it.
 - Playwright's own video recorder captures CSS pixels and encodes VP8 at about 1 Mbit/s, which
   leaves a 1440×810 page small and blurred inside a 1080p frame; hence `screencast.cjs`.
+- Since the console's third usability batch the protocol is entered through its form (the JSON
+  editor under "Advanced (JSON)" starts empty), so the scene types the question and fills the
+  other fields inside a time-lapse. "Start stage" now asks first; `handleDialogs` confirms that
+  question the same way it answers the re-authentication dialog.
