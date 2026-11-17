@@ -14,6 +14,7 @@ from growbridge.archive.models import (
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Capabilities
 from growbridge.sim.fixtures import humidity_rule, make_run_sheet, make_safety
+from growbridge.vocab import load_catalog, packaged_text
 
 CAPS = Capabilities(
     version="test",
@@ -166,6 +167,47 @@ def test_humidity_feedback_release_on_other_channel_is_blocked():
     rule = humidity_rule(release=RuleAction(channel=Channel.FAN, level=1))
     sheet = make_run_sheet(feedback_rules=(rule,))
     assert "humidity_exhaust_only" in codes(validate_run_sheet(sheet, CAPS), blocking=True)
+
+
+MOIST = load_catalog(
+    packaged_text()
+    + """
+[[variable]]
+id = "leaf_air_moisture"
+kind = "sensor"
+label_en = "Leaf air moisture"
+label_zh = "叶面空气湿度"
+quantity = "relative_humidity"
+unit = "%"
+aliases = ["moist"]
+"""
+)
+
+
+def _light_rule(sensor):
+    return humidity_rule(
+        sensor=sensor, action=RuleAction(channel=Channel.LIGHT, level=20), release=None
+    )
+
+
+def test_catalog_humidity_name_is_exhaust_only():
+    sheet = make_run_sheet(feedback_rules=(_light_rule("moist"),))
+    assert "humidity_exhaust_only" in codes(
+        validate_run_sheet(sheet, CAPS, catalog=MOIST), blocking=True
+    )
+
+
+def test_substring_rule_still_blocks_unknown_names():
+    sheet = make_run_sheet(feedback_rules=(_light_rule("rh"),))
+    assert "humidity_exhaust_only" in codes(validate_run_sheet(sheet, CAPS), blocking=True)
+
+
+def test_catalog_never_unblocks():
+    sheet = make_run_sheet(feedback_rules=(_light_rule("humi"),))
+    assert "humidity_exhaust_only" in codes(validate_run_sheet(sheet, CAPS), blocking=True)
+    assert "humidity_exhaust_only" in codes(
+        validate_run_sheet(sheet, CAPS, catalog=MOIST), blocking=True
+    )
 
 
 def test_temperature_feedback_may_change_light():
