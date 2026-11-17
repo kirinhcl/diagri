@@ -312,14 +312,15 @@ class WorkflowStore:
         )
         return tuple(self._stage_row(row) for row in rows)
 
-    def device_busy(self, device_id: str, stage_id: str) -> bool:
+    def live_stage_on(self, device_id: str, stage_id: str) -> str | None:
+        """The id of another stage still live or being checked on this device, if any."""
         states = [state.value for state in LIVE_STATES]
         row = self.db.one(
-            "SELECT 1 FROM wf_stages WHERE device_id = ? AND stage_id != ?"
+            "SELECT stage_id FROM wf_stages WHERE device_id = ? AND stage_id != ?"
             f" AND state IN ({_marks(len(states))})",
             (device_id, stage_id, *states),
         )
-        return row is not None
+        return None if row is None else str(row["stage_id"])
 
     def active(self) -> StageRow | None:
         """Latest started stage of a round that is not yet delivered or aborted."""

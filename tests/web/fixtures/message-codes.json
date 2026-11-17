@@ -684,5 +684,291 @@
       "action": false
     }
   },
-  "denial": {}
+  "denial": {
+    "project_name_required": {
+      "params": [],
+      "action": true,
+      "of": "state"
+    },
+    "record_not_found": {
+      "params": [
+        "record_kind",
+        "record_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "protocol_not_found": {
+      "params": [
+        "protocol_id",
+        "project_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "protocol_version_exists": {
+      "params": [
+        "protocol_id",
+        "version"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "round_not_accepting_run_sheets": {
+      "params": [
+        "round_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_mismatch": {
+      "params": [
+        "run_sheet_id",
+        "record_kind"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_needs_switch": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_version_conflict": {
+      "params": [
+        "run_sheet_id",
+        "version"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_too_old": {
+      "params": [
+        "run_sheet_id",
+        "version",
+        "current_version"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_version_in_use": {
+      "params": [
+        "run_sheet_id",
+        "version"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_changed_since_review": {
+      "params": [
+        "stage_id",
+        "expected_digest",
+        "current_digest"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_awaiting_approval": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_startable": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_pausable": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_resumable": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_already_ended": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_takeoverable": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_in_manual": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_not_switchable": {
+      "params": [
+        "stage_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_busy": {
+      "params": [
+        "stage_id",
+        "device_id",
+        "other_stage_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "unsettled_actions": {
+      "params": [
+        "stage_id",
+        "count"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_differs_from_run_sheet": {
+      "params": [
+        "stage_id",
+        "channels",
+        "diffs"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "stage_changed_concurrently": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "no_choice_pending": {
+      "params": [
+        "round_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "no_next_stage": {
+      "params": [
+        "round_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "round_already_ended": {
+      "params": [
+        "round_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "unknown_choice": {
+      "params": [
+        "choice"
+      ],
+      "action": false,
+      "of": "state"
+    },
+    "approval_blocking_findings": {
+      "params": [
+        "stage_id",
+        "count"
+      ],
+      "action": true,
+      "of": "approval_invalid"
+    },
+    "approval_none_valid": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "approval_invalid"
+    },
+    "approval_run_sheet_changed": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "approval_invalid"
+    },
+    "approval_other_target": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "approval_invalid"
+    },
+    "capabilities_changed": {
+      "params": [
+        "stage_id",
+        "detail"
+      ],
+      "action": true,
+      "of": "approval_invalid"
+    },
+    "approval_recovery_changed": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "approval_invalid"
+    },
+    "safety_conflict": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "safety_conflict"
+    },
+    "pump_unconfirmed": {
+      "params": [
+        "device_id"
+      ],
+      "action": true,
+      "of": "interlock"
+    },
+    "drafter_only": {
+      "params": [
+        "role"
+      ],
+      "action": false,
+      "of": "model_role"
+    },
+    "not_this_project": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "scope"
+    }
+  }
 }

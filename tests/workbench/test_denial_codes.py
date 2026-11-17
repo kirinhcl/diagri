@@ -93,7 +93,6 @@ PENDING: set[str] = {
     "workbench/rounds.py",
     "workflow/permissions.py",
     "workflow/recovery.py",
-    "workflow/service.py",
     "workflow/store.py",
     "workflow/tasks.py",
 }
