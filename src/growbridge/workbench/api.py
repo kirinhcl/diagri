@@ -137,7 +137,15 @@ class SafetyApproval(Body):
 def refusal(error: Denied) -> JSONResponse:
     status = STATUS_BY_CODE.get(error.code, 403)
     return JSONResponse(
-        status_code=status, content={"detail": {"code": error.code, "message": str(error)}}
+        status_code=status,
+        content={
+            "detail": {
+                "code": error.code,
+                "reason": error.reason,
+                "params": error.params,
+                "message": str(error),
+            }
+        },
     )
 
 

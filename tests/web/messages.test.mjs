@@ -8,7 +8,7 @@ import { formatterFor, messageParts, messageView } from "../../src/growbridge/we
 import { testCtx } from "./support/render-page.mjs";
 
 const CODES = JSON.parse(readFileSync(new URL("./fixtures/message-codes.json", import.meta.url), "utf8"));
-const FAMILIES = ["alert", "finding", "receipt", "task_end", "compute_error", "compute_stuck", "chat_end", "estimate"];
+const FAMILIES = ["alert", "finding", "receipt", "task_end", "compute_error", "compute_stuck", "chat_end", "estimate", "denial"];
 const SAMPLE = "{sensor} {op} {value} for {duration_seconds}, {level}";
 const PLACEHOLDER = /\{(\w+)\}/g;
 const names = (text) => [...text.matchAll(PLACEHOLDER)].map((m) => m[1]);
@@ -21,7 +21,7 @@ function ctxWithSample(lang, options) {
   return { ...ctx, t };
 }
 
-test("the code file names exactly the 8 families", () => {
+test("the code file names exactly the 9 families", () => {
   assert.deepEqual(Object.keys(CODES).sort(), [...FAMILIES].sort());
 });
 

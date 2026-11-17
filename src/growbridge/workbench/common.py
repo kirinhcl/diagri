@@ -1,6 +1,8 @@
 """What every workbench route module shares: the request body base, the request id pattern and
 the answer to a body that is well-formed but not acceptable."""
 
+from collections.abc import Mapping
+
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
 
@@ -8,8 +10,11 @@ REQUEST_ID = r"^[a-zA-Z0-9_-]{8,100}$"
 UNPROCESSABLE = 422
 
 
-def rejected(message: str) -> HTTPException:
-    return HTTPException(UNPROCESSABLE, detail={"code": "param", "message": message})
+def rejected(
+    message: str, *, reason: str | None = None, params: Mapping[str, object] | None = None
+) -> HTTPException:
+    detail = {"code": "param", "reason": reason, "params": dict(params or {}), "message": message}
+    return HTTPException(UNPROCESSABLE, detail=detail)
 
 
 class Body(BaseModel):
