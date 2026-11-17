@@ -60,19 +60,7 @@ def sent_elsewhere() -> set[str]:
 
 
 # Files that still have a refusal without a reason; each task removes the files it converts.
-PENDING: set[str] = {
-    "agents/budget.py",
-    "agents/dispatch.py",
-    "agents/handlers_auditor.py",
-    "agents/handlers_common.py",
-    "agents/handlers_evidence.py",
-    "agents/handlers_orchestrator.py",
-    "agents/handlers_planner.py",
-    "agents/handlers_report.py",
-    "agents/handlers_researcher.py",
-    "agents/tools.py",
-    "runtime_compute.py",
-}
+PENDING: set[str] = set()
 
 
 def test_a_denial_keeps_code_and_message_and_carries_reason_and_params() -> None:

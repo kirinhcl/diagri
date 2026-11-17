@@ -101,16 +101,31 @@ def own_task(deps: Deps, task_id: str) -> ResearchTask:
     """The running researcher task; ``task_id`` from the model must equal the server's binding."""
     task = require_bound(deps, task_id)
     if task.owner_role != ROLE:
-        raise Denied("scope", "this run does not belong to the researcher")
+        raise Denied(
+            "scope",
+            "this run does not belong to the researcher",
+            reason="wrong_task_kind",
+            params={"task_kind": None},
+        )
     return task
 
 
 def _verified(deps: Deps, task: ResearchTask, snapshot_id: str) -> Snapshot:
     snap = scoped_snapshot(deps, task, snapshot_id)  # project and holdout checks come first
     if deps.archive.is_invalid(snap.id):
-        raise Denied("state", f"snapshot {snap.id} was invalidated by a later correction")
+        raise Denied(
+            "state",
+            f"snapshot {snap.id} was invalidated by a later correction",
+            reason="snapshot_invalidated",
+            params={"snapshot_id": snap.id},
+        )
     if not snapshots.verify(deps.archive, snap.id):
-        raise Denied("snapshot_incomplete", f"snapshot {snap.id} fails verification")
+        raise Denied(
+            "snapshot_incomplete",
+            f"snapshot {snap.id} fails verification",
+            reason="snapshot_fails_verification",
+            params={"snapshot_id": snap.id},
+        )
     return snap
 
 
@@ -127,7 +142,12 @@ def _freeze_inputs(deps: Deps, task: ResearchTask, data: PublishInput) -> Frozen
     for item in data.snapshots:
         snap = _verified(deps, task, item.snapshot_id)
         if round_of.setdefault(snap.experiment_id, item.round) != item.round:
-            raise Denied("param", f"experiment {snap.experiment_id} listed in two rounds")
+            raise Denied(
+                "param",
+                f"experiment {snap.experiment_id} listed in two rounds",
+                reason="duplicate_experiment",
+                params={"experiment_id": snap.experiment_id},
+            )
         snaps.append(snap)
         rows.extend(_read_rows(deps, snap))
     return Frozen(tuple(snaps), round_of, tuple(rows))
@@ -398,17 +418,26 @@ def _require_registered_runs(deps: Deps, protocol: ResearchProtocol, frozen: Fro
                 "state",
                 f"the pre-registered confirmatory run of snapshot {snap.id} has not finished;"
                 " the operator starts it with POST /wb/analysis/runs",
+                reason="confirmatory_run_pending",
+                params={"snapshot_id": snap.id},
             )
 
 
 def _table(protocol: ResearchProtocol, data: PublishInput, frozen: Frozen) -> UnitTable:
     if data.treatment_id not in {t.id for t in protocol.treatments}:
-        raise Denied("param", f"unknown treatment {data.treatment_id}")
+        raise Denied(
+            "param",
+            f"unknown treatment {data.treatment_id}",
+            reason="unknown_treatment",
+            params={"treatment_id": data.treatment_id},
+        )
     metric = protocol.analysis.primary_endpoint
     try:
         return unit_table(frozen.rows, protocol.allocations, metric, frozen.round_of)
     except ValueError as exc:
-        raise Denied("param", str(exc)) from None
+        raise Denied(
+            "param", str(exc), reason="table_invalid", params={"detail": str(exc)}
+        ) from None
 
 
 def _deliver(deps: Deps, round_id: str, artifact_id: str, state: TaskState) -> str:
@@ -422,13 +451,23 @@ def _deliver(deps: Deps, round_id: str, artifact_id: str, state: TaskState) -> s
 def _precheck(deps: Deps, data: PublishInput) -> ResearchTask:
     task = own_task(deps, data.task_id)
     if task.state is not TaskState.IN_PROGRESS:
-        raise Denied("state", f"task {task.id} is {task.state.value}; nothing can be published")
+        raise Denied(
+            "state",
+            f"task {task.id} is {task.state.value}; nothing can be published",
+            reason="task_not_in_progress",
+            params={"task_id": task.id, "status": task.state.value},
+        )
     if data.holdout_id is not None and deps.holdout is None:
         unavailable("holdout registry")
     if data.round_id is not None:
         require_round(deps, data.round_id, RoundState.ANALYSIS, task.project_id)
     if deps.workflow.store.latest_protocol(data.protocol_id, task.project_id) is None:
-        raise Denied("state", f"no protocol {data.protocol_id} in project {task.project_id}")
+        raise Denied(
+            "state",
+            f"no protocol {data.protocol_id} in project {task.project_id}",
+            reason="protocol_not_found",
+            params={"protocol_id": data.protocol_id, "project_id": task.project_id},
+        )
     return task
 
 
@@ -447,12 +486,27 @@ def _data_protocol(
         pair for snap in frozen.snaps for pair in store.protocol_versions_of(snap.experiment_id)
     }
     if len(found) > 1:
-        raise Denied("param", "the cited snapshots come from more than one protocol version")
+        raise Denied(
+            "param",
+            "the cited snapshots come from more than one protocol version",
+            reason="snapshots_mixed_protocol",
+            params={},
+        )
     if not found or next(iter(found))[0] != data.protocol_id:
-        raise Denied("param", f"the cited snapshots were not collected under {data.protocol_id}")
+        raise Denied(
+            "param",
+            f"the cited snapshots were not collected under {data.protocol_id}",
+            reason="snapshots_other_protocol",
+            params={"protocol_id": data.protocol_id},
+        )
     protocol = store.protocol(*next(iter(found)))
     if protocol is None or protocol.project_id != task.project_id:
-        raise Denied("scope", "that protocol is not available to this run")
+        raise Denied(
+            "scope",
+            "that protocol is not available to this run",
+            reason="not_this_protocol",
+            params={"protocol_id": data.protocol_id},
+        )
     return protocol
 
 

@@ -281,3 +281,44 @@ _register(
 _register("model_unregistered", ("model_unregistered", ()), action=False)
 _register("sandbox_unavailable", ("sandbox_unavailable", ()))
 _register("clock_unsynced", ("clock_unsynced", ()))
+
+# --- model tools and the compute runtime (agents/*.py, runtime_compute.py) ---------------------
+# Only a model reaches most of these, so they carry no next step for a person; the two that an
+# operator can act on say so.
+_register("budget", ("budget_not_set", ("project_id",)))
+_register("state", ("confirmatory_run_pending", ("snapshot_id",)))
+_register(
+    "scope",
+    ("no_run", ()),
+    ("not_this_run", ()),
+    ("wrong_task_kind", ("task_kind",)),
+    action=False,
+)
+_register(
+    "state",
+    ("round_wrong_phase", ("round_id", "state", "needed_state")),
+    ("task_not_in_progress", ("task_id", "status")),
+    ("alert_book_unavailable", ()),
+    action=False,
+)
+_register(
+    "model_role",
+    ("tool_not_allowed", ("role",)),
+    ("no_model", ("role",)),
+    ("unknown_role", ("role",)),
+    action=False,
+)
+_register("unavailable", ("unavailable", ()), action=False)
+_register("snapshot_incomplete", ("snapshot_fails_verification", ("snapshot_id",)), action=False)
+_register(
+    "param",
+    ("duplicate_experiment", ("experiment_id",)),
+    ("table_invalid", ("detail",)),
+    ("operator_only_evidence", ()),
+    ("unknown_treatment", ("treatment_id",)),
+    # mixed_protocol and not_this_protocol refine "scope"; these two sites raise "param"
+    ("snapshots_mixed_protocol", ()),
+    ("snapshots_other_protocol", ("protocol_id",)),
+    action=False,
+)
+_register("quota", ("quota_proposal_limit", ("max_proposals",)), action=False)

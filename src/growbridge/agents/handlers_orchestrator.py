@@ -109,6 +109,8 @@ def _stored(deps: Deps, task: ResearchTask) -> dict:
             "state",
             f"trigger_event_id {task.trigger_event_id!r} already belongs to task {stored.id} "
             f"(owner {stored.owner_role}); nothing was created. Use a new trigger_event_id.",
+            reason="request_id_reused_for_other_goal",
+            params={"task_id": stored.id, "request_id": task.trigger_event_id},
         )
     return {
         "task_id": stored.id,
@@ -247,7 +249,9 @@ def _visible_task(deps: Deps, task_id: str) -> ResearchTask:
     try:
         cursor = deps.tasks.get(task_id)
     except Denied:
-        raise Denied("scope", "that task is not available to this run") from None
+        raise Denied(
+            "scope", "that task is not available to this run", reason="not_this_run", params={}
+        ) from None
     if f"{TASK_REF}{task_id}" in bound.input_refs and cursor.project_id == bound.project_id:
         return cursor
     while cursor.project_id == bound.project_id:
@@ -256,7 +260,9 @@ def _visible_task(deps: Deps, task_id: str) -> ResearchTask:
         if cursor.parent_task_id is None:
             break
         cursor = deps.tasks.get(cursor.parent_task_id)
-    raise Denied("scope", "that task is not available to this run")
+    raise Denied(
+        "scope", "that task is not available to this run", reason="not_this_run", params={}
+    )
 
 
 def _own_artifact(deps: Deps, artifact_id: str):
@@ -269,7 +275,12 @@ def _own_artifact(deps: Deps, artifact_id: str):
         except Denied:
             owner = None
     if artifact is None or owner is None or owner.project_id != bound_task(deps).project_id:
-        raise Denied("scope", f"artifact {artifact_id} is not available to this run")
+        raise Denied(
+            "scope",
+            f"artifact {artifact_id} is not available to this run",
+            reason="not_this_run",
+            params={},
+        )
     return artifact
 
 
@@ -278,9 +289,19 @@ def _read(deps: Deps, artifact_id: str) -> dict:
     path = deps.archive.root.joinpath(artifact.path).resolve()
     roots = (deps.work_root.resolve(), deps.archive.root.resolve())
     if not any(path.is_relative_to(root) for root in roots) or not path.is_file():
-        raise Denied("scope", f"artifact {artifact_id} is outside the project data")
+        raise Denied(
+            "scope",
+            f"artifact {artifact_id} is outside the project data",
+            reason="not_this_run",
+            params={},
+        )
     if file_digest(path) != artifact.sha256:
-        raise Denied("state", f"artifact {artifact_id} no longer matches its recorded digest")
+        raise Denied(
+            "state",
+            f"artifact {artifact_id} no longer matches its recorded digest",
+            reason="artifact_digest_mismatch",
+            params={"round_id": None, "artifact_id": artifact_id},
+        )
     with path.open("rb") as handle:
         raw = handle.read(MAX_ARTIFACT_BYTES + 1)
     text = raw[:MAX_ARTIFACT_BYTES].decode(errors="replace")

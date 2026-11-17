@@ -97,7 +97,12 @@ async def _local_analysis(deps: Deps, data: LocalAnalysisInput) -> dict:
     if deps.sandbox is None:
         unavailable("sandbox")
     if not snapshots.verify(deps.archive, data.snapshot_id):
-        raise Denied("snapshot_incomplete", f"snapshot {data.snapshot_id} fails verification")
+        raise Denied(
+            "snapshot_incomplete",
+            f"snapshot {data.snapshot_id} fails verification",
+            reason="snapshot_fails_verification",
+            params={"snapshot_id": data.snapshot_id},
+        )
     run_id = new_id("local")
     out_dir = deps.work_root / "local" / run_id / "out"
     out_dir.mkdir(parents=True)
@@ -123,9 +128,19 @@ def _started_stage(deps: Deps, task_id: str, stage_id: str):
     task = own_task(deps, task_id)
     stage = deps.workflow.stage(stage_id)
     if stage.project_id != task.project_id:  # before anything is read, written or touched
-        raise Denied("scope", f"stage {stage_id} is not available to task {task.id}")
+        raise Denied(
+            "scope",
+            f"stage {stage_id} is not available to task {task.id}",
+            reason="not_this_run",
+            params={},
+        )
     if stage.started_at is None:
-        raise Denied("state", f"stage {stage_id} never started; there is no data yet")
+        raise Denied(
+            "state",
+            f"stage {stage_id} never started; there is no data yet",
+            reason="stage_not_started",
+            params={"stage_id": stage_id},
+        )
     return task, stage
 
 
@@ -133,7 +148,12 @@ def _end(stage) -> float:
     """Where a started stage's data window ends (``StageRuntime.window_end``)."""
     end = stage.window_end()
     if end is None:  # _started_stage refuses a stage that never started
-        raise Denied("state", f"stage {stage.stage_id} never started; there is no data yet")
+        raise Denied(
+            "state",
+            f"stage {stage.stage_id} never started; there is no data yet",
+            reason="stage_not_started",
+            params={"stage_id": stage.stage_id},
+        )
     return end
 
 

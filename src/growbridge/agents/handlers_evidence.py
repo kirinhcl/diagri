@@ -50,16 +50,28 @@ class ProposeCardInput(ToolInput):
 def propose_card(deps: Deps, data: ProposeCardInput) -> dict:
     task = require_bound(deps, data.task_id)
     if task.owner_role != ROLE:
-        raise Denied("scope", "only a planner task may propose evidence cards")
+        raise Denied(
+            "scope",
+            "only a planner task may propose evidence cards",
+            reason="wrong_task_kind",
+            params={"task_kind": None},
+        )
     if data.source_class == "local":
         # A model cannot have taken a local measurement; such a card would also look trusted.
         raise Denied(
             "param",
             "only an operator can record a local measurement as evidence; "
             "propose a handbook or paper card",
+            reason="operator_only_evidence",
+            params={},
         )
     if deps.archive.evidence_count_from(task.id) >= MAX_PROPOSALS_PER_TASK:
-        raise Denied("quota", f"a task may propose at most {MAX_PROPOSALS_PER_TASK} cards")
+        raise Denied(
+            "quota",
+            f"a task may propose at most {MAX_PROPOSALS_PER_TASK} cards",
+            reason="quota_proposal_limit",
+            params={"max_proposals": MAX_PROPOSALS_PER_TASK},
+        )
     card = EvidenceCard(
         id=new_id("evidence"),
         source_class=data.source_class,

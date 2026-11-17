@@ -128,8 +128,19 @@ def test_guard_refuses_a_snapshot_that_fails_verification(world):
     with pytest.raises(Denied) as info:
         guard_of(world)("task-1", f"{snapshot}/samples.jsonl")
     assert info.value.code == "snapshot_incomplete"
+    assert info.value.reason == "snapshot_fails_verification"
+    assert info.value.params == {"snapshot_id": snapshot}
 
 
 def test_guard_without_a_compute_service_is_a_no_op(world):
     world.runtime.compute = None
     install_input_guard(world.runtime)  # nothing to guard, nothing raised
+
+
+def test_snapshot_invalidated_carries_the_snapshot_through_the_guard(world):
+    snapshot = world.freeze("exp-a")
+    world.archive.is_invalid = lambda snapshot_id: True
+    with pytest.raises(Denied) as info:
+        guard_of(world)("task-1", f"{snapshot}/samples.jsonl")
+    assert (info.value.code, info.value.reason) == ("state", "snapshot_invalidated")
+    assert info.value.params == {"snapshot_id": snapshot}

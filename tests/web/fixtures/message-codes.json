@@ -1891,6 +1891,137 @@
       "params": [],
       "action": true,
       "of": "clock_unsynced"
+    },
+    "budget_not_set": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "budget"
+    },
+    "confirmatory_run_pending": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "no_run": {
+      "params": [],
+      "action": false,
+      "of": "scope"
+    },
+    "not_this_run": {
+      "params": [],
+      "action": false,
+      "of": "scope"
+    },
+    "wrong_task_kind": {
+      "params": [
+        "task_kind"
+      ],
+      "action": false,
+      "of": "scope"
+    },
+    "round_wrong_phase": {
+      "params": [
+        "round_id",
+        "state",
+        "needed_state"
+      ],
+      "action": false,
+      "of": "state"
+    },
+    "task_not_in_progress": {
+      "params": [
+        "task_id",
+        "status"
+      ],
+      "action": false,
+      "of": "state"
+    },
+    "alert_book_unavailable": {
+      "params": [],
+      "action": false,
+      "of": "state"
+    },
+    "tool_not_allowed": {
+      "params": [
+        "role"
+      ],
+      "action": false,
+      "of": "model_role"
+    },
+    "no_model": {
+      "params": [
+        "role"
+      ],
+      "action": false,
+      "of": "model_role"
+    },
+    "unknown_role": {
+      "params": [
+        "role"
+      ],
+      "action": false,
+      "of": "model_role"
+    },
+    "unavailable": {
+      "params": [],
+      "action": false,
+      "of": "unavailable"
+    },
+    "snapshot_fails_verification": {
+      "params": [
+        "snapshot_id"
+      ],
+      "action": false,
+      "of": "snapshot_incomplete"
+    },
+    "duplicate_experiment": {
+      "params": [
+        "experiment_id"
+      ],
+      "action": false,
+      "of": "param"
+    },
+    "table_invalid": {
+      "params": [
+        "detail"
+      ],
+      "action": false,
+      "of": "param"
+    },
+    "operator_only_evidence": {
+      "params": [],
+      "action": false,
+      "of": "param"
+    },
+    "unknown_treatment": {
+      "params": [
+        "treatment_id"
+      ],
+      "action": false,
+      "of": "param"
+    },
+    "snapshots_mixed_protocol": {
+      "params": [],
+      "action": false,
+      "of": "param"
+    },
+    "snapshots_other_protocol": {
+      "params": [
+        "protocol_id"
+      ],
+      "action": false,
+      "of": "param"
+    },
+    "quota_proposal_limit": {
+      "params": [
+        "max_proposals"
+      ],
+      "action": false,
+      "of": "quota"
     }
   }
 }

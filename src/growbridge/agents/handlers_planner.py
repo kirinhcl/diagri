@@ -113,7 +113,12 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
         require_project(deps, data.project_id)
         protocol = deps.workflow.store.latest_protocol(data.protocol_id, data.project_id)
         if protocol is None:
-            raise Denied("state", f"no protocol {data.protocol_id} in project {data.project_id}")
+            raise Denied(
+                "state",
+                f"no protocol {data.protocol_id} in project {data.project_id}",
+                reason="protocol_not_found",
+                params={"protocol_id": data.protocol_id, "project_id": data.project_id},
+            )
         return {"findings": findings_json(check_experimental_design(protocol))}
 
     def sample_size(data: SampleSizeInput) -> dict:
