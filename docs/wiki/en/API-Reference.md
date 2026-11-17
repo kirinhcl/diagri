@@ -52,7 +52,7 @@ Source: `create_app` in [`api.py`](../../../src/growbridge/api.py). There are 14
 | 401 | The token is missing or wrong (`Authentication required`); there is no valid session (`Open the dashboard with growbridge dashboard to connect`); the code was used or has expired. |
 | 403 | The `Origin` is not allowed; the header `X-GrowBridge-UI` is missing; a write route in DiAGRI mode. |
 | 404 | `device` is not `light`, `exhaust` or `fan`. |
-| 409 | The bridge refused or failed the request (`BridgeError`), for example controls disabled, stale data, pump cooldown, or a `request_id` reused with other arguments. The body is `{"detail": "<message>", "code": <code or null>, "reason": <reason or null>, "params": {}}`; `detail` stays a string, and `code`, `reason` and `params` are the fields of the error body described under the table of the workbench errors (a `PumpOffUnconfirmed` error is `interlock` / `pump_unconfirmed`, any other has `null`). |
+| 409 | The bridge refused or failed the request (`BridgeError`), for example controls disabled, stale data, pump cooldown, or a `request_id` reused with other arguments. The body is `{"detail": "<message>", "code": <code or null>, "reason": <reason or null>, "params": {}}`; `detail` stays a string, and `code`, `reason` and `params` are the fields of the error body described under the table of the workbench errors (a `PumpOffUnconfirmed` error is `interlock` / `pump_unconfirmed` with `"params": {"device_id": null}`, since the bridge does not know the device there; any other has `null` and `{}`). |
 | 422 | The body or the query did not pass validation. A NaN or an infinity the request carried is echoed back as text, such as `"nan"`. |
 | 429 | 64 codes are waiting, or 64 sessions are open. |
 

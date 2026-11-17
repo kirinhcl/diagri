@@ -82,7 +82,7 @@ async def test_an_unknown_device_is_record_not_found(bridge, settings):
     )
 
 
-async def test_an_unconfirmed_pump_is_pump_unconfirmed(bridge, settings):
+async def test_a_plain_interlock_bridge_error_has_no_code(bridge, settings):
     core, _ = bridge
     core.interlock = True
     app = create_app(settings, core)

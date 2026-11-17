@@ -52,7 +52,7 @@
 | 401 | 没带令牌或令牌不对（`Authentication required`）；没有有效会话（`Open the dashboard with growbridge dashboard to connect`）；code 已用过或已过期。 |
 | 403 | `Origin` 不在允许范围内；缺少请求头 `X-GrowBridge-UI`；在 DiAGRI 模式下调用写入路由。 |
 | 404 | `device` 不是 `light`、`exhaust` 或 `fan`。 |
-| 409 | 请求被桥接层拒绝或执行失败（`BridgeError`），例如控制未开启、数据过期、水泵冷却未结束，或 `request_id` 被用于不同的参数。响应体是 `{"detail": "<message>", "code": <代码或 null>, "reason": <原因或 null>, "params": {}}`；`detail` 仍是字符串，`code`、`reason` 和 `params` 见工作台错误表后面对错误体字段的说明（`PumpOffUnconfirmed` 错误是 `interlock` / `pump_unconfirmed`，其余为 `null`）。 |
+| 409 | 请求被桥接层拒绝或执行失败（`BridgeError`），例如控制未开启、数据过期、水泵冷却未结束，或 `request_id` 被用于不同的参数。响应体是 `{"detail": "<message>", "code": <代码或 null>, "reason": <原因或 null>, "params": {}}`；`detail` 仍是字符串，`code`、`reason` 和 `params` 见工作台错误表后面对错误体字段的说明（`PumpOffUnconfirmed` 错误是 `interlock` / `pump_unconfirmed`，`params` 为 `{"device_id": null}`，因为桥接层在这里不知道设备；其余的 `code`、`reason` 为 `null`，`params` 为 `{}`）。 |
 | 422 | 请求体或查询参数没有通过校验。请求里的 NaN 或无穷大会以文本形式回显，例如 `"nan"`。 |
 | 429 | 已有 64 个 code 在等待，或已有 64 个会话。 |
 

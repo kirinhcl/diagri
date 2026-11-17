@@ -173,7 +173,7 @@ class ControlService:
             right = rights.build_right(kind, scope, operator, recovery, self.clock.now())
             held = self.ledger.active_rights(self.device_id, recovery, RightKind.STAGE)
             if held and kind in rights.ORDINARY_KINDS:
-                raise refusals.right_held(self.device_id, scope.stage_id)
+                raise refusals.right_held(self.device_id, held[0].stage_id)
             return self.ledger.add_right(right)
 
     def right(self, number: int) -> WriteRight | None:

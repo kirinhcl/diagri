@@ -121,9 +121,10 @@ async def test_right_voided_carries_the_right_id(rig):
     check(exc, "right_invalid", "right_voided", {"right_id": number})
 
 
-async def test_right_held_carries_device_and_stage(rig):
-    rig.stage_right()
-    exc = refusal(lambda: rig.service.grant(RightKind.STAGE, stage_scope()))
+async def test_right_held_carries_device_and_the_stage_that_holds_it(rig):
+    rig.stage_right()  # held by stage-1
+    asking = RightScope(device_id=DEVICE, channels=(Channel.LIGHT,), stage_id="stage-2")
+    exc = refusal(lambda: rig.service.grant(RightKind.STAGE, asking))
     check(exc, "right_held", "right_held", {"device_id": DEVICE, "stage_id": "stage-1"})
 
 
