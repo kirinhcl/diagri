@@ -229,6 +229,23 @@ test("no page leaks internal text", async (t) => {
   }
 });
 
+// The leak scan above only means something for a form if the form is on the page it scans.
+test("the batch 3 form pages show their forms in both languages", async () => {
+  const forms = (node) => [...(node.localName === "form" ? [node] : []), ...[...node.children].flatMap(forms)];
+  const pages = [
+    { page: "safety", min: 1 },
+    { page: "project", params: { projectId: PROJECT.project_id }, min: 1 },
+    { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id }, min: 1 },
+    { page: "round", params: { roundId: FIXTURES["round.json"].round_id }, min: 1 },
+  ];
+  for (const { page, params, min } of pages) {
+    for (const lang of ["zh", "en"]) {
+      const { element } = await renderPage(page, params, { lang });
+      assert.ok(forms(element).length >= min, `${page} (${lang}) shows no form`);
+    }
+  }
+});
+
 test("a stage read from before stages had names is called an unnamed stage", async () => {
   const { element, ctx } = await renderPage("stage", PARAMS.stage, { fixtures: { "stage.json": OLD_STAGE } });
   const headings = (node) => [...(node.localName === "h1" ? [node] : []), ...[...node.children].flatMap(headings)];
