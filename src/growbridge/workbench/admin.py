@@ -95,7 +95,7 @@ def _accounts_routes(router, fresh, operators, store, admin) -> None:
     @router.post("/admin/operators/disable")
     async def disable(body: NameIn, actor: Fresh, _admin: Admin):
         try:
-            operators.disable(body.name)
+            operators.disable(body.name, by=actor.id)
         except ValueError as error:
             raise rejected(str(error)) from error
         return {"disabled": body.name}

@@ -42,6 +42,23 @@ def test_unscoped_legacy_row_not_merged_into_scoped(book):
     assert book.get(legacy.event_id).scope is None and book.get(legacy.event_id).count == 1
 
 
+def test_a_scoped_raise_closes_the_open_legacy_row_of_its_kind_and_key(tmp_path):
+    # a device alert open at the upgrade was stored without an owner; when the condition fires
+    # again it goes on under its scope, and the old row closes instead of staying open beside it
+    db = Database(tmp_path / "alerts.db")
+    before_scopes = AlertBook(db, FakeClock())
+    legacy = before_scopes.raise_alert("threshold", "temp", "warning", "old")
+    book = AlertBook(db, FakeClock(), device_id="AC5-LOCAL")
+
+    again = book.raise_alert("threshold", "temp", "warning", "new")
+
+    assert [alert.event_id for alert in book.open()] == [again.event_id]
+    assert again.scope == ("device", "AC5-LOCAL")
+    closed = book.get(legacy.event_id)
+    assert closed.resolved_at is not None and closed.scope is None
+    db.close()
+
+
 def test_resolve_matches_its_scope_and_legacy_rows_only(book):
     legacy = book.raise_alert("audit_task", "audit:s1", "warning", "old")
     mine = book.raise_alert("audit_task", "audit:s1", "warning", "mine", ("stage", "s1"))

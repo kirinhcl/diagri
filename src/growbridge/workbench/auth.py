@@ -100,10 +100,22 @@ class Operators:
         row = self.db.one("SELECT disabled_at FROM operators WHERE name = ?", (name,))
         return row is not None and row["disabled_at"] is None
 
-    def disable(self, name: str) -> None:
-        """Stop an operator from signing in and end their sessions; their locks stay."""
+    def disable(self, name: str, *, by: str | None = None) -> None:
+        """Stop an operator from signing in and end their sessions; their locks stay. Nothing in
+        the console enables an account again, so ``by`` (the administrator asking) cannot disable
+        themselves and the last active administrator is never disabled (``ValueError``)."""
         with self.db.transaction():
             self._require_known(name)
+            if by == name:
+                raise ValueError("an administrator cannot disable their own account")
+            if self.role(name) == "admin" and self.active(name):
+                others = self.db.one(
+                    "SELECT COUNT(*) AS n FROM operators"
+                    " WHERE role = 'admin' AND disabled_at IS NULL AND name != ?",
+                    (name,),
+                )
+                if others["n"] == 0:
+                    raise ValueError("the last active administrator cannot be disabled")
             self.db.execute(
                 "UPDATE operators SET disabled_at = ? WHERE name = ?", (self.clock.now(), name)
             )
@@ -190,8 +202,12 @@ class Operators:
         )
 
     def actor(self, token: str, recovery_number: int) -> Actor:
-        """The operator behind ``token``; an unknown, expired or outdated session is denied."""
+        """The operator behind ``token``; an unknown, expired or outdated session is denied, and so
+        is one whose account was disabled (a login racing the disable may outlive its delete)."""
         row = self._session(token)
+        if not self.active(row["name"]):
+            self.logout(token)
+            raise Denied("session", "the session is no longer valid")
         bound = row["recovery_number"]
         if bound is None:
             self.db.execute(

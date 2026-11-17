@@ -235,6 +235,15 @@ class AlertBook:
                 (kind, key, *owner),
             )
             if row is None:
+                if owner != (None, None):
+                    # an event of this kind and key left open from before scopes goes on under
+                    # its scope: close the old row (never hand it to anyone) instead of keeping
+                    # two open events for one condition
+                    self.db.execute(
+                        "UPDATE observer_alerts SET resolved_at = ? WHERE kind = ? AND key = ?"
+                        " AND scope_kind IS NULL AND resolved_at IS NULL",
+                        (now, kind, key),
+                    )
                 event_id = new_id("alert")
                 self.db.execute(
                     "INSERT INTO observer_alerts(event_id, kind, key, severity, message, count,"

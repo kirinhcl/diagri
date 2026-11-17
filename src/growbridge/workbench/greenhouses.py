@@ -31,7 +31,9 @@ def greenhouse_rows(locks: GreenhouseLocks, access: Access, actor: Actor) -> lis
         holder = row["holder"]
         state = "free" if holder is None else ("mine" if holder == actor.id else "taken")
         shown = {"id": row["id"], "name": row["name"], "state": state}
-        shown["locked_at"] = row["locked_at"]
+        # when a colleague took their greenhouse is theirs: the holder and administrators see it
+        sees_when = state == "mine" or access.is_admin(actor)
+        shown["locked_at"] = row["locked_at"] if sees_when else None
         if access.is_admin(actor):
             shown["holder"] = holder
         rows.append(shown)

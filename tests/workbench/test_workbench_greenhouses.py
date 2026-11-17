@@ -110,6 +110,24 @@ def test_admin_manages_operators(bench):
     assert weak.status_code == 422
 
 
+def test_others_do_not_see_when_a_taken_greenhouse_was_locked(bench):
+    alice, bob = bench.user("alice"), bench.user("bob")
+    bench.post(alice, "/wb/greenhouses/lock", {"greenhouse_ids": ["gh-01"]})
+
+    assert states(bob)["gh-01"]["locked_at"] is None
+    assert states(alice)["gh-01"]["locked_at"] is not None
+    assert states(bench.user("root"))["gh-01"]["locked_at"] is not None
+
+
+def test_an_administrator_cannot_disable_their_own_account_over_http(bench):
+    root = bench.user("root")
+
+    response = bench.post(root, "/wb/admin/operators/disable", {"name": "root"})
+
+    assert response.status_code == 422 and code(response) == "param"
+    assert bench.operators.active("root") is True
+
+
 def test_transfer_rules(bench):
     bench.pending_as("alice")
     root, project = bench.user("root"), bench.project_id

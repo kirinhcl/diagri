@@ -69,6 +69,41 @@ def test_disabled_user_session_ends(operators):
     assert denied.value.code == "session"
 
 
+def test_a_session_that_outlived_its_disable_is_still_refused(operators):
+    # a login that raced a disable could store its session after the sessions were deleted
+    operators.add("alice", SECRET)
+    token = login(operators, "alice")
+    operators.db.execute("UPDATE operators SET disabled_at = 1 WHERE name = 'alice'")
+
+    with pytest.raises(Denied) as denied:
+        operators.actor(token, 1)
+
+    assert denied.value.code == "session"
+
+
+def test_an_operator_cannot_disable_their_own_account(operators):
+    operators.add("root", SECRET, role="admin")
+    operators.add("ops", SECRET, role="admin")
+
+    with pytest.raises(ValueError):
+        operators.disable("root", by="root")
+
+    assert operators.active("root") is True
+
+
+def test_the_last_active_administrator_cannot_be_disabled(operators):
+    operators.add("root", SECRET, role="admin")
+    operators.add("ops", SECRET, role="admin")
+    operators.add("alice", SECRET)
+    operators.disable("ops", by="root")  # another administrator is left
+    operators.disable("alice", by="root")
+
+    with pytest.raises(ValueError):
+        operators.disable("root")
+
+    assert operators.active("root") is True
+
+
 def test_disable_unknown_name_refused(operators):
     with pytest.raises(ValueError):
         operators.disable("nobody")
