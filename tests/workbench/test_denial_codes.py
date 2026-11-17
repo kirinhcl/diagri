@@ -72,7 +72,6 @@ PENDING: set[str] = {
     "agents/handlers_researcher.py",
     "agents/tools.py",
     "archive/snapshot.py",
-    "compute/service.py",
     "research/analysis.py",
     "research/holdout.py",
     "research/preregistration.py",

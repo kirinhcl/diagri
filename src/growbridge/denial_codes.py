@@ -190,3 +190,45 @@ _register(
     ("level_out_of_range", ("channel", "level", "min", "max")),
 )
 _register("param", ("measurement_rejected", ("detail",)), action=False)
+
+# --- compute service (compute/service.py, via compute/refusals.py) ----------------------------
+_register(
+    "param",
+    ("param_too_long", ("field", "max_length")),
+    ("param_bad_characters", ("field",)),
+    ("param_bad_format", ("field",)),
+    ("param_not_in_choices", ("field", "choices")),
+    ("param_wrong_type", ("field", "expected_kind")),
+    ("param_not_finite", ("field",)),
+    ("param_out_of_range", ("field", "minimum", "maximum")),
+    ("param_below_minimum", ("field", "minimum")),
+    ("param_above_maximum", ("field", "maximum")),
+    ("param_unknown_fields", ("names",)),
+    ("param_required", ("field",)),
+    ("param_negative_amount", ("field",)),
+    ("param_bad_input_path", ("field",)),
+    ("param_input_missing", ("field",)),
+    ("inputs_unavailable", ()),
+    ("template_not_found", ("template_id",)),
+    ("template_version_unregistered", ("template_id", "version")),
+)
+_register(
+    "state",
+    ("attempt_already_final", ("attempt_id", "phase")),
+    ("attempt_settled_by_operator", ("attempt_id",)),
+    ("attempt_not_cancellable", ("attempt_id", "phase")),
+    ("attempt_nothing_to_fetch", ("attempt_id", "phase")),
+    ("attempt_outputs_over_limit", ("attempt_id",)),
+    ("attempt_no_storage_limit", ("attempt_id", "template_id")),
+    ("attempt_not_retryable", ("attempt_id", "phase")),
+)
+_register("scope", ("attempt_other_submitter", ("attempt_id",)))
+_register(
+    "quota",
+    ("quota_not_recorded", ("task_id",)),
+    ("quota_over_task_budget", ("resource", "need_amount", "available_amount")),
+    ("quota_over_service_cap", ("resource", "need_amount", "available_amount")),
+    ("quota_over_balance", ("resource", "need_amount", "available_amount")),
+    ("quota_retry_limit", ("max_retries",)),
+)
+_register("member", ("member", ()))

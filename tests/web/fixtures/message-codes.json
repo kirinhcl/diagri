@@ -1475,6 +1475,238 @@
       ],
       "action": false,
       "of": "param"
+    },
+    "param_too_long": {
+      "params": [
+        "field",
+        "max_length"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_bad_characters": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_bad_format": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_not_in_choices": {
+      "params": [
+        "field",
+        "choices"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_wrong_type": {
+      "params": [
+        "field",
+        "expected_kind"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_not_finite": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_out_of_range": {
+      "params": [
+        "field",
+        "minimum",
+        "maximum"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_below_minimum": {
+      "params": [
+        "field",
+        "minimum"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_above_maximum": {
+      "params": [
+        "field",
+        "maximum"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_unknown_fields": {
+      "params": [
+        "names"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_required": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_negative_amount": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_bad_input_path": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "param_input_missing": {
+      "params": [
+        "field"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "inputs_unavailable": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "template_not_found": {
+      "params": [
+        "template_id"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "template_version_unregistered": {
+      "params": [
+        "template_id",
+        "version"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "attempt_already_final": {
+      "params": [
+        "attempt_id",
+        "phase"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_settled_by_operator": {
+      "params": [
+        "attempt_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_not_cancellable": {
+      "params": [
+        "attempt_id",
+        "phase"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_nothing_to_fetch": {
+      "params": [
+        "attempt_id",
+        "phase"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_outputs_over_limit": {
+      "params": [
+        "attempt_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_no_storage_limit": {
+      "params": [
+        "attempt_id",
+        "template_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_not_retryable": {
+      "params": [
+        "attempt_id",
+        "phase"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "attempt_other_submitter": {
+      "params": [
+        "attempt_id"
+      ],
+      "action": true,
+      "of": "scope"
+    },
+    "quota_not_recorded": {
+      "params": [
+        "task_id"
+      ],
+      "action": true,
+      "of": "quota"
+    },
+    "quota_over_task_budget": {
+      "params": [
+        "resource",
+        "need_amount",
+        "available_amount"
+      ],
+      "action": true,
+      "of": "quota"
+    },
+    "quota_over_service_cap": {
+      "params": [
+        "resource",
+        "need_amount",
+        "available_amount"
+      ],
+      "action": true,
+      "of": "quota"
+    },
+    "quota_over_balance": {
+      "params": [
+        "resource",
+        "need_amount",
+        "available_amount"
+      ],
+      "action": true,
+      "of": "quota"
+    },
+    "quota_retry_limit": {
+      "params": [
+        "max_retries"
+      ],
+      "action": true,
+      "of": "quota"
+    },
+    "member": {
+      "params": [],
+      "action": true,
+      "of": "member"
     }
   }
 }
