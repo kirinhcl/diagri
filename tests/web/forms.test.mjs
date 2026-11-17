@@ -152,6 +152,19 @@ test("suggestions make a datalist the page can refill", () => {
   assert.throws(() => formControls(form).get("nope"), /no field/);
 });
 
+test("onChange tells the page each value a field is changed to, and only that field", () => {
+  installFakeDom();
+  const form = sampleForm([]);
+  const seen = [];
+  formControls(form).onChange("metric", (value) => seen.push(value));
+  const field = (name) => elements(form, "input").find((element) => element.getAttribute("name") === name);
+  field("metric").value = "area";
+  field("metric").dispatchEvent(new Event("change"));
+  field("when").dispatchEvent(new Event("change"));
+  assert.deepEqual(seen, ["area"]);
+  assert.throws(() => formControls(form).onChange("nope", () => {}), /no field/);
+});
+
 test("a refusal of a hidden field is written with the field's label, not its name", async () => {
   installFakeDom();
   const fields = [

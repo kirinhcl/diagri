@@ -462,6 +462,7 @@ export default {
   "measure.new": "录入测量",
   "measure.list": "已录入的测量",
   "measure.empty": "这个实验还没有测量记录。",
+  "measure.noVariables": "该实验的协议没有声明变量。请先保存一个声明了变量的协议版本，再录入测量。",
   "measure.measuredAt": "测量时间",
   "measure.plant": "植株",
   "measure.batch": "批次",

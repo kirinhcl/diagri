@@ -1,0 +1,15 @@
+{
+  "experiment_id": "exp-round_9d38ffa4ca3049948194e0b60315c650",
+  "variables": [
+    {
+      "id": "canopy_area_growth",
+      "label_en": "Canopy area growth",
+      "label_zh": "冠层面积增长",
+      "unit": "cm2/d",
+      "method": "Canopy area from top-view images, change per day",
+      "min": null,
+      "max": null,
+      "deprecated": false
+    }
+  ]
+}

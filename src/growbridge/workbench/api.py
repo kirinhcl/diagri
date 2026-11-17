@@ -32,6 +32,8 @@ from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry
+from growbridge.vocab import Variable
+from growbridge.vocab.checks import check_measurement
 from growbridge.workbench.analysis import add_analysis_routes
 from growbridge.workbench.auth import (
     SESSION_SECONDS,
@@ -158,6 +160,14 @@ class GuardedRoute(APIRoute):
 
 def runtime_json(runtime: StageRuntime) -> dict:
     return runtime.model_dump(mode="json", exclude={"run_sheet"})
+
+
+VARIABLE_FIELDS = ("id", "label_en", "label_zh", "unit", "method", "min", "max", "deprecated")
+
+
+def variable_json(variable: Variable) -> dict:
+    """What the measurement form needs of a catalog variable."""
+    return {name: getattr(variable, name) for name in VARIABLE_FIELDS}
 
 
 def origin_matches_host(origin: str | None, host: str) -> bool:
@@ -450,6 +460,11 @@ class Workbench:
 
     # --- records -------------------------------------------------------------------------------
 
+    def staged_experiment(self, experiment_id: str) -> None:
+        """Refuses an experiment no stage runs: every measurement must trace to a project."""
+        if not self.workflow.store.projects_of_experiment(experiment_id):
+            raise Denied("scope", "a measurement belongs to an experiment of an existing stage")
+
     def _record_routes(self) -> None:
         router = self.router
         Operator = Annotated[Actor, Depends(self.operator)]  # noqa: N806
@@ -457,15 +472,19 @@ class Workbench:
 
         @router.post("/measurements")
         async def measurement(body: MeasurementIn, actor: Operator):
-            if not self.workflow.store.projects_of_experiment(body.experiment_id):
-                raise Denied(  # every measurement must be traceable to a project
-                    "scope", "a measurement belongs to an experiment of an existing stage"
-                )
+            self.staged_experiment(body.experiment_id)
             fields = body.model_dump(exclude={"id"})
             try:
                 record = ManualMeasurement(
                     id=body.id or new_id("measurement"), operator=actor.id, **fields
                 )
+            except ValueError as error:
+                raise rejected("the measurement was not accepted") from error
+            declared = self.workflow.store.declared_variables(body.experiment_id)
+            problems = check_measurement(record, self.workflow.catalog, declared)
+            if problems:
+                raise rejected("; ".join(problems))
+            try:
                 self.archive.add_measurement(record)
             except ValueError as error:
                 raise rejected("the measurement was not accepted") from error
@@ -499,6 +518,17 @@ class Workbench:
                 "state_at": row.state_at if row else None,  # the console proves a finished window
                 "project_id": row.project_id if row else runtime.project_id,
                 **(stage_names(store, row) if row else dict.fromkeys(STAGE_NAME_KEYS)),
+            }
+
+        @router.get("/experiments/{experiment_id}/variables")
+        async def variables(experiment_id: str, actor: Anyone):
+            """The variables a measurement of this experiment may name, as the entry form offers."""
+            self.staged_experiment(experiment_id)
+            declared = self.workflow.store.declared_variables(experiment_id)
+            entries = (self.workflow.catalog.get(name) for name in sorted(declared))
+            return {
+                "experiment_id": experiment_id,
+                "variables": [variable_json(entry) for entry in entries if entry is not None],
             }
 
         @router.get("/receipts/{request_id}")

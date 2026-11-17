@@ -44,6 +44,7 @@ const ROUTES = [
   [/^\/rounds\/[^/]+\/report$/, () => "report.json"],
   [/^\/protocols\/[^/]+\/analysis$/, () => "analysis.json"],
   [/^\/stages\/([^/]+)(\/[a-z-]+)?$/, ([id, part], pending) => stageFixture(id, part, pending)],
+  [/^\/experiments\/([^/]+)\/variables$/, ([id], pending) => (id === pending.experiment ? "variables-pending.json" : "variables.json")],
   [/^\/environment$/, () => "environment.json"],
   [/^\/safety$/, () => "safety.json"],
   [/^\/alerts$/, () => "alerts.json"],
@@ -75,11 +76,15 @@ function fixtureFor(path, pending) {
 }
 
 function fakeApi(files) {
-  const pending = { round: files["round-pending.json"]?.round_id, stage: files["stage-pending.json"]?.stage_id };
+  const pending = {
+    round: files["round-pending.json"]?.round_id,
+    stage: files["stage-pending.json"]?.stage_id,
+    experiment: files["stage-pending.json"]?.experiment_id,
+  };
   const calls = [];
   const get = async (path) => {
     const name = fixtureFor(path, pending);
-    const found = name !== null && Object.hasOwn(files, name);
+    const found = name !== null && Object.hasOwn(files, name) && files[name] !== null;
     calls.push({ method: "GET", path, fixture: found ? name : null });
     if (!found) throw new ApiError(404, null, "HTTP 404");
     return structuredClone(files[name]);
@@ -99,7 +104,8 @@ function meWith(me, options) {
 }
 
 // The page ctx of W/main.js makeCtx, plus `now` (fixed epoch seconds, or undefined). `fixtures`
-// replaces fixture files by name. Pages build DOM, so a fake DOM is installed when there is none.
+// replaces fixture files by name; a file replaced by null is missing, so its read answers 404.
+// Pages build DOM, so a fake DOM is installed when there is none.
 export function testCtx(options = {}) {
   const { lang = "zh", fixtures = {}, now } = options;
   if (typeof document === "undefined") installFakeDom();

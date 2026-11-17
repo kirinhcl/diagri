@@ -68,6 +68,7 @@ against the server's enums and literals.
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
 | compute.json | `/compute` (synthetic) |
+| variables.json, variables-pending.json | `/experiments/{experiment_id}/variables` of the ended stage's and of `stage-dev`'s experiment (synthetic) |
 
 ## report.json (task 14)
 
@@ -83,3 +84,11 @@ The top-level `budget` gained `used_calls`, `used_cost`, `max_calls` and `max_co
 server now answers (beside the captured `calls_left` and `cost_left`). Values are synthetic but
 consistent with the captured left-overs: 103 left of 120 calls (17 used), 97.06714 left of 100 cost
 (2.93286 used).
+
+## variables.json and variables-pending.json (variable catalog, task 5)
+
+Synthetic, not captured: the answer of the new `/experiments/{experiment_id}/variables` read, written
+by hand to the shape of `src/growbridge/workbench/api.py`. Both experiments' protocols name the
+primary endpoint `canopy_area_growth` (the dev seed's `protocol-1` is `make_protocol`, which declares
+it), so each file lists that one variable with the packaged catalog's labels, unit `cm2/d` and
+method. The measurements captured before the catalog keep their recorded unit `cm2/day`.

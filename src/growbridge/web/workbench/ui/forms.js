@@ -294,7 +294,8 @@ function partOf(form, name) {
 }
 
 // set({name: value}) writes values as the form would start with them (a datetime from epoch
-// seconds; null empties the field); suggest(name, values) replaces a field's suggestions.
+// seconds; null empties the field); suggest(name, values) replaces a field's suggestions;
+// onChange(name, handler) calls handler(value) each time the person changes that field (not set).
 export function formControls(form) {
   const get = (name) => partOf(form, name).entry.input.value;
   const set = (values) => {
@@ -310,7 +311,11 @@ export function formControls(form) {
     entry.list.replaceChildren(...suggestionOptions(values));
   };
   const focus = (name) => partOf(form, name).entry.input.focus();
-  return { get, set, suggest, focus };
+  const onChange = (name, handler) => {
+    const { input } = partOf(form, name).entry;
+    input.addEventListener("change", () => handler(input.value));
+  };
+  return { get, set, suggest, focus, onChange };
 }
 
 export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own }) {

@@ -385,6 +385,17 @@ class WorkflowStore:
         )
         return tuple((row["protocol_id"], row["protocol_version"]) for row in rows)
 
+    def declared_variables(self, experiment_id: str) -> frozenset[str]:
+        """The union of the variables of every protocol version a stage of this experiment runs
+        under (none: no stage runs it). A round's protocol version is always saved before the
+        round; were one missing, its variables would simply not count, which refuses more."""
+        declared: set[str] = set()
+        for protocol_id, version in self.protocol_versions_of(experiment_id):
+            protocol = self.protocol(protocol_id, version)
+            if protocol is not None:
+                declared.update(protocol.variables)
+        return frozenset(declared)
+
     # --- approvals -----------------------------------------------------------------------------
 
     def add_approval(self, approval: Approval) -> None:

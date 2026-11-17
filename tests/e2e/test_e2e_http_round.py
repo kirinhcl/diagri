@@ -207,7 +207,7 @@ async def test_round_from_goal_to_delivered_through_http_routes_only(world, site
         "method": "image",
         "metric": "canopy_area_growth",
         "value": 1.30,
-        "unit": "cm2/day",
+        "unit": "cm2/d",
     }
     assert await post(client, "/wb/measurements", measurement) == {"id": "m-1"}
     # the loop's first pass after the end audits the stage once, before any goal is set

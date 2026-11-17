@@ -32,7 +32,7 @@ def measurements() -> list[ManualMeasurement]:
             method="image",
             metric=METRIC,
             value=value,
-            unit="cm2/day",
+            unit="cm2/d",
             operator=OPERATOR,
         )
         for number, _treatment, value in OUTCOMES

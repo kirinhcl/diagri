@@ -86,7 +86,7 @@ def measure(runtime, at: float) -> None:
             method="image",
             metric="canopy_area_growth",
             value=1.30,
-            unit="cm2/day",
+            unit="cm2/d",
             operator=OPERATOR,
         )
     )

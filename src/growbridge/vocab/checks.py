@@ -1,7 +1,7 @@
-"""Checks of a protocol against the variable catalog (spec section 6)."""
+"""Checks of a protocol and of a manual measurement against the variable catalog (spec §6)."""
 
-from growbridge.archive.models import ResearchProtocol
-from growbridge.vocab.catalog import Catalog
+from growbridge.archive.models import ManualMeasurement, ResearchProtocol
+from growbridge.vocab.catalog import Catalog, Variable
 
 
 def check_protocol(
@@ -47,3 +47,36 @@ def _factor_problems(treatment_id: str, key: str, catalog: Catalog) -> list[str]
         f" (use the standard ID {found.id})" if found is not None and found.kind == "factor" else ""
     )
     return [f"treatment {treatment_id}: factor {key} is not a factor in the catalog{hint}"]
+
+
+def check_measurement(
+    record: ManualMeasurement, catalog: Catalog, declared: frozenset[str]
+) -> list[str]:
+    """Every problem found; an empty list means the measurement may be stored.
+
+    The metric must be a variable the experiment's protocol declared, matched exactly. A declared
+    variable that has since been deprecated is still accepted: deprecation is not checked at entry.
+    """
+    if not declared:
+        return [
+            f"the protocol of experiment {record.experiment_id} declares no variables:"
+            " save a protocol version that declares them first"
+        ]
+    entry = catalog.get(record.metric) if record.metric in declared else None
+    if entry is None:
+        names = ", ".join(sorted(declared))
+        return [f"metric {record.metric!r} is not a declared variable; declared: {names}"]
+    return _entry_problems(record, entry)
+
+
+def _entry_problems(record: ManualMeasurement, entry: Variable) -> list[str]:
+    problems: list[str] = []
+    if entry.kind != "manual":
+        problems.append(f"variable {entry.id} is a {entry.kind} variable, not a manual one")
+    if record.unit != entry.unit:
+        problems.append(f"variable {entry.id} is recorded in {entry.unit}, not {record.unit}")
+    if entry.min is not None and record.value < entry.min:
+        problems.append(f"value {record.value} is below the minimum {entry.min} of {entry.id}")
+    if entry.max is not None and record.value > entry.max:
+        problems.append(f"value {record.value} is above the maximum {entry.max} of {entry.id}")
+    return problems
