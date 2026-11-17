@@ -5,7 +5,7 @@ import { clearOnHandOver } from "./intents.js";
 import { LANGS, initialLang, makeT } from "./i18n.js";
 import { inboxCounts } from "./pages/inbox.js";
 import * as loginPage from "./pages/login.js";
-import { PAGES, hrefFor, parseHash } from "./router.js";
+import { PAGES, homeFor, hrefFor, parseHash } from "./router.js";
 import { askSecret } from "./ui/dialog.js";
 import { clear, h } from "./ui/dom.js";
 import { bindFormContext, dropDetachedDraftSavers, errorDetail, errorLines, saveAllDrafts } from "./ui/forms.js";
@@ -238,8 +238,8 @@ async function loadMe(token) {
   const changed = handOver(state.lastOperator, state.me.operator);
   state.lastOperator = state.me.operator;
   if (changed) state.returnTo = null;
-  if (changed && location.hash !== hrefFor("inbox")) {
-    navigate(hrefFor("inbox"));
+  if (changed && location.hash !== homeFor(state.me)) {
+    navigate(homeFor(state.me));
     return false;
   }
   return true;

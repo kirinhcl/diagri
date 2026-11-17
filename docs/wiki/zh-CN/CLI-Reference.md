@@ -35,7 +35,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `mcp` | 无 | 是 | 是，每个工具都要调用它 | 两种模式都能用，工具不同 |
 | `status` | 无 | 是 | 是 | 两种模式都能用 |
 | `dashboard` | `--no-open` | 是 | 是 | 两种模式都能用；DiAGRI 模式下控制台不能写入 |
-| `operator add` | `name`（位置参数，必填） | 是 | 否 | 为它准备；命令本身不检查 `auto_research` |
+| `operator add` | `name`（位置参数，必填）、`--admin`（设为管理员；多用户） | 是 | 否 | 为它准备；命令本身不检查 `auto_research` |
 | `host register` | 无 | 是 | 否 | 为它准备；命令本身不检查 `auto_research` |
 | `recovery bump` | `--reason REASON`（必填） | 是 | 否，而且必须先停掉 | 为它准备；命令本身不检查 `auto_research` |
 | `simulate` | 无 | 否 | 否 | 在临时目录里自建一个 DiAGRI 运行时 |

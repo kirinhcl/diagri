@@ -11,12 +11,25 @@ from typing import Any
 from growbridge.workflow.store import WorkflowStore
 
 
-def project_summaries(store: WorkflowStore, limit: int = 200) -> list[dict[str, Any]]:
+def _owned(only_owner: str | None, alias: str = "") -> tuple[str, tuple[str, ...]]:
+    """The SQL condition (placed before any LIMIT) that keeps one owner's projects."""
+    if only_owner is None:
+        return "", ()
+    column = f"{alias}owner" if alias else "owner"
+    return f" AND {column} = ?", (only_owner,)
+
+
+def project_summaries(
+    store: WorkflowStore, limit: int = 200, *, only_owner: str | None = None
+) -> list[dict[str, Any]]:
     """Projects newest first, each with its round count and latest round (and that round's
-    ``round_number``, as ``WorkflowStore.round_number`` counts it)."""
+    ``round_number``, as ``WorkflowStore.round_number`` counts it). ``only_owner`` keeps one
+    operator's projects."""
+    condition, params = _owned(only_owner)
     projects = store.db.query(
-        "SELECT id, name, created_at FROM wf_projects ORDER BY created_at DESC, rowid DESC LIMIT ?",
-        (limit,),
+        f"SELECT id, name, created_at FROM wf_projects WHERE 1 = 1{condition}"
+        " ORDER BY created_at DESC, rowid DESC LIMIT ?",
+        (*params, limit),
     )
     summaries: list[dict[str, Any]] = []
     for project in projects:
@@ -108,22 +121,30 @@ def project_detail(store: WorkflowStore, project_id: str) -> dict[str, Any] | No
     }
 
 
-def count_rounds_awaiting_choice(store: WorkflowStore) -> int:
-    """How many rounds wait for an operator's choice."""
-    row = store.db.one(
-        "SELECT COUNT(*) AS n FROM wf_rounds"
-        " WHERE awaiting_choice IS NOT NULL AND awaiting_choice != ''"
-    )
+_WAITING_ROUNDS = (
+    " FROM wf_rounds r JOIN wf_projects p ON p.id = r.project_id"
+    " WHERE r.awaiting_choice IS NOT NULL AND r.awaiting_choice != ''"
+)
+
+
+def count_rounds_awaiting_choice(store: WorkflowStore, *, only_owner: str | None = None) -> int:
+    """How many rounds wait for an operator's choice (of one owner's projects, if given)."""
+    condition, params = _owned(only_owner, "p.")
+    row = store.db.one(f"SELECT COUNT(*) AS n{_WAITING_ROUNDS}{condition}", params)
     return row["n"] if row else 0
 
 
-def rounds_awaiting_choice(store: WorkflowStore, limit: int = 50) -> list[dict[str, Any]]:
-    """Rounds waiting for an operator's choice, oldest first."""
+def rounds_awaiting_choice(
+    store: WorkflowStore, limit: int = 50, *, only_owner: str | None = None
+) -> list[dict[str, Any]]:
+    """Rounds waiting for an operator's choice, oldest first (of one owner's projects, if
+    given; the owner is filtered before the limit)."""
+    condition, params = _owned(only_owner, "p.")
     rows = store.db.query(
-        "SELECT id, project_id, awaiting_choice, created_at FROM wf_rounds"
-        " WHERE awaiting_choice IS NOT NULL AND awaiting_choice != ''"
-        " ORDER BY created_at, rowid LIMIT ?",
-        (limit,),
+        "SELECT r.id AS id, r.project_id AS project_id, r.awaiting_choice AS awaiting_choice,"
+        f" r.created_at AS created_at{_WAITING_ROUNDS}{condition}"
+        " ORDER BY r.created_at, r.rowid LIMIT ?",
+        (*params, limit),
     )
     return [
         {

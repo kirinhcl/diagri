@@ -1,0 +1,10 @@
+{
+  "locks": [
+    {"id": "gh-01", "name": "Greenhouse 1", "state": "taken", "locked_at": 1794821000.0, "holder": "alice"},
+    {"id": "gh-02", "name": "Greenhouse 2", "state": "free", "locked_at": null, "holder": null}
+  ],
+  "events": [
+    {"id": 2, "greenhouse_id": "gh-01", "holder": "alice", "action": "lock", "actor": "alice", "at": 1794821000.0, "note": ""},
+    {"id": 1, "greenhouse_id": "gh-02", "holder": "bob", "action": "force_release", "actor": "dev", "at": 1794820000.0, "note": "bob left"}
+  ]
+}

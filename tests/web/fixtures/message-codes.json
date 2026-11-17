@@ -2054,6 +2054,163 @@
       "params": [],
       "action": true,
       "of": "locked"
+    },
+    "not_owner": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "not_owner"
+    },
+    "stage_greenhouse_not_held": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "not_lock_holder"
+    },
+    "owner_lacks_greenhouse": {
+      "params": [
+        "project_id",
+        "device_id"
+      ],
+      "action": true,
+      "of": "not_lock_holder"
+    },
+    "greenhouse_not_held": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "not_lock_holder"
+    },
+    "local_greenhouse_not_held": {
+      "params": [],
+      "action": true,
+      "of": "not_lock_holder"
+    },
+    "admin_only": {
+      "params": [],
+      "action": true,
+      "of": "admin_only"
+    },
+    "greenhouses_taken": {
+      "params": [
+        "greenhouse_ids"
+      ],
+      "action": true,
+      "of": "lock_taken"
+    },
+    "greenhouse_busy": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "greenhouse_busy"
+    },
+    "greenhouse_unknown": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "greenhouses_named_twice": {
+      "params": [],
+      "action": true,
+      "of": "state"
+    },
+    "trigger_id_in_use": {
+      "params": [],
+      "action": true,
+      "of": "state"
+    },
+    "stage_id_in_use": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "run_sheet_rebinds_stage": {
+      "params": [
+        "stage_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "owner_still_active": {
+      "params": [
+        "project_id",
+        "owner"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "project_has_unfinished_stages": {
+      "params": [
+        "project_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "operator_not_active": {
+      "params": [
+        "name"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "operator_name_length": {
+      "params": [
+        "max_length"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "operator_exists": {
+      "params": [
+        "name"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "operator_unknown": {
+      "params": [
+        "name"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "secret_length": {
+      "params": [
+        "min_length",
+        "max_length"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "own_account": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "last_admin": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "account_change_refused": {
+      "params": [
+        "detail"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "model_drafts_through_tools": {
+      "params": [],
+      "action": false,
+      "of": "model_role"
     }
   }
 }

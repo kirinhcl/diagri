@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 56 个路由。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 56 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -208,6 +208,23 @@
 | 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数 | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
+
+### 多用户路由
+
+打开 `multi_user` 时挂载（[`workbench/greenhouses.py`](../../../src/growbridge/workbench/greenhouses.py)、[`workbench/admin.py`](../../../src/growbridge/workbench/admin.py)）。此时其余每个路由也检查调用者：操作员只看到并操作自己拥有的项目，动阶段还要锁着它的温室；别人的对象按"不存在的编号"回答。`GET /wb/me` 增加 `multi_user`、`role`、`greenhouses`。`POST /wb/drafts/run-sheet` 拒绝角色令牌（`model_role`）：模型只能通过绑定任务的工具起草运行单。每个读取路由遵循哪条规则，列在 [`workbench/visibility.py`](../../../src/growbridge/workbench/visibility.py)。
+
+| 方法与路径 | 谁可以 | 请求体 | 回答 | 拒绝码 |
+| --- | --- | --- | --- | --- |
+| `GET /wb/greenhouses` | 操作员 | | `greenhouses`：`id`、`name`、`state`（`free`、`mine`、`taken`）、`locked_at`；管理员另有 `holder` | |
+| `POST /wb/greenhouses/lock` | 操作员，需重新认证 | `greenhouse_ids`（1 到 64 个） | `locked` | `lock_taken`、`state` |
+| `POST /wb/greenhouses/{id}/release` | 锁定它的操作员 | | `released` | `not_lock_holder`、`greenhouse_busy`、`state` |
+| `GET /wb/admin/operators` | 管理员 | | `operators`：`name`、`role`、`created_at`、`disabled_at`、`unfinished_stages` | `admin_only` |
+| `POST /wb/admin/operators` | 管理员，需重新认证 | `name`、`secret`、`role` | `name`、`role` | `admin_only`、`param` |
+| `POST /wb/admin/operators/disable` | 管理员，需重新认证 | `name` | `disabled` | `admin_only`、`param` |
+| `POST /wb/admin/operators/secret` | 管理员，需重新认证 | `name`、`secret` | `reset` | `admin_only`、`param` |
+| `GET /wb/admin/locks` | 管理员 | | `locks`、`events` | `admin_only` |
+| `POST /wb/admin/greenhouses/{id}/release` | 管理员，需重新认证 | `note`（1 到 500 字） | `released` | `admin_only`、`greenhouse_busy` |
+| `POST /wb/admin/projects/{project_id}/owner` | 管理员，需重新认证 | `owner`、`note` | `project_id`、`owner` | `admin_only`、`state`（原所有者仍可操作、有未结束阶段，或新所有者不可用） |
 
 每个拒绝都会说明原因。工作台路由的 `detail` 对象多出 `reason`（`denial` 族的一个代码，没有原因的拒绝为 `null`）和 `params`（对象，原因不带参数时为空）：`{"detail": {"code": "<code>", "message": "<text>", "reason": "<reason>", "params": {}}}`。桥接路由的 `detail` 仍是字符串，响应体多出顶层的 `code`、`reason` 和 `params`。粗码和状态码不变，`message` 仍是英文文本。一个原因属于一个粗码（它的 `of`）；控制台按页面语言写出该原因的句子，旧客户端或没有原因时退回到粗码。`tests/web/fixtures/message-codes.json` 的 `denial` 族列出每个原因及其 `params`、`action`（控制台给出的下一步）和 `of`。表单字段在发出请求之前显示的文字由控制台自己给出（`msg.validation.*`），不属于这个 API。模型看到的仍是 `Error: denied (<code>): <message>`，看不到原因。
 

@@ -1,4 +1,4 @@
-// Plain-language messages for every denial code (33 from the wiki, plus four client-side codes).
+// Plain-language messages for every denial code (38 from the wiki, plus four client-side codes).
 // Row: [code, zh text, zh advice, en text, en advice]
 const ROWS = [
   ["host_unregistered", "这台电脑不是该设备登记的写入主机。", "请在登记的主机上操作，或先把这台电脑登记为写入主机。", "This computer is not the registered write host for the device.", "Work from the registered host, or register this computer as the write host first."],
@@ -34,6 +34,11 @@ const ROWS = [
   ["cooldown", "正在浇水，或距上一次浇水还不够久。", "等一会儿再浇。", "Irrigation is running, or the last one started too recently.", "Wait a while, then irrigate again."],
   ["unavailable", "这个功能的后端没有配置（搜索、计算服务、隔离环境或留出集登记）。", "你无法解决；这个服务在部署时没有包含它。", "An optional backend is not configured (search, compute service, sandbox or holdout registry).", "Nothing you can do; this installation was set up without it."],
   ["locked", "登录失败次数过多，已锁定 15 分钟。", "等 15 分钟后再试。", "Too many failed sign-ins; locked for 15 minutes.", "Wait 15 minutes, then try again."],
+  ["lock_taken", "你选的温室里有的已被别人锁定，这次一个也没有锁上。", "去掉被占用的温室后重新锁定。", "Some of the greenhouses you picked are locked by someone else, so none were locked.", "Leave out the taken ones and lock again."],
+  ["greenhouse_busy", "这个温室上还有没结束的阶段，不能释放。", "先停止或结束那个阶段（或中止轮次），再释放。", "A stage on this greenhouse has not ended or stopped, so it cannot be released.", "Stop or end that stage (or abort its round) first, then release."],
+  ["not_owner", "管理员不能替别人操作他们的项目。", "请项目所有者操作；需要时可以先停用其账号，再把项目转给别人。", "Administrators do not act on another operator's project.", "Ask the project's owner. If needed, disable their account and hand the project to someone else."],
+  ["not_lock_holder", "你没有锁定这个温室。", "先在「温室」页锁定它，再重试。", "You do not hold this greenhouse.", "Lock it on the Greenhouses page first, then try again."],
+  ["admin_only", "只有管理员能做这个操作。", "请联系管理员。", "Only an administrator can do this.", "Ask an administrator."],
   ["validation", "有些输入不符合要求。", "按字段旁的提示改正后再提交。", "Some of the input is not valid.", "Fix the fields marked below and submit again."],
   ["reauth_failed", "密码不对，没有重新认证。", "请再试一次；连续输错会被暂时锁定。", "The password was wrong, so you were not re-authenticated.", "Try again. Several wrong tries in a row lock sign-in for a while."],
   ["network", "连不上服务器，或没有收到答复。", "检查网络连接，稍后再试。", "Could not reach the server, or no answer came back.", "Check the network connection and try again in a moment."],

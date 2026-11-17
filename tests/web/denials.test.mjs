@@ -20,7 +20,7 @@ function wikiCodes() {
 
 test("every wiki denial code is described in both languages", () => {
   const codes = wikiCodes();
-  assert.equal(codes.length, 33);
+  assert.equal(codes.length, 38);
   for (const code of [...codes, ...CLIENT_CODES]) {
     for (const lang of ["zh", "en"]) {
       const d = describeDenial(code, lang);

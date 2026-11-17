@@ -6,7 +6,7 @@ is reported as a ``data_gap`` instead; an old reading never keeps an alert runni
 """
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Any, Literal, Protocol
 
 from pydantic import Field
@@ -33,6 +33,23 @@ STEPS = (
     # The stable message code and its params (JSON); NULL for an alert stored before codes.
     "ALTER TABLE observer_alerts ADD COLUMN code TEXT",
     "ALTER TABLE observer_alerts ADD COLUMN params TEXT",
+    # Who the alert belongs to (multi-user): a stage, a project or a device; NULL for the
+    # system's own alerts and for every alert stored before this existed.
+    "ALTER TABLE observer_alerts ADD COLUMN scope_kind TEXT",
+    "ALTER TABLE observer_alerts ADD COLUMN scope_id TEXT",
+    "CREATE INDEX observer_alerts_scoped ON observer_alerts(kind, key, scope_kind, scope_id)",
+)
+Scope = tuple[str, str]  # ("stage" | "project" | "device", id)
+# Kinds about the device this process controls; they belong to it unless a scope is given.
+DEVICE_KINDS = frozenset(
+    {
+        "frozen_reading",
+        "data_gap",
+        "threshold",
+        "pump_unreadable",
+        "pump_unexpected",
+        "pump_watchdog",
+    }
 )
 SEVERITY_ORDER: tuple[Severity, ...] = ("info", "warning", "critical")  # mildest first
 
@@ -46,6 +63,7 @@ class AlertHook(Protocol):
         key: str,
         message: str,
         severity: Severity = ...,
+        scope: Scope | None = None,
         *,
         code: str | None = None,
         params: Mapping[str, object] | None = None,
@@ -142,6 +160,14 @@ class Alert(Model):
     read_severity: Severity | None = None
     code: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
+    scope_kind: str | None = None
+    scope_id: str | None = None
+
+    @property
+    def scope(self) -> Scope | None:
+        if self.scope_kind is None or self.scope_id is None:
+            return None
+        return (self.scope_kind, self.scope_id)
 
 
 def _from_row(row) -> Alert:
@@ -170,10 +196,16 @@ def awaits_reading(alert: Alert, now: float, trusted: bool) -> bool:
 
 
 class AlertBook:
-    def __init__(self, db: Database, clock: Clock):
+    def __init__(self, db: Database, clock: Clock, device_id: str | None = None):
         self.db = db
         self.clock = clock
+        self.device_id = device_id  # owner of the device kinds raised without a scope
         db.migrate(NAMESPACE, STEPS)
+
+    def _scope(self, kind: str, scope: Scope | None) -> tuple[str | None, str | None]:
+        if scope is None and kind in DEVICE_KINDS and self.device_id is not None:
+            scope = ("device", self.device_id)
+        return (None, None) if scope is None else scope
 
     def raise_alert(
         self,
@@ -181,13 +213,15 @@ class AlertBook:
         key: str,
         severity: Severity,
         message: str,
+        scope: Scope | None = None,
         *,
         code: str | None = None,
         params: Mapping[str, object] | None = None,
     ) -> Alert:
-        """Merge into the open event of the same kind and key, or start a new one. Without a code
-        the alert is stored under its kind and no params."""
+        """Merge into the open event of the same kind, key and scope, or start a new one. Without
+        a code the alert is stored under its kind and no params."""
         now = self.clock.now()
+        owner = self._scope(kind, scope)
         if code is None:
             code, stored = kind, {}
         else:
@@ -196,16 +230,26 @@ class AlertBook:
         params_json = json.dumps(stored, sort_keys=True, default=str)
         with self.db.transaction():
             row = self.db.one(
-                "SELECT event_id, read_severity FROM observer_alerts "
-                "WHERE kind = ? AND key = ? AND resolved_at IS NULL",
-                (kind, key),
+                "SELECT event_id, read_severity FROM observer_alerts WHERE kind = ? AND key = ?"
+                " AND scope_kind IS ? AND scope_id IS ? AND resolved_at IS NULL",
+                (kind, key, *owner),
             )
             if row is None:
+                if owner != (None, None):
+                    # an event of this kind and key left open from before scopes goes on under
+                    # its scope: close the old row (never hand it to anyone) instead of keeping
+                    # two open events for one condition
+                    self.db.execute(
+                        "UPDATE observer_alerts SET resolved_at = ? WHERE kind = ? AND key = ?"
+                        " AND scope_kind IS NULL AND resolved_at IS NULL",
+                        (now, kind, key),
+                    )
                 event_id = new_id("alert")
                 self.db.execute(
-                    "INSERT INTO observer_alerts(event_id, kind, key, severity, message, "
-                    "count, first_at, last_at, code, params) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)",
-                    (event_id, kind, key, severity, message, now, now, code, params_json),
+                    "INSERT INTO observer_alerts(event_id, kind, key, severity, message, count,"
+                    " first_at, last_at, code, params, scope_kind, scope_id)"
+                    " VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)",
+                    (event_id, kind, key, severity, message, now, now, code, params_json, *owner),
                 )
             else:
                 event_id = row["event_id"]
@@ -231,13 +275,21 @@ class AlertBook:
             )
         return _from_row(row)
 
-    def resolve(self, kind: str, key: str) -> bool:
+    def resolve(self, kind: str, key: str, scope: Scope | None = None) -> bool:
+        """Close the open event of this kind, key and scope, and any unscoped one stored before
+        scopes existed (closing never hands that old event to anyone)."""
+        owner = self._scope(kind, scope)
         cursor = self.db.execute(
-            "UPDATE observer_alerts SET resolved_at = ? "
-            "WHERE kind = ? AND key = ? AND resolved_at IS NULL",
-            (self.clock.now(), kind, key),
+            "UPDATE observer_alerts SET resolved_at = ? WHERE kind = ? AND key = ?"
+            " AND ((scope_kind IS ? AND scope_id IS ?) OR scope_kind IS NULL)"
+            " AND resolved_at IS NULL",
+            (self.clock.now(), kind, key, *owner),
         )
         return cursor.rowcount > 0
+
+    def open_for_scope(self, kinds: Collection[str], scope: Scope) -> tuple[Alert, ...]:
+        """The open alerts of ``kinds`` that belong to ``scope``."""
+        return tuple(a for a in self.open() if a.kind in kinds and a.scope == tuple(scope))
 
     def open(self) -> tuple[Alert, ...]:
         rows = self.db.query(

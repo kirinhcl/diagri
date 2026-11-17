@@ -1,0 +1,7 @@
+{
+  "greenhouses": [
+    {"id": "gh-01", "name": "Greenhouse 1", "state": "mine", "locked_at": 1794821000.0},
+    {"id": "gh-02", "name": "Greenhouse 2", "state": "taken", "locked_at": null},
+    {"id": "gh-03", "name": "Greenhouse 3", "state": "free", "locked_at": null}
+  ]
+}

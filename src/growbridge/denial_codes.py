@@ -329,3 +329,39 @@ _register("quota", ("quota_proposal_limit", ("max_proposals",)), action=False)
 _register("entry", ("origin_not_allowed", ()), ("use_workbench", ()))
 _register("session", ("dashboard_not_connected", ()), ("link_used", ()))
 _register("locked", ("too_many_pending_connections", ()), ("too_many_sessions", ()), action=True)
+
+# --- multi-user workbench (workflow/access.py, workflow/locks.py, workbench/admin.py) -----------
+# A record the caller may not see is refused as a missing one: record_not_found, not listed here.
+_register("not_owner", ("not_owner", ("project_id",)))
+_register(
+    "not_lock_holder",
+    ("stage_greenhouse_not_held", ("stage_id",)),
+    ("owner_lacks_greenhouse", ("project_id", "device_id")),
+    ("greenhouse_not_held", ("greenhouse_id",)),
+    ("local_greenhouse_not_held", ()),
+)
+_register("admin_only", ("admin_only", ()))
+_register("lock_taken", ("greenhouses_taken", ("greenhouse_ids",)))
+_register("greenhouse_busy", ("greenhouse_busy", ("greenhouse_id",)))
+_register(
+    "state",
+    ("greenhouse_unknown", ("greenhouse_id",)),
+    ("greenhouses_named_twice", ()),
+    ("trigger_id_in_use", ()),
+    ("stage_id_in_use", ("stage_id",)),
+    ("run_sheet_rebinds_stage", ("stage_id",)),
+    ("owner_still_active", ("project_id", "owner")),
+    ("project_has_unfinished_stages", ("project_id",)),
+    ("operator_not_active", ("name",)),
+)
+_register(
+    "param",
+    ("operator_name_length", ("max_length",)),
+    ("operator_exists", ("name",)),
+    ("operator_unknown", ("name",)),
+    ("secret_length", ("min_length", "max_length")),
+    ("own_account", ()),
+    ("last_admin", ()),
+    ("account_change_refused", ("detail",)),
+)
+_register("model_role", ("model_drafts_through_tools", ()), action=False)

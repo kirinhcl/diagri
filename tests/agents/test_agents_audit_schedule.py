@@ -61,10 +61,10 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
     stages = Stages(clock.now() if started else None, state)
     book = AlertBook(db, clock)
 
-    def resolve_alert(kind, key):
+    def resolve_alert(kind, key, scope=None):
         # Runtime.resolve_alert's contract: never raises, False when not stored
         try:
-            book.resolve(kind, key)
+            book.resolve(kind, key, scope)
         except Exception:
             return False
         return True
@@ -76,8 +76,8 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         budget=calls,
         clock=clock,
         book=book,
-        alert=lambda kind, key, message, severity="critical", *, code=None, params=None: (
-            book.raise_alert(kind, key, severity, message, code=code, params=params)
+        alert=lambda kind, key, message, severity="critical", scope=None, **fields: (
+            book.raise_alert(kind, key, severity, message, scope, **fields)
         ),
         resolve_alert=resolve_alert,
     )

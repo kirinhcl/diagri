@@ -10,6 +10,7 @@ import { advancedJson } from "../ui/field-forms.js";
 import { Cancelled, errorLines } from "../ui/forms.js";
 import { keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
+import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
 import { safetyForm } from "./safety-form.js";
@@ -123,7 +124,12 @@ export async function render(ctx) {
   };
   const refreshCurrent = () =>
     readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
-  await readCurrent();
+  try {
+    await readCurrent();
+  } catch (error) {
+    if (!isNotLockHolder(error)) throw error;
+    return { element: lockFirst(ctx, ctx.t("nav.safety")) };
+  }
   const outcome = { text: ctx.t("form.done"), refused: false };
   const editorCtx = editorContext(ctx, refreshCurrent, outcome);
   const approve = approver(ctx, state, outcome, readCurrent, refreshCurrent);

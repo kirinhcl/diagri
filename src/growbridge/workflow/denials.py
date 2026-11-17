@@ -28,6 +28,32 @@ def record_not_found(kind: str, record_id: str, message: str) -> Denied:
     return Denied("state", message, reason="record_not_found", params=params)
 
 
+def unknown(kind: str, record_id: str) -> Denied:
+    """The refusal for a record that does not exist. Multi-user gives the same one for a record
+    the caller may not see, so the two answer alike (status, reason, params and message)."""
+    return record_not_found(kind, record_id, f"unknown {kind} {record_id}")
+
+
+def stage_id_in_use(stage_id: str) -> Denied:
+    """A replacement run sheet names a stage of another round: nothing about that stage is said."""
+    return Denied(
+        "state",
+        f"stage id {stage_id} is already used",
+        reason="stage_id_in_use",
+        params={"stage_id": stage_id},
+    )
+
+
+def run_sheet_rebinds_stage(stage_id: str) -> Denied:
+    """Rights follow the sheet's device while checks read the stage row: they must stay equal."""
+    return Denied(
+        "state",
+        "a replacement run sheet keeps the stage's project, experiment and device",
+        reason="run_sheet_rebinds_stage",
+        params={"stage_id": stage_id},
+    )
+
+
 def protocol_version_exists(protocol_id: str, version: int) -> Denied:
     return Denied(
         "state",
