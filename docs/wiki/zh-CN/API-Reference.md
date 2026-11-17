@@ -94,6 +94,8 @@
 | `GET` | `/wb/receipts/{request_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `GET` | `/wb/alerts` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `POST` | `/wb/alerts/{event_id}/read` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `GET` | `/wb/devices/{device_id}/notes` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不是本机设备）、`not_lock_holder` |
+| `POST` | `/wb/devices/{device_id}/notes` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不是本机设备）、`not_lock_holder` |
 | `POST` | `/wb/projects` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/protocols` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
@@ -155,7 +157,9 @@
 | `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id`、`project_id` 和 `state_at`（角色令牌得到的运行信息和以前一样，没有 `round_id`）。操作员还得到 `project_name`、`round_number`、`stage_index` 和 `phase`，含义同轮次；找不到时各为 `null` |
 | `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警。每条在英文 `message` 之外还有 `code`（`alert` 族的消息码；有代码之前存下的告警为 `null`）和 `params`（对象，代码没有参数时为空）。 |
-| `POST` | `/wb/alerts/{event_id}/read` | 无 | `event_id` |
+| `POST` | `/wb/alerts/{event_id}/read` | 可选 `note`（最多 500 字）：原因或处理。每次已读带的非空原因都保留；模型把它当作背景，附在对应的读数卡住经历上 | `event_id` |
+| `GET` | `/wb/devices/{device_id}/notes` | 无 | `notes`：这台设备最新的 10 条日志（`id`、`device_id`、`at`、`actor`、`sensor`、`text`），最新在前。日志写的是设备本身，不属于某个实验，之后持有这个温室的人也能看到 |
+| `POST` | `/wb/devices/{device_id}/notes` | `text`（1 到 500 字）、可选 `sensor`（最多 40 字） | 新写入的日志 |
 | `POST` | `/wb/projects` | `name`（1 到 200） | `project_id` |
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |
 | `POST` | `/wb/rounds` | `project_id`、`protocol_id`（各 1 到 100） | `round_id`、`state` |
@@ -183,7 +187,7 @@
 | `GET` | `/wb/projects` | 无 | `projects`：每个项目的摘要，最多 200 个；其中的 `latest_round` 还有 `round_number` |
 | `GET` | `/wb/projects/{project_id}` | 无 | 项目的 `project_id`、`name`、`created_at`、`rounds`（新的在前，每个带 `round_number`）和 `protocols`（每个协议的最新版本）、`budget`（`calls_left`、`cost_left`、`used_calls`、`used_cost`、`max_calls` 和 `max_cost`，没有设置预算时为 `null`；`used_cost` 可以超过 `max_cost`，照实显示）和 `tasks`（最多 100 条）。项目不存在时以 `state` 拒绝。 |
 | `GET` | `/wb/stages/{stage_id}/readings` | 查询参数 `points`（2 到 2000，默认 600） | `samples`（由 `timestamp`、`data`、`quality`、`clock_synced`、`flagged` 组成的列表）、`window`（`start`、`end`、`bucket_seconds`，阶段尚未开始时为 `null`）、`total_samples`、`flagged_total` 和 `downsampled`。每个时间桶保留最新的一条样本；`flagged` 是该桶里质量不是 `ok` 或时钟未同步的样本数。`points` 超出范围时返回 422。 |
-| `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是当前阶段，包括它的 `project_name`、`round_number`、`stage_index` 和 `phase`（找不到时各为 `null`）、它的 `state`、每个通道的 `ownership`，以及仅在阶段处于 `running` 时运行单此刻要求的档位 `expected`（其他状态为 `null`）和 `planned`（时间窗内的计划：`light`、`exhaust`、`fan` 各一个 `[时间, 档位]` 点的列表，窗口起点一个、每次计划变化一个；阶段不在运行时为 `{}`；温度和湿度没有计划值）；没有当前阶段时 `stage` 为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
+| `GET` | `/wb/environment` | 查询参数 `window`（秒，300 到 604800，默认 21600）、`points`（2 到 1000，默认 360） | 实时环境页的数据，取自档案，不向设备发请求：`now`、`device_id`（本机设备，用于设备日志）、`clock_synced`；`latest` 是最新一条样本（`timestamp`、`age_seconds`、`quality`、`clock_synced`、`experiment_id`、`sensors`，以及 `channels` 里每个通道记录的 `level` 和 `on`），没有样本时为 `null`；`stage` 是当前阶段，包括它的 `project_name`、`round_number`、`stage_index` 和 `phase`（找不到时各为 `null`）、它的 `state`、每个通道的 `ownership`，以及仅在阶段处于 `running` 时运行单此刻要求的档位 `expected`（其他状态为 `null`）和 `planned`（时间窗内的计划：`light`、`exhaust`、`fan` 各一个 `[时间, 档位]` 点的列表，窗口起点一个、每次计划变化一个；阶段不在运行时为 `{}`；温度和湿度没有计划值）；没有当前阶段时 `stage` 为 `null`；`sensors` 和 `level_ranges` 取自设备能力；`alerts` 是按严重程度计数的未处理告警；`readings` 是时间窗内的全部样本（不论是否属于阶段），格式和阶段读数相同。 |
 | `GET` | `/wb/stages/{stage_id}/measurements` | 无 | `measurements`：该阶段所属实验的测量，包含已被更正的 |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | 无 | `stage_id`、`stage_state`、`timezone`、`on_time_seconds`、`early_seconds`、`now`，以及 `occurrences`：运行单的人工任务在阶段时间窗内的每一次（`task_id`、`kind`、`due_at`、`make_up_allowed`、`seconds`），带 `status`（`upcoming`、`open`、`done`、`late`、`skipped`、`missed`）和起作用的那条 `record`（没有时为 `null`）；阶段开始前为空 |
 | `GET` | `/wb/stages/{stage_id}/history` | 无 | `history`（阶段的状态变化）和 `interventions`（该实验中属于本阶段的干预） |
