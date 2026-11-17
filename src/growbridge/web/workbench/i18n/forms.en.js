@@ -141,7 +141,7 @@ export default {
   "runsheet.form.end": "At the end of the stage",
   "runsheet.form.versionNote": "If you change anything, it is saved as version {version} of this run sheet and needs a new approval. If you change nothing, the current version and its approval stay.",
   "runsheet.form.draftStale": "The run sheet changed after your draft was kept, so the draft was not restored. Enter your changes again.",
-  "round.choice.redo.line": "Runs this stage again; the data it already has is kept.",
+  "round.choice.redo.line": "Sends this stage back to waiting for review; the data it already has is kept. Nothing runs until a new run sheet is approved and started.",
   "round.choice.next.line": "Moves on to the next stage; this stage is not run again.",
   "round.choice.verify.line": "Goes to the data verification of this round.",
   "evidence.enterTitle": "Enter this evidence card?",

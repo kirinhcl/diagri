@@ -393,6 +393,15 @@ test("a freeze script longer than the limit is refused beside the field, nothing
   await settle();
 });
 
+test("the redo confirm line says the stage goes back to review and nothing runs until a new run sheet is approved", () => {
+  assert.doesNotMatch(en["round.choice.redo.line"], /runs this stage again/i);
+  assert.match(en["round.choice.redo.line"], /review/);
+  assert.match(en["round.choice.redo.line"], /run sheet/);
+  assert.doesNotMatch(zh["round.choice.redo.line"], /再跑一次/);
+  assert.match(zh["round.choice.redo.line"], /待审批/);
+  assert.match(zh["round.choice.redo.line"], /运行单/);
+});
+
 test("the run form starts on 'choose' and asks before the one run a snapshot allows", async () => {
   const frozen = { script_sha256: "ab".repeat(32), frozen_at: 1796590000, frozen_by: "dev", script: "x = 1" };
   const c = testCtx({ lang: "en", fixtures: { "analysis.json": { ...ANALYSIS, frozen } } });

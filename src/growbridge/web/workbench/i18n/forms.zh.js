@@ -140,7 +140,7 @@ export default {
   "runsheet.form.end": "阶段结束时",
   "runsheet.form.versionNote": "如果你改了任何内容，会保存为这份运行单的第 {version} 版，并需要重新审批；什么都没改，则保留当前版本及其审批。",
   "runsheet.form.draftStale": "运行单在你保存草稿之后变了，草稿没有恢复。请重新输入你的修改。",
-  "round.choice.redo.line": "再跑一次这个阶段，已有的数据保留。",
+  "round.choice.redo.line": "把这个阶段退回到待审批；已有的数据保留。在新的运行单获批并启动之前，不会运行任何东西。",
   "round.choice.next.line": "进入下一阶段，这个阶段不再重跑。",
   "round.choice.verify.line": "进入这一轮的数据核验。",
   "evidence.enterTitle": "录入这张证据卡？",
