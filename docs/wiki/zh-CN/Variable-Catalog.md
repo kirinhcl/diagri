@@ -44,13 +44,13 @@
 
 ## 它在下游管什么
 
-- **测量。** 人工测量只能使用该实验的协议所声明的变量，单位必须是该变量的单位，数值必须在范围内。见[开展一轮研究](Run-a-Research-Round.md#记录一次测量)。
+- **测量。** 人工测量只能使用该实验的协议所声明的变量，单位必须是该变量的单位，数值必须在范围内。见[运行一轮研究](Run-a-Research-Round.md#记录一次测量)。
 - **留出集。** 结局名称通过目录解析；目录无法解析的名称按留出的结局处理。见[科研方法](Research-Methodology.md#预测模型与留出数据)。
 - **快照。** 每个数据快照包含 `catalog.json`，记录目录的 `version`、`digest`、数据用到的 `variables`，以及 `unresolved` 的名称。
 
 ## 另见
 
-- [开展一轮研究](Run-a-Research-Round.md)
+- [运行一轮研究](Run-a-Research-Round.md)
 - [科研方法](Research-Methodology.md)
 - [HTTP、工作台与 MCP 接口](API-Reference.md)
 - [数据、档案与可追溯性](Data-Archive-and-Traceability.md)
