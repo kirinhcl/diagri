@@ -319,6 +319,18 @@ test("the save-as choice and the saved notice call a protocol the console saved 
   }
 });
 
+test("the endpoint hint offers suggestions only when saved protocols give some", async () => {
+  const hintOf = (form) => {
+    const ids = named(form, "primary_endpoint")[0].getAttribute("aria-describedby").split(" ");
+    return byClass(form, "field-hint").find((hint) => ids.includes(hint.getAttribute("id"))).textContent;
+  };
+  const saved = await open();
+  assert.equal(hintOf(saved.form), en["protocol.form.endpointHint"]);
+  const none = await open({ project: { ...PROJECT, protocols: [] } });
+  assert.equal(hintOf(none.form), en["protocol.form.endpointHintNone"]);
+  for (const table of [en, zh]) assert.doesNotMatch(table["protocol.form.endpointHintNone"], /suggestion|建议/i);
+});
+
 test("a new protocol is the default choice and gets a new id at version 1", async () => {
   const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang: "en" });
   const form = byTag(sectionOf(element, en["project.protocols.title"]), "form")[0];

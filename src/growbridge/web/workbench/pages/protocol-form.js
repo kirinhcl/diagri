@@ -104,10 +104,11 @@ function duplicateCodes(t) {
 
 function analysisFields(t, project) {
   const rows = array(project.protocols);
+  const endpoints = unique(rows.map((row) => row.primary_endpoint));
   const fraction = (name, label, value) => ({ name, label, hint: t("protocol.form.fractionHint"), type: "number", required: true, min: 0, max: 1, value });
   return [
     linesField({ name: "variables", label: t("protocol.form.variables"), hint: t("protocol.form.variablesHint"), required: true }),
-    { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t("protocol.form.endpointHint"), required: true, parse: trimmed, suggestions: unique(rows.map((row) => row.primary_endpoint)) },
+    { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t(endpoints.length ? "protocol.form.endpointHint" : "protocol.form.endpointHintNone"), required: true, parse: trimmed, suggestions: endpoints },
     { name: "target_effect", label: t("protocol.form.effect"), hint: t("protocol.form.effectHint"), type: "number", required: true },
     { name: "method", label: t("protocol.form.method"), hint: t("protocol.form.methodHint"), required: true, parse: trimmed, suggestions: unique([...FIXED_METHODS, ...rows.map((row) => row.method)]) },
     linesField({ name: "exclusion_rules", label: t("protocol.form.exclusions"), hint: t("protocol.form.exclusionsHint") }),

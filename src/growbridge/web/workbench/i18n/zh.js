@@ -350,7 +350,6 @@ export default {
   "stage.draft.note": "在下面修改运行单。提交时会校验，没有阻断性问题才会替换当前运行单，替换后需要重新审批。",
   "stage.draft.json": "草稿（JSON）",
   "stage.draft.submit": "提交修改",
-  "stage.draft.submitJson": "提交 JSON 草稿",
   "stage.draft.refused": "草稿没有保存：校验发现了阻断性问题（见下方）。",
   "stage.pause": "暂停阶段",
   "stage.pause.reason": "原因（可选）",

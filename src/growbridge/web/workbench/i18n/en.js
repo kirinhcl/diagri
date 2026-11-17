@@ -350,7 +350,6 @@ export default {
   "stage.draft.note": "Edit the run sheet below. It is checked when submitted and replaces the current one only when nothing blocks it; it then needs a new approval.",
   "stage.draft.json": "Draft (JSON)",
   "stage.draft.submit": "Submit changes",
-  "stage.draft.submitJson": "Submit the JSON draft",
   "stage.draft.refused": "The draft was not stored because the check found blocking problems (listed below).",
   "stage.pause": "Pause stage",
   "stage.pause.reason": "Reason (optional)",

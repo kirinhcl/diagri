@@ -75,6 +75,7 @@ export default {
   "protocol.form.analysis": "分析",
   "protocol.form.endpoint": "主要终点",
   "protocol.form.endpointHint": "可以选一个建议，也可以自己写。",
+  "protocol.form.endpointHintNone": "填写分析要比较的变量；它必须是上面“测量的变量”中的一个。",
   "protocol.form.variables": "测量的变量",
   "protocol.form.variablesHint": "变量目录里的 ID，每行一个；主要终点必须在其中。",
   "protocol.form.effect": "目标效应",
@@ -152,4 +153,5 @@ export default {
   "tasks.skipTitle": "跳过这项任务？",
   "tasks.skipLine": "之后再记一次，以最后一次为准。",
   "tasks.skipReason": "理由（可不填）",
+  "stage.draft.submitJson": "提交 JSON 草稿",
 };
