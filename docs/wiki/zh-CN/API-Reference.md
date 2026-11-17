@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 56 个路由。第一张表末尾的八个读取路由总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 56 个路由。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -128,7 +128,7 @@
 | `GET` | `/wb/safety` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 | `GET` | `/wb/capabilities` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 
-最后二十九个路由只给操作员用，其中的十四个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
+最后二十九个路由只给操作员用，其中的十七个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
 下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。
 
