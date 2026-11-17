@@ -312,6 +312,15 @@ class Archive:
             )
             self._touch()
 
+    def actions_between(self, experiment_id: str, lo: float, hi: float) -> tuple[ActionRecord, ...]:
+        """The experiment's actions created in ``[lo, hi)``, oldest first."""
+        rows = self.db.query(
+            "SELECT body FROM actions WHERE experiment_id = ?"
+            " AND created_at >= ? AND created_at < ? ORDER BY seq",
+            (experiment_id, lo, hi),
+        )
+        return tuple(ActionRecord.model_validate_json(row["body"]) for row in rows)
+
     def actions(self, experiment_id: str | None = None) -> tuple[ActionRecord, ...]:
         if experiment_id is None:
             rows = self.db.query("SELECT body FROM actions ORDER BY seq")

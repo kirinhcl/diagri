@@ -14,6 +14,9 @@ import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import { formatDuration } from "../../src/growbridge/web/workbench/format.js";
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { hrefFor, parseHash } from "../../src/growbridge/web/workbench/router.js";
+import { visibleText } from "./support/leaks.mjs";
+
+const descendantsOf = (node) => [...(node.children || [])].flatMap((child) => [child, ...descendantsOf(child)]);
 
 const t = (key, vars) => (vars ? `${key}${JSON.stringify(vars)}` : key);
 
@@ -170,4 +173,33 @@ test("the page draws the stage's planned levels on the level charts, and none wh
   assert.ok(withPlan.includes("Planned level"));
   const without = await envText("en", { ...RUNNING, planned: {} });
   assert.ok(!without.includes("Planned"));
+});
+
+test("the device notes are listed as text, newest first, and a new one is sent", async () => {
+  const { element, ctx } = await renderPage("environment", {}, { lang: "en" });
+  const nodes = [element, ...descendantsOf(element)];
+  const text = visibleText(element);
+  assert.match(text, /Device notes/);
+  assert.ok(text.indexOf("changed the CO2 probe") < text.indexOf("<b>fan</b> cleaned"));
+  assert.equal(nodes.some((el) => el.nodeName === "B"), false); // the note's text is not markup
+
+  const form = nodes.find((el) => el.nodeName === "FORM");
+  const input = [form, ...descendantsOf(form)].find((el) => el.nodeName === "INPUT" || el.nodeName === "TEXTAREA");
+  input.value = "  re-seated the probe ";
+  form.dispatchEvent(Object.assign(new Event("submit"), { preventDefault() {} }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const post = ctx.api.calls.find((c) => c.method === "POST");
+  assert.deepEqual(post && [post.path, post.body], ["/devices/SIMULATED/notes", { text: "re-seated the probe" }]);
+  const reads = ctx.api.calls.filter((c) => c.method === "GET" && c.path === "/devices/SIMULATED/notes");
+  assert.equal(reads.length, 2); // listed again after the write
+});
+
+test("an empty device note is not sent", async () => {
+  const { element, ctx } = await renderPage("environment", {}, { lang: "en" });
+  const form = descendantsOf(element).find((el) => el.nodeName === "FORM");
+  form.dispatchEvent(Object.assign(new Event("submit"), { preventDefault() {} }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(ctx.api.calls.filter((c) => c.method === "POST").length, 0);
 });

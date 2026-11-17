@@ -209,3 +209,20 @@ def test_report_store_saves_one_report_per_project_and_day(db):
     assert store.save("p2", "2026-11-10", "other project") is True
     assert store.get("p1", "2026-11-10") == "first"
     assert store.get("p1", "2026-11-11") is None
+
+
+def test_report_lists_recurring_patterns(metrics):
+    lines = (
+        "protect:hot on 4 of the last 7 days, around 14:05",
+        "co2 frozen on 3 of the last 7 days, around 02:00",
+    )
+    context = ReportContext(project_id="p", project_name="Basil", recurring=lines)
+
+    text = render_daily_report(metrics, context)
+    assert "Recurring:\n- protect:hot on 4 of the last 7 days, around 14:05\n- co2 frozen" in text
+
+
+def test_report_without_recurring_has_no_section(metrics):
+    text = render_daily_report(metrics, ReportContext(project_id="p", project_name="Basil"))
+
+    assert "Recurring" not in text

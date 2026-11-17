@@ -38,6 +38,11 @@ STEPS = (
     "ALTER TABLE observer_alerts ADD COLUMN scope_kind TEXT",
     "ALTER TABLE observer_alerts ADD COLUMN scope_id TEXT",
     "CREATE INDEX observer_alerts_scoped ON observer_alerts(kind, key, scope_kind, scope_id)",
+    # memory: every reason an operator gave when marking an alert read (an alert is read again
+    # each day and when it gets worse, so one column would lose the earlier reasons)
+    "CREATE TABLE alert_notes(id INTEGER PRIMARY KEY AUTOINCREMENT, event_id TEXT NOT NULL,"
+    " actor TEXT NOT NULL, at REAL NOT NULL, note TEXT NOT NULL)",
+    "CREATE INDEX alert_notes_event ON alert_notes(event_id)",
 )
 Scope = tuple[str, str]  # ("stage" | "project" | "device", id)
 # Kinds about the device this process controls; they belong to it unless a scope is given.
@@ -170,6 +175,17 @@ class Alert(Model):
         return (self.scope_kind, self.scope_id)
 
 
+class AlertNote(Model):
+    """A reason given when an alert was marked read, with the span of that alert."""
+
+    event_id: str
+    at: float
+    actor: str
+    note: str
+    first_at: float
+    resolved_at: float | None = None
+
+
 def _from_row(row) -> Alert:
     values = {name: row[name] for name in Alert.model_fields}
     values["params"] = json.loads(values["params"]) if values["params"] else {}
@@ -297,17 +313,34 @@ class AlertBook:
         )
         return tuple(_from_row(row) for row in rows)
 
-    def mark_read(self, event_id: str, actor: Actor) -> None:
+    def mark_read(self, event_id: str, actor: Actor, note: str | None = None) -> None:
+        """Record the read; a non-blank ``note`` (why it happened, what was done) is kept too."""
         if actor.kind != "operator":
             raise Denied(
                 "not_operator",
                 "only an operator can mark an alert as read",
                 reason="not_operator",
             )
+        now, reason = self.clock.now(), (note or "").strip()
         with self.db.transaction():  # the severity read is the one stored at this moment
             current = self.get(event_id)
             self.db.execute(
                 "UPDATE observer_alerts SET read_by = ?, read_at = ?, read_severity = ? "
                 "WHERE event_id = ?",
-                (actor.id, self.clock.now(), current.severity, event_id),
+                (actor.id, now, current.severity, event_id),
             )
+            if reason:
+                self.db.execute(
+                    "INSERT INTO alert_notes(event_id, actor, at, note) VALUES (?, ?, ?, ?)",
+                    (event_id, actor.id, now, reason),
+                )
+
+    def notes_of(self, kind: str, key: str) -> tuple[AlertNote, ...]:
+        """Every read note of the alerts of this kind and key, oldest first."""
+        rows = self.db.query(
+            "SELECT n.event_id, n.at, n.actor, n.note, a.first_at, a.resolved_at"
+            " FROM alert_notes n JOIN observer_alerts a ON a.event_id = n.event_id"
+            " WHERE a.kind = ? AND a.key = ? ORDER BY n.at, n.id",
+            (kind, key),
+        )
+        return tuple(AlertNote(**dict(row)) for row in rows)

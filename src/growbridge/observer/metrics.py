@@ -76,6 +76,17 @@ def _segments(
     return result
 
 
+def coverage_gaps(
+    samples: Sequence[SampleRecord], start: float, end: float, max_gap: float
+) -> tuple[tuple[float, float], ...]:
+    """Uncovered spans of ``[start, end)`` in absolute time, counting only the samples the daily
+    metrics count (planned, clock synced, quality ok)."""
+    segments = _segments([s for s in samples if _counts(s)], start, end, max_gap)
+    return tuple(
+        (start + g.start_offset, start + g.end_offset) for g in _gaps(segments, start, end)
+    )
+
+
 def _gaps(segments: Sequence[Segment], start: float, end: float) -> tuple[Gap, ...]:
     gaps: list[Gap] = []
     cursor = start
