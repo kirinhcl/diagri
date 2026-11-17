@@ -4,6 +4,8 @@ import test from "node:test";
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
+import MESSAGES_EN from "../../src/growbridge/web/workbench/i18n/messages.en.js";
+import MESSAGES_ZH from "../../src/growbridge/web/workbench/i18n/messages.zh.js";
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { analysisSection, analysisState, runView } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
 import { abortLines, estimateText, render, reportLists, reportView } from "../../src/growbridge/web/workbench/pages/round.js";
@@ -33,8 +35,8 @@ const sectionTitled = (root, title) => elements(root, "section").find((node) => 
 
 test("an estimate reads as effect, p value and blocks, or says why there is none", () => {
   assert.equal(estimateText(ctx, { estimable: true, effect: 0.42, p_value: 0.0312, blocks: 2 }), "Effect 0.420, p = 0.031, over 2 complete blocks");
-  const none = { estimable: false, note: "fewer than 2 complete blocks; no treatment effect can be estimated" };
-  assert.equal(estimateText(ctx, none), none.note);
+  const coded = { estimable: false, note: "fewer than 2 complete blocks; no treatment effect can be estimated", note_code: "too_few_blocks", note_params: { blocks: 0, min_blocks: 2 } };
+  assert.equal(estimateText(ctx, coded), "Fewer than 2 complete blocks (0 so far), so no treatment effect can be estimated.");
   assert.equal(estimateText(ctx, { estimable: false }), en["report.notEstimable"]);
   assert.equal(estimateText(ctx, null), "—");
 });
@@ -328,4 +330,49 @@ test("a large effect and a tiny p value are written without an exponent, in the 
   const small = { estimable: true, effect: 0.231234, p_value: 0.034, blocks: 2 };
   assert.equal(estimateText(testCtx({ lang: "en" }), small), "Effect 0.231, p = 0.034, over 2 complete blocks");
   for (const lang of ["en", "zh"]) assert.doesNotMatch(estimateText(testCtx({ lang }), big), /e[+-]/);
+});
+
+const TOO_FEW = { estimable: false, effect: 0, blocks: 0, p_value: null, note: "fewer than 2 complete blocks; no treatment effect can be estimated", note_code: "too_few_blocks", note_params: { blocks: 0, min_blocks: 2 } };
+const withEstimate = (estimate, extra = {}) => ({ label: "descriptive", ...extra, report: { estimate } });
+
+test("an estimate note follows the console language and says what to do", () => {
+  for (const lang of ["en", "zh"]) {
+    const text = visibleText(reportView(testCtx({ lang }), withEstimate(TOO_FEW)));
+    const messages = lang === "en" ? MESSAGES_EN : MESSAGES_ZH;
+    const filled = (template) => template.replace("{blocks}", "0").replaceAll("{min_blocks}", "2");
+    assert.ok(text.includes(filled(messages["msg.estimate.too_few_blocks"])), lang);
+    assert.ok(text.includes(filled(messages["msg.estimate.too_few_blocks.action"])), lang);
+  }
+  const zhText = visibleText(reportView(testCtx({ lang: "zh" }), withEstimate(TOO_FEW)));
+  assert.doesNotMatch(zhText, /fewer than/i);
+  const sampled = { estimable: true, effect: 1.5, blocks: 25, p_value: 0.001, note: "p-value approximated by sampled sign flips", note_code: "sampled_p", note_params: { flips: 20000, blocks: 25 } };
+  const sampledText = visibleText(reportView(testCtx({ lang: "zh" }), withEstimate(sampled)));
+  assert.ok(sampledText.includes("20,000") && !/sampled sign flips/.test(sampledText));
+  assert.ok(!sampledText.includes("再跑几轮"), "an approximated p needs no action");
+});
+
+test("an old report's note stays in the details", () => {
+  const old = { estimable: false, effect: 0, blocks: 0, p_value: null, note: "fewer than 2 complete blocks; no treatment effect can be estimated" };
+  const view = reportView(testCtx({ lang: "zh" }), withEstimate(old));
+  assert.ok(visibleText(view).includes(zh["report.notEstimable"]));
+  assert.ok(!visibleText(view).includes(old.note), "the English sentence is not on the page");
+  assert.ok(visibleTextIncludingDetails(view).includes(old.note), "but it is in the details");
+});
+
+test("an old estimable report's note on its sampled p value is folded, not shown", () => {
+  const old = { estimable: true, effect: 1.5, blocks: 25, p_value: 0.001, note: "p-value approximated by sampled sign flips" };
+  for (const lang of ["zh", "en"]) {
+    const view = reportView(testCtx({ lang }), withEstimate(old));
+    assert.ok(!visibleText(view).includes(old.note), `${lang}: the English sentence is not on the page`);
+    assert.ok(visibleTextIncludingDetails(view).includes(old.note), `${lang}: but it is in the details`);
+  }
+  const none = reportView(testCtx({ lang: "zh" }), withEstimate({ ...old, note: "" }));
+  assert.ok(!visibleTextIncludingDetails(none).includes(zh["report.estimateNote"]), "an empty note adds no row");
+});
+
+test("the estimate names the measured quantity", () => {
+  const view = reportView(testCtx({ lang: "zh" }), withEstimate(TOO_FEW, { primary_endpoint: "canopy_area_growth" }));
+  assert.ok(visibleText(view).includes("指标：「canopy_area_growth」"));
+  const none = reportView(testCtx({ lang: "zh" }), withEstimate(TOO_FEW, { primary_endpoint: null }));
+  assert.ok(!visibleText(none).includes("指标"));
 });

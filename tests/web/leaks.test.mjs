@@ -215,7 +215,11 @@ test("the stage waiting for review renders from the -pending fixtures", async ()
   assert.ok(files.length > 0 && files.every((file) => /-pending\.json$/.test(String(file))), files.join(", "));
 });
 
-test("no Batch 1 page leaks internal text", async (t) => {
+test("no exemption is left for the second batch", () => {
+  assert.ok(EXEMPTIONS.every((exemption) => exemption.batch !== 2));
+});
+
+test("no page leaks internal text", async (t) => {
   for (const { page, params, fixtures } of PAGES_CHECKED) {
     for (const lang of ["zh", "en"]) {
       await t.test(`${page} ${JSON.stringify(params || {})} (${lang})`, async () => {

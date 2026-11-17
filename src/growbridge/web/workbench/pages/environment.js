@@ -8,7 +8,7 @@ import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js
 import { clear, h } from "../ui/dom.js";
 import { displayName } from "../ui/names.js";
 import { note, pageHead, section, timeText } from "../ui/section.js";
-import { statePill } from "../ui/status.js";
+import { statePillKeeper } from "../ui/status.js";
 import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 
 export const WINDOWS = [3600, 6 * 3600, 24 * 3600, 7 * 86400];
@@ -66,7 +66,7 @@ export function ageText(t, seconds) {
   return formatAge(t, typeof seconds === "number" ? Math.max(0, seconds) : seconds);
 }
 
-function statusLine(ctx, env) {
+function statusLine(ctx, env, statePillOf) {
   const parts = [];
   const state = freshness(env);
   if (state === "none") parts.push(h("span", { class: ["pill", "pill-waiting"], text: ctx.t("env.noData") }));
@@ -79,7 +79,7 @@ function statusLine(ctx, env) {
   }
   if (env.stage) {
     const link = h("a", { attrs: { href: hrefFor("stage", { stageId: env.stage.stage_id }) }, text: ctx.t("env.stage", { name: displayName(ctx, "stage", env.stage) }) });
-    parts.push(h("span", { class: "env-stage" }, link, statePill(ctx.t, env.stage.state)));
+    parts.push(h("span", { class: "env-stage" }, link, statePillOf(env.stage.state)));
   } else parts.push(h("span", { class: "env-muted", text: ctx.t("env.noStage") }));
   const open = Object.values(env.alerts || {}).reduce((sum, n) => sum + n, 0);
   if (open > 0) parts.push(h("a", { class: "env-alerts", attrs: { href: hrefFor("alerts") }, text: ctx.t("env.alerts", { count: open }) }));
@@ -154,7 +154,7 @@ function trendsView(ctx, env) {
     h("h3", { class: "env-sub", text: ctx.t("env.sensors") }),
     readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, empty: "env.readingsEmpty", scope: "sensors" }),
     h("h3", { class: "env-sub", text: ctx.t("env.channels") }),
-    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty", scope: "levels" }),
+    readingsChart(ctx.t, env.readings, { ...options, sampleSeconds, metrics: LEVELS, empty: "env.levelsEmpty", scope: "levels", planned: env.stage ? env.stage.planned : null }),
   );
 }
 
@@ -187,8 +187,9 @@ export async function render(ctx) {
   const status = h("div");
   const now = h("div");
   const trends = h("div");
+  const statePillOf = statePillKeeper(ctx.t);
   const draw = () => {
-    clear(status).append(statusLine(ctx, env));
+    clear(status).append(statusLine(ctx, env, statePillOf));
     clear(now).append(nowView(ctx, env));
     const open = openChartFolds(trends); // a poll must not close what the reader opened
     clear(trends).append(trendsView(ctx, env));

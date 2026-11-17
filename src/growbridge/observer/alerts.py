@@ -5,13 +5,17 @@ reading. When the data is missing, stale or invalid, the rule loses its continui
 is reported as a ``data_gap`` instead; an old reading never keeps an alert running or raises one.
 """
 
+import json
 from collections.abc import Collection, Mapping, Sequence
-from typing import Literal
+from typing import Any, Literal, Protocol
+
+from pydantic import Field
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Condition, Model
+from growbridge.codes import checked
 from growbridge.ports import Actor, Denied, Reading
 
 Severity = Literal["info", "warning", "critical"]
@@ -26,6 +30,9 @@ STEPS = (
     "CREATE INDEX observer_alerts_open ON observer_alerts(kind, key, resolved_at)",
     # The severity an operator read; NULL for a read recorded before this column existed.
     "ALTER TABLE observer_alerts ADD COLUMN read_severity TEXT",
+    # The stable message code and its params (JSON); NULL for an alert stored before codes.
+    "ALTER TABLE observer_alerts ADD COLUMN code TEXT",
+    "ALTER TABLE observer_alerts ADD COLUMN params TEXT",
     # Who the alert belongs to (multi-user): a stage, a project or a device; NULL for the
     # system's own alerts and for every alert stored before this existed.
     "ALTER TABLE observer_alerts ADD COLUMN scope_kind TEXT",
@@ -45,6 +52,21 @@ DEVICE_KINDS = frozenset(
     }
 )
 SEVERITY_ORDER: tuple[Severity, ...] = ("info", "warning", "critical")  # mildest first
+
+
+class AlertHook(Protocol):
+    """The hook a component raises alerts through (``Runtime._alert``); True when stored."""
+
+    def __call__(
+        self,
+        kind: str,
+        key: str,
+        message: str,
+        severity: Severity = ...,
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> bool: ...
 
 
 class AlertRule(Model):
@@ -135,6 +157,8 @@ class Alert(Model):
     read_by: str | None = None
     read_at: float | None = None
     read_severity: Severity | None = None
+    code: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
     scope_kind: str | None = None
     scope_id: str | None = None
 
@@ -145,8 +169,22 @@ class Alert(Model):
         return (self.scope_kind, self.scope_id)
 
 
-def _alert(row) -> Alert:
-    return Alert(**{name: row[name] for name in Alert.model_fields})
+def _stored_params(
+    kind: str, code: str | None, params: Mapping[str, object] | None
+) -> tuple[str, str]:
+    """The code and params JSON an alert is stored with: without a code, its kind and no params."""
+    if code is None:
+        code, stored = kind, {}
+    else:
+        stored = checked("alert", code, params or {})
+    # a value that is not JSON is stored as its text: the params never stop an alert
+    return code, json.dumps(stored, sort_keys=True, default=str)
+
+
+def _from_row(row) -> Alert:
+    values = {name: row[name] for name in Alert.model_fields}
+    values["params"] = json.loads(values["params"]) if values["params"] else {}
+    return Alert(**values)
 
 
 def _rank(severity: Severity) -> int:
@@ -181,11 +219,21 @@ class AlertBook:
         return (None, None) if scope is None else scope
 
     def raise_alert(
-        self, kind: str, key: str, severity: Severity, message: str, scope: Scope | None = None
+        self,
+        kind: str,
+        key: str,
+        severity: Severity,
+        message: str,
+        scope: Scope | None = None,
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
     ) -> Alert:
-        """Merge into the open event of the same kind, key and scope, or start a new one."""
+        """Merge into the open event of the same kind, key and scope, or start a new one. Without
+        a code the alert is stored under its kind and no params."""
         now = self.clock.now()
         owner = self._scope(kind, scope)
+        code, params_json = _stored_params(kind, code, params)
         with self.db.transaction():
             row = self.db.one(
                 "SELECT event_id, read_severity FROM observer_alerts WHERE kind = ? AND key = ?"
@@ -196,9 +244,9 @@ class AlertBook:
                 event_id = new_id("alert")
                 self.db.execute(
                     "INSERT INTO observer_alerts(event_id, kind, key, severity, message, count,"
-                    " first_at, last_at, scope_kind, scope_id)"
-                    " VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)",
-                    (event_id, kind, key, severity, message, now, now, *owner),
+                    " first_at, last_at, code, params, scope_kind, scope_id)"
+                    " VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)",
+                    (event_id, kind, key, severity, message, now, now, code, params_json, *owner),
                 )
             else:
                 event_id = row["event_id"]
@@ -207,8 +255,9 @@ class AlertBook:
                     read_severity = severity  # re-arm: a later rise waits for a reader again
                 self.db.execute(
                     "UPDATE observer_alerts SET count = count + 1, last_at = ?, "
-                    "message = ?, severity = ?, read_severity = ? WHERE event_id = ?",
-                    (now, message, severity, read_severity, event_id),
+                    "message = ?, severity = ?, read_severity = ?, code = ?, params = ? "
+                    "WHERE event_id = ?",
+                    (now, message, severity, read_severity, code, params_json, event_id),
                 )
         return self.get(event_id)
 
@@ -216,7 +265,7 @@ class AlertBook:
         row = self.db.one("SELECT * FROM observer_alerts WHERE event_id = ?", (event_id,))
         if row is None:
             raise Denied("state", f"unknown alert {event_id}")
-        return _alert(row)
+        return _from_row(row)
 
     def resolve(self, kind: str, key: str, scope: Scope | None = None) -> bool:
         """Close the open event of this kind, key and scope, and any unscoped one stored before
@@ -238,7 +287,7 @@ class AlertBook:
         rows = self.db.query(
             "SELECT * FROM observer_alerts WHERE resolved_at IS NULL ORDER BY first_at, event_id"
         )
-        return tuple(_alert(row) for row in rows)
+        return tuple(_from_row(row) for row in rows)
 
     def mark_read(self, event_id: str, actor: Actor) -> None:
         if actor.kind != "operator":

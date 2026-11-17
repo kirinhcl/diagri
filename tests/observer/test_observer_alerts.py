@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from growbridge.archive.models import Condition
@@ -246,3 +248,58 @@ def test_alerts_survive_a_new_book_on_the_same_database(db, clock):
     AlertBook(db, clock).raise_alert("data_gap", "temperature", "warning", "no data")
 
     assert len(AlertBook(db, clock).open()) == 1
+
+
+def test_an_alert_stores_its_code_and_params(db, clock):
+    book = AlertBook(db, clock)
+
+    alert = book.raise_alert(
+        "data_gap", "t", "warning", "no data", code="data_gap", params={"sensor": "t", "n": 2}
+    )
+
+    stored = book.get(alert.event_id)
+    assert (stored.code, stored.params) == ("data_gap", {"sensor": "t", "n": 2})
+    assert stored.message == "no data"
+
+
+def test_params_that_are_not_json_do_not_stop_the_alert_from_being_stored(db, clock):
+    book = AlertBook(db, clock)
+    when = datetime(2026, 11, 16, 8, 30, tzinfo=UTC)
+
+    alert = book.raise_alert(
+        "data_gap", "t", "warning", "no data", code="data_gap", params={"at": when, "seen": {"x"}}
+    )
+
+    stored = book.get(alert.event_id)
+    assert stored.message == "no data"
+    assert stored.params == {"at": str(when), "seen": "{'x'}"}
+
+
+def test_a_repeat_writes_the_new_code_and_params(db, clock):
+    book = AlertBook(db, clock)
+    book.raise_alert("k", "x", "warning", "one", code="first", params={"a": 1})
+
+    again = book.raise_alert("k", "x", "warning", "two", code="second", params={"b": 2})
+
+    assert (again.count, again.code, again.params) == (2, "second", {"b": 2})
+    assert len(book.open()) == 1
+
+
+def test_an_alert_stored_before_codes_reads_with_no_code(db, clock):
+    db.migrate(NAMESPACE, STEPS[:3])  # the table as it was before code and params
+    db.execute(
+        "INSERT INTO observer_alerts(event_id, kind, key, severity, message, count, first_at, "
+        "last_at) VALUES ('old', 'data_gap', 't', 'warning', 'm', 1, 1, 2)"
+    )
+
+    alert = AlertBook(db, clock).get("old")
+
+    assert (alert.code, alert.params) == (None, {})
+
+
+def test_an_alert_without_a_code_takes_its_kind_and_no_params(db, clock):
+    book = AlertBook(db, clock)
+
+    alert = book.raise_alert("data_gap", "t", "warning", "no data")
+
+    assert (alert.code, alert.params) == ("data_gap", {})

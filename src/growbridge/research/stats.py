@@ -11,8 +11,12 @@ from collections import defaultdict
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from statistics import fmean
+from typing import Any
+
+from pydantic import Field
 
 from growbridge.archive.models import Allocation, ManualMeasurement, Model
+from growbridge.codes import checked
 
 MIN_BLOCKS = 2
 MAX_EXACT_BLOCKS = 20
@@ -27,6 +31,8 @@ class BlockEstimate(Model):
     p_value: float | None
     estimable: bool
     note: str = ""
+    note_code: str = ""  # the code of ``note`` in the "estimate" family; "" for an exact estimate
+    note_params: dict[str, Any] = Field(default_factory=dict)
 
 
 def _allocation_for(
@@ -90,14 +96,14 @@ def unit_means(
     return unit_table(measurements, allocations, metric, round_of, failed_rounds).values
 
 
-def _permutation_p(differences: list[float]) -> tuple[float, str]:
+def _permutation_p(differences: list[float]) -> tuple[float, bool]:
     observed = abs(sum(differences))
     slack = TOLERANCE * max(1.0, sum(abs(item) for item in differences))
     if len(differences) <= MAX_EXACT_BLOCKS:
         flips = itertools.product((1, -1), repeat=len(differences))
         total = 2 ** len(differences)
         extra = 0
-        note = ""
+        sampled = False
     else:
         generator = random.Random(SAMPLING_SEED)
         flips = (
@@ -105,14 +111,14 @@ def _permutation_p(differences: list[float]) -> tuple[float, str]:
         )
         total = SAMPLED_FLIPS
         extra = 1  # the observed assignment counts as one permutation: p is never 0
-        note = "p-value approximated by sampled sign flips"
+        sampled = True
     hits = sum(
         1
         for signs in flips
         if abs(sum(sign * item for sign, item in zip(signs, differences, strict=True)))
         >= observed - slack
     )
-    return (hits + extra) / (total + extra), note
+    return (hits + extra) / (total + extra), sampled
 
 
 def paired_block_estimate(
@@ -128,13 +134,29 @@ def paired_block_estimate(
         effect = fmean(differences) if differences else 0.0
         note = f"fewer than {MIN_BLOCKS} complete blocks; no treatment effect can be estimated"
         return BlockEstimate(
-            effect=effect, blocks=len(differences), p_value=None, estimable=False, note=note
+            effect=effect,
+            blocks=len(differences),
+            p_value=None,
+            estimable=False,
+            note=note,
+            note_code="too_few_blocks",
+            note_params=checked(
+                "estimate", "too_few_blocks", {"blocks": len(differences), "min_blocks": MIN_BLOCKS}
+            ),
         )
-    p_value, note = _permutation_p(differences)
+    p_value, sampled = _permutation_p(differences)
+    if not sampled:
+        return BlockEstimate(
+            effect=fmean(differences), blocks=len(differences), p_value=p_value, estimable=True
+        )
     return BlockEstimate(
         effect=fmean(differences),
         blocks=len(differences),
         p_value=p_value,
         estimable=True,
-        note=note,
+        note="p-value approximated by sampled sign flips",
+        note_code="sampled_p",
+        note_params=checked(
+            "estimate", "sampled_p", {"flips": SAMPLED_FLIPS, "blocks": len(differences)}
+        ),
     )

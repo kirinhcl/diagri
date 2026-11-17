@@ -55,6 +55,7 @@ async def test_capture_is_always_probed_and_missing_backups_are_a_standing_warni
     assert "offsite_backup" not in runtime.health.limits
     standing = [a for a in runtime.book.open() if a.kind == "backup_unconfigured"]
     assert len(standing) == 1 and standing[0].severity == "warning"
+    assert (standing[0].code, standing[0].params) == ("backup_unconfigured", {})
     assert "offsite_backup" not in runtime.health.check().failures
 
 
@@ -67,6 +68,9 @@ async def test_capture_goes_stale_when_no_sample_arrives(world):
 
     health = [a for a in runtime.book.open() if a.kind == "run_health"]
     assert len(health) == 1 and "capture" in health[0].message
+    assert health[0].code == "run_health"
+    assert "capture" in health[0].params["failures"]
+    assert health[0].params["failures"] == list(runtime.health.check().failures)
 
 
 async def test_capture_limit_follows_the_active_run_sheets_sampling_gap(world):
@@ -112,6 +116,7 @@ async def test_a_failing_backup_raises_an_alert(world, tmp_path, monkeypatch):
 
     alerts = [a for a in runtime.book.open() if a.kind == "backup"]
     assert len(alerts) == 1 and "disk full" in alerts[0].message
+    assert (alerts[0].code, alerts[0].params) == ("backup", {})
 
 
 async def test_failed_external_heartbeats_raise_alerts(world):
@@ -121,6 +126,8 @@ async def test_failed_external_heartbeats_raise_alerts(world):
     await world.beat(runtime, 1)
 
     assert [a.key for a in runtime.book.open() if a.kind == "external_monitor"] == ["host"]
+    (monitor,) = [a for a in runtime.book.open() if a.kind == "external_monitor"]
+    assert (monitor.code, monitor.params) == ("external_monitor", {"signal": "host"})
     assert host.signals
 
 
@@ -174,13 +181,18 @@ async def test_a_rewound_sample_source_raises_an_alert_and_the_tick_goes_on(worl
     runtime = await world.boot()
 
     def rewound(*_args, **_kwargs):
-        raise SourceRewound("rowids were reused")
+        raise SourceRewound(4, 9)
 
     monkeypatch.setattr(runtime.source, "read_after", rewound)
     await world.approved_stage(runtime)
     await world.beat(runtime, 30)
 
     assert "source_rewound" in kinds(runtime)
+    (rewound_alert,) = [a for a in runtime.book.open() if a.kind == "source_rewound"]
+    assert (rewound_alert.code, rewound_alert.params) == (
+        "source_rewound",
+        {"top_rowid": 4, "cursor": 9},
+    )
     assert "tick_step" not in kinds(runtime)
     light = (await runtime.control.read_state()).levels[Channel.LIGHT]
     assert light == ROUND_LIGHT[1]  # the executor still ran

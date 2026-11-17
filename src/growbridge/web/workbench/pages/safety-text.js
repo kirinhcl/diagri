@@ -31,7 +31,7 @@ export function ruleSentence(t, rule) {
 export function frozenLine(t, sensor, minutes) {
   return t("safety.frozenLine", {
     sensor: labelOr(t, "metric", sensor),
-    duration: formatDuration(t, minutes * SECONDS_PER_MINUTE),
+    duration: exactText(t, minutes * SECONDS_PER_MINUTE),
   });
 }
 
@@ -52,7 +52,7 @@ const isDuration = (seconds) => typeof seconds === "number" && Number.isFinite(s
 
 // A duration in words; when the words round the value, the exact seconds follow (R18). "—" when
 // there is none.
-function exactText(t, seconds) {
+export function exactText(t, seconds) {
   const text = formatDuration(t, seconds);
   return !isDuration(seconds) || durationIsExact(seconds) ? text : t("safety.exactSeconds", { text, n: seconds });
 }

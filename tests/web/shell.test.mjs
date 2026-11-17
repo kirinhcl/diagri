@@ -89,7 +89,7 @@ test("groups follow the urgency order and keep kinds that only have cut items", 
 
 // --- inbox titles, durations and "more" links (Task 14) -----------------------------------------
 import { findLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
-import { testCtx } from "./support/render-page.mjs";
+import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
 
 const NOW = 1_800_000_000;
 const findAll = (node, test) => [...(test(node) ? [node] : []), ...[...(node.children || [])].flatMap((child) => findAll(child, test))];
@@ -182,7 +182,6 @@ test("DESCRIBERS is exported", () => {
 });
 
 test("each alert row has an id and the focused one is highlighted", async () => {
-  const { renderPage } = await import("./support/render-page.mjs");
   const id = "alert_a71084164435490a9d4344321ed49313";
   const { element } = await renderPage("alerts", { focus: id });
   const rows = findAll(element, (node) => node.localName === "tr" && (node.getAttribute("id") || "").startsWith("alert-"));
@@ -192,7 +191,6 @@ test("each alert row has an id and the focused one is highlighted", async () => 
 });
 
 test("alerts page survives a hostile or unknown focus and highlights nothing", async () => {
-  const { renderPage } = await import("./support/render-page.mjs");
   for (const focus of ['a"b', "a\\b", "nope", "]"]) {
     const { element } = await renderPage("alerts", { focus });
     assert.equal(findAll(element, withClass("alert-focused")).length, 0, focus);
@@ -286,4 +284,76 @@ test("the waiting time counts whole seconds, never tenths", () => {
   const ctx = testCtx({ now: NOW });
   const view = groupView(ctx, { kind: "alert", hidden: 0, items: [{ kind: "alert", id: "a1", since: NOW - 75.6, detail: { message: "m", alert_kind: "data_gap" } }] });
   assert.match(visibleText(view), /已等待 76 秒/);
+});
+
+test("an inbox item of an unknown kind keeps its kind code in its details", () => {
+  const ctx = testCtx({ now: NOW });
+  const view = groupView(ctx, { kind: "warp_event", hidden: 0, items: [{ kind: "warp_event", id: "w1", since: NOW, detail: {} }] });
+  assert.ok(!visibleText(view).includes("warp_event"));
+  const heading = findAll(view, (n) => n.localName === "h2")[0];
+  assert.match(visibleTextIncludingDetails(heading.parentNode), /代码 warp_event/);
+  const item = findAll(view, (n) => n.localName === "li" && n.getAttribute("data-key"))[0];
+  assert.match(visibleTextIncludingDetails(item), /代码 warp_event/);
+});
+
+const INBOX_ALERT = (kind) => FIXTURES["inbox.json"].items.find((item) => item.kind === "alert" && item.detail.alert_kind === kind);
+
+test("an inbox alert is titled by its text, not by the server's message", () => {
+  const ctx = testCtx({ now: NOW });
+  const item = INBOX_ALERT("stage_waiting");
+  const d = describe(ctx, item);
+  assert.equal(typeof d.title, "string");
+  assert.ok(d.title.includes("暂停"));
+  assert.ok(!d.title.includes(item.detail.message));
+  assert.equal(d.lines.filter(Boolean).length, 1); // the next step
+  assert.ok(!d.lines.join(" ").includes("stage:a-1"));
+});
+
+test("an inbox alert from before codes is titled by its kind and says so", () => {
+  const ctx = testCtx({ now: NOW });
+  const d = describe(ctx, INBOX_ALERT("data_gap"));
+  assert.equal(d.title, "数据空档");
+  assert.deepEqual(d.lines.filter(Boolean), ["这条告警来自更新之前，服务器原文在技术详情里。"]);
+});
+
+test("an inbox alert keeps the server's message and its code in one fold", async () => {
+  const { element } = await renderPage("inbox", {}, { now: NOW });
+  const text = visibleText(element);
+  assert.doesNotMatch(text, /No readings for 20 min|is paused after/);
+  const row = findAll(element, (n) => n.localName === "li" && n.getAttribute("data-key") === `alert:${INBOX_ALERT("stage_waiting").id}`)[0];
+  const folds = findAll(row, (n) => n.localName === "details" && n.getAttribute("class") === "tech-details");
+  assert.equal(folds.length, 1);
+  assert.match(folds[0].textContent, /is paused after disconnect_affects/);
+  assert.match(folds[0].textContent, /stage_waiting/);
+});
+
+// --- a stuck compute item says why and what to do (CMP-04) --------------------------------------
+
+const STUCK_ITEMS = () => FIXTURES["inbox.json"].items.filter((item) => item.kind === "compute_stuck");
+
+test("a stuck attempt in the inbox says why and what to do; the server's words are in the details", () => {
+  const ctx = testCtx({ now: NOW });
+  const [wait, , limit] = STUCK_ITEMS();
+  const lines = (item) => describe(ctx, item).lines.join(" ");
+  assert.match(lines(wait), /已等了90 分钟，仍在核对/);
+  assert.match(lines(wait), /确定不会有结果时再结算/);
+  assert.match(lines(limit), /这次计算出错了.*输出超过了上限.*结算它/);
+  assert.ok(!lines(wait).includes("waiting for reconciliation"));
+  const view = groupView(ctx, { kind: "compute_stuck", items: [wait], hidden: 0 });
+  const details = visibleTextIncludingDetails(view);
+  assert.match(details, /waiting for reconciliation: the outcome of the submit is unknown/);
+  assert.equal(findAll(view, (n) => n.localName === "details").length, 1);
+});
+
+test("an old stuck attempt in the inbox shows a generic line", () => {
+  const ctx = testCtx({ now: NOW });
+  const old = STUCK_ITEMS().find((item) => item.detail.reason_code === undefined);
+  assert.deepEqual(describe(ctx, old).lines, ["这次计算卡住了，原因见技术详情。"]);
+  assert.match(visibleTextIncludingDetails(groupView(ctx, { kind: "compute_stuck", items: [old], hidden: 0 })), /No result after 2 h on the cluster/);
+});
+
+test("a stuck error without a known error code says unknown", () => {
+  const ctx = testCtx({ now: NOW });
+  const item = STUCK_ITEMS().find((entry) => entry.detail.reason_code === "error" && entry.detail.error_code === "");
+  assert.match(describe(ctx, item).lines.join(" "), /未知（技术详情）/);
 });

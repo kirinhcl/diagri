@@ -8,6 +8,10 @@
     { "attempt_id": "att_7d2e4f6a8b0c4d1e9f3a5b7c9d1e3f5a", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "template_id": "growth-curve-fit", "phase": "running", "task_state": "computing", "remote_job_id": "28471953", "created_at": 1796591200.0 }
   ],
   "stuck": [
-    { "attempt_id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "reconcile", "reason": "waiting for reconciliation: the outcome of the submit is unknown", "since": 1796588800.0 }
+    {"attempt_id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "reconcile", "reason": "waiting for reconciliation: the outcome of the submit is unknown", "reason_code": "reconcile_wait", "reason_params": {"age_seconds": 5400}, "since": 1796588800.0},
+    {"attempt_id": "att_2b4d6f8a0c2e4a6c8e0a2c4e6a8c0e2a", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "queued", "reason": "not refreshed for 7200 seconds", "reason_code": "not_refreshed", "reason_params": {"age_seconds": 7200}, "since": 1796585200.0},
+    {"attempt_id": "att_3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "needs_review", "reason": "error: output limit: the outputs total 9000000000 bytes, over the limit of 5000000000", "reason_code": "error", "reason_params": {}, "error_code": "output_limit", "error_params": {"limit_kind": "total", "bytes": 9000000000, "limit": 5000000000}, "since": 1796587000.0},
+    {"attempt_id": "att_4d6f8a0b2e4a6c8e0a2c4e6a8c0e2a4d", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "fetching", "reason": "error: scheduler unreachable", "reason_code": "error", "reason_params": {}, "error_code": "", "error_params": {}, "since": 1796586000.0},
+    {"attempt_id": "att_5e7a9b1c3f5a7c9e1b3d5f7a9c1e3b5e", "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b", "phase": "running", "reason": "No result after 2 h on the cluster", "since": 1796584000.0}
   ]
 }

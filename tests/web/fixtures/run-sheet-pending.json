@@ -82,37 +82,68 @@
     {
       "code": "missing_tolerance",
       "message": "light: no maximum tolerated outage given",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "channel": "light"
+      }
     },
     {
       "code": "missing_tolerance",
       "message": "exhaust: no maximum tolerated outage given",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "channel": "exhaust"
+      }
     },
     {
       "code": "missing_tolerance",
       "message": "fan: no maximum tolerated outage given",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "channel": "fan"
+      }
     },
     {
       "code": "missing_tolerance",
       "message": "pump: no maximum tolerated outage given",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "channel": "pump"
+      }
     },
     {
       "code": "no_evidence",
       "message": "timed action light-on: no evidence card or user input",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "source_kind": "timed_action",
+        "source": "light-on"
+      }
     },
     {
       "code": "no_evidence",
       "message": "timed action light-off: no evidence card or user input",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "source_kind": "timed_action",
+        "source": "light-off"
+      }
     },
     {
       "code": "no_evidence",
       "message": "timed action exhaust-base: no evidence card or user input",
-      "blocking": false
+      "blocking": false,
+      "variant": "",
+      "params": {
+        "source_kind": "timed_action",
+        "source": "exhaust-base"
+      }
     }
   ],
   "blocking": false

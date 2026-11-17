@@ -102,7 +102,7 @@ def model_client_or_none(runtime):
     except Exception as error:
         log.warning("model roles are off: %s: %s", type(error).__name__, error)
         message = f"Model roles are off: {type(error).__name__}: {error}"
-        runtime.alert("model_client", "anthropic", message)
+        runtime.alert("model_client", "anthropic", message, code="model_client")
         return None
 
 

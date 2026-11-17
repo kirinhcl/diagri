@@ -1,5 +1,6 @@
 """What the workbench shows of the compute service: balance, budgets, usage, open and stuck jobs."""
 
+import json
 from typing import Any
 
 from growbridge.archive.clock import Clock
@@ -94,38 +95,47 @@ def _open_jobs(db: Database) -> list[dict[str, Any]]:
     ]
 
 
-def _why_stuck(row: Any, now: float) -> str | None:
-    """The reason an open attempt needs a person, or None while it is on its way."""
+def _why_stuck(row: Any, now: float) -> tuple[str, str, dict[str, int]] | None:
+    """Why an open attempt needs a person, as (English text, code, params); None while it is on
+    its way. The code is a ``compute_stuck`` code."""
     age = now - row["updated_at"]
     if row["phase"] in ("prepared", "reconcile"):  # its error only says why it is waiting
         if age > RECONCILE_AFTER_SECONDS:
-            return "waiting for reconciliation: the outcome of the submit is unknown"
+            text = "waiting for reconciliation: the outcome of the submit is unknown"
+            return text, "reconcile_wait", {"age_seconds": int(age)}
         return None
     if row["error"]:
-        return f"error: {row['error']}"
+        return f"error: {row['error']}", "error", {}
     if row["phase"] in POLLED and age > STUCK_AFTER_SECONDS:
-        return f"not refreshed for {int(age)} seconds"
+        return f"not refreshed for {int(age)} seconds", "not_refreshed", {"age_seconds": int(age)}
     return None
 
 
 def _stuck(db: Database, now: float) -> list[dict[str, Any]]:
     phases = (*LIVE, "fetching", "needs_review")
     rows = db.query(
-        "SELECT id, task_id, phase, error, updated_at FROM compute_attempts WHERE phase IN"
-        f" ({', '.join('?' * len(phases))}) ORDER BY updated_at, id",
+        "SELECT id, task_id, phase, error, error_code, error_params, updated_at"
+        f" FROM compute_attempts WHERE phase IN ({', '.join('?' * len(phases))})"
+        " ORDER BY updated_at, id",
         phases,
     )
     found = []
     for row in rows:
-        reason = _why_stuck(row, now)
-        if reason is not None:
-            found.append(
-                {
-                    "attempt_id": row["id"],
-                    "task_id": row["task_id"],
-                    "phase": row["phase"],
-                    "reason": reason,
-                    "since": row["updated_at"],
-                }
-            )
+        why = _why_stuck(row, now)
+        if why is None:
+            continue
+        reason, code, params = why
+        entry = {
+            "attempt_id": row["id"],
+            "task_id": row["task_id"],
+            "phase": row["phase"],
+            "reason": reason,
+            "reason_code": code,
+            "reason_params": params,
+            "since": row["updated_at"],
+        }
+        if code == "error":  # the attempt's own error, as coded ('' on an old attempt)
+            entry["error_code"] = row["error_code"]
+            entry["error_params"] = json.loads(row["error_params"])
+        found.append(entry)
     return found

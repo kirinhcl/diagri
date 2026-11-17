@@ -6,11 +6,11 @@ read-back and acts through the dedicated ``pump_off`` path; it has no way to swi
 """
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from growbridge.archive.clock import Clock
-from growbridge.observer.alerts import Severity
+from growbridge.observer.alerts import AlertHook, Severity
 from growbridge.ports import ControlPort, Denied, PumpReading, StagePort, StageRuntime
 
 UNREADABLE = "pump_unreadable"
@@ -19,7 +19,6 @@ KEY = "pump"
 FAILURE = "pump_watchdog"
 INTERVENTION = "unexpected_watering"
 REASSERT_SECONDS = 300.0  # a latched alert is stored again this often while it persists
-MIN_UPDATE_SECONDS = 60.0  # a changed message is stored at most this often
 MAX_MESSAGE = 200
 
 UNREADABLE_TEXT = (
@@ -42,6 +41,8 @@ RECORD_FAILED_TEXT = "The pump watchdog could not record the unexpected_watering
 
 log = logging.getLogger(__name__)
 
+Shape = tuple[str, tuple[tuple[str, object], ...]]  # an alert's code and sorted params
+
 
 class PumpWatchdog:
     def __init__(self, control: ControlPort, stages: StagePort, clock: Clock):
@@ -49,12 +50,12 @@ class PumpWatchdog:
         self.stages = stages
         self.clock = clock
         # hooks report whether the alert was stored; a latch is set only after a stored write
-        self.alert: Callable[[str, str, str, Severity], bool] | None = None
+        self.alert: AlertHook | None = None
         self.resolve: Callable[[str, str], bool] | None = None
         self._acted: float | None = None  # monotonic time of its own last switch-off
-        # latched alerts: (message, monotonic time raised) while active, False once resolved;
-        # absent until seen
-        self._latched: dict[tuple[str, str], tuple[str, float] | bool] = {}
+        # latched alerts: ((code, params), monotonic time raised) while active, False once
+        # resolved; absent until seen
+        self._latched: dict[tuple[str, str], tuple[Shape, float] | bool] = {}
 
     async def step(self, stage: StageRuntime | None) -> None:
         if await self._decide(stage):
@@ -74,7 +75,7 @@ class PumpWatchdog:
     async def _evaluate(self, stage: StageRuntime | None, reading: PumpReading) -> None:
         control = self.control
         if reading.on is None:
-            self._enter(UNREADABLE, KEY, UNREADABLE_TEXT, "warning")
+            self._enter(UNREADABLE, KEY, UNREADABLE_TEXT, "warning", code="pump_unreadable")
             return
         self._leave(UNREADABLE, KEY)
         if control.irrigating():
@@ -97,10 +98,13 @@ class PumpWatchdog:
         except Denied:
             confirmed = False
         if confirmed:
-            text = OFF_TEXT
+            self._raise(UNEXPECTED, OFF_TEXT, "critical", code="pump_unexpected_off")
+        elif self.control.interlocked():
+            self._raise(
+                UNEXPECTED, UNCONFIRMED_TEXT, "critical", code="pump_unexpected_interlocked"
+            )
         else:
-            text = UNCONFIRMED_TEXT if self.control.interlocked() else FAILED_TEXT
-        self._raise(UNEXPECTED, text, "critical")
+            self._raise(UNEXPECTED, FAILED_TEXT, "critical", code="pump_unexpected_failed")
         if stage is None:
             return
         after = self.control.last_pump_off_id()
@@ -114,13 +118,30 @@ class PumpWatchdog:
             self.stages.record_intervention(stage.stage_id, INTERVENTION, detail)
         except Exception:
             log.exception("could not record the unexpected_watering intervention")
-            self._enter(FAILURE, "intervention", RECORD_FAILED_TEXT, "critical")
+            self._enter(
+                FAILURE,
+                "intervention",
+                RECORD_FAILED_TEXT,
+                "critical",
+                code="pump_watchdog_record",
+            )
         else:
             self._leave(FAILURE, "intervention")
 
-    def _raise(self, kind: str, message: str, severity: Severity, key: str = KEY) -> bool:
+    def _raise(
+        self,
+        kind: str,
+        message: str,
+        severity: Severity,
+        key: str = KEY,
+        *,
+        code: str,
+        params: Mapping[str, object] | None = None,
+    ) -> bool:
         """True when the hook stored the alert."""
-        return self.alert is not None and bool(self.alert(kind, key, message, severity))
+        if self.alert is None:
+            return False
+        return bool(self.alert(kind, key, message, severity, code=code, params=params or {}))
 
     def step_failed(self, error: Exception) -> None:
         """The engine's report that ``step`` itself raised."""
@@ -129,17 +150,28 @@ class PumpWatchdog:
             "step",
             f"The pump watchdog failed: {type(error).__name__}: {error}"[:MAX_MESSAGE],
             "critical",
+            code="pump_watchdog_step",
         )
 
-    def _enter(self, kind: str, key: str, message: str, severity: Severity) -> None:
+    def _enter(
+        self,
+        kind: str,
+        key: str,
+        message: str,
+        severity: Severity,
+        code: str,
+        params: Mapping[str, object] | None = None,
+    ) -> None:
+        """Raise a latched alert: stored again at once when its code or params change, and
+        otherwise only every REASSERT_SECONDS. The English message is not compared."""
         now = self.clock.monotonic()
+        shape: Shape = (code, tuple(sorted((params or {}).items())))
         state = self._latched.get((kind, key))
-        if isinstance(state, tuple):
-            wait = REASSERT_SECONDS if state[0] == message else MIN_UPDATE_SECONDS
-            if now - state[1] < wait:
-                return
-        if self._raise(kind, message, severity, key=key):  # a failed write is retried next time
-            self._latched[(kind, key)] = (message, now)
+        if isinstance(state, tuple) and state[0] == shape and now - state[1] < REASSERT_SECONDS:
+            return
+        stored = self._raise(kind, message, severity, key=key, code=code, params=params)
+        if stored:  # a failed write is retried next time
+            self._latched[(kind, key)] = (shape, now)
 
     def _leave(self, kind: str, key: str) -> None:
         if self._latched.get((kind, key)) is False:

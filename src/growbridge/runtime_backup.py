@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 RETRY_SECONDS = 300.0  # real seconds to wait after a failed attempt
 LIMIT_FACTOR = 2.0  # the probe fails when the last backup is older than this many intervals
 
-Notify = Callable[[str, str, str], None]
+Notify = Callable[..., None]  # (kind, key, message, severity=..., *, code=None, params=None)
 
 
 class Backups:
@@ -69,7 +69,8 @@ class Backups:
         except Exception as error:
             log.exception("backup failed")
             self.retry_at = asyncio.get_running_loop().time() + RETRY_SECONDS
-            self.alert("backup", "databases", f"Backup failed: {type(error).__name__}: {error}")
+            message = f"Backup failed: {type(error).__name__}: {error}"
+            self.alert("backup", "databases", message, code="backup")
             return
         self.resolve("backup", "databases")
 

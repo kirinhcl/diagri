@@ -529,10 +529,15 @@ async def test_firecrest_fetch_refuses_too_many_files_before_any_download(
     for number in range(MAX_OUTPUT_FILES + 1):
         client.put_output(job_id, f"f{number}", b"")
 
-    with pytest.raises(OutputTooLarge, match="files"):
+    with pytest.raises(OutputTooLarge, match="files") as info:
         await backend.fetch(job_id, tmp_path, BIG)
 
     assert client.called("download") == [] and local_files(tmp_path) == []
+    counts = (info.value.limit_kind, info.value.file_count, info.value.limit_count)
+    assert counts == ("files", MAX_OUTPUT_FILES + 1, MAX_OUTPUT_FILES)
+    assert str(info.value) == (  # the English text stays as it was
+        f"output limit: {MAX_OUTPUT_FILES + 1} output files, over the limit of {MAX_OUTPUT_FILES}"
+    )
 
 
 async def test_firecrest_fetch_accepts_exactly_the_file_limit(backend, client, tmp_path):

@@ -1,6 +1,5 @@
 // The approved safety limits and an editor to approve a new set. Approval lists every change first.
 import { ApiError } from "../api.js";
-import { formatDuration } from "../format.js";
 import { hasLabel } from "../i18n.js";
 import { configDiff } from "../diff.js";
 import { confirmAction } from "../ui/dialog.js";
@@ -11,7 +10,7 @@ import { baselineChanged, diffLines, visibleChanges } from "./safety-diff.js";
 import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 import { frozenRows } from "./safety-frozen.js";
 import { safetySkeleton } from "./safety-skeleton.js";
-import { frozenLine, ruleSentence } from "./safety-text.js";
+import { exactText, frozenLine, ruleSentence } from "./safety-text.js";
 
 export { ruleSentence, unitText } from "./safety-text.js";
 
@@ -35,7 +34,7 @@ function rulesList(ctx, rules) {
 function frozenView(ctx, frozen) {
   const rows = frozenRows(frozen);
   const seconds = frozen?.max_gap_seconds;
-  const gap = keyValues([[ctx.t("safety.frozenGap"), formatDuration(ctx.t, seconds)]]);
+  const gap = keyValues([[ctx.t("safety.frozenGap"), exactText(ctx.t, seconds)]]);
   const list = rows.length
     ? h("ul", { class: "safety-frozen" }, rows.map(([sensor, minutes]) => h("li", { text: frozenLine(ctx.t, sensor, minutes) })))
     : note(ctx.t("safety.frozenNone"));

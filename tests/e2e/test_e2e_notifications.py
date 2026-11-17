@@ -25,6 +25,7 @@ async def test_no_channel_configured_is_a_standing_warning_in_the_alert_book(wor
     runtime = await world.boot(channels={})
 
     standing = [a for a in runtime.book.open() if a.kind == "notify_unconfigured"]
+    assert [(a.code, a.params) for a in standing] == [("notify_unconfigured", {})]
 
     assert [a.severity for a in standing] == ["warning"]
 

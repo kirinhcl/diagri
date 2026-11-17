@@ -113,8 +113,14 @@ class FakeBackend:
 
     async def fetch(self, job_id: str, out_dir: Path, max_bytes: int) -> dict[str, str]:
         self.fetch_limits.append(max_bytes)
-        if sum(len(content) for content in self.artifacts.values()) > max_bytes:
-            raise OutputTooLarge("output limit: the outputs are over the limit")
+        total = sum(len(content) for content in self.artifacts.values())
+        if total > max_bytes:
+            raise OutputTooLarge(
+                "output limit: the outputs are over the limit",
+                limit_kind="total",
+                size=total,
+                limit=max_bytes,
+            )
         out_dir.mkdir(parents=True, exist_ok=True)
         sums: dict[str, str] = {}
         for name, content in self.artifacts.items():

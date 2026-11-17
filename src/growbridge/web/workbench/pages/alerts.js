@@ -1,12 +1,13 @@
 // Open alerts: how bad, how often, since when, and who has read them.
 import { h } from "../ui/dom.js";
-import { errorBox, note, pageHead, section, showErrors, timeCell, timeText } from "../ui/section.js";
-import { codeLabel, severityPill } from "../ui/status.js";
+import { errorBox, note, nowSeconds, pageHead, section, showErrors, timeCell, timeText } from "../ui/section.js";
+import { labelOr } from "../i18n.js";
+import { severityPill } from "../ui/status.js";
 import { table } from "../ui/table.js";
+import { alertCell } from "./alert-text.js";
 import { isNotMounted } from "./not-mounted.js";
 
 const SEVERITY_ORDER = ["info", "warning", "critical"]; // mildest first
-const nowSeconds = () => Date.now() / 1000;
 export const REASK_SECONDS = 24 * 3600; // observer/alerts.py REASK_SECONDS
 
 // The inbox's rule (observer/alerts.py awaits_reading): unread, or worse than the severity it was
@@ -27,24 +28,16 @@ export function readLine(ctx, alert) {
   return ctx.t("alerts.readBy", { who: alert.read_by, time: timeText(ctx, alert.read_at) });
 }
 
-// The first line is the summary; the lines after it are what the alert found, one list item each.
-function messageCell(message) {
-  const lines = String(message ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
-  const [summary = "", ...rest] = lines;
-  const items = rest.map((line) => h("li", { text: line.replace(/^-\s+/, "") }));
-  return h("div", { class: "cell-stack" }, h("p", { text: summary }), items.length ? h("ul", {}, items) : null);
-}
-
 // Offered again only because the day has passed: it did not get worse, and was read.
-function olderThanReask(alert) {
+function olderThanReask(ctx, alert) {
   const readAt = SEVERITY_ORDER.indexOf(alert.read_severity);
   const worse = readAt >= 0 && SEVERITY_ORDER.indexOf(alert.severity) > readAt;
-  return Boolean(alert.read_by) && !worse && alertWaiting(alert, nowSeconds());
+  return Boolean(alert.read_by) && !worse && alertWaiting(alert, nowSeconds(ctx));
 }
 
 function readCell(ctx, alert) {
   const said = readLine(ctx, alert);
-  if (!alertWaiting(alert, nowSeconds())) return h("p", { class: "block-note", text: said });
+  if (!alertWaiting(alert, nowSeconds(ctx))) return h("p", { class: "block-note", text: said });
   const box = errorBox();
   const label = ctx.t("alerts.markRead");
   const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
@@ -62,15 +55,15 @@ function readCell(ctx, alert) {
     ctx.notify(ctx.t("alerts.wasRead"), "ok");
     ctx.reload();
   });
-  const why = olderThanReask(alert) ? h("p", { class: "cell-sub", text: ctx.t("alerts.askAgain") }) : null;
+  const why = olderThanReask(ctx, alert) ? h("p", { class: "cell-sub", text: ctx.t("alerts.askAgain") }) : null;
   return h("div", { class: "action" }, h("p", { class: "block-note", text: said }), why, button, box);
 }
 
 function alertsTable(ctx, alerts, focus) {
   const columns = [
     { label: ctx.t("alerts.severity"), cell: (row) => severityPill(ctx.t, row.severity) },
-    { label: ctx.t("alerts.kind"), cell: (row) => codeLabel(ctx.t, "alert.kind", row.kind) },
-    { label: ctx.t("alerts.message"), cell: (row) => messageCell(row.message) },
+    { label: ctx.t("alerts.kind"), cell: (row) => labelOr(ctx.t, "alert.kind", row.kind) },
+    { label: ctx.t("alerts.message"), cell: (row) => alertCell(ctx, row) },
     { label: ctx.t("alerts.count"), cell: (row) => String(row.count) },
     { label: ctx.t("alerts.first"), cell: (row) => timeCell(ctx, row.first_at) },
     { label: ctx.t("alerts.last"), cell: (row) => timeCell(ctx, row.last_at) },

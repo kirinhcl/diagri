@@ -93,8 +93,8 @@ def _runtime(book, waiting=(), expired=()):
         clock=FakeClock(),
         workflow=SimpleNamespace(waiting_stages=lambda: list(waiting)),
         tasks=SimpleNamespace(expire=lambda _now: list(expired)),
-        alert=lambda kind, key, message, severity="critical", scope=None: book.raise_alert(
-            kind, key, severity, message, scope
+        alert=lambda kind, key, message, severity="critical", scope=None, **fields: (
+            book.raise_alert(kind, key, severity, message, scope, **fields)
         ),
     )
 
@@ -118,7 +118,7 @@ def test_task_deadline_and_agent_task_belong_to_the_project(book):
     task = SimpleNamespace(id="task-1", project_id="p-a", owner_role="planner", input_refs=())
     runtime = _runtime(book, expired=[task])
     expire_tasks(runtime)
-    _report_failure(runtime, task, "failed")
+    _report_failure(runtime, task, "failed", failed=True)
 
     scopes = {(a.kind, a.scope) for a in book.open()}
     assert scopes == {("task_deadline", ("project", "p-a")), ("agent_task", ("project", "p-a"))}
@@ -134,7 +134,7 @@ def test_audit_task_belongs_to_its_stage_or_project(book):
     )
     without = SimpleNamespace(id="a2", project_id="p-a", owner_role=AUDIT_ROLE, input_refs=())
     runtime = _runtime(book)
-    _report_failure(runtime, with_stage, "x")
-    _report_failure(runtime, without, "y")
+    _report_failure(runtime, with_stage, "x", failed=True)
+    _report_failure(runtime, without, "y", failed=True)
 
     assert {a.scope for a in book.open()} == {("stage", "grow"), ("project", "p-a")}

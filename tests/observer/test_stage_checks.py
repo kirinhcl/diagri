@@ -354,3 +354,55 @@ async def test_an_unscoped_stage_alert_from_before_scopes_is_resolved(rig):
     await rig.checks.tick()
 
     assert ("task_missed", f"{STAGE}:legacy") not in set(rig.open_alerts())
+
+
+async def test_task_missed_alert_carries_stage_task_kind_and_due_time(rig):
+    rig.at(WATER_DUE + ON_TIME_SECONDS + 1)
+    await rig.checks.tick()
+    alert = rig.open_alerts()[("task_missed", f"{STAGE}:water:{int(WATER_DUE)}")]
+    assert alert.code == "task_missed"
+    assert alert.params == {
+        "stage_id": STAGE,
+        "task_id": "water",
+        "task_kind": "irrigation",
+        "due_at": WATER_DUE,
+    }
+
+
+async def test_measurement_missing_alert_carries_the_window_and_timezone(rig):
+    recorded = MEASURE_DUE + 300
+    rig.record("measure", "measurement", MEASURE_DUE, recorded)
+    rig.record("water", "irrigation", WATER_DUE, WATER_DUE + 60)
+    rig.at(recorded + MEASUREMENT_GRACE_SECONDS)
+    await rig.checks.tick()
+    alert = rig.open_alerts()[("measurement_missing", f"{STAGE}:measure:{int(MEASURE_DUE)}")]
+    assert alert.code == "measurement_missing"
+    first = MEASURE_DUE - EARLY_SECONDS
+    assert set(alert.params) == {
+        "stage_id",
+        "task_id",
+        "window_start",
+        "window_end",
+        "timezone",
+    }
+    assert alert.params["stage_id"] == STAGE
+    assert alert.params["task_id"] == "measure"
+    assert alert.params["window_start"] == first
+    assert alert.params["window_end"] > first
+    assert alert.params["timezone"] == rig.stages.active_stage().run_sheet.timezone
+
+
+async def test_measurement_outside_window_alert_carries_the_measurement_and_time(rig):
+    _, end = data_window(rig.stages.active_stage())
+    late = end + WINDOW_GRACE_SECONDS + 128
+    rig.measure("m9", late)
+    rig.at(DAY_START + 60)
+    await rig.checks.tick()
+    alert = rig.open_alerts()[("measurement_outside_window", f"{STAGE}:m9")]
+    assert alert.code == "measurement_outside_window"
+    assert alert.params == {
+        "stage_id": STAGE,
+        "measurement_id": "m9",
+        "metric": "height",
+        "measured_at": late,
+    }

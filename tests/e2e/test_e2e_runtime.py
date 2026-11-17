@@ -111,6 +111,7 @@ async def test_stage_that_cannot_be_checked_does_not_keep_the_others_in_recovery
     alerts = [a for a in second.book.open() if a.kind == "tick_step"]
     assert [a.key for a in alerts] == ["recovery"]  # the failure is still reported
     assert "synthetic failure" in alerts[0].message
+    assert (alerts[0].code, alerts[0].params) == ("tick_step", {"step": "recovery"})
 
 
 async def test_unregistered_host_opens_no_ble_connection_and_writes_are_denied(world):
@@ -121,6 +122,8 @@ async def test_unregistered_host_opens_no_ble_connection_and_writes_are_denied(w
     assert runtime.bridge.task is None
     assert not runtime.control.host_registered()
     assert [a.key for a in runtime.book.open() if a.kind == "runtime"] == ["write_host"]
+    (host,) = [a for a in runtime.book.open() if a.kind == "runtime"]
+    assert (host.code, host.params) == ("not_write_host", {})
 
     await runtime.bridge.start()  # the HTTP lifespan starts the bridge too: still refused
     assert runtime.bridge.task is None and world.sim.connected is False
@@ -174,5 +177,6 @@ async def test_failing_tick_step_raises_an_alert_and_later_steps_still_run(
     alerts = [a for a in runtime.book.open() if a.kind == "tick_step"]
     assert [a.key for a in alerts] == [broken]
     assert "synthetic failure" in alerts[0].message
+    assert (alerts[0].code, alerts[0].params) == ("tick_step", {"step": broken})
     assert {"tick", "deliver", "expire"} <= set(calls)
     assert (await runtime.control.read_state()).levels[Channel.LIGHT] == ROUND_LIGHT[1]

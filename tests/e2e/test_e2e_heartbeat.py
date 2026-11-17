@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from growbridge import cli
+from growbridge.codes import CODES
 from growbridge.runtime_heartbeat import HOST_ENV, RUN_ENV, heartbeats_from_env
 
 HOST_URL = "https://hc.example.invalid/ping/fake-host-secret"
@@ -27,6 +28,10 @@ def configured(monkeypatch, seen, handler=lambda request: httpx.Response(200)):
 
 def standing(runtime):
     return [a for a in runtime.book.open() if a.kind == STANDING]
+
+
+def test_the_standing_warning_has_its_own_code():
+    assert STANDING in CODES["alert"]
 
 
 async def test_both_urls_send_heartbeats_once_per_interval(world, monkeypatch):

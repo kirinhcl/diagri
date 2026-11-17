@@ -122,6 +122,9 @@ class Finding(Model):
     code: str
     message: str
     blocking: bool = True
+    # what the console builds its text from; message stays as the English wording for API clients
+    variant: str = ""
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class RawSample(Model):

@@ -18,6 +18,7 @@ from growbridge.archive.readings import bucketed_samples
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import Actor, ControlPort, Denied
+from growbridge.workbench.planned import planned_series
 from growbridge.workflow.access import Access
 from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
 from growbridge.workflow.service import WorkflowService
@@ -72,16 +73,21 @@ def latest_reading(archive: Archive, outlets: dict[Channel, int], now: float) ->
     }
 
 
-def active_stage(workflow: WorkflowService, now: float) -> dict | None:
+def active_stage(workflow: WorkflowService, now: float, window: float) -> dict | None:
     """The active stage, and what its run sheet expects of each channel now. Only a running stage
     follows the run sheet; paused, under takeover, in recovery check or ended, it expects
-    nothing, so the page shows no difference from the run sheet. The stage is named as the
-    stage read names it (project name, round number, stage index, phase)."""
+    nothing, so the page shows no difference from the run sheet. ``planned`` is the plan over the
+    window, from the stage start. The stage is named as the stage read names it (project name,
+    round number, stage index, phase)."""
     stage = workflow.active_stage()
     if stage is None:
         return None
     sheet = stage.run_sheet
-    expected = sheet.expected_levels(now) if stage.state is StageState.RUNNING else {}
+    running = stage.state is StageState.RUNNING
+    expected = sheet.expected_levels(now) if running else {}
+    planned: dict[str, list[tuple[float, int]]] = {}
+    if running and stage.started_at is not None:
+        planned = planned_series(sheet, max(now - window, stage.started_at), now)
     row = workflow.store.find_stage(stage.stage_id)
     return {
         "stage_id": stage.stage_id,
@@ -93,6 +99,7 @@ def active_stage(workflow: WorkflowService, now: float) -> dict | None:
         "ends_at": None if stage.started_at is None else stage.started_at + sheet.duration_seconds,
         "sampling_seconds": sheet.sampling.interval_seconds,
         "timezone": sheet.timezone,
+        "planned": planned,
         "channels": {
             plan.channel.value: {
                 "ownership": plan.ownership.value,
@@ -140,7 +147,7 @@ class EnvironmentView:
             return stage
         return stage if self.access.sees_stage(self.actor, stage["stage_id"]) else None
 
-    def alert(self, alert) -> bool:
+    def shows_alert(self, alert) -> bool:
         return self.full or self.access.sees_alert(self.actor, alert)
 
 
@@ -167,14 +174,14 @@ def add_environment_routes(
         caps = control.capabilities()
         open_alerts = () if alerts is None else alerts.open()
         severities: dict[str, int] = {}
-        for alert in (a for a in open_alerts if view.alert(a)):
+        for alert in (a for a in open_alerts if view.shows_alert(a)):
             severities[alert.severity] = severities.get(alert.severity, 0) + 1
         since = view.since(now - window)
         return {
             "now": now,
             "clock_synced": clock.synced,
             "latest": view.reading(latest_reading(archive, caps.outlets, now), since),
-            "stage": view.stage(active_stage(workflow, now)),
+            "stage": view.stage(active_stage(workflow, now, window)),
             "sensors": caps.sensors,
             "level_ranges": {c.value: list(r) for c, r in caps.level_ranges.items()},
             "alerts": severities,

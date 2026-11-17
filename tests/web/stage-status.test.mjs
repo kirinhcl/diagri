@@ -162,3 +162,112 @@ test("an approval of another run sheet than the one reviewed keeps both digests 
   assert.ok(visibleTextIncludingDetails(approval).includes(approved));
   assert.match(visibleText(approval), /指纹 b2b2b2b2…/);
 });
+
+test("the title pill keeps an open unknown-state fold open across polls", async () => {
+  const { renderPage } = await import("./support/render-page.mjs");
+  const foldsIn = (node) => [...(node.localName === "details" ? [node] : []), ...[...(node.children || [])].flatMap(foldsIn)];
+  const stageId = FIXTURES["stage.json"].stage_id;
+  const { element, ctx, refresh } = await renderPage("stage", { stageId }, { fixtures: { "stage.json": { ...FIXTURES["stage.json"], state: "mystery" } } });
+  const holder = (node) => {
+    const pill = (n) => (n.getAttribute?.("class") || "") === "stage-pill" ? [n] : [...(n.children || [])].flatMap(pill);
+    return pill(node)[0];
+  };
+  const slot = holder(element);
+  const [fold] = foldsIn(slot);
+  assert.ok(fold, "an unknown state has a fold");
+  fold.setAttribute("open", "");
+  await refresh();
+  assert.equal(foldsIn(holder(element))[0], fold);
+  assert.ok(fold.hasAttribute("open"));
+  const get = ctx.api.get;
+  ctx.api.get = async (path, ...rest) => {
+    const answer = await get(path, ...rest);
+    return /\/stages\/[^/]+$/.test(path.split("?")[0]) ? { ...answer, state: "enigma" } : answer;
+  };
+  await refresh();
+  assert.notEqual(foldsIn(holder(element))[0], fold);
+});
+
+function installHolder(lines) {
+  const holder = document.createElement("div");
+  for (const line of lines.filter(Boolean)) {
+    if (typeof line === "string") {
+      const p = document.createElement("p");
+      p.textContent = line;
+      holder.append(p);
+    } else holder.append(...(Array.isArray(line) ? line : [line]));
+  }
+  return holder;
+}
+const foldCount = (node) => elements(node, "details").length;
+
+test("a failed receipt says what happened and what to do, without the server's words", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", error_code: "not_sent", error_params: {}, error: "ConnectionRefusedError: [Errno 61]" };
+  const lines = outcomeLines(ctx, { outcome: "failed", record }, "fan");
+  const holder = installHolder(lines);
+  const text = visibleText(holder);
+  assert.match(text, /指令没有发出去，设备没有变化。/);
+  assert.match(text, /检查连接后重试。/);
+  assert.doesNotMatch(text, /ConnectionRefused|原因：|wb-9/);
+  const all = visibleTextIncludingDetails(holder);
+  assert.match(all, /ConnectionRefusedError/);
+  assert.match(all, /wb-9/);
+  assert.equal(foldCount(holder), 1);
+});
+
+test("an old receipt without a code keeps its reason in the details", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", error: "relay timed out" };
+  const holder = installHolder(outcomeLines(ctx, { outcome: "failed", record }, "fan"));
+  assert.match(visibleText(holder), /没有执行，原因见技术详情。/);
+  assert.doesNotMatch(visibleText(holder), /relay timed out/);
+  assert.match(visibleTextIncludingDetails(holder), /relay timed out/);
+  assert.equal(foldCount(holder), 1);
+  const en = installHolder(outcomeLines(testCtx({ lang: "en" }), { outcome: "failed", record }, "fan"));
+  assert.match(visibleText(en), /Not carried out; the reason is in the technical details\./);
+});
+
+test("an unknown receipt code is shown as unknown, never as the code", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", error_code: "brand_new_code", error_params: {} };
+  const holder = installHolder(outcomeLines(ctx, { outcome: "failed", record }, "fan"));
+  assert.match(visibleText(holder), /未知（技术详情）/);
+  assert.doesNotMatch(visibleText(holder), /brand_new_code/);
+});
+
+test("a failed receipt in the activity log has one fold", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", created_at: 1000, error_code: "not_sent", error_params: {} };
+  const item = logItem(ctx, "风扇调到 3 / 10", record);
+  item.show("failed", outcomeLines(ctx, { outcome: "failed", record }, "fan"));
+  assert.equal(foldCount(item.element), 1);
+  assert.match(visibleTextIncludingDetails(item.element), /wb-9/);
+});
+
+test("an unknown receipt with a code says what happened and what to do, in an item with one fold", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", created_at: 1000, error_code: "no_receipt", error_params: {}, error: "no receipt: timed out" };
+  const item = logItem(ctx, "风扇调到 3 / 10", record);
+  item.show("unknown", outcomeLines(ctx, { outcome: "unknown", record }, "fan"));
+  const text = visibleText(item.element);
+  assert.match(text, /没有收到设备的回执，结果不明。/);
+  assert.match(text, /到现场核对设备，并记一次现场检查。/);
+  assert.ok(!text.includes(ctx.t("receipt.unknownNote")));
+  assert.doesNotMatch(text, /no receipt: timed out|wb-9/);
+  const all = visibleTextIncludingDetails(item.element);
+  assert.match(all, /no receipt: timed out/);
+  assert.match(all, /wb-9/);
+  assert.equal(foldCount(item.element), 1);
+  assertNoLeaks(item.element);
+});
+
+test("an unknown receipt without a code keeps the general note and its request id fold", () => {
+  const ctx = testCtx({ lang: "zh" });
+  const record = { request_id: "wb-9", created_at: 1000, error: "no receipt: timed out" };
+  const item = logItem(ctx, "风扇调到 3 / 10", record);
+  item.show("unknown", outcomeLines(ctx, { outcome: "unknown", record }, "fan"));
+  assert.ok(visibleText(item.element).includes(ctx.t("receipt.unknownNote")));
+  assert.equal(foldCount(item.element), 1);
+  assert.match(visibleTextIncludingDetails(item.element), /wb-9/);
+});

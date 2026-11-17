@@ -28,6 +28,7 @@ from growbridge.agents.tools import ROLE_TOOLS, Tool, ToolOutcome, Toolset, buil
 from growbridge.archive.db import Database
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import ResearchTask
+from growbridge.codes import checked
 from growbridge.config import RoleModel
 from growbridge.ports import Denied
 from growbridge.workflow.states import TaskState
@@ -182,12 +183,21 @@ class Dispatcher:
         try:
             run = await self._run(task, reviews, deliveries)
         except Denied as exc:
-            self._end(task, TaskState.NEEDS_ATTENTION, f"{exc.code}: {exc}")
+            self._end(
+                task,
+                TaskState.NEEDS_ATTENTION,
+                f"{exc.code}: {exc}",
+                code="denied",
+                params={"denied_code": exc.code},
+            )
             return None
         except Exception as exc:  # the model or its client failed; nothing else is affected
             log.exception("model run for task %s failed", task.id)
             self._end(
-                task, TaskState.NEEDS_ATTENTION, f"model unavailable: {type(exc).__name__}: {exc}"
+                task,
+                TaskState.NEEDS_ATTENTION,
+                f"model unavailable: {type(exc).__name__}: {exc}",
+                code="model_unavailable",
             )
             return None
         said = run.text.strip()
@@ -196,13 +206,21 @@ class Dispatcher:
                 task,
                 TaskState.NEEDS_ATTENTION,
                 f"model stopped without finishing: {run.stop_reason}",
+                code="model_stopped",
+                params={"stop_reason": run.stop_reason},
             )
         elif task.owner_role in DELIVERABLES and not deliveries:
             reason = f"{UNDELIVERED[task.owner_role]}: {said or '(no text)'}"
-            self._end(task, TaskState.NEEDS_ATTENTION, reason[:REASON_CHARS])
+            self._end(
+                task,
+                TaskState.NEEDS_ATTENTION,
+                reason[:REASON_CHARS],
+                code="undelivered",
+                params={"role": task.owner_role},
+            )
         else:
             state = TaskState.NEEDS_REVIEW if reviews else TaskState.DONE
-            self._end(task, state, "run finished", said)
+            self._end(task, state, "run finished", said, code="run_finished")
         return run
 
     def _claim(self, task_id: str) -> ResearchTask | None:
@@ -295,12 +313,23 @@ class Dispatcher:
         ]
         return build_toolset(role, tools, config.tools)
 
-    def _end(self, task: ResearchTask, state: TaskState, reason: str, said: str = "") -> None:
-        """Move the task out of in progress, say so in the conversation and, for a task the
-        orchestrator delegated, hand the next step back to it."""
+    def _end(
+        self,
+        task: ResearchTask,
+        state: TaskState,
+        reason: str,
+        said: str = "",
+        *,
+        code: str,
+        params: Mapping[str, object] | None = None,
+    ) -> None:
+        """Move the task out of in progress, say so in the conversation (the English reason, and
+        the code and params the console shows it by) and, for a task the orchestrator delegated,
+        hand the next step back to it."""
         if not self._move(task, state, reason):
             return
-        self._record(task, "status", state.value, reason=reason)
+        detail = checked("chat_end", code, params or {})
+        self._record(task, "status", state.value, reason=reason, code=code, params=detail)
         if task.owner_role == LEAD or not self._delegated_by_lead(task):
             return
         outcome = (said or reason)[:OUTCOME_CHARS]

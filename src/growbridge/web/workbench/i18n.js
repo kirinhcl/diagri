@@ -31,6 +31,15 @@ export function hasLabel(t, prefix, value) {
   return t(key) !== key;
 }
 
+// The text for `value` under `prefix` (a string, or its dot-joined parts) with vars filled, or null
+// when the catalog has none. The key is built only here and never returned, so a caller cannot print it.
+export function textOr(t, prefix, value, vars = {}) {
+  if (typeof value !== "string" || value === "") return null;
+  const key = [].concat(prefix, value).join(".");
+  const text = t(key, vars);
+  return text === key ? null : text;
+}
+
 export function initialLang(stored, navigatorLanguage) {
   if (LANGS.includes(stored)) return stored;
   return String(navigatorLanguage || "").toLowerCase().startsWith("zh") ? "zh" : "en";

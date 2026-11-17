@@ -45,15 +45,24 @@ function protocolsTable(ctx, project) {
   return table(columns, protocols, { label: ctx.t("project.protocols.title") });
 }
 
+// "used / total", each shown as it is: a cost can be spent past its limit.
+function usedOfTotal(label, used, total, show) {
+  return [label, `${show(used)} / ${show(total)}`];
+}
+
 // What is left of the call budget, in the page's language; when either runs out, no model is called.
 export function budgetView(ctx, project) {
   const budget = project.budget;
   if (!budget) return note(ctx.t("project.budget.none"));
-  const left = keyValues([
+  const rows = [];
+  // An old server answers only what is left; the used and total figures come with a new one.
+  if (budget.used_calls !== undefined && budget.max_calls !== undefined) rows.push(usedOfTotal(ctx.t("project.budget.callsUsed"), budget.used_calls, budget.max_calls, (n) => formatNumber(n, 0, ctx.lang)));
+  if (budget.used_cost !== undefined && budget.max_cost !== undefined) rows.push(usedOfTotal(ctx.t("project.budget.costUsed"), budget.used_cost, budget.max_cost, (n) => formatMoney(n, ctx.lang)));
+  rows.push(
     [ctx.t("project.budget.callsLeft"), formatNumber(budget.calls_left, 0, ctx.lang)],
     [ctx.t("project.budget.costLeft"), formatMoney(budget.cost_left, ctx.lang)],
-  ]);
-  return h("div", {}, left, note(ctx.t("project.budget.help")));
+  );
+  return h("div", {}, keyValues(rows), note(ctx.t("project.budget.help")));
 }
 
 function tasksTable(ctx, project) {

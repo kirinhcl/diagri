@@ -10,7 +10,7 @@ import { clear, h } from "../ui/dom.js";
 import { errorDetail, errorLines } from "../ui/forms.js";
 import { deviceName, displayName, nameDetails } from "../ui/names.js";
 import { errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
-import { statePill } from "../ui/status.js";
+import { statePill, statePillKeeper } from "../ui/status.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
 import { measurementForm, measurementsView } from "./stage-measurements.js";
@@ -184,7 +184,7 @@ function draw(page, data) {
   const { stage } = data;
   arrange(page, stage.state);
   const review = data.review.error ? null : data.review.value;
-  head.pill.replaceChildren(statePill(ctx.t, stage.state));
+  head.pill.replaceChildren(head.statePill(stage.state));
   head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   parts.status.show(JSON.stringify(stage), () => statusView(ctx, stage));
   const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review]);
@@ -208,7 +208,7 @@ function headView(ctx, stage, onRefresh) {
   button.addEventListener("click", () => onRefresh());
   const title = h("div", { class: "stage-title" }, h("h1", { text: displayName(ctx, "stage", stage) }), pill);
   const text = h("div", {}, title, h("p", { class: "page-lead", text: ctx.t("stage.lead") }), updated, techDetails(ctx.t, nameDetails(stage, ctx.t)));
-  return { element: h("header", { class: "page-head" }, text, button), pill, updated };
+  return { element: h("header", { class: "page-head" }, text, button), pill, updated, statePill: statePillKeeper(ctx.t) };
 }
 
 function setCrumbs(ctx, stage) {

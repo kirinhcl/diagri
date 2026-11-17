@@ -6,25 +6,13 @@ open ``stage_waiting`` alert for as long as it waits; a research task past its d
 them only to whoever may see that stage or project.
 """
 
-import json
-from collections.abc import Mapping
 from typing import Any
 
+from growbridge.runtime_waiting import waiting_message, waiting_params
 from growbridge.workflow.states import StageState
 
 STAGE_ALERT = "stage_waiting"
 OPERATOR_PAUSE = "pause"  # the history event of a pause that an operator asked for
-
-
-def waiting_message(item: Mapping[str, Any]) -> str:
-    """Why a stage waits: its state, the event that put it there and what the event carried."""
-    detail = {
-        name: value
-        for name, value in item["detail"].items()
-        if name != "right_number" and value != item["event"]
-    }
-    text = f"Stage {item['stage_id']} is {item['state']} after {item['event']}"
-    return f"{text}: {json.dumps(detail, sort_keys=True)}" if detail else text
 
 
 def stage_alerts(runtime: Any) -> None:
@@ -46,10 +34,17 @@ def stage_alerts(runtime: Any) -> None:
             checking = item["state"] == StageState.RECOVERY_CHECK.value
             severity = "critical" if checking else "warning"
             scope = ("stage", item["stage_id"])
-            runtime.alert(STAGE_ALERT, key, waiting_message(item), severity, scope)
+            message, params = waiting_message(item), waiting_params(item)
+            runtime.alert(
+                STAGE_ALERT, key, message, severity, scope, code="stage_waiting", params=params
+            )
 
 
 def expire_tasks(runtime: Any) -> None:
     for task in runtime.tasks.expire(runtime.clock.now()):
         message = f"Research task {task.id} is past its deadline and needs attention"
-        runtime.alert("task_deadline", task.id, message, "warning", ("project", task.project_id))
+        params = {"task_id": task.id, "project_id": task.project_id, "role": task.owner_role}
+        scope = ("project", task.project_id)
+        runtime.alert(
+            "task_deadline", task.id, message, "warning", scope, code="task_deadline", params=params
+        )

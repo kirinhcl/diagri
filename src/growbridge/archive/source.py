@@ -11,6 +11,14 @@ from growbridge.store import Store
 class SourceRewound(RuntimeError):
     """The legacy table's newest rowid is below the archive cursor: rowids were reused."""
 
+    def __init__(self, top_rowid: int, cursor: int):
+        super().__init__(
+            f"legacy samples end at rowid {top_rowid} but the archive cursor is {cursor}; "
+            "rows were deleted and rowids reused, so new rows cannot be told apart"
+        )
+        self.top_rowid = top_rowid
+        self.cursor = cursor
+
 
 class LegacySampleSource:
     """``SampleSource`` over ``Store.samples``; the cursor is the row's ``rowid``.
@@ -47,10 +55,7 @@ class LegacySampleSource:
         self.observe()
         top = self.store.db.execute("SELECT MAX(rowid) FROM samples").fetchone()[0] or 0
         if top < cursor:
-            raise SourceRewound(
-                f"legacy samples end at rowid {top} but the archive cursor is {cursor}; "
-                "rows were deleted and rowids reused, so new rows cannot be told apart"
-            )
+            raise SourceRewound(top, cursor)
         rows = self.store.db.execute(
             "SELECT rowid, at, data FROM samples WHERE rowid > ? ORDER BY rowid LIMIT ?",
             (cursor, limit),

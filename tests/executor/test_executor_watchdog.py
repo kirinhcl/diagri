@@ -127,7 +127,7 @@ async def test_a_failing_pump_reading_does_not_stop_protection(rig, monkeypatch)
     monkeypatch.setattr(rig.engine, "_protect", protect)
     monkeypatch.setattr(rig.control, "pump_reading", broken)
     alerts = []
-    rig.engine.watchdog.alert = lambda *args: alerts.append(args[:2] + args[3:])
+    rig.engine.watchdog.alert = lambda *args, **_: alerts.append(args[:2] + args[3:])
     await rig.tick()
     assert reached
     assert ("pump_watchdog", "step", "critical") in alerts

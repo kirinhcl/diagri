@@ -307,3 +307,12 @@ test("an error made by the console has no HTTP status 0 and its text is not call
   assert.deepEqual(errorDetail(new ApiError(503, "server_error", "HTTP 503"), zh), [["HTTP 状态", 503], ["代码", "server_error"], ["错误信息", "HTTP 503"]]);
   assert.deepEqual(errorDetail(new ApiError(409, "state", "HTTP is not ready"), zh), [["HTTP 状态", 409], ["代码", "state"], ["服务器原文", "HTTP is not ready"]]);
 });
+
+test("copy buttons cannot be selected in Safari either", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(new URL("../../src/growbridge/web/workbench/pages.css", import.meta.url), "utf8");
+  const rule = /\.tech-copy\s*\{([^}]*)\}/.exec(css);
+  assert.ok(rule, ".tech-copy has a rule");
+  assert.match(rule[1], /-webkit-user-select:\s*none/);
+  assert.match(rule[1], /(?<!-webkit-)user-select:\s*none/);
+});
