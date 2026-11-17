@@ -93,3 +93,10 @@ def test_broken_catalog_names_the_entry(case):
 def test_text_that_is_not_toml_is_refused():
     with pytest.raises(CatalogError):
         load_catalog("version = [")
+
+
+def test_snapshot_record_resolves_and_lists_unknown_names():
+    record = packaged_catalog().snapshot_record(["temp", "air_temperature", "heigth", "light"])
+    assert [v["id"] for v in record["variables"]] == ["air_temperature", "light"]
+    assert record["unresolved"] == ["heigth"]
+    assert record["digest"] == packaged_catalog().digest

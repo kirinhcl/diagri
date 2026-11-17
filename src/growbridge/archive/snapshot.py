@@ -5,7 +5,7 @@ Late additions never change a snapshot; freezing again writes a new version.
 """
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +17,7 @@ from growbridge.ports import Denied
 from growbridge.vocab import Catalog, packaged_catalog
 
 MANIFEST = "manifest.json"
+CATALOG_FILE = "catalog.json"
 
 
 def _sample_time(sample: SampleRecord) -> float:
@@ -102,6 +103,26 @@ def _write_files(directory: Path, data: dict[str, list]) -> dict[str, str]:
     return files
 
 
+def _variable_names(data: dict[str, list], declared: Collection[str]) -> set[str]:
+    """Every variable name this snapshot's records use: declared, measured, or a sensor key."""
+    names = set(declared)
+    names.update(m.metric for m in data["measurements"])
+    for sample in (*data["samples"], *data["samples_untrusted"]):
+        sensor = sample.data.get("sensor")
+        if isinstance(sensor, dict):
+            names.update(sensor)
+    return names
+
+
+def _write_catalog(
+    directory: Path, catalog: Catalog, data: dict[str, list], declared: Collection[str]
+) -> tuple[str, str]:
+    path = directory / CATALOG_FILE
+    record = catalog.snapshot_record(_variable_names(data, declared))
+    path.write_text(canonical_json(record), encoding="utf-8")
+    return path.name, file_digest(path)
+
+
 def freeze(
     archive: Archive,
     experiment_id: str,
@@ -114,6 +135,8 @@ def freeze(
     measurement_filter: Callable[[ManualMeasurement], bool] | None = None,
     schedule: Sequence[Model] | None = None,
     measurement_grace: float = 0.0,
+    declared: Collection[str] = (),
+    catalog: Catalog | None = None,
 ) -> Snapshot:
     """Freeze the window. Trusted samples (synced, ok, planned) go to ``samples.jsonl``, the
     rest to ``samples_untrusted.jsonl``; ``measurement_filter`` returning False leaves a
@@ -122,6 +145,7 @@ def freeze(
         raise Denied("clock_unsynced", "the clock is not synchronised; data cannot be frozen")
     if end <= start:
         raise ValueError("snapshot window must have end > start")
+    catalog = catalog or packaged_catalog()
     with archive.db.transaction():
         data, excluded = _collect(
             archive, experiment_id, start, end, measurement_filter, schedule, measurement_grace
@@ -130,6 +154,9 @@ def freeze(
         coverage, gaps = coverage_of(times, start, end, expected_interval, max_gap)
         snapshot_id = new_id("snap")
         directory = archive.root / "snapshots" / snapshot_id
+        files = _write_files(directory, data)
+        name, digest = _write_catalog(directory, catalog, data, declared)
+        files[name] = digest
         fields: dict[str, Any] = {
             "id": snapshot_id,
             "experiment_id": experiment_id,
@@ -138,7 +165,7 @@ def freeze(
             "complete": coverage >= min_coverage,
             "coverage": coverage,
             "gaps": [list(gap) for gap in gaps],
-            "files": _write_files(directory, data),
+            "files": files,
         }
         manifest = directory / MANIFEST
         extra = {

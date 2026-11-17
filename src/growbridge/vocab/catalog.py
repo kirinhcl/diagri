@@ -8,7 +8,7 @@ import functools
 import hashlib
 import re
 import tomllib
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from importlib import resources
 from types import MappingProxyType
 from typing import Any, Literal
@@ -97,6 +97,24 @@ class Catalog:
         if first is None and second is None:
             return a == b
         return first == second
+
+    def snapshot_record(self, names: Iterable[str]) -> dict[str, Any]:
+        """What a snapshot keeps of this catalog: its version and digest, the full entry of each
+        distinct variable the names resolve to, and the names that resolve to nothing."""
+        found: dict[str, Variable] = {}
+        unresolved: set[str] = set()
+        for name in names:
+            variable = self.resolve(name)
+            if variable is None:
+                unresolved.add(name)
+            else:
+                found[variable.id] = variable
+        return {
+            "version": self.version,
+            "digest": self.digest,
+            "variables": [found[i].model_dump(mode="json") for i in sorted(found)],
+            "unresolved": sorted(unresolved),
+        }
 
 
 def _entry(raw: Any, index: int) -> Variable:
