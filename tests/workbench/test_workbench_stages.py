@@ -194,6 +194,41 @@ def test_model_token_may_submit_a_draft_and_read_stage_state(bench):
     assert state.status_code == 200 and state.json()["state"] == "pending_review"
 
 
+def edited_draft(bench, version: int) -> dict:
+    """The stored version 1 draft, changed the way the console form changes a level, at `version`."""
+    round_id = bench.seed_round()
+    sheet = bench.sheet().model_dump(mode="json")
+    first = bench.post(
+        bench.lan,
+        "/wb/drafts/run-sheet",
+        {"round_id": round_id, "run_sheet": sheet},
+        headers=bench.model(),
+    )
+    assert first.status_code == 200
+    changed = {**sheet, "version": version}
+    changed["care_rules"][0]["schedule"][0]["level"] = 65
+    return {"round_id": round_id, "run_sheet": changed}
+
+
+def test_a_changed_draft_with_the_next_version_is_accepted(bench, operator):
+    body = edited_draft(bench, version=2)
+
+    response = bench.post(bench.lan, "/wb/drafts/run-sheet", body, headers=bench.model())
+
+    assert response.status_code == 200
+    stored = operator.get("/wb/stages/stage-1/run-sheet")
+    assert stored.json()["run_sheet_version"] == 2
+
+
+def test_a_changed_draft_that_keeps_the_stored_version_is_refused(bench):
+    body = edited_draft(bench, version=1)
+
+    response = bench.post(bench.lan, "/wb/drafts/run-sheet", body, headers=bench.model())
+
+    assert response.status_code == 409
+    assert detail(response)["reason"] == "run_sheet_version_conflict"
+
+
 @pytest.fixture
 def checked_bench(tmp_path):
     """A bench whose workflow checks the round's treatment, as the runtime's does."""

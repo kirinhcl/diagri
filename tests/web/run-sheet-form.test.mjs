@@ -73,7 +73,21 @@ test("changing one timed action's level changes only that value", async () => {
   await submit(form);
   const expected = clone(PENDING.run_sheet);
   expected.timed_actions[0].level = 65;
+  expected.version = PENDING.run_sheet.version + 1;
   assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
+});
+
+test("a changed form sends the next version, an unchanged one keeps the stored version and approval", async () => {
+  const { ctx, form, sent } = open();
+  await submit(form);
+  assert.equal(sent[0].run_sheet.version, PENDING.run_sheet.version);
+  const changed = open();
+  change(field(rowsOf(section(changed.ctx, changed.form, "runsheet.form.timed"))[0], "level"), "65");
+  await submit(changed.form);
+  assert.equal(changed.sent[0].run_sheet.version, PENDING.run_sheet.version + 1);
+  assert.ok(byClass(form, "run-sheet-version-note").length === 1);
+  assert.match(byClass(form, "run-sheet-version-note")[0].textContent, new RegExp(String(PENDING.run_sheet.version + 1)));
+  assert.ok(ctx);
 });
 
 test("keys the form does not show (feedback rules, care rules, ownership, ids, timezone) are sent back unchanged", async () => {
@@ -91,6 +105,7 @@ test("keys the form does not show (feedback rules, care rules, ownership, ids, t
   change(field(rowsOf(section(ctx, form, "runsheet.form.timed"))[1], "level"), "5");
   await submit(form);
   const expected = clone(review.run_sheet);
+  expected.version += 1;
   expected.duration_seconds = 9 * 86400;
   expected.timed_actions[1].level = 5;
   assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
@@ -160,6 +175,7 @@ test("sampling and what happens when the wait runs out are changed in place", as
   change(field(form, "on_expiry"), "stop");
   await submit(form);
   const expected = clone(PENDING.run_sheet);
+  expected.version += 1;
   expected.sampling.interval_seconds = 30;
   expected.on_expiry = "stop";
   assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
@@ -204,6 +220,7 @@ test("rows can be added, and removing one keeps the others exactly as stored", a
   find(rows[1], (el) => el.localName === "button")[0].dispatchEvent(new Event("click"));
   await submit(form);
   const expected = clone(FULL.run_sheet);
+  expected.version += 1;
   expected.manual_tasks = [expected.manual_tasks[0], expected.manual_tasks[2], { id: "photo-2", kind: "photo", at: "12:30", make_up_allowed: false }];
   assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
 });
@@ -226,6 +243,7 @@ test("a timed action removed before one with its own evidence leaves that eviden
   find(rowsOf(section(ctx, form, "runsheet.form.timed"))[0], (el) => el.localName === "button")[0].dispatchEvent(new Event("click"));
   await submit(form);
   const expected = clone(review.run_sheet);
+  expected.version += 1;
   expected.timed_actions = expected.timed_actions.slice(1);
   assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
   assert.equal(sent[0].run_sheet.timed_actions[0].evidence, "card-off");

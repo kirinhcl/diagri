@@ -291,6 +291,18 @@ function basePart(base) {
   return { name: "base", element: h("span", { attrs: { hidden: true } }), values: () => ({}), placeErrors: (problems) => problems, draft: () => base, restore: () => {} };
 }
 
+// The server refuses a changed body that keeps the stored version, so a change goes as the next version;
+// an unchanged sheet goes back exactly as stored, which keeps its approval.
+function versioned(stored, built) {
+  if (JSON.stringify(built) === JSON.stringify(stored)) return built;
+  return { ...built, version: stored.version + 1 };
+}
+
+function versionNotePart(ctx, version) {
+  const element = h("p", { class: "note run-sheet-version-note", text: ctx.t("runsheet.form.versionNote", { version: Number(version) + 1 }) });
+  return { name: "versionNote", element, values: () => ({}), placeErrors: (problems) => problems, draft: () => null, restore: () => {} };
+}
+
 // A kept draft made on another run sheet is dropped, never put onto this one (its rows and channels would not line up).
 function dropStaleDraft(key, base) {
   const saved = key ? takeDraft(key) : null;
@@ -314,8 +326,9 @@ export function runSheetForm(ctx, { review, roundId, capabilities, onSubmit, dra
     settingsPart(ctx, sheet),
     channelsPart({ ctx, stored: sheet.channels, capabilities }),
     ...rowParts({ ctx, sheet, capabilities }),
+    versionNotePart(ctx, sheet.version),
   ];
-  const send = (values) => onSubmit({ round_id: roundId, run_sheet: buildRunSheet(sheet, values) });
+  const send = (values) => onSubmit({ round_id: roundId, run_sheet: versioned(sheet, buildRunSheet(sheet, values)) });
   const form = simpleForm({ fields: [], parts, ctx, onSubmit: send, draftKey, submitLabel: submitLabel || t("stage.draft.submit") });
   if (stale) form.prepend(h("p", { class: "note", attrs: { role: "status" }, text: t("runsheet.form.draftStale") }));
   return form;

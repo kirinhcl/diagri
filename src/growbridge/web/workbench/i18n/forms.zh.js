@@ -138,6 +138,7 @@ export default {
   "runsheet.form.pumpRange": "请填大于 0、至多 {max} 的数。",
   "runsheet.form.pumpOnlyWatering": "只有浇水任务才有水泵运行时间。请清空秒数，或把种类改为浇水。",
   "runsheet.form.end": "阶段结束时",
+  "runsheet.form.versionNote": "如果你改了任何内容，会保存为这份运行单的第 {version} 版，并需要重新审批；什么都没改，则保留当前版本及其审批。",
   "runsheet.form.draftStale": "运行单在你保存草稿之后变了，草稿没有恢复。请重新输入你的修改。",
   "round.choice.redo.line": "再跑一次这个阶段，已有的数据保留。",
   "round.choice.next.line": "进入下一阶段，这个阶段不再重跑。",
