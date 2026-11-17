@@ -19,6 +19,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
 
+from growbridge.agents.context import task_language
 from growbridge.agents.conversation import ConversationLog, clip_json
 from growbridge.agents.handlers_common import bind_task
 from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, ModelReply, TokenPrice
@@ -31,6 +32,7 @@ from growbridge.archive.models import ResearchTask
 from growbridge.codes import checked
 from growbridge.config import RoleModel
 from growbridge.ports import Denied
+from growbridge.research.notes import TEXT_LANGUAGE
 from growbridge.workflow.states import TaskState
 from growbridge.workflow.tasks import TaskBoard
 
@@ -107,7 +109,10 @@ def delivered(role: str, outcome: ToolOutcome) -> bool:
 
 
 def task_message(
-    task: ResearchTask, context: dict | None = None, history: Sequence[dict] = ()
+    task: ResearchTask,
+    context: dict | None = None,
+    history: Sequence[dict] = (),
+    language: str = TEXT_LANGUAGE,
 ) -> str:
     handoff = Handoff(
         goal=task.question,
@@ -124,6 +129,7 @@ def task_message(
     record = {"task_id": task.id, "project_id": task.project_id, **handoff.model_dump(mode="json")}
     if context:  # the ids a draft must name (round, protocol version, device): never guessed
         record["context"] = context
+    record["language"] = language  # the console language: the one to write for the operator
     if history:  # the conversation so far, oldest first; data, like everything in the record
         record["conversation"] = list(history)
     return INTRO + json.dumps(record, ensure_ascii=False, sort_keys=True)
@@ -147,6 +153,7 @@ def follow_up(task: ResearchTask, state: TaskState, outcome: str) -> ResearchTas
         trigger_event_id=f"followup:{task.id}",
         correlation_id=task.correlation_id,
         input_refs=(*task.input_refs, f"{TASK_REF}{task.id}"),
+        language=task.language,
     )
 
 
@@ -284,7 +291,7 @@ class Dispatcher:
                 for e in entries
                 if e.task_id != task.id
             ][-HISTORY_ENTRIES:]
-        return task_message(task, context, history)
+        return task_message(task, context, history, task_language(task, self.tasks))
 
     def _record(self, task: ResearchTask, kind: Any, text: str, **detail: Any) -> None:
         if self.conversation is None:

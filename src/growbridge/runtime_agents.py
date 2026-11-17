@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from growbridge.agents.context import project_context
+from growbridge.agents.context import project_context, task_language
 from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.handlers import Deps, build_role_tools
 from growbridge.agents.llm import ModelClient
@@ -116,6 +116,7 @@ def schedule_audits(runtime: Any) -> int:
         correlation_id=new_id("audit"),
         input_refs=(f"{STAGE_REF}{stage.stage_id}",),
         deadline=now + AUDIT_DEADLINE_SECONDS,
+        language=task_language(None, runtime.tasks, stage.project_id),
     )
     stored = runtime.tasks.create(task)
     return int(stored.id == task.id)

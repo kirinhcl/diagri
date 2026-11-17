@@ -334,3 +334,23 @@ async def test_another_roles_failing_task_is_still_a_critical_agent_task_alert(d
 def test_an_audit_has_eight_model_calls_by_default():
     # raised from 6 after the final review, to leave slack for a refused or repeated call
     assert AUDIT_MAX_CALLS == 8
+
+
+def test_an_audit_uses_the_projects_latest_goal_language_or_chinese(db):
+    runtime = rig(db)
+    runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+    schedule_audits(runtime)
+    (first_audit,) = audits(runtime)
+    runtime.tasks.transition(first_audit.id, TaskState.DONE, "done-1")
+    runtime.tasks.create(
+        make_task("orchestrator", "goal:p1:alice:1", project_id=PROJECT, language="en")
+    )
+    runtime.tasks.create(
+        make_task("orchestrator", "goal:other:alice:1", project_id="other", language="zh")
+    )
+    runtime.clock.wall += AUDIT_DAY_SECONDS
+    schedule_audits(runtime)
+
+    first, second = (t for t in audits(runtime) if t.owner_role == "auditor")
+
+    assert (first.language, second.language) == ("zh", "en")

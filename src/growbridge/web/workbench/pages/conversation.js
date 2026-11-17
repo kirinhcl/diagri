@@ -211,7 +211,7 @@ function messageForm(ctx, project) {
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) form.requestSubmit();
   });
-  const body = (goal) => ({ project_id: project.project_id, goal, request_id: newRequestId(), ...(rounds.value ? { round_id: rounds.value } : {}) });
+  const body = (goal) => ({ project_id: project.project_id, goal, language: ctx.lang, request_id: newRequestId(), ...(rounds.value ? { round_id: rounds.value } : {}) });
   return { form, input, send, body };
 }
 

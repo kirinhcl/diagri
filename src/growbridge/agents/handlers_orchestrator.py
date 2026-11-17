@@ -150,7 +150,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
         }
 
     def create_task(data: CreateTaskInput) -> dict:
-        require_project(deps, data.project_id)
+        running = require_project(deps, data.project_id)
         task = ResearchTask(
             id=new_id("task"),
             project_id=data.project_id,
@@ -162,6 +162,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             constraints=data.constraints,
             input_refs=data.input_refs,
             expected_artifacts=data.expected_artifacts,
+            language=running.language,
         )
         return _stored(deps, task)
 
@@ -183,6 +184,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             # a handoff always hangs under the running task, named or not: only then does the
             # dispatcher hand its end back as the follow-up the tool result promises
             parent_task_id=running.id,
+            language=running.language,
         )
         return _stored(deps, task)
 
