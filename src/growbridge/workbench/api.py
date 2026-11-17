@@ -522,13 +522,15 @@ class Workbench:
 
         @router.get("/experiments/{experiment_id}/variables")
         async def variables(experiment_id: str, actor: Anyone):
-            """The variables a measurement of this experiment may name, as the entry form offers."""
+            """The variables a measurement of this experiment may name, as the entry form offers:
+            the declared manual ones (a declared sensor or factor variable is always refused)."""
             self.staged_experiment(experiment_id)
             declared = self.workflow.store.declared_variables(experiment_id)
             entries = (self.workflow.catalog.get(name) for name in sorted(declared))
+            manual = [entry for entry in entries if entry is not None and entry.kind == "manual"]
             return {
                 "experiment_id": experiment_id,
-                "variables": [variable_json(entry) for entry in entries if entry is not None],
+                "variables": [variable_json(entry) for entry in manual],
             }
 
         @router.get("/receipts/{request_id}")

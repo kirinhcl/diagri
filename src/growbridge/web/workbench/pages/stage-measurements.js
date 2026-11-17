@@ -27,8 +27,8 @@ export function measurementOptions(measurements) {
   return Object.fromEntries(SUGGESTED.map((name) => [name, distinct(name)]));
 }
 
-// The variables the experiment's protocol declared, as the metric's choices: the label in the
-// page's language, then the unit the value is recorded in.
+// The manual variables the experiment's protocols declared, as the metric's choices: the label in
+// the page's language, then the unit the value is recorded in.
 export function variableOptions(variables, lang) {
   const list = Array.isArray(variables) ? variables : [];
   return list.map((variable) => ({ value: variable.id, label: `${lang === "zh" ? variable.label_zh : variable.label_en} (${variable.unit})` }));
@@ -95,9 +95,10 @@ export function measurementsView(ctx, measurements, form) {
   return measurementTable(ctx, measurements, { onCorrect: form.correct });
 }
 
-// The metric is a choice of the declared variables; the unit comes with it and is no field. With
-// more than one, the choice starts empty so a value is never stored under a variable nobody chose
-// (required: the form will not send it so); a single variable is the only possible choice.
+// The metric is a choice of the declared manual variables (the server lists no others, so a
+// declared sensor or factor variable never counts here); the unit comes with it and is no field.
+// With more than one, the choice starts empty so a value is never stored under a variable nobody
+// chose (required: the form will not send it so); a single variable is the only possible choice.
 function metricOptions(ctx, variables) {
   const options = variableOptions(variables, ctx.lang);
   return variables.length > 1 ? [{ value: "", label: ctx.t("measure.chooseVariable") }, ...options] : options;
@@ -124,7 +125,7 @@ function fillMethod(controls, variables, metric) {
   controls.set({ method: chosen && chosen.method ? chosen.method : null });
 }
 
-// No declared variable, so nothing can be recorded: a note instead of the form, and no Correct.
+// No declared manual variable, so nothing can be recorded: a note instead of the form, and no Correct.
 function noVariables(ctx) {
   return { element: h("div", { class: "measure-new" }, note(ctx.t("measure.noVariables"))), correct: null, update: () => {} };
 }
@@ -145,7 +146,7 @@ function correctingLine(ctx) {
 }
 
 // experiment_id comes from the stage; measured_at is wall time in the site's zone, shown beside it.
-// `variables` are those the experiment's protocol declared (GET /experiments/{id}/variables).
+// `variables` are the manual ones the experiment's protocols declared (GET /experiments/{id}/variables).
 // Returns the form with correct(record), which fills it in to correct that record, and
 // update(measurements), which the list calls with what was recorded.
 export function measurementForm(ctx, stage, onRecorded, variables) {

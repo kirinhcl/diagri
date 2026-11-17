@@ -50,8 +50,22 @@ def test_wrong_unit_is_refused(bench, operator):
     assert stored(bench) == ()
 
 
+def run_under_v2(bench, variables: tuple[str, ...]) -> None:
+    """A new round runs the bench's experiment under protocol version 2, declaring `variables`."""
+    v2 = make_protocol(
+        project_id=bench.project_id, version=2, stages=("vegetative",), variables=variables
+    )
+    bench.workflow.save_protocol(v2, bench.designer)
+    round_id = bench.workflow.create_round(bench.project_id, v2.id, bench.designer)
+    change = {"experiment_id": EXPERIMENT, "protocol_version": 2}
+    bench.workflow.submit_run_sheet(
+        round_id, bench.sheet("stage-v2").model_copy(update=change), bench.designer
+    )
+
+
 def test_variables_endpoint_lists_declared_variables(bench, operator):
     bench.pending()
+    run_under_v2(bench, ("canopy_area_growth", "air_temperature", "light"))  # sensor, factor
 
     response = operator.get(f"/wb/experiments/{EXPERIMENT}/variables")
 
@@ -59,6 +73,8 @@ def test_variables_endpoint_lists_declared_variables(bench, operator):
     body = response.json()
     assert body["experiment_id"] == EXPERIMENT
     variables = body["variables"]
+    # Only the declared manual variables: a measurement may name no other.
+    assert not {"air_temperature", "light"} & {item["id"] for item in variables}
     assert [item["id"] for item in variables] == ["canopy_area_growth", "height", "yield_g"]
     assert [item["unit"] for item in variables] == ["cm2/d", "cm", "g"]
     assert variables[1]["method"] == "ruler, soil to apex"
@@ -82,16 +98,7 @@ def test_union_over_protocol_versions(bench, operator):
     score = measurement(id="m-score", metric="canopy_score", unit="{score}", value=3.0)
     assert bench.post(operator, "/wb/measurements", score).status_code == 422
 
-    variables = ("canopy_area_growth", "canopy_score")
-    v2 = make_protocol(
-        project_id=bench.project_id, version=2, stages=("vegetative",), variables=variables
-    )
-    bench.workflow.save_protocol(v2, bench.designer)
-    round_id = bench.workflow.create_round(bench.project_id, v2.id, bench.designer)
-    change = {"experiment_id": EXPERIMENT, "protocol_version": 2}
-    bench.workflow.submit_run_sheet(
-        round_id, bench.sheet("stage-v2").model_copy(update=change), bench.designer
-    )
+    run_under_v2(bench, ("canopy_area_growth", "canopy_score"))
 
     assert bench.post(operator, "/wb/measurements", measurement(id="m-height")).status_code == 200
     assert bench.post(operator, "/wb/measurements", score).status_code == 200

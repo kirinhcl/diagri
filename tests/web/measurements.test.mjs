@@ -204,6 +204,16 @@ test("with no declared variables there is no form, only a note saying why", () =
   assert.equal(elements(measurementForm(testCtx(), STAGE, async () => {}).element, "form").length, 0, "variables left out count as none");
 });
 
+// The list holds the declared manual variables only, and a new protocol version applies once a
+// new round runs the experiment under it: the note says both.
+test("the no-variables note names manual variables and a new round", () => {
+  const expected = { en: ["manual variables", "new round"], zh: ["人工变量", "新的一轮"] };
+  for (const [lang, words] of Object.entries(expected)) {
+    const text = visibleText(formView(lang, []).form.element);
+    for (const word of words) assert.ok(text.includes(word), `${lang}: ${text}`);
+  }
+});
+
 test("the form's lead names no experiment id and corrects stays hidden", () => {
   const { form } = formView();
   const text = visibleText(form.element);
