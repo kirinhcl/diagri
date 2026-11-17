@@ -1,11 +1,13 @@
 import codes from "./codes.en.js";
 import denials from "./denials.en.js";
+import forms from "./forms.en.js";
 import messages from "./messages.en.js";
 
 export default {
   ...codes,
   ...messages,
   ...denials,
+  ...forms,
   "app.title": "DiAGRI Workbench",
   "app.subtitle": "Workbench",
   "common.hello": "Hello, {name}",

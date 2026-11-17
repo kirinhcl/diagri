@@ -1,11 +1,13 @@
 import codes from "./codes.zh.js";
 import denials from "./denials.zh.js";
+import forms from "./forms.zh.js";
 import messages from "./messages.zh.js";
 
 export default {
   ...codes,
   ...messages,
   ...denials,
+  ...forms,
   "app.title": "DiAGRI 工作台",
   "app.subtitle": "工作台",
   "common.hello": "你好，{name}",
