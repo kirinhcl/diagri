@@ -5,6 +5,7 @@ import { saveDraft, stripSecrets, takeDraft } from "../drafts.js";
 import { formatTime, zonedToEpoch } from "../format.js";
 import { messageParts } from "../messages.js";
 import { locatedText, problemText } from "../validation.js";
+import { confirmAction } from "./dialog.js";
 import { clear, h } from "./dom.js";
 import { techDetails } from "./section.js";
 
@@ -100,6 +101,20 @@ export function errorDetail(error, t = bound.t) {
   return entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
 }
 
+// Thrown from a form's onSubmit when the person said no in a confirm dialog: nothing happened,
+// so the form says nothing.
+export class Cancelled extends Error {
+  constructor() {
+    super("cancelled");
+    this.name = "Cancelled";
+  }
+}
+
+// Asks the confirm dialog; returns when confirmed, throws Cancelled when not.
+export async function confirmOrCancel(ctx, prompt) {
+  if (!(await confirmAction(ctx.t, prompt))) throw new Cancelled();
+}
+
 // Plain lines, then (for a refusal) the folded technical details.
 function showStatus(status, lines, kind, details = null) {
   clear(status);
@@ -131,6 +146,7 @@ function formFrame(submitLabel, children, run, getCtx) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     guarded().catch((error) => {
+      if (error instanceof Cancelled) return showStatus(status, [], "info");
       const ctx = getCtx();
       showRefusal(status, error, ctx.t, errorLines(error, ctx.lang, ctx.t, ctx));
     });
@@ -140,6 +156,10 @@ function formFrame(submitLabel, children, run, getCtx) {
 
 // Every refusal is written to the form's own status line; some also keep a draft or reload the page.
 function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
+  if (error instanceof Cancelled) {
+    showStatus(status, [], "info");
+    return;
+  }
   const lines = errorLines(error, ctx.lang, ctx.t, ctx);
   const code = error instanceof ApiError ? error.code : null;
   if (code === "validation") {
