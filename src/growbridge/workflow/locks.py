@@ -166,9 +166,21 @@ class GreenhouseLocks:
         """Hand the device's care back, then free the greenhouse (see the module docstring)."""
         self._check_release(greenhouse_id, actor, force)
         holder = self.store.care_holder(self.greenhouse(greenhouse_id).device_id)
-        if holder is not None and holder.care_right is not None:
-            await self.control.handover(holder.care_right, "release")
-        self._finish_release(greenhouse_id, actor, force, note)
+        if holder is None or holder.care_right is None:
+            self._finish_release(greenhouse_id, actor, force, note)
+            return
+        await self.control.handover(holder.care_right, "release")
+        released = False
+        try:
+            self._finish_release(greenhouse_id, actor, force, note)
+            released = True
+        finally:
+            if not released:
+                # refused or failed after the hand-back (a stage was filed meanwhile, the database
+                # failed): the lock stays, so the dead right is forgotten and the runtime's
+                # restore_care issues care again rather than waiting for a stage that may never
+                # start or for a restart
+                self.store.drop_care(holder.stage_id, holder.care_right)
 
     def _finish_release(self, greenhouse_id: str, actor: str, force: bool, note: str) -> None:
         with self.db.transaction():

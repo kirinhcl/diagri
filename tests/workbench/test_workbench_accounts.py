@@ -159,3 +159,29 @@ def test_cli_add_admin(tmp_path, monkeypatch):
         assert Operators(db, FakeClock()).role("root") == "admin"
     finally:
         db.close()
+
+
+def test_account_changes_are_recorded_with_who_and_when(operators):
+    operators.add("root", SECRET, role="admin")  # from the command line: no actor
+    operators.add("alice", SECRET, by="root")
+    operators.reset_secret("alice", SECRET + "!", by="root")
+    operators.disable("alice", by="root")
+
+    events = operators.events()
+
+    assert [(e["name"], e["action"], e["actor"], e["detail"]) for e in events] == [
+        ("alice", "disable", "root", None),
+        ("alice", "reset_secret", "root", None),
+        ("alice", "add", "root", "user"),
+        ("root", "add", None, "admin"),
+    ]
+    assert all(isinstance(e["at"], float) for e in events)
+
+
+def test_a_refused_account_change_records_nothing(operators):
+    operators.add("root", SECRET, role="admin")
+
+    with pytest.raises(ValueError):
+        operators.disable("root", by="root")
+
+    assert [e["action"] for e in operators.events()] == ["add"]

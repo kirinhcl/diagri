@@ -681,18 +681,33 @@ class WorkflowService(StageRecovery):
         rnd = self.store.round(round_id)
         if rnd.state in ROUND_TERMINAL:
             raise denials.round_already_ended(round_id, rnd.state.value)
-        for stage in self.store.stages_of_round(round_id):
-            for number in held(stage.right_number, stage.manual_right, stage.care_right):
-                await self.control.handover(number, "round aborted")
-        with self.db.transaction():
-            guard_round(self.access, actor, self.store, round_id)  # transferred meanwhile?
-            fresh = self.store.round(round_id)
-            if fresh.state in ROUND_TERMINAL:
-                raise denials.round_already_ended(round_id, fresh.state.value)
+        cared: list[tuple[str, int]] = []  # finished stages whose care was handed back
+        aborted = False
+        try:
             for stage in self.store.stages_of_round(round_id):
-                self.store.abort_stage(stage, self.clock.now())
-            changes = {"state": RoundState.ABORTED, "awaiting_choice": None}
-            return self.store.update_round(round_id, **changes).state
+                for number in held(stage.right_number, stage.manual_right, stage.care_right):
+                    await self.control.handover(number, "round aborted")
+                if stage.state in STAGE_TERMINAL and stage.care_right is not None:
+                    cared.append((stage.stage_id, stage.care_right))
+            with self.db.transaction():
+                guard_round(self.access, actor, self.store, round_id)  # transferred meanwhile?
+                fresh = self.store.round(round_id)
+                if fresh.state in ROUND_TERMINAL:
+                    raise denials.round_already_ended(round_id, fresh.state.value)
+                for stage in self.store.stages_of_round(round_id):
+                    self.store.abort_stage(stage, self.clock.now())
+                changes = {"state": RoundState.ABORTED, "awaiting_choice": None}
+                state = self.store.update_round(round_id, **changes).state
+            aborted = True
+            return state
+        finally:
+            if not aborted:
+                # refused or failed after hand-backs. The refusals that reach the transaction are
+                # an ownership transfer (it needs every stage of the project finished) and an abort
+                # that won the race (it ends the stages itself), so only a finished stage's care
+                # can be left naming a dead right; it comes back on the next restore_care
+                for stage_id, number in cared:
+                    self.store.drop_care(stage_id, number)
 
     def mark_snapshot_frozen(self, round_id: str, snapshot_id: str, event_id: str) -> RoundState:
         changes = {"snapshot_id": snapshot_id}

@@ -183,3 +183,16 @@ def test_me_tells_the_console_about_multi_user(bench):
     single = Bench(single_dir)
     single.operators.add("carol", SECRET)
     assert single.user("carol").get("/wb/me").json()["multi_user"] is False
+
+
+def test_administrators_see_who_changed_an_account(bench):
+    root = bench.user("root")
+    bench.post(root, "/wb/admin/operators/secret", {"name": "alice", "secret": SECRET})
+
+    events = root.get("/wb/admin/operators").json()["events"]
+
+    assert (events[0]["name"], events[0]["action"], events[0]["actor"]) == (
+        "alice",
+        "reset_secret",
+        "root",
+    )

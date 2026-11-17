@@ -6,6 +6,7 @@ import { afterWrite, confirmedButton, note, pageHead, section, timeText } from "
 
 const ROLES = ["user", "admin"];
 const EVENT_KEYS = { lock: "admin.event.lock", release: "admin.event.release", force_release: "admin.event.force" };
+const ACCOUNT_EVENT_KEYS = { add: "admin.accountEvent.add", disable: "admin.accountEvent.disable", reset_secret: "admin.accountEvent.reset" };
 
 function roleText(ctx, role) {
   return ctx.t(role === "admin" ? "admin.role.admin" : "admin.role.user");
@@ -30,6 +31,19 @@ function accountsTable(ctx, operators) {
     { label: ctx.t("admin.state"), cell: (row) => disableButton(ctx, row) },
   ];
   return table(columns, operators, { label: ctx.t("admin.accounts") });
+}
+
+// Who added, disabled or reset whose account: a reset lets an administrator sign in as that account.
+function accountEventsTable(ctx, events) {
+  if (!events.length) return note(ctx.t("admin.noAccountEvents"));
+  const columns = [
+    { label: ctx.t("admin.time"), cell: (row) => timeText(ctx, row.at) },
+    { label: ctx.t("admin.name"), cell: (row) => row.name },
+    { label: ctx.t("admin.eventAction"), cell: (row) => ctx.t(ACCOUNT_EVENT_KEYS[row.action] || "common.unknown") },
+    { label: ctx.t("admin.by"), cell: (row) => row.actor || ctx.t("admin.byCommandLine") },
+    { label: ctx.t("admin.role"), cell: (row) => (row.action === "add" ? roleText(ctx, row.detail) : "—") },
+  ];
+  return table(columns, events, { label: ctx.t("admin.accountEvents") });
 }
 
 function addForm(ctx) {
@@ -115,6 +129,7 @@ export async function render(ctx) {
     { class: "page admin" },
     pageHead(ctx.t("nav.admin"), ctx.t("admin.lead")),
     section(ctx.t("admin.accounts"), accountsTable(ctx, operators), addForm(ctx), secretForm(ctx)),
+    section(ctx.t("admin.accountEvents"), accountEventsTable(ctx, Array.isArray(accounts?.events) ? accounts.events : [])),
     section(ctx.t("admin.projects"), note(ctx.t("admin.transferLead")), transferForm(ctx)),
     section(ctx.t("admin.locks"), locksTable(ctx, locks?.locks || [])),
     section(ctx.t("admin.events"), eventsTable(ctx, locks?.events || [])),

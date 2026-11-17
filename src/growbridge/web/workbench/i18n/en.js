@@ -715,4 +715,10 @@ export default {
   "admin.newOwner": "New owner",
   "admin.transferLead": "Projects made before multi-user was switched on have no owner and only administrators see them; a project whose owner is disabled cannot be acted on either. Once it has no unfinished stage, hand it to an active account here (the project ID is on the Projects page).",
   "admin.transferred": "The project now belongs to {owner}.",
+  "admin.accountEvents": "Account history",
+  "admin.noAccountEvents": "No account has been changed yet.",
+  "admin.accountEvent.add": "Account added",
+  "admin.accountEvent.disable": "Account disabled",
+  "admin.accountEvent.reset": "Password reset",
+  "admin.byCommandLine": "the command line",
 };
