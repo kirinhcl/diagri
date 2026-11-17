@@ -7,7 +7,7 @@ from __future__ import annotations
 from growbridge.agents.handlers_common import Deps, ToolInput, bound_task
 from growbridge.agents.memory_rounds import round_record
 from growbridge.agents.tools import Tool
-from growbridge.observer.episodes import project_episodes
+from growbridge.observer.episodes import project_episodes, stage_window
 from growbridge.ports import Denied
 
 
@@ -25,18 +25,16 @@ def read_round_history(deps: Deps, data: RoundHistoryInput) -> dict:
 
 
 def _round_episodes(src, project_id: str, round_id: str) -> list[dict]:
-    """The project's episodes while this round's stages ran."""
-    store = src.workflow.store
-    spans = [
-        (stage.started_at, stage.state_at)
-        for stage in store.stages_of_round(round_id)
-        if stage.started_at is not None
-    ]
-    if not spans:
+    """The episodes while this round's stages ran; only those windows are read."""
+    store, now = src.workflow.store, src.clock.now()
+    started = [s for s in store.stages_of_round(round_id) if s.started_at is not None]
+    windows = [stage_window(stage, now) for stage in started]
+    if not windows:
         return []
-    since, now = min(a for a, _ in spans), src.clock.now()
-    found = project_episodes(store, src.archive, src.book, project_id, since, now, src.multi_user)
-    inside = [e for e in found if any(a <= e.start <= max(b, a) for a, b in spans)]
+    since, until = min(a for a, _, _ in windows), max(b for _, b, _ in windows)
+    reads = (store, src.archive, src.book, project_id, since, until, src.multi_user)
+    found = project_episodes(*reads, windows=windows)
+    inside = [e for e in found if any(a <= e.start <= b for a, b, _ in windows)]
     return [e.model_dump(mode="json") for e in inside]
 
 

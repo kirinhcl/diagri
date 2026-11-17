@@ -195,3 +195,36 @@ def test_roles_tell_history_is_background():
         assert '"history"' in role.system and "background" in role.system
         assert '"invalid"' in role.system and '"held_out"' in role.system
     assert "history.rounds" in ROLES["planner"].system
+
+
+def test_long_reports_keep_every_round_id(tmp_path):
+    from test_memory_rounds import World as Rounds
+
+    rounds = Rounds(tmp_path)
+    long = "x" * 2000
+    for n in range(5):
+        rounds.round(f"r{n}", next_round=long, unresolved=[long] * 10, limitations=[long] * 4)
+
+    history = build_history(rounds.src(), "p-a", ())
+
+    assert len(json.dumps(history, ensure_ascii=False)) <= HISTORY_CHARS
+    assert [r["round_id"] for r in history["rounds"]] == [f"r{n}" for n in range(4, -1, -1)]
+    newest = history["rounds"][0]["report"]
+    assert newest["conclusion"] == "supported" and len(newest.get("next_round", "")) <= 301
+
+
+def test_report_summary_caps_model_text():
+    from growbridge.agents.memory_rounds import report_summary
+
+    long = "y" * 2000
+    summary = report_summary(
+        {
+            "label": "confirmatory",
+            "next_round": long,
+            "unresolved": [long] * 10,
+            "limitations": [long],
+        }
+    )
+    assert len(summary["next_round"]) == 301 and summary["next_round"].endswith("…")
+    assert len(summary["unresolved"]) == 3 and all(len(u) == 301 for u in summary["unresolved"])
+    assert len(summary["limitations"][0]) == 301

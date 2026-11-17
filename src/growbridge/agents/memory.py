@@ -26,6 +26,7 @@ NOTE_DAYS = 30
 MAX_EPISODES = 10
 MAX_NOTES = 5
 UNAVAILABLE = {"error": "history unavailable"}
+SHRUNK_REPORT = ("label", "conclusion", "invalid", "held_out", "unavailable")
 
 
 def build_history(src: MemorySources, project_id: str, skip_rounds: Collection[str]) -> dict:
@@ -84,13 +85,15 @@ def episode_line(e: Episode, timezone: str) -> str:
 
 def trim(history: dict, limit: int = HISTORY_CHARS) -> dict:
     """Drop entries until the JSON fits: episodes, then notes, then each round's decisions, then
-    patterns; the rounds themselves (oldest first) only when nothing else is left."""
+    patterns; then rounds shrink to their id, state, label and conclusion (oldest first), so the
+    model can still read them in full with ``read_round_history``; whole rounds go last."""
     trimmed = copy.deepcopy(history)
     steps: tuple[Callable[[dict], bool], ...] = (
         lambda h: _pop(h["episodes"]),
         lambda h: _pop(h["notes"]),
         _drop_decision,
         lambda h: _pop(h["patterns"]),
+        _shrink_round,
         lambda h: _pop(h["rounds"]),
     )
     for step in steps:
@@ -109,6 +112,19 @@ def _pop(items: list) -> bool:
         return False
     items.pop()
     return True
+
+
+def _shrink_round(history: dict) -> bool:
+    """The oldest round not yet shrunk keeps only what names it and its outcome."""
+    for item in reversed(history["rounds"]):
+        report = item.get("report") or {}
+        small = {k: report[k] for k in SHRUNK_REPORT if k in report}
+        shrunk = {"round_id": item["round_id"], "state": item.get("state"), "report": small}
+        if item != shrunk:
+            item.clear()
+            item.update(shrunk)
+            return True
+    return False
 
 
 def _drop_decision(history: dict) -> bool:

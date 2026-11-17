@@ -97,3 +97,63 @@ async def test_held_out_round_through_tool_and_context(env, tmp_path):
     assert "effect" not in json.dumps(tool) and "p_value" not in json.dumps(summary)
     downgrade, body = load_report(mem, env.project_id, plain["artifact_id"])
     assert downgrade is None and body["estimate"]["effect"] is not None
+
+
+def _stage(env, started: float, ended: float | None):
+    """stage-1 of the main round, started at ``started`` and ended at ``ended`` (None: running)."""
+    from growbridge.workflow.states import StageState
+
+    env.workflow.submit_run_sheet(env.round_id, env.sheet(), env.operator)
+    store = env.workflow.store
+    row = store.stage("stage-1")
+    state = StageState.RUNNING if ended is None else StageState.ENDED
+    store.update_stage(row, started_at=started, state=state, state_at=ended or started)
+    return row.experiment_id
+
+
+async def test_the_tool_reads_samples_only_inside_the_round(env, monkeypatch):
+    now = env.clock.now()
+    start, end = now - 90 * 86400, now - 89 * 86400
+    _stage(env, start, end)
+    store = env.workflow.store
+    later = {"stage_id": "stage-later", "round_id": "round-later", "experiment_id": "exp-later"}
+    store.add_stage(
+        store.stage("stage-1").model_copy(
+            update={**later, "started_at": now - 10 * 86400, "state_at": now - 9 * 86400}
+        )
+    )
+    calls = []
+    real = env.archive.samples
+    monkeypatch.setattr(
+        env.archive, "samples", lambda exp, a, b: calls.append((a, b)) or real(exp, a, b)
+    )
+
+    await env.invoke("planner", TOOL, env.make_deps(memory=memory(env)), round_id=env.round_id)
+
+    assert calls and all(start <= a and b <= end for a, b in calls)
+
+
+async def test_the_tool_shows_a_running_rounds_episodes_up_to_now(env):
+    from growbridge.archive.models import ActionRecord, ActionState, Channel, RightKind
+
+    now = env.clock.now()
+    experiment = _stage(env, now - 2 * 86400, None)
+    env.archive.append_action(
+        ActionRecord(
+            request_id="req-hot",
+            state=ActionState.CONFIRMED,
+            channel=Channel.EXHAUST,
+            planned_level=100,
+            right_number=1,
+            right_kind=RightKind.PROTECTION,
+            trigger="protect:hot",
+            created_at=now - 3600,
+            experiment_id=experiment,
+            stage_id="stage-1",
+        )
+    )
+    deps = env.make_deps(memory=memory(env))
+
+    body = json.loads((await env.invoke("planner", TOOL, deps, round_id=env.round_id)).content)
+
+    assert [e["subject"] for e in body["episodes"] if e["kind"] == "protection"] == ["hot"]

@@ -19,6 +19,7 @@ model.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator, Sequence
 from datetime import datetime
 from statistics import median
@@ -38,6 +39,7 @@ RECUR_SPREAD_SECONDS = 7200.0
 MAX_PATTERNS = 10
 MAX_RECURRING_LINES = 3
 PROTECT = "protect:"
+log = logging.getLogger(__name__)
 Window = tuple[float, float, Any]  # (start, end, StageRow)
 
 
@@ -68,12 +70,13 @@ def stage_windows(store: Any, project_id: str, now: float) -> tuple[Window, ...]
         " AND started_at < ? ORDER BY started_at",
         (project_id, now),
     )
-    windows = []
-    for row in rows:
-        stage = store.stage(row["stage_id"])
-        end = stage.state_at if stage.state in FINISHED_STATES else now
-        windows.append((stage.started_at, min(end, now), stage))
-    return tuple(windows)
+    return tuple(stage_window(store.stage(row["stage_id"]), now) for row in rows)
+
+
+def stage_window(stage: Any, now: float) -> Window:
+    """When ``stage`` (started) ran: to its end, or to ``now`` while it has not finished."""
+    end = stage.state_at if stage.state in FINISHED_STATES else now
+    return (stage.started_at, min(end, now), stage)
 
 
 def project_episodes(
@@ -84,8 +87,11 @@ def project_episodes(
     since: float,
     now: float,
     hide_values: bool,
+    windows: Sequence[Window] | None = None,
 ) -> list[Episode]:
-    windows = stage_windows(store, project_id, now)
+    """Episodes of ``[since, now]`` in ``windows`` (default: the project's stage windows)."""
+    if windows is None:
+        windows = stage_windows(store, project_id, now)
     found = [
         *_protection(archive, windows, since, now),
         *_frozen(archive, book, windows, since, now, hide_values),
@@ -117,8 +123,10 @@ def _writes(
     archive: Any, stage: Any, a: float, b: float, since: float, now: float
 ) -> Iterator[Any]:
     lo, hi = max(a, since), min(b, now)
-    for record in archive.actions(stage.experiment_id):
-        if record.trigger.startswith(PROTECT) and lo <= record.created_at < hi:
+    if hi <= lo:
+        return  # the window is outside the period looked at: nothing is read
+    for record in archive.actions_between(stage.experiment_id, lo, hi):
+        if record.trigger.startswith(PROTECT):
             yield record
 
 
@@ -266,3 +274,14 @@ def recurring_for_report(
     since = end - EPISODE_DAYS * DAY
     found = project_episodes(store, archive, book, project_id, since, end, hide_values=False)
     return recurring_lines(patterns(found, end, timezone))
+
+
+def report_recurring(runtime: Any, stage: Any, end: float, timezone: str) -> tuple[str, ...]:
+    """``recurring_for_report`` for the daily report of ``stage``'s project; a failure here is
+    logged and leaves the section out, never the report."""
+    try:
+        reads = (runtime.workflow.store, runtime.archive, runtime.book)
+        return recurring_for_report(*reads, stage.project_id, end, timezone)
+    except Exception:
+        log.exception("the recurring section of the daily report could not be built")
+        return ()

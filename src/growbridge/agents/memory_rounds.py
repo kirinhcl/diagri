@@ -23,6 +23,8 @@ from growbridge.workflow.states import RoundState
 MAX_ROUNDS = 5
 MAX_DECISIONS = 8
 MAX_LIMITATIONS = 3
+MAX_UNRESOLVED = 3
+TEXT_MAX = 300  # characters of model-written report text in a summary
 CLOSED = (RoundState.DELIVERED.value, RoundState.ABORTED.value)
 SNAPSHOT_REF = "snapshot:"
 
@@ -93,16 +95,23 @@ def load_report(
 
 
 def report_summary(body: dict) -> dict:
-    estimate = body.get("estimate") or {}
+    """The report's conclusion and figures; the model's own text is cut to ``TEXT_MAX``."""
+    estimate = body.get("estimate") if isinstance(body.get("estimate"), dict) else {}
     return {
         "label": body.get("label"),
         "conclusion": body.get("conclusion"),
         "effect": estimate.get("effect"),
         "p_value": estimate.get("p_value"),
-        "limitations": list(body.get("limitations", ()))[:MAX_LIMITATIONS],
-        "next_round": body.get("next_round"),
-        "unresolved": list(body.get("unresolved", ())),
+        "limitations": [_cut(x) for x in list(body.get("limitations", ()))[:MAX_LIMITATIONS]],
+        "next_round": _cut(body.get("next_round")),
+        "unresolved": [_cut(x) for x in list(body.get("unresolved", ()))[:MAX_UNRESOLVED]],
     }
+
+
+def _cut(text: object) -> object:
+    if isinstance(text, str) and len(text) > TEXT_MAX:
+        return text[:TEXT_MAX] + "…"
+    return text
 
 
 def _read(artifact: Any) -> dict | None:

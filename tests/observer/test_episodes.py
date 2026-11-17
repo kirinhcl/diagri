@@ -376,3 +376,35 @@ def test_recurring_counts_only_up_to_the_report_day(world):
     assert lines(T0 + 3 * DAY) == ("protect:hot on 3 of the last 7 days, around 14:00",)
     assert lines(T0 + 4 * DAY) == ("protect:hot on 4 of the last 7 days, around 14:00",)
     assert lines(T0 + 2 * DAY) == ()
+
+
+# --- final review: bounded reads, a report that survives ------------------------------------
+
+
+def test_protection_reads_only_the_period_looked_at(world, monkeypatch):
+    world.stage("old", T0, T0 + DAY)
+    world.stage("across", T0 + 20 * DAY, T0 + 30 * DAY)
+    calls = []
+    real = world.archive.actions_between
+    monkeypatch.setattr(
+        world.archive,
+        "actions_between",
+        lambda exp, lo, hi: calls.append((exp, lo, hi)) or real(exp, lo, hi),
+    )
+    monkeypatch.setattr(world.archive, "actions", lambda *_: pytest.fail("whole action log read"))
+
+    now = T0 + 31 * DAY
+    world.episodes(now)
+    assert calls == [("exp-across", now - 7 * DAY, T0 + 30 * DAY)]
+
+
+def test_a_failing_recurring_section_leaves_the_report(world):
+    from growbridge.observer.episodes import report_recurring
+
+    class Broken:
+        db = property(lambda self: (_ for _ in ()).throw(RuntimeError("disk")))
+
+    runtime = SimpleNamespace(workflow=SimpleNamespace(store=Broken()), archive=None, book=None)
+    stage = SimpleNamespace(project_id=PROJECT)
+
+    assert report_recurring(runtime, stage, T0, "UTC") == ()
