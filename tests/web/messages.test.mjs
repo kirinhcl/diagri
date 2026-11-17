@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { VALIDATION_TYPES } from "../../src/growbridge/web/workbench/validation.js";
 import { readFileSync } from "node:fs";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
@@ -56,6 +57,11 @@ test("every message text in the catalogs belongs to a registered code", () => {
   for (const table of [en, zh]) {
     for (const key of Object.keys(table).filter((k) => k.startsWith("msg."))) {
       const base = key.replace(/\.action$/, "");
+      if (base.startsWith("msg.validation.")) {
+        // request-body validation texts are keyed by Pydantic's type, not by a registered code
+        assert.ok([...VALIDATION_TYPES, "other"].includes(base.slice("msg.validation.".length)), key);
+        continue;
+      }
       const family = Object.keys(CODES).find((f) => base.startsWith(`msg.${f}.`));
       assert.ok(family, key);
       assert.ok(base.slice(`msg.${family}.`.length) in CODES[family], key);

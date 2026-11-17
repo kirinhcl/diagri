@@ -56,6 +56,17 @@ test("422 keeps the field errors", async () => {
   });
 });
 
+test("422 fields carry the type and only the plain numbers and texts of ctx", async () => {
+  const detail = [{ type: "greater_than", loc: ["body", "items", 0, "n"], msg: "x", ctx: { gt: 0, error: { a: 1 }, name: "n", bad: null } }];
+  const api = createApi({ fetchImpl: fakeFetch([reply(422, { detail })]) });
+  await assert.rejects(api.post("/x", {}), (e) => {
+    assert.equal(e.fields[0].type, "greater_than");
+    assert.deepEqual(e.fields[0].loc, ["body", "items", 0, "n"]);
+    assert.deepEqual(e.fields[0].limits, { gt: 0, name: "n" });
+    return true;
+  });
+});
+
 test("a network failure becomes code network", async () => {
   const f = fakeFetch([new TypeError("failed")]);
   const api = createApi({ fetchImpl: f });

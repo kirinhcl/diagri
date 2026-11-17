@@ -4,6 +4,7 @@ import { describeDenial } from "../denials.js";
 import { saveDraft, stripSecrets, takeDraft } from "../drafts.js";
 import { formatTime, zonedToEpoch } from "../format.js";
 import { messageParts } from "../messages.js";
+import { locatedText, problemText } from "../validation.js";
 import { clear, h } from "./dom.js";
 import { techDetails } from "./section.js";
 
@@ -74,6 +75,12 @@ export function errorLines(error, lang, t, ctx = { lang, t }) {
 // What api.js writes itself when the server's answer had no words of its own ("HTTP 502: not JSON").
 const CONSOLE_MESSAGE = /^HTTP \d+/;
 
+// Pydantic's own words for each problem, with where it was found (for the technical details).
+function validationLines(fields) {
+  if (!Array.isArray(fields) || fields.length === 0) return null;
+  return fields.map(({ loc, msg }) => `${(loc || []).join(" › ")}: ${msg}`).join("\n");
+}
+
 // [label, value] pairs for the technical details: HTTP status, code and the message as it came (a
 // message that only repeats the code is left out). The labels use t, else the bound page's.
 export function errorDetail(error, t = bound.t) {
@@ -88,6 +95,7 @@ export function errorDetail(error, t = bound.t) {
     [t("tech.reason"), isApi ? error.reason : null],
     [t("tech.params"), isApi && error.reason && Object.keys(error.params || {}).length > 0 ? error.params : null],
     [t(fromServer ? "tech.serverMessage" : "tech.message"), isApi && message === error.code ? null : message],
+    [t("tech.validation"), isApi ? validationLines(error.fields) : null],
   ];
   return entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
 }
@@ -135,7 +143,7 @@ function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
   const lines = errorLines(error, ctx.lang, ctx.t, ctx);
   const code = error instanceof ApiError ? error.code : null;
   if (code === "validation") {
-    showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields)]);
+    showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields, ctx)]);
     return;
   }
   showRefusal(status, error, ctx.t, lines);
@@ -246,17 +254,19 @@ function convert(entries, timeZone, t) {
 // Puts each 422 error beside its field; returns the lines for errors that match no field. A hidden
 // field's error could not be seen beside it, so it is one of those lines, under the field's label
 // (never its name), or alone when the field has none.
-function placeFieldErrors(entries, fieldErrors) {
+function placeFieldErrors(entries, fieldErrors, ctx) {
   const byName = (hidden) => new Map(entries.filter((entry) => (entry.field.type === "hidden") === hidden).map((entry) => [entry.field.name, entry]));
   const shown = byName(false);
   const unseen = byName(true);
   const rest = [];
-  for (const { loc, msg } of fieldErrors) {
+  for (const problem of fieldErrors) {
+    const { loc } = problem;
     const name = loc.find((part) => shown.has(part));
     const hidden = unseen.get(loc.find((part) => unseen.has(part)));
-    if (name) setFieldError(shown.get(name), msg);
-    else if (hidden) rest.push(hidden.field.label ? `${hidden.field.label}: ${msg}` : msg);
-    else rest.push(`${loc.filter((part) => part !== "body").join(" › ")}: ${msg}`);
+    const what = problemText(ctx, problem);
+    if (name) setFieldError(shown.get(name), what);
+    else if (hidden) rest.push(hidden.field.label ? `${hidden.field.label}${ctx.t("validation.sep")}${what}` : what);
+    else rest.push(locatedText(ctx, problem));
   }
   return rest;
 }
@@ -340,7 +350,7 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
       handleFailure(error, ctx, {
         status,
         keepDraft: () => draftKey && saveDraft(draftKey, stripSecrets(raw, secretNames)),
-        showValidation: (fieldErrors) => placeFieldErrors(entries, fieldErrors),
+        showValidation: (fieldErrors, ctx) => placeFieldErrors(entries, fieldErrors, ctx),
       });
     }
   };
@@ -387,7 +397,7 @@ export function jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx:
       handleFailure(error, ctx, {
         status,
         keepDraft: () => draftKey && saveDraft(draftKey, { text }),
-        showValidation: (fieldErrors) => placeFieldErrors([], fieldErrors),
+        showValidation: (fieldErrors, ctx) => placeFieldErrors([], fieldErrors, ctx),
       });
     }
   };

@@ -108,6 +108,7 @@ export default {
   "tech.reason": "Reason",
   "tech.code": "Code",
   "tech.serverMessage": "Server message",
+  "tech.validation": "Validation details",
   "tech.params": "Parameters",
   "tech.message": "Error message",
   "tech.recordId": "Record id",

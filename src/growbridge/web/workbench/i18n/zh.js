@@ -108,6 +108,7 @@ export default {
   "tech.reason": "原因代码",
   "tech.code": "代码",
   "tech.serverMessage": "服务器原文",
+  "tech.validation": "校验详情",
   "tech.params": "参数",
   "tech.message": "错误信息",
   "tech.recordId": "记录 id",
