@@ -195,7 +195,7 @@ def test_model_token_may_submit_a_draft_and_read_stage_state(bench):
 
 
 def edited_draft(bench, version: int) -> dict:
-    """The stored version 1 draft, changed the way the console form changes a level, at `version`."""
+    """A stored version 1 draft, then the same sheet with a level changed, at `version`."""
     round_id = bench.seed_round()
     sheet = bench.sheet().model_dump(mode="json")
     first = bench.post(
