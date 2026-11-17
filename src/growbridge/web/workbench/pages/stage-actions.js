@@ -8,7 +8,7 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { advancedJson } from "../ui/field-forms.js";
-import { confirmOrCancel, errorLines, simpleForm } from "../ui/forms.js";
+import { confirmOrCancel, errorLines, formControls, simpleForm } from "../ui/forms.js";
 import { messageParts, messageView } from "../messages.js";
 import { displayName } from "../ui/names.js";
 import { formatDuration, levelText, shortDigest } from "../format.js";
@@ -303,12 +303,14 @@ const inputNamed = (node, name) => {
   return null;
 };
 
-// The level must lie in the chosen channel's range; without capabilities the server judges.
-function levelField(ctx, current) {
+// The level must be a whole number inside the chosen channel's range, read when the form is sent;
+// without capabilities the server judges the range.
+function levelField(ctx, rangeNow) {
   const parse = (text, t) => {
     const level = Number(text);
     if (!Number.isFinite(level)) return { error: t("form.badNumber") };
-    const [min, max] = current() || [];
+    if (!Number.isInteger(level)) return { error: t("stage.manual.whole") };
+    const [min, max] = rangeNow() || [];
     if (min !== undefined && level < min) return { error: t("form.tooSmall", { min }) };
     if (max !== undefined && level > max) return { error: t("form.tooBig", { max }) };
     return { value: level };
@@ -316,35 +318,56 @@ function levelField(ctx, current) {
   return { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true, parse };
 }
 
+// Switching the pump off asks first; the write's own receipt line and one refresh say the rest.
 function pumpOffButton(env) {
   const { ctx, stage } = env;
   const label = ctx.t("stage.manual.pumpOff");
-  const ask = { title: ctx.t("stage.manual.pumpOff.title"), lines: [ctx.t("stage.manual.pumpOff.line")] };
-  const run = () =>
-    deviceWrite(env, { action: "manual:pump", channel: "pump", path: "/manual/pump", body: { stage_id: stage.stage_id, level: 0, note: "" }, heading: manualHeading(ctx, "pump", 0), label });
-  return actionButton(env, { label, tone: "quiet", ask, run }).element;
+  const box = errorBox();
+  const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
+  button.addEventListener("click", async () => {
+    box.hidden = true;
+    const ask = { title: ctx.t("stage.manual.pumpOff.title"), lines: [ctx.t("stage.manual.pumpOff.line")], confirmLabel: label };
+    if (!(await confirmAction(ctx.t, ask))) return;
+    button.disabled = true;
+    try {
+      const body = { stage_id: stage.stage_id, level: 0, note: "" };
+      await deviceWrite(env, { action: "manual:pump", channel: "pump", path: "/manual/pump", body, heading: manualHeading(ctx, "pump", 0), label });
+    } catch (error) {
+      await refused(env, box, error);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return h("div", { class: "action" }, button, box);
 }
 
 export function manualGroup(env) {
   const { ctx, stage, capabilities } = env;
   const title = ctx.t("stage.manual");
-  const options = CHANNELS.map((value) => ({ value, label: labelOr(ctx.t, "channel", value) }));
-  let range = levelRange(capabilities, CHANNELS[0]);
+  const options = [{ value: "", label: ctx.t("form.choose") }, ...CHANNELS.map((value) => ({ value, label: labelOr(ctx.t, "channel", value) }))];
+  let controls = null;
+  const rangeNow = () => levelRange(capabilities, controls && controls.get("channel"));
   const fields = [
     { name: "channel", label: ctx.t("stage.manual.channel"), type: "select", options, required: true },
-    levelField(ctx, () => range),
+    levelField(ctx, rangeNow),
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
   const onSubmit = async ({ channel, level, note: text }) => {
+    const shown = { channel: labelOr(ctx.t, "channel", channel), level: levelText(ctx.t, channel, level) };
+    await confirmOrCancel(ctx, { title: ctx.t("stage.manual.confirm", shown), lines: [ctx.t("stage.manual.confirm.line")], confirmLabel: ctx.t("stage.manual.submit") });
     const body = { stage_id: stage.stage_id, level, note: text || "" };
     const heading = manualHeading(ctx, channel, level);
     await deviceWrite(env, { action: `manual:${channel}`, channel, path: `/manual/${encodeURIComponent(channel)}`, body, heading, label: title });
   };
   const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
-  const hint = h("p", { class: "block-note" });
+  controls = formControls(form);
+  const hintId = `manual-range-${++counter}`;
+  const hint = h("p", { class: "block-note", attrs: { id: hintId, hidden: true } });
   const levelInput = inputNamed(form, "level");
-  const follow = (channel) => {
-    range = levelRange(capabilities, channel);
+  levelInput.setAttribute("aria-describedby", `${levelInput.getAttribute("aria-describedby") || ""} ${hintId}`.trim());
+  const follow = () => {
+    const channel = controls.get("channel");
+    const range = levelRange(capabilities, channel);
     for (const [name, value] of [["min", range && range[0]], ["max", range && range[1]]]) {
       if (range) levelInput.setAttribute(name, String(value));
       else levelInput.removeAttribute(name);
@@ -352,9 +375,7 @@ export function manualGroup(env) {
     hint.textContent = range ? ctx.t("stage.manual.range", { channel: labelOr(ctx.t, "channel", channel), min: range[0], max: range[1] }) : "";
     hint.hidden = !range;
   };
-  const select = inputNamed(form, "channel");
-  select.addEventListener("change", () => follow(select.value));
-  follow(CHANNELS[0]);
+  inputNamed(form, "channel").addEventListener("change", follow);
   return group("manual", title, note(ctx.t("stage.manual.ranges")), form, hint, pumpOffButton(env));
 }
 
@@ -374,7 +395,7 @@ function irrigationGroup(env, allowed) {
     return { value: seconds };
   };
   const fields = [
-    { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true, min: 0, max, hint: ctx.t("stage.irrigation.max", { max }), parse },
+    { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true, min: 0, max, hint: Number.isFinite(configured) ? ctx.t("stage.irrigation.max", { max }) : undefined, parse },
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
   const onSubmit = async ({ seconds, note: text }) => {

@@ -60,6 +60,7 @@ test("the manual form sends the level and the log heading carries the scale", as
   elements(form, "select")[0].value = "fan";
   const level = elements(form, "input").find((input) => input.getAttribute("name") === "level");
   level.value = "3";
+  answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   assert.equal(sent[0][0], "/manual/fan");
@@ -101,6 +102,7 @@ test("a resent write is said so in a line under the heading, not in it", async (
   elements(form, "select")[0].value = "light";
   elements(form, "input").find((i) => i.getAttribute("name") === "level").value = "50";
   for (let i = 0; i < 2; i += 1) {
+    answerNextDialog(true);
     form.dispatchEvent(new Event("submit", { cancelable: true }));
     await settle();
   }
@@ -342,25 +344,74 @@ test("the level field's range follows the chosen channel", async () => {
   const form = elements(group, "form")[0];
   const select = elements(form, "select")[0];
   const level = byName(form, "level");
-  assert.deepEqual([...select.children].map((o) => o.getAttribute("value")), ["light", "exhaust", "fan"]);
+  assert.deepEqual([...select.children].map((o) => o.getAttribute("value")), ["", "light", "exhaust", "fan"]);
+  assert.equal(level.getAttribute("max"), null, "no channel chosen, no range");
+  select.value = "light";
+  select.dispatchEvent(new Event("change"));
   assert.equal(level.getAttribute("max"), "100");
+  assert.match(visibleText(group), /灯光取 0 到 100。/);
   select.value = "fan";
   select.dispatchEvent(new Event("change"));
   assert.equal(level.getAttribute("min"), "0");
   assert.equal(level.getAttribute("max"), "10");
-  assert.match(visibleText(group), /0 到 10/);
+  const hint = visibleText(group);
+  assert.match(hint, /风扇取 0 到 10。/);
+  assert.doesNotMatch(hint, /0 到 100/);
+  const hintNode = elements(group, "p").find((p) => visibleText(p) === "风扇取 0 到 10。");
+  assert.ok(level.getAttribute("aria-describedby").split(" ").includes(hintNode.getAttribute("id")));
   level.value = "11";
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   assert.deepEqual(sent, []);
-  assert.match(visibleText(form), /10/);
+  assert.match(visibleText(form), /请输入 10 或更小的数/);
+  level.value = "2.5";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.match(visibleText(form), /请输入整数/);
   const open = manualEnv("zh", null);
-  const bare = byName(manualGroup(open.env), "level");
-  assert.equal(bare.getAttribute("max"), null);
+  const bare = manualGroup(open.env);
+  chooseFan(bare);
+  assert.equal(byName(bare, "level").getAttribute("max"), null);
+  assert.ok(!elements(bare, "p").some((p) => /取 \d/.test(visibleText(p))));
+});
+
+function chooseFan(group) {
+  const select = elements(group, "select")[0];
+  select.value = "fan";
+  select.dispatchEvent(new Event("change"));
+}
+
+test("the manual form asks first, and a channel must be chosen", async () => {
+  const { env, sent } = manualEnv();
+  const notices = [];
+  env.ctx.notify = (message) => notices.push(message);
+  const form = elements(manualGroup(env), "form")[0];
+  const level = byName(form, "level");
+  level.value = "3";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.deepEqual(sent, [], "no channel, nothing sent");
+  assert.equal(openDialogs().length, 0);
+  elements(form, "select")[0].value = "fan";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  const text = visibleText(openDialogs()[0]);
+  assert.match(text, /把风扇调到 3 \/ 10？/);
+  assert.match(text, /设备会立即切换到这个档位/);
+  answerNextDialog(false);
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.deepEqual(notices, []);
+  assert.doesNotMatch(visibleText(form), /已完成|失败|错误/);
 });
 
 test("the pump is switched off by its own button, after a confirmation", async () => {
   const { env, sent, tracked } = manualEnv();
+  const notices = [];
+  let changed = 0;
+  env.ctx.notify = (message) => notices.push(message);
+  env.onChanged = async () => { changed += 1; };
   const group = manualGroup(env);
   const button = buttonsOf(group).find((b) => visibleText(b) === "关闭水泵");
   assert.ok(button, "a switch-off button");
@@ -370,13 +421,20 @@ test("the pump is switched off by its own button, after a confirmation", async (
   answerNextDialog(false);
   await settle();
   assert.deepEqual(sent, []);
+  assert.equal(notices.length, 0);
   button.dispatchEvent(new Event("click"));
   await settle();
   answerNextDialog(true);
   await settle();
   await settle();
-  assert.deepEqual(sent.map(([path, body]) => [path, body.level]), [["/manual/pump", 0]]);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0][0], "/manual/pump");
+  const { request_id: requestId, ...rest } = sent[0][1];
+  assert.match(requestId, /^wb-/);
+  assert.deepEqual(rest, { stage_id: stage.stage_id, level: 0, note: "" });
   assert.equal(tracked.length, 1);
+  assert.equal(notices.length, 0, "no generic done notice");
+  assert.equal(changed, 1, "one refresh");
 });
 
 test("irrigation seconds are capped at the configured pump limit and asked first, like a task row", async () => {
@@ -402,6 +460,7 @@ test("irrigation seconds are capped at the configured pump limit and asked first
   answerNextDialog(false);
   await settle();
   assert.deepEqual(sent, []);
+  assert.doesNotMatch(visibleText(form), /已完成|失败|错误/);
   await submit("3");
   answerNextDialog(true);
   await settle();
@@ -410,4 +469,21 @@ test("irrigation seconds are capped at the configured pump limit and asked first
   open.env.ctx.me = { ...open.env.ctx.me, entry: "lan" };
   const bare = actionsView({ ...open.env, stage: { ...stage, state: "manual" } });
   assert.equal(byName(findAction(bare, "irrigation"), "seconds").getAttribute("max"), "60");
+  assert.doesNotMatch(visibleText(findAction(bare, "irrigation")), /最多/);
+});
+
+test("start with a review that could not be read stays enabled and asks first", async () => {
+  const ctx = testCtx({ lang: "zh" });
+  ctx.me = { ...ctx.me, entry: "lan" };
+  const sent = [];
+  ctx.api = { post: async (path, body) => (sent.push([path, body]), {}) };
+  const view = actionsView({ ctx, stage: FIXTURES["stage-pending.json"], review: null, log: { track() {} }, onChanged: async () => {} });
+  const [button] = buttonsOf(findAction(view, "start"));
+  assert.ok(!button.hasAttribute("disabled"));
+  button.dispatchEvent(new Event("click"));
+  await settle();
+  assert.match(visibleText(openDialogs()[0]), /启动这个阶段？/);
+  answerNextDialog(false);
+  await settle();
+  assert.deepEqual(sent, []);
 });
