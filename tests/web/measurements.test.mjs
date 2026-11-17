@@ -4,6 +4,7 @@ import test from "node:test";
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { saveDraft } from "../../src/growbridge/web/workbench/drafts.js";
 import { measurementBody, measurementForm, measurementOptions, measurementTable, variableOptions } from "../../src/growbridge/web/workbench/pages/stage-measurements.js";
+import { formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { timeText } from "../../src/growbridge/web/workbench/ui/section.js";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { FIXTURES, installFakeDom, renderPage, testCtx } from "./support/render-page.mjs";
@@ -68,6 +69,13 @@ test("the body takes its unit from the chosen variable, never from the values", 
   assert.equal(body.position, "", "an empty position is sent as such");
 });
 
+test("with no variable chosen the body carries no unit at all", () => {
+  for (const metric of ["", "heigth", undefined]) {
+    const body = measurementBody({ metric, value: 12.5, unit: "mm" }, TWO, "experiment-1");
+    assert.ok(!Object.hasOwn(body, "unit"), JSON.stringify(body));
+  }
+});
+
 test("the measurement table shows six columns and folds the rest", () => {
   const ctx = testCtx({ lang: "zh" });
   const view = measurementTable(ctx, RECORDED, { onCorrect: () => {} });
@@ -118,9 +126,11 @@ test("the metric is a choice of the declared variables, and only the method sugg
   form.update(RECORDED);
   const metric = select(form.element, "metric");
   assert.deepEqual(elements(metric, "option").map((o) => [o.getAttribute("value"), o.textContent]), [
+    ["", "选择一个变量"],
     ["canopy_area_growth", "冠层面积增长 (cm2/d)"],
     ["height", "株高 (cm)"],
   ]);
+  assert.equal(metric.hasAttribute("required"), true);
   assert.equal(input(form.element, "metric"), undefined, "no free-text metric");
   assert.equal(input(form.element, "unit"), undefined, "the unit comes with the variable");
   assert.equal(select(form.element, "unit"), undefined);
@@ -131,13 +141,54 @@ test("the metric is a choice of the declared variables, and only the method sugg
   assertNoLeaks(form.element);
 });
 
-test("the method is filled in from the chosen variable when the form opens and on each choice", () => {
+test("with several declared variables none is chosen for the operator, and the method waits", () => {
   const { form } = formView("en", TWO);
-  assert.equal(input(form.element, "method").value, "top-view images");
   const metric = select(form.element, "metric");
+  assert.equal(metric.value, "");
+  assert.equal(elements(metric, "option")[0].textContent, "Choose a variable");
+  assert.equal(input(form.element, "method").value, "");
   metric.value = "height";
   metric.dispatchEvent(new Event("change"));
   assert.equal(input(form.element, "method").value, "ruler, soil to apex");
+  metric.value = "canopy_area_growth";
+  metric.dispatchEvent(new Event("change"));
+  assert.equal(input(form.element, "method").value, "top-view images");
+});
+
+test("the form posts nothing while no variable is chosen", async () => {
+  const { ctx, form, recorded } = formView("en", TWO);
+  const inner = elements(form.element, "form")[0];
+  formControls(inner).set({ measured_at: 1796590000, plant_id: "plant-1", batch: "batch-1", layout_version: "layout-1", value: 12.5, method: "ruler" });
+  inner.dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+  assert.deepEqual(ctx.api.calls.filter((call) => call.method === "POST"), []);
+  assert.deepEqual(recorded, []);
+  assert.ok(visibleText(form.element).includes(ctx.t("form.required")), visibleText(form.element));
+});
+
+test("a single declared variable is chosen already, with its method", () => {
+  const { form } = formView("en", [TWO[1]]);
+  const metric = select(form.element, "metric");
+  assert.deepEqual(elements(metric, "option").map((o) => o.getAttribute("value")), ["height"], "no placeholder");
+  assert.equal(metric.value, "height");
+  assert.equal(input(form.element, "method").value, "ruler, soil to apex");
+});
+
+test("Correct chooses the record's own variable among several and posts its unit", async () => {
+  const { ctx, form } = formView("en", TWO);
+  const record = { ...RECORDED[0], metric: "height", unit: "cm", method: "tape" };
+  form.update([record]);
+  form.correct(record);
+  assert.equal(select(form.element, "metric").value, "height");
+  assert.equal(input(form.element, "method").value, "tape", "the record's own method is kept");
+  elements(form.element, "form")[0].dispatchEvent(new Event("submit"));
+  await settle();
+  await settle();
+  const sent = ctx.api.calls.find((call) => call.method === "POST");
+  assert.equal(sent.body.metric, "height");
+  assert.equal(sent.body.unit, "cm");
+  assert.equal(sent.body.corrects, record.id);
 });
 
 test("with no declared variables there is no form, only a note saying why", () => {

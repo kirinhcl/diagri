@@ -34,10 +34,13 @@ export function variableOptions(variables, lang) {
   return list.map((variable) => ({ value: variable.id, label: `${lang === "zh" ? variable.label_zh : variable.label_en} (${variable.unit})` }));
 }
 
-// The body to post: the unit is always the chosen variable's own, never one typed or copied.
+// The body to post: the unit is always the chosen variable's own, never one typed or copied, and
+// with no variable chosen there is no unit at all (the server then refuses the body).
 export function measurementBody(values, variables, experimentId) {
   const chosen = (Array.isArray(variables) ? variables : []).find((variable) => variable.id === values.metric);
-  return { position: "", ...values, unit: chosen ? chosen.unit : undefined, experiment_id: experimentId };
+  const { unit: _given, ...rest } = values;
+  const body = { position: "", ...rest, experiment_id: experimentId };
+  return chosen ? { ...body, unit: chosen.unit } : body;
 }
 
 // Batch, position, layout, the record's id and both ends of its corrections, told by time.
@@ -92,7 +95,14 @@ export function measurementsView(ctx, measurements, form) {
   return measurementTable(ctx, measurements, { onCorrect: form.correct });
 }
 
-// The metric is a choice of the declared variables; the unit comes with it and is no field.
+// The metric is a choice of the declared variables; the unit comes with it and is no field. With
+// more than one, the choice starts empty so a value is never stored under a variable nobody chose
+// (required: the form will not send it so); a single variable is the only possible choice.
+function metricOptions(ctx, variables) {
+  const options = variableOptions(variables, ctx.lang);
+  return variables.length > 1 ? [{ value: "", label: ctx.t("measure.chooseVariable") }, ...options] : options;
+}
+
 function fields(ctx, variables) {
   const text = (name, key, required = true) => ({ name, label: ctx.t(`measure.${key}`), required });
   return [
@@ -101,7 +111,7 @@ function fields(ctx, variables) {
     text("batch", "batch"),
     text("layout_version", "layout"),
     text("position", "position", false),
-    { name: "metric", label: ctx.t("measure.metric"), type: "select", required: true, options: variableOptions(variables, ctx.lang) },
+    { name: "metric", label: ctx.t("measure.metric"), type: "select", required: true, options: metricOptions(ctx, variables) },
     { name: "value", label: ctx.t("measure.value"), type: "number", required: true },
     { ...text("method", "method"), suggestions: [] },
     { name: "corrects", type: "hidden", label: ctx.t("measure.correctedRecord") },
@@ -168,7 +178,8 @@ export function measurementForm(ctx, stage, onRecorded, variables) {
   form.classList.add("form-columns");
   controls = formControls(form);
   controls.onChange("metric", (metric) => fillMethod(controls, declared, metric));
-  if (!controls.get("method")) fillMethod(controls, declared, controls.get("metric")); // a draft keeps its own
+  // Only a variable already chosen (the single one, or a restored draft's) fills the method; a draft keeps its own.
+  if (controls.get("metric") && !controls.get("method")) fillMethod(controls, declared, controls.get("metric"));
   line.cancel.addEventListener("click", stopCorrecting);
   showCorrecting(); // a draft restored after a lost session may already correct a record
   const correct = (record) => {

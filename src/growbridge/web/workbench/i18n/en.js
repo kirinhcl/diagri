@@ -463,6 +463,7 @@ export default {
   "measure.list": "Recorded measurements",
   "measure.empty": "No measurement has been recorded for this experiment.",
   "measure.noVariables": "This experiment's protocol declares no variables. Save a protocol version that declares them before recording measurements.",
+  "measure.chooseVariable": "Choose a variable",
   "measure.measuredAt": "Measured at",
   "measure.plant": "Plant",
   "measure.batch": "Batch",
