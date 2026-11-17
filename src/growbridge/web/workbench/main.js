@@ -10,7 +10,7 @@ import { askSecret } from "./ui/dialog.js";
 import { clear, h } from "./ui/dom.js";
 import { bindFormContext, dropDetachedDraftSavers, errorDetail, errorLines, saveAllDrafts } from "./ui/forms.js";
 import { shell } from "./ui/layout.js";
-import { techDetails } from "./ui/section.js";
+import { loadFailedView, problemView } from "./ui/problem.js";
 
 const LANGUAGE_KEY = "growbridge-workbench-language";
 const NOTICE_MS = 6000;
@@ -117,22 +117,9 @@ function makeCtx(frame) {
 
 // --- views for pages that could not be shown ------------------------------------------------------
 // Plain lines under the title; the error's status, code and own words folded into technical details.
-function problemView(lines, retry, details = []) {
-  const title = state.t("error.title");
-  const button = h("button", {
-    class: "button button-primary",
-    attrs: { type: "button" },
-    on: { click: () => route() },
-    text: state.t("common.retry"),
-  });
-  return h(
-    "section",
-    { class: "wb-problem", attrs: { role: "alert" } },
-    h("h1", { text: title }),
-    lines.filter((line) => line !== title).map((line) => h("p", { text: line })),
-    techDetails(state.t, details),
-    retry ? button : null,
-  );
+// A refusal or error instead of the page, with a retry that reads the page again.
+function errorView(error) {
+  return problemView(state.t, errorLines(error, state.lang, state.t, state), { onRetry: () => route(), details: errorDetail(error, state.t) });
 }
 
 function notFoundView() {
@@ -147,7 +134,7 @@ function notFoundView() {
 function showFatal(error) {
   state.frame = null;
   state.at = null;
-  const view = problemView(errorLines(error, state.lang, state.t, state), true, errorDetail(error, state.t));
+  const view = errorView(error);
   clear(app).append(h("main", { class: "wb-fatal" }, view));
 }
 
@@ -166,14 +153,14 @@ async function renderPage(page, ctx, params) {
   try {
     module = await import(`./pages/${page}.js`);
   } catch (error) {
-    return { element: problemView([state.t("page.loadFailed")], true, errorDetail(error, state.t)) };
+    return { element: loadFailedView(state.t, error, () => route()) };
   }
   try {
     const result = await module.render(ctx, params);
     if (result && result.element) return result;
-    return { element: problemView([state.t("page.loadFailed")], true) };
+    return { element: loadFailedView(state.t, null, () => route()) };
   } catch (error) {
-    return { element: problemView(errorLines(error, state.lang, state.t, state), true, errorDetail(error, state.t)) };
+    return { element: errorView(error) };
   }
 }
 

@@ -1,12 +1,15 @@
 // Console pages rendered from the captured fixtures, scanned for internal text (ids, codes, epochs,
 // raw payloads, catalog keys) that a person should never have to read.
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { PAGES } from "../../src/growbridge/web/workbench/router.js";
 import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
+import { askSecret } from "../../src/growbridge/web/workbench/ui/dialog.js";
 import { h } from "../../src/growbridge/web/workbench/ui/dom.js";
+import { formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { assertNoLeaks, exemptStrings, findLeaks, visibleText } from "./support/leaks.mjs";
 import { EXEMPTIONS } from "./support/leak-exemptions.mjs";
 import { FIXTURES, installFakeDom, renderPage, testCtx } from "./support/render-page.mjs";
@@ -229,6 +232,78 @@ test("no page leaks internal text", async (t) => {
         assertNoLeaks(element, exemptStrings(page, { ...FIXTURES, ...fixtures }));
       });
     }
+  }
+});
+
+// --- dialogs: what a person reads before a consequential action -----------------------------------
+// Pages in the states where buttons and forms ask first: every enabled button is pressed and every form
+// that asks is sent; each dialog that opens is scanned like a page, then cancelled. `dialogs` is how many
+// must open, so a page that stops asking (or a state that stops offering the action) fails here.
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const nodesOf = (node) => [node, ...[...(node.children || [])].flatMap(nodesOf)];
+const ROUND_READ = FIXTURES["round.json"];
+const LIVE_STAGE = { ...FIXTURES["stage.json"], state: "running", ended_at: null, end_pending: false, paused_at: null };
+const CHOOSING_ROUND = { ...ROUND_READ, state: "running", awaiting_choice: ROUND_READ.stages[0].stage_id };
+// What a form that asks first is sent with; forms without these fields are not sent.
+const FORM_VALUES = { choice: "redo", script: "print(1)", snapshot_id: FIXTURES["analysis.json"].snapshots[0].snapshot_id };
+const DIALOG_PAGES = [
+  { page: "greenhouses", dialogs: 1 }, // release
+  { page: "admin", dialogs: 2 }, // disable, for each of two accounts
+  { page: "stage", params: PARAMS.stage, fixtures: { "stage.json": LIVE_STAGE }, dialogs: 2 }, // stop, take over
+  { page: "round", params: PARAMS.round, fixtures: { "round.json": CHOOSING_ROUND }, dialogs: 4 }, // abort, choice, freeze, run
+];
+
+afterEach(() => resetDialogs());
+
+async function dialogsOn(element, exempt) {
+  const seen = [];
+  const scanOpen = async () => {
+    await settle();
+    await settle();
+    for (const dialog of openDialogs()) {
+      assertNoLeaks(dialog, exempt);
+      seen.push(visibleText(dialog));
+      dialog.close();
+    }
+    await settle();
+  };
+  for (const button of nodesOf(element).filter((node) => node.localName === "button")) {
+    if (button.getAttribute("type") === "submit" || button.hasAttribute("disabled")) continue;
+    button.dispatchEvent(new Event("click"));
+    await scanOpen();
+  }
+  for (const form of nodesOf(element).filter((node) => node.localName === "form")) {
+    const names = new Set(nodesOf(form).map((node) => node.getAttribute && node.getAttribute("name")));
+    const values = Object.fromEntries(Object.entries(FORM_VALUES).filter(([name]) => names.has(name)));
+    if (!Object.keys(values).length) continue;
+    formControls(form).set(values);
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await scanOpen();
+  }
+  return seen;
+}
+
+test("no dialog that asks before an action leaks internal text", async (t) => {
+  for (const { page, params, fixtures, dialogs } of DIALOG_PAGES) {
+    for (const lang of ["zh", "en"]) {
+      await t.test(`${page} (${lang})`, async () => {
+        const { element } = await renderPage(page, params, { lang, fixtures });
+        const seen = await dialogsOn(element, exemptStrings(page, { ...FIXTURES, ...fixtures }));
+        assert.equal(seen.length, dialogs, seen.join(" | "));
+        assertNoPendingDialogAnswers();
+      });
+    }
+  }
+});
+
+test("the password dialog leaks no internal text", async () => {
+  for (const lang of ["zh", "en"]) {
+    installFakeDom();
+    const answer = askSecret(makeT(lang), makeT(lang)("round.abort"));
+    const [dialog] = openDialogs();
+    assertNoLeaks(dialog);
+    dialog.close();
+    assert.equal(await answer, null);
   }
 });
 

@@ -5,13 +5,13 @@ import { ApiError } from "../api.js";
 import { h } from "../ui/dom.js";
 import { fieldsPart, linesField, rowGroup } from "../ui/field-forms.js";
 import { simpleForm } from "../ui/forms.js";
+import { protocolName } from "../ui/names.js";
 
 const DEFAULT_MISSING = 0.2;
 const DEFAULT_DEVIATION = 0.1;
 const FIXED_METHODS = ["paired_block", "two_group"];
 
 const PLAIN_DECIMAL = /^-?\d+(\.\d+)?$/;
-const LEADING_ZERO = /^-?0\d/;
 const array = (value) => (Array.isArray(value) ? value : []);
 const unique = (values) => [...new Set(values.filter((value) => typeof value === "string" && value !== ""))];
 const encode = encodeURIComponent;
@@ -29,7 +29,8 @@ const whole = (min) => (text, t) => {
   return number < min ? { error: t("form.tooSmall", { min }) } : { value: number };
 };
 
-// "key=value" per line; a plain decimal ("40", "-1.5") becomes a number, everything else ("0x10", "1e3", "007") stays text.
+// "key=value" per line; a plain decimal a number holds exactly as typed ("40", "-1.5") becomes a number. Everything
+// else stays text: "0x10", "1e3", "007", and "1.50" or 20 digits, which a number would change.
 function factors(text, t) {
   const found = {};
   for (const line of text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
@@ -38,7 +39,7 @@ function factors(text, t) {
     const raw = at < 0 ? "" : line.slice(at + 1).trim();
     if (!key || !raw) return { error: t("protocol.form.factorLine") };
     if (Object.hasOwn(found, key)) return { error: t("protocol.form.factorTwice") };
-    found[key] = PLAIN_DECIMAL.test(raw) && !LEADING_ZERO.test(raw) ? Number(raw) : raw;
+    found[key] = PLAIN_DECIMAL.test(raw) && String(Number(raw)) === raw ? Number(raw) : raw;
   }
   return { value: found };
 }
@@ -103,10 +104,11 @@ function duplicateCodes(t) {
 
 function analysisFields(t, project) {
   const rows = array(project.protocols);
+  const endpoints = unique(rows.map((row) => row.primary_endpoint));
   const fraction = (name, label, value) => ({ name, label, hint: t("protocol.form.fractionHint"), type: "number", required: true, min: 0, max: 1, value });
   return [
     linesField({ name: "variables", label: t("protocol.form.variables"), hint: t("protocol.form.variablesHint"), required: true }),
-    { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t("protocol.form.endpointHint"), required: true, parse: trimmed, suggestions: unique(rows.map((row) => row.primary_endpoint)) },
+    { name: "primary_endpoint", label: t("protocol.form.endpoint"), hint: t(endpoints.length ? "protocol.form.endpointHint" : "protocol.form.endpointHintNone"), required: true, parse: trimmed, suggestions: endpoints },
     { name: "target_effect", label: t("protocol.form.effect"), hint: t("protocol.form.effectHint"), type: "number", required: true },
     { name: "method", label: t("protocol.form.method"), hint: t("protocol.form.methodHint"), required: true, parse: trimmed, suggestions: unique([...FIXED_METHODS, ...rows.map((row) => row.method)]) },
     linesField({ name: "exclusion_rules", label: t("protocol.form.exclusions"), hint: t("protocol.form.exclusionsHint") }),
@@ -212,7 +214,7 @@ const versionNote = (ctx, rows, id) => {
 // "A new protocol", or one of the saved protocols (then the form saves its next version).
 function saveAsField(ctx, rows, protocolId) {
   const saved = unique(rows.map((row) => row.protocol_id));
-  const options = saved.map((id) => ({ value: id, label: ctx.t("protocol.form.saveAsItem", { id, version: nextVersion(rows, id) - 1 }) }));
+  const options = saved.map((id) => ({ value: id, label: ctx.t("protocol.form.saveAsItem", { name: protocolName(ctx.t, id), version: nextVersion(rows, id) - 1 }) }));
   return { name: "save_as", label: ctx.t("protocol.form.saveAs"), type: "select", value: protocolId, options: [{ value: "", label: ctx.t("protocol.form.saveAsNew") }, ...options] };
 }
 

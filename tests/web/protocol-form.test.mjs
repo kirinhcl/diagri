@@ -4,6 +4,7 @@ import { afterEach, test } from "node:test";
 
 import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
+import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
 import { protocolForm } from "../../src/growbridge/web/workbench/pages/protocol-form.js";
 import { holdoutEditor } from "../../src/growbridge/web/workbench/pages/project-forms.js";
 import { bindFormContext, formControls, saveAllDrafts } from "../../src/growbridge/web/workbench/ui/forms.js";
@@ -296,6 +297,40 @@ test("saving as a saved protocol sends its id with the next version, through the
   assert.equal(post.body.protocol.version, 2);
 });
 
+test("the save-as choice and the saved notice call a protocol the console saved by its number, never its id", async () => {
+  const id = `protocol-2-${TAIL}`;
+  const fixtures = { "project.json": { ...PROJECT, protocols: [{ ...PROJECT.protocols[0], protocol_id: id }] } };
+  const answers = { "/protocols": (body) => ({ protocol_id: body.protocol.id, version: body.protocol.version, digest: "d".repeat(64) }) };
+  const cases = [
+    ["en", en, "A new version of Protocol 2 (now version 1)", "Protocol 2, version 2 was saved."],
+    ["zh", zh, "协议 2 的新版本（现在是第 1 版）", "已保存协议 2，第 2 版。"],
+  ];
+  for (const [lang, table, item, saved] of cases) {
+    const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang, fixtures, answers });
+    const notices = [];
+    ctx.notify = (message) => notices.push(message);
+    const form = byTag(sectionOf(element, table["project.protocols.title"]), "form")[0];
+    const choose = named(form, "save_as")[0];
+    assert.deepEqual(byTag(choose, "option").map((option) => option.textContent), [table["protocol.form.saveAsNew"], item]);
+    change(choose, id);
+    fill(form);
+    await submit(form);
+    assert.deepEqual(notices, [saved]);
+  }
+});
+
+test("the endpoint hint offers suggestions only when saved protocols give some", async () => {
+  const hintOf = (form) => {
+    const ids = named(form, "primary_endpoint")[0].getAttribute("aria-describedby").split(" ");
+    return byClass(form, "field-hint").find((hint) => ids.includes(hint.getAttribute("id"))).textContent;
+  };
+  const saved = await open();
+  assert.equal(hintOf(saved.form), en["protocol.form.endpointHint"]);
+  const none = await open({ project: { ...PROJECT, protocols: [] } });
+  assert.equal(hintOf(none.form), en["protocol.form.endpointHintNone"]);
+  for (const table of [en, zh]) assert.doesNotMatch(table["protocol.form.endpointHintNone"], /suggestion|建议/i);
+});
+
 test("a new protocol is the default choice and gets a new id at version 1", async () => {
   const { element, ctx } = await renderPage("project", { projectId: PROJECT.project_id }, { lang: "en" });
   const form = byTag(sectionOf(element, en["project.protocols.title"]), "form")[0];
@@ -406,6 +441,16 @@ test("only plain decimals in a factor value become numbers; 0x10, 1e3 and 007 st
   change(named(rowsOf(treatments)[0], "factors")[0], "a=40\nb=-1.5\nc=0x10\nd=1e3\ne=007\nf=0.5\ng=0");
   await submit(form);
   assert.deepEqual(sent[0].protocol.treatments[0].factors, { a: 40, b: -1.5, c: "0x10", d: "1e3", e: "007", f: 0.5, g: 0 });
+});
+
+test("a factor value a number cannot hold as typed stays text: no lost digits, no dropped zeros", async () => {
+  const { form, sent } = await open();
+  fill(form);
+  const [treatments] = groups(form);
+  change(named(rowsOf(treatments)[0], "factors")[0], "a=1.50\nb=12345678901234567890\nc=9007199254740993\nd=-0\ne=2.0\nf=1.25");
+  await submit(form);
+  assert.deepEqual(sent[0].protocol.treatments[0].factors, { a: "1.50", b: "12345678901234567890", c: "9007199254740993", d: "-0", e: "2.0", f: 1.25 });
+  for (const table of [en, zh]) assert.match(table["protocol.form.tfactorsHint"], /1\.50/, "the hint says which values stay text");
 });
 
 test("the control and allocation choices show the treatment's name; a code only tells equal names apart or stands in for no name", async () => {

@@ -164,6 +164,17 @@ test("the 2b param names format as the contract says", () => {
   for (const name of ["x_digest", "diffs", "paths", "choice", "detail", "error"]) assert.equal(formatterFor(name), null);
 });
 
+// The run-sheet form has no version box: it raises the version itself, so the advice cannot be to raise it.
+test("a run-sheet version conflict says to reload the page and make the change again", () => {
+  const advice = (lang) => messageParts(testCtx({ lang }), "denial", "run_sheet_version_conflict", { run_sheet_id: "sheet-1", version: 3 }).action;
+  assert.match(advice("en"), /reload the page/i);
+  assert.match(advice("en"), /change again/i);
+  assert.doesNotMatch(advice("en"), /^raise/i);
+  assert.match(advice("zh"), /刷新页面/);
+  assert.match(advice("zh"), /重新/);
+  assert.doesNotMatch(advice("zh"), /^请把版本号提高/);
+});
+
 test("the budget advice speaks to the reader, not about an operator", () => {
   assert.doesNotMatch(DENIALS.budget.zh.advice, /操作员/);
   assert.doesNotMatch(DENIALS.budget.en.advice, /an operator/i);

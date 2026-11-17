@@ -2,7 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
 import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
+import formsEn from "../../src/growbridge/web/workbench/i18n/forms.en.js";
+import formsZh from "../../src/growbridge/web/workbench/i18n/forms.zh.js";
 import { LANGS, initialLang, makeT } from "../../src/growbridge/web/workbench/i18n.js";
+
+test("the JSON draft's submit label is kept with the other form texts, in both languages", () => {
+  for (const table of [formsEn, formsZh]) assert.ok(Object.hasOwn(table, "stage.draft.submitJson"));
+  assert.equal(en["stage.draft.submitJson"], formsEn["stage.draft.submitJson"]);
+  assert.equal(zh["stage.draft.submitJson"], formsZh["stage.draft.submitJson"]);
+});
 
 test("zh and en have the same keys and no empty text", () => {
   assert.deepEqual(Object.keys(zh).sort(), Object.keys(en).sort());
