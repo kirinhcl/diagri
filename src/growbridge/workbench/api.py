@@ -667,7 +667,8 @@ class Workbench:
                 "variables": [variable_json(entry) for entry in manual],
             }
 
-        @router.get("/receipts/{request_id}")
+        # ``path``: a care write's request id holds ``<care id>/<step id>`` (executor/engine.py)
+        @router.get("/receipts/{request_id:path}")
         async def receipt(request_id: str, actor: Anyone):
             record = self.control.receipt(request_id)
             if record is None or not self.sees_receipt(actor, record.stage_id):

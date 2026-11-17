@@ -1,14 +1,60 @@
 """Care rules, clock trust and stage end (spec 7.7)."""
 
-from executor_helpers import STAGE
+from executor_helpers import DAY, STAGE
 
-from growbridge.archive.models import Channel
+from growbridge.archive.models import ActionState, CareRule, Channel, TimedAction
 from growbridge.ports import StageEventKind
 
 
 async def pause(rig):
     await rig.svc.pause_stage(STAGE, rig.op, "test")
     assert rig.state() == "paused"
+
+
+def morning_and_evening_light() -> tuple[CareRule, ...]:
+    """Two care rules on the light whose steps have the same ids, ``on`` and ``off``."""
+    light = Channel.LIGHT
+
+    def steps(on: str, off: str) -> tuple[TimedAction, ...]:
+        return (
+            TimedAction(id="on", channel=light, at=on, level=60),
+            TimedAction(id="off", channel=light, at=off, level=0),
+        )
+
+    return (
+        CareRule(id="care-morning", channel=light, schedule=steps("06:00", "06:05")),
+        CareRule(id="care-evening", channel=light, schedule=steps("06:10", "22:00")),
+    )
+
+
+async def test_executor_care_write_names_its_care_rule_and_step(rig):
+    await rig.at("06:01")
+    await rig.start()
+    await pause(rig)
+
+    (request_id,) = (await rig.tick()).writes
+
+    assert rig.control.receipt(request_id).trigger == "care:care-light/care-on"
+    assert request_id.endswith(f":care:care-light/care-on:light:60:{DAY}.g0")
+
+
+async def test_executor_care_step_of_another_care_rule_is_not_filed_as_a_retry(rig):
+    await rig.at("05:59")
+    await rig.start(care_rules=morning_and_evening_light())
+    await pause(rig)
+    await rig.tick()  # light off, as the evening rule's 22:00 step of the day before says
+    rig.sim.ignore_writes = True  # the morning light does not take
+    await rig.at("06:01")
+    (morning,) = (await rig.tick()).writes
+    assert rig.control.receipt(morning).state is ActionState.FAILED
+    rig.sim.ignore_writes = False
+
+    await rig.at("06:11")
+    (evening,) = (await rig.tick()).writes
+
+    record = rig.control.receipt(evening)
+    assert record.supersedes is None  # the evening step is not a retry of the morning one
+    assert record.trigger == "care:care-evening/on"
 
 
 async def test_executor_care_keeps_the_light_on_schedule_while_paused(rig):
