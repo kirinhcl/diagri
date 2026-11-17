@@ -20,7 +20,9 @@ from growbridge.archive.readings import DEFAULT_POINTS, MAX_POINTS, bucketed_sam
 from growbridge.archive.store import Archive
 from growbridge.compute.service import ComputeService
 from growbridge.observer.alerts import Alert, AlertBook, awaits_reading
+from growbridge.observer.device_notes import DeviceNotes
 from growbridge.ports import Actor, ControlPort, Denied
+from growbridge.workbench.device_notes import add_device_note_routes
 from growbridge.workbench.environment import add_environment_routes
 from growbridge.workbench.rounds import PathId, ProjectBudget
 from growbridge.workbench.scope import project_read, stage_read, visible_task
@@ -305,21 +307,15 @@ def add_read_routes(
     compute: ComputeService | None = None,
     max_pump_seconds: float,
     access: Access | None = None,
+    notes: DeviceNotes | None = None,
+    device_id: str = "",
 ) -> None:
     _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock, access)
     _project_routes(router, operator, workflow, tasks, budget, access)
     _stage_read_routes(router, operator, workflow, archive, clock, access)
-    add_environment_routes(
-        router,
-        operator,
-        workflow,
-        archive,
-        control,
-        clock,
-        alerts,
-        access,
-        max_pump_seconds=max_pump_seconds,
-    )
+    environment = (router, operator, workflow, archive, control, clock, alerts, access)
+    add_environment_routes(*environment, max_pump_seconds=max_pump_seconds, device_id=device_id)
+    add_device_note_routes(router, operator, notes, access, device_id)
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 

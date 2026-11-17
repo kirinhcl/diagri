@@ -47,6 +47,7 @@ const ROUTES = [
   [/^\/experiments\/([^/]+)\/variables$/, ([id], pending) => (id === pending.experiment ? "variables-pending.json" : "variables.json")],
   [/^\/environment$/, () => "environment.json"],
   [/^\/capabilities$/, () => "capabilities.json"],
+  [/^\/devices\/[^/]+\/notes$/, () => "device-notes.json"],
   [/^\/safety$/, () => "safety.json"],
   [/^\/alerts$/, () => "alerts.json"],
   [/^\/evidence$/, () => "evidence.json"],

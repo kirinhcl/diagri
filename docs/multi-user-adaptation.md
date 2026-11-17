@@ -20,6 +20,7 @@ What new code needs to do:
 7. **Hand-over and irrigation** — `ControlService.handover()` ends the current irrigation cycle whatever right it gets. The workflow now re-checks the stage before each hand-over; ending the cycle only when the handed-over right is the irrigation's own would be the deeper fix.
 8. **One workbench instance** owns the lock table (it lives in `workflow.sqlite3`).
 9. **Twelve AC5s on one Raspberry Pi** — check BlueZ's concurrent connection limit (often about 7 on the built-in controller; not measured) and the radio range; a USB adapter or round-robin connections may be needed.
+10. **Memory** ([design](superpowers/specs/2026-11-17-memory-design.md)) — a model's `history` and `read_round_history` read only the task's own project. Protection writes and data gaps count only inside the project's stage windows; a frozen period is the device's and is kept across projects, but outside the project's stages it carries no value. Device notes and read notes are about the device: the lock holder and administrators see them in the console, and every later holder's models read them. With several devices, give `MemorySources.device_id` and the episode queries the task's device instead of the local one.
 
 10. **Alert codes** — since the merge with `main`, a new alert also passes `code=` and `params=` (registered in `codes.py`) besides its scope; see `raise_alert` in `observer/alerts.py`.
 
@@ -59,6 +60,7 @@ Decided to keep:
 8. **只有一个工作台实例**持有锁表（在 `workflow.sqlite3` 里）。
 9. **一台树莓派连 12 台 AC5**：需要核实 BlueZ 同时连接数上限（板载控制器常见约 7 个，未实测）和覆盖距离，可能要外接 USB 蓝牙适配器或轮流连接。
 10. **告警消息码**：与 `main` 合并后，新告警除了归属，还要传 `code=` 和 `params=`（在 `codes.py` 登记），见 `observer/alerts.py` 的 `raise_alert`。
+11. **记忆**（[设计](superpowers/specs/2026-11-17-memory-design.md)）：模型的 `history` 和 `read_round_history` 只读任务所属项目。保护写入和数据缺口只算本项目阶段运行窗口内的；读数卡住是设备的事，跨项目保留，但不在本项目阶段期间的不带数值。设备日志和已读原因写的是设备本身：控制台里锁持有者和管理员可见，之后每个持有者的模型都能读到。多设备时，`MemorySources.device_id` 和经历查询要改用任务所用的设备，而不是本机设备。
 
 ### 合并审查后的决定（2026-11-17）
 
