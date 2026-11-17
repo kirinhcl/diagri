@@ -80,7 +80,12 @@ class RefusingSandbox:
     """Used where no isolation backend exists: nothing runs."""
 
     def run(self, script: Path, snapshot_dir: Path, out_dir: Path, timeout: float) -> SandboxResult:
-        raise Denied("sandbox_unavailable", "no isolation backend on this platform")
+        raise Denied(
+            "sandbox_unavailable",
+            "no isolation backend on this platform",
+            reason="sandbox_unavailable",
+            params={},
+        )
 
 
 def _text(value: str | bytes | None) -> str:

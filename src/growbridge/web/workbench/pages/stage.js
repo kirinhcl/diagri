@@ -11,6 +11,7 @@ import { errorDetail, errorLines } from "../ui/forms.js";
 import { deviceName, displayName, nameDetails } from "../ui/names.js";
 import { errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
 import { statePill, statePillKeeper } from "../ui/status.js";
+import { loadCapabilities } from "../capabilities.js";
 import { actionsView, activityLog, findingsList } from "./stage-actions.js";
 import { historyView } from "./stage-history.js";
 import { measurementForm, measurementsView } from "./stage-measurements.js";
@@ -118,7 +119,7 @@ function problemBox(nodes) {
 // opened between polls stays open.
 function showResult(part, ctx, result, signatureOf, build) {
   if (result.error) {
-    const said = [errorLines(result.error, ctx.lang, ctx.t), errorDetail(result.error, ctx.t)];
+    const said = [errorLines(result.error, ctx.lang, ctx.t, ctx), errorDetail(result.error, ctx.t)];
     part.show(`error:${JSON.stringify(said)}`, () => problemBox(errorParts(ctx, result.error)));
     return;
   }
@@ -198,7 +199,7 @@ function draw(page, data) {
   head.pill.replaceChildren(head.statePill(stage.state));
   head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   parts.status.show(JSON.stringify(stage), () => statusView(ctx, stage));
-  const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review]);
+  const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review, review && review.approval]);
   parts.actions.show(actionKey, () => actionsView({ ...page.env, stage, review, roundId: stage.round_id }));
   const sampleSeconds = review && review.run_sheet && review.run_sheet.sampling ? review.run_sheet.sampling.interval_seconds : null;
   const chart = (readings) => readingsChart(ctx.t, readings, { timeZone: zoneOf(ctx), lang: ctx.lang, sampleSeconds, now: ctx.now });
@@ -314,7 +315,7 @@ export async function render(shellCtx, params) {
     }
   });
   page.head = headView(ctx, first.stage, refresh);
-  page.env = { ctx, log: page.log, onChanged: refresh };
+  page.env = { ctx, log: page.log, onChanged: refresh, capabilities: await loadCapabilities(ctx) };
   const onRecorded = async (message) => {
     ctx.notify(message, "ok");
     await refresh();

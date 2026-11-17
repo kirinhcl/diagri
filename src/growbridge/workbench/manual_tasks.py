@@ -27,6 +27,9 @@ from growbridge.control.device import changed_nothing
 from growbridge.planning import manual_tasks
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.workbench.common import Body
+from growbridge.workbench.scope import stage_read, stage_write
+from growbridge.workflow import denials
+from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
 
@@ -66,7 +69,12 @@ async def _run_once(control: ControlPort, request: ActionRequest, item) -> Actio
             return await control.irrigate(attempt_request, item.seconds, planned=True)
         if not changed_nothing(earlier.state, earlier.error, earlier.error_code):
             return earlier
-    raise Denied("state", f"{MAX_ATTEMPTS} attempts of this irrigation never reached the device")
+    raise Denied(
+        "state",
+        f"{MAX_ATTEMPTS} attempts of this irrigation never reached the device",
+        reason="irrigation_attempts_exhausted",
+        params={"task_id": item.task_id, "stage_id": request.stage_id, "attempts": MAX_ATTEMPTS},
+    )
 
 
 def _ran(action: ActionRecord) -> dict | None:
@@ -108,7 +116,12 @@ def _window(stage: StageRuntime) -> tuple[float, float]:
     """The stage's actual window, as its snapshot uses it (``StageRuntime.window_end``)."""
     end = stage.window_end()
     if stage.started_at is None or end is None:
-        raise Denied("state", "the stage has not started; no manual task is due yet")
+        raise Denied(
+            "state",
+            "the stage has not started; no manual task is due yet",
+            reason="stage_not_started",
+            params={"stage_id": stage.stage_id},
+        )
     return stage.started_at, end
 
 
@@ -121,27 +134,55 @@ def _occurrence(
     for item in manual_tasks.occurrences(stage.run_sheet, start, end):
         if manual_tasks.key(item.task_id, item.due_at) == wanted:
             return stage, item
-    raise Denied("scope", f"the run sheet plans no task {task_id} due at that time")
+    raise Denied(
+        "scope",
+        f"the run sheet plans no task {task_id} due at that time",
+        reason="no_such_occurrence",
+        params={"task_id": task_id, "due_at": due_at},
+    )
 
 
 def _due(item: manual_tasks.Occurrence, now: float) -> None:
-    if now < item.due_at - manual_tasks.EARLY_SECONDS:
-        raise Denied("state", "this task is not due yet")
+    opens_at = item.due_at - manual_tasks.EARLY_SECONDS
+    if now < opens_at:
+        raise Denied(
+            "state",
+            "this task is not due yet",
+            reason="manual_task_not_due",
+            params={"task_id": item.task_id, "due_at": item.due_at, "opens_at": opens_at},
+        )
 
 
 def _check_irrigation(archive: Archive, stage: StageRuntime, item, now: float) -> None:
     """The pump runs at most once per occurrence (a later "skipped" record does not undo a run),
     never after the occurrence's deadline, and not for an occurrence already done."""
     start, end = _window(stage)
-    if now > manual_tasks.deadline(item, end):
-        raise Denied("state", "this irrigation is past its deadline")
+    deadline_at = manual_tasks.deadline(item, end)
+    if now > deadline_at:
+        raise Denied(
+            "state",
+            "this irrigation is past its deadline",
+            reason="irrigation_past_deadline",
+            params={"task_id": item.task_id, "due_at": item.due_at, "deadline_at": deadline_at},
+        )
+    which = {"task_id": item.task_id, "due_at": item.due_at}
     wanted = manual_tasks.key(item.task_id, item.due_at)
     records = archive.task_records(stage.experiment_id, start, end)
     mine = [r for r in records if manual_tasks.key(r.task_id, r.due_at) == wanted]
     if any(record.irrigation_request_id is not None for record in mine):
-        raise Denied("state", "the pump already ran, or may have, for this irrigation")
+        raise Denied(
+            "state",
+            "the pump already ran, or may have, for this irrigation",
+            reason="irrigation_already_ran",
+            params=which,
+        )
     if _current(archive, stage, item, now)["status"] in ("done", "late"):
-        raise Denied("state", "this irrigation is already recorded as done")
+        raise Denied(
+            "state",
+            "this irrigation is already recorded as done",
+            reason="irrigation_already_done",
+            params=which,
+        )
 
 
 def _row(item, record: TaskRecord | None, state: str) -> dict:
@@ -185,12 +226,14 @@ def add_manual_task_routes(
     archive: Archive,
     control: ControlPort,
     clock: Clock,
+    access: Access | None = None,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     OnSite = Annotated[Actor, Depends(on_site)]  # noqa: N806
 
     @router.get("/stages/{stage_id}/manual-tasks")
     async def list_tasks(stage_id: str, actor: Operator):
+        stage_read(access, actor, stage_id, lambda: denials.unknown("stage", stage_id))
         stage = workflow.stage(stage_id)
         body = {
             "stage_id": stage.stage_id,
@@ -212,6 +255,7 @@ def add_manual_task_routes(
 
     @router.post("/stages/{stage_id}/manual-tasks")
     async def record_task(stage_id: str, body: TaskOutcome, actor: Operator):
+        stage_write(access, actor, stage_id)
         stage, item = _occurrence(workflow, stage_id, body.task_id, body.due_at)
         now = clock.now()
         _due(item, now)
@@ -220,10 +264,13 @@ def add_manual_task_routes(
             done_at = now if body.done_at is None else body.done_at
             if done_at > now or done_at < item.due_at - manual_tasks.EARLY_SECONDS:
                 raise Denied(
-                    "param", "done_at must be in the past and at most an hour before the task"
+                    "param",
+                    "done_at must be in the past and at most an hour before the task",
+                    reason="done_at_window",
+                    params={"window_seconds": manual_tasks.EARLY_SECONDS},
                 )
         elif body.done_at is not None:
-            raise Denied("param", "a skipped task has no done_at")
+            raise Denied("param", "a skipped task has no done_at", reason="skipped_has_time")
         _record(
             archive,
             stage,
@@ -238,11 +285,22 @@ def add_manual_task_routes(
 
     @router.post("/stages/{stage_id}/manual-tasks/irrigate")
     async def irrigate(stage_id: str, body: PlannedIrrigation, actor: OnSite):
+        stage_write(access, actor, stage_id)
         stage, item = _occurrence(workflow, stage_id, body.task_id, body.due_at)
         if item.kind != "irrigation" or item.seconds is None:
-            raise Denied("scope", "this task is not a planned irrigation (it has no seconds)")
+            raise Denied(
+                "scope",
+                "this task is not a planned irrigation (it has no seconds)",
+                reason="not_irrigation",
+                params={"task_id": item.task_id},
+            )
         if stage.state is not StageState.RUNNING or stage.right_number is None:
-            raise Denied("state", "a planned irrigation runs only while the stage is running")
+            raise Denied(
+                "state",
+                "a planned irrigation runs only while the stage is running",
+                reason="irrigation_stage_not_running",
+                params={"stage_id": stage.stage_id, "state": stage.state.value},
+            )
         now = clock.now()
         _due(item, now)
         _check_irrigation(archive, stage, item, now)

@@ -2,12 +2,14 @@
 const BASE = "/wb";
 
 export class ApiError extends Error {
-  constructor(status, code, message, fields = []) {
+  constructor(status, code, message, fields = [], { reason = null, params = {} } = {}) {
     super(message || code || "error");
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.reason = reason;
+    this.params = params;
   }
 }
 
@@ -27,16 +29,31 @@ async function readBody(response) {
   }
 }
 
+// Pydantic's ctx, keeping only the plain numbers and texts (an `error` entry there is an exception).
+function validationLimits(ctx) {
+  if (!ctx || typeof ctx !== "object" || Array.isArray(ctx)) return {};
+  const keep = ([, v]) => typeof v === "string" || (typeof v === "number" && Number.isFinite(v));
+  return Object.fromEntries(Object.entries(ctx).filter(keep));
+}
+
+function validationField(d) {
+  const item = d && typeof d === "object" ? d : {};
+  const loc = (Array.isArray(item.loc) ? item.loc : []).map((part) => (typeof part === "number" ? part : String(part)));
+  return { loc, msg: String(item.msg || ""), type: String(item.type || ""), limits: validationLimits(item.ctx) };
+}
+
 function toError(status, body) {
   // No 5xx is a definitive refusal: whatever its body says, the action may or may not have happened.
   if (status >= 500) return new ApiError(status, "server_error", `HTTP ${status}`);
   const detail = body ? body.detail : null;
   if (status === 422 && Array.isArray(detail)) {
-    const fields = detail.map((d) => ({ loc: (d.loc || []).map(String), msg: String(d.msg || "") }));
+    const fields = detail.map(validationField);
     return new ApiError(status, "validation", "validation", fields);
   }
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
-    return new ApiError(status, detail.code || null, detail.message || detail.code);
+    const reason = typeof detail.reason === "string" && detail.reason !== "" ? detail.reason : null;
+    const plain = detail.params && typeof detail.params === "object" && !Array.isArray(detail.params);
+    return new ApiError(status, detail.code || null, detail.message || detail.code, [], { reason, params: plain ? detail.params : {} });
   }
   return new ApiError(status, null, `HTTP ${status}`);
 }

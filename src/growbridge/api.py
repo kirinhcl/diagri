@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Header, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -18,25 +18,15 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .dashboard import COOKIE, SESSION_SECONDS, BrowserSessions
-from .service import Bridge, BridgeError
+from .httperror import CodedHTTPError
+from .jsonsafe import json_safe
+from .service import Bridge, BridgeError, PumpOffUnconfirmed
 from .workbench.auth import allowed_origins, trusted_hosts
 
 UNPROCESSABLE = 422
-
-
-def json_safe(value):
-    """``value`` with every NaN or infinity written as text, the only way JSON can carry it, and
-    every lone surrogate escaped (``\\ud800``): UTF-8 cannot encode one, and an answer that
-    echoes the input back would otherwise fail with 500."""
-    if isinstance(value, float) and not math.isfinite(value):
-        return str(value)
-    if isinstance(value, str):
-        return value.encode("utf-8", "backslashreplace").decode("utf-8")
-    if isinstance(value, dict):
-        return {json_safe(key): json_safe(item) for key, item in value.items()}
-    if isinstance(value, list | tuple):
-        return [json_safe(item) for item in value]
-    return value
+# A BridgeError subclass with a meaning of its own: (coarse code, reason). Any other BridgeError
+# answers 409 with code and reason null.
+BRIDGE_ERROR_CODES = {PumpOffUnconfirmed: ("interlock", "pump_unconfirmed")}
 
 
 class Operation(BaseModel):
@@ -75,7 +65,9 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
 
     def check_origin(request: Request):
         if request.headers.get("origin") not in allowed:
-            raise HTTPException(403, "Browser origin is not allowed")
+            raise CodedHTTPError(
+                403, "Browser origin is not allowed", code="entry", reason="origin_not_allowed"
+            )
 
     @asynccontextmanager
     async def lifespan(app):
@@ -86,18 +78,30 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
     async def bearer(authorization: Annotated[str | None, Header()] = None):
         expected = f"Bearer {settings.token}"
         if authorization is None or not hmac.compare_digest(authorization, expected):
-            raise HTTPException(status_code=401, detail="Authentication required")
+            raise CodedHTTPError(
+                401, "Authentication required", code="session", reason="not_signed_in"
+            )
 
     async def authorize(request: Request, authorization: Annotated[str | None, Header()] = None):
         if authorization is not None:
             await bearer(authorization)
             return
         if not sessions.valid(request.cookies.get(COOKIE)):
-            raise HTTPException(401, "Open the dashboard with growbridge dashboard to connect")
+            raise CodedHTTPError(
+                401,
+                "Open the dashboard with growbridge dashboard to connect",
+                code="session",
+                reason="dashboard_not_connected",
+            )
         if request.method not in {"GET", "HEAD"}:
             check_origin(request)
             if request.headers.get("x-growbridge-ui") != "1":
-                raise HTTPException(403, "Browser control header is required")
+                raise CodedHTTPError(
+                    403,
+                    "Browser control header is required",
+                    code="entry",
+                    reason="not_from_page",
+                )
 
     app = FastAPI(
         lifespan=lifespan,
@@ -112,7 +116,12 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
 
     async def writes_closed():
         if settings.auto_research:
-            raise HTTPException(403, "Device writes go through the workbench")
+            raise CodedHTTPError(
+                403,
+                "Device writes go through the workbench",
+                code="entry",
+                reason="use_workbench",
+            )
 
     @app.middleware("http")
     async def browser_headers(request, call_next):
@@ -170,9 +179,22 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
             "retention_days": settings.retention_days,
         }
 
+    @app.exception_handler(CodedHTTPError)
+    async def coded_error(request, error: CodedHTTPError):
+        return JSONResponse(status_code=error.status, content=error.body())
+
     @app.exception_handler(BridgeError)
     async def bridge_error(request, error):
-        return JSONResponse(status_code=409, content={"detail": str(error)})
+        code, reason = next(
+            (pair for kind, pair in BRIDGE_ERROR_CODES.items() if isinstance(error, kind)),
+            (None, None),
+        )
+        # the pump's device id is not in hand here (the endpoint names it, the error does not)
+        params = {"device_id": None} if reason == "pump_unconfirmed" else {}
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(error), "code": code, "reason": reason, "params": params},
+        )
 
     @app.exception_handler(RequestValidationError)
     async def unprocessable(request, error: RequestValidationError):
@@ -263,7 +285,13 @@ def create_app(settings, bridge=None, workbench: APIRouter | None = None):
     @api.post("/control/{device}", dependencies=[Depends(writes_closed)])
     async def level(device: str, operation: Level):
         if device not in {"light", "exhaust", "fan"}:
-            raise HTTPException(404, "Unknown device")
+            raise CodedHTTPError(
+                404,
+                "Unknown device",
+                code="state",
+                reason="record_not_found",
+                params={"record_kind": "device", "record_id": device},
+            )
         return await asyncio.shield(
             bridge.operate(operation.request_id, device, {"level": operation.level})
         )

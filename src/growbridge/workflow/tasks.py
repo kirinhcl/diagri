@@ -56,10 +56,20 @@ class TaskBoard:
             existing = self.db.one(
                 "SELECT * FROM task_board WHERE trigger_event_id = ?", (task.trigger_event_id,)
             )
+            if existing is not None and existing["project_id"] != task.project_id:
+                # say nothing about another project's task, not even that it is one
+                raise Denied(
+                    "state", "this trigger_event_id is already used", reason="trigger_id_in_use"
+                )
             if existing is not None:
                 return self._load(existing)
             if self.db.one("SELECT 1 FROM task_board WHERE id = ?", (task.id,)) is not None:
-                raise Denied("state", f"task id {task.id} already exists")
+                raise Denied(
+                    "state",
+                    f"task id {task.id} already exists",
+                    reason="task_board_conflict",
+                    params={"task_id": task.id, "parent_task_id": task.parent_task_id},
+                )
             self._check_depth(task)
             stored = task.model_copy(update={"state": S.IN_PROGRESS})
             self.db.execute(
@@ -86,7 +96,12 @@ class TaskBoard:
     def get(self, task_id: str) -> ResearchTask:
         row = self.db.one("SELECT * FROM task_board WHERE id = ?", (task_id,))
         if row is None:
-            raise Denied("state", f"unknown task {task_id}")
+            raise Denied(
+                "state",
+                f"unknown task {task_id}",
+                reason="record_not_found",
+                params={"record_kind": "task", "record_id": task_id},
+            )
         return self._load(row)
 
     def list(self, project_id: str, state: TaskState | None = None) -> tuple[ResearchTask, ...]:
@@ -98,27 +113,37 @@ class TaskBoard:
         rows = self.db.query(sql + " ORDER BY seq", params)
         return tuple(self._load(row) for row in rows)
 
-    def in_states(
-        self, states: Collection[TaskState], limit: int = 100
-    ) -> tuple[ResearchTask, ...]:
-        """Tasks of any project in one of ``states``, oldest first."""
-        wanted = [state.value for state in states]
-        if not wanted:
-            return ()
+    @staticmethod
+    def _in_states_sql(
+        states: Collection[TaskState], only_owner: str | None
+    ) -> tuple[str, tuple[object, ...]]:  # (``list`` is a method name in this class)
+        """FROM/WHERE of the tasks in ``states``; with ``only_owner`` only that owner's projects
+        (the join exists only then: a board on its own database has no project table)."""
+        wanted = tuple(state.value for state in states)
         marks = ",".join("?" for _ in wanted)
-        rows = self.db.query(
-            f"SELECT * FROM task_board WHERE state IN ({marks}) ORDER BY seq LIMIT ?",
-            (*wanted, limit),
-        )
+        if only_owner is None:
+            return f" FROM task_board t WHERE t.state IN ({marks})", wanted
+        joined = " FROM task_board t JOIN wf_projects p ON p.id = t.project_id"
+        return f"{joined} WHERE t.state IN ({marks}) AND p.owner = ?", (*wanted, only_owner)
+
+    def in_states(
+        self, states: Collection[TaskState], limit: int = 100, *, only_owner: str | None = None
+    ) -> tuple[ResearchTask, ...]:
+        """Tasks in one of ``states``, oldest first; of one owner's projects when given."""
+        if not states:
+            return ()
+        sql, params = self._in_states_sql(states, only_owner)
+        rows = self.db.query(f"SELECT t.*{sql} ORDER BY t.seq LIMIT ?", (*params, limit))
         return tuple(self._load(row) for row in rows)
 
-    def count_in_states(self, states: Collection[TaskState]) -> int:
-        """How many tasks of any project are in one of ``states``."""
-        wanted = [state.value for state in states]
-        if not wanted:
+    def count_in_states(
+        self, states: Collection[TaskState], *, only_owner: str | None = None
+    ) -> int:
+        """How many tasks are in one of ``states``; of one owner's projects when given."""
+        if not states:
             return 0
-        marks = ",".join("?" for _ in wanted)
-        row = self.db.one(f"SELECT COUNT(*) AS n FROM task_board WHERE state IN ({marks})", wanted)
+        sql, params = self._in_states_sql(states, only_owner)
+        row = self.db.one(f"SELECT COUNT(*) AS n{sql}", params)
         return row["n"] if row else 0
 
     def state_since(self, task_ids: Collection[str]) -> dict[str, float]:
@@ -165,10 +190,21 @@ class TaskBoard:
         with self.db.transaction():
             row = self.db.one("SELECT * FROM task_board WHERE id = ?", (task_id,))
             if row is None:
-                raise Denied("state", f"unknown task {task_id}")
+                raise Denied(
+                    "state",
+                    f"unknown task {task_id}",
+                    reason="record_not_found",
+                    params={"record_kind": "task", "record_id": task_id},
+                )
             count = row["revisions"] + 1
-            if count > self._load(row).budget.max_revisions:
-                raise Denied("budget", f"revision limit reached for task {task_id}")
+            max_revisions = self._load(row).budget.max_revisions
+            if count > max_revisions:
+                raise Denied(
+                    "budget",
+                    f"revision limit reached for task {task_id}",
+                    reason="budget_revision_limit",
+                    params={"task_id": task_id, "max_revisions": max_revisions},
+                )
             self.db.execute("UPDATE task_board SET revisions = ? WHERE id = ?", (count, task_id))
             return count
 
@@ -179,7 +215,12 @@ class TaskBoard:
         seen = self.db.one("SELECT task_id FROM task_events WHERE event_id = ?", (event_id,))
         if seen is not None:
             if seen["task_id"] != task_id:
-                raise Denied("state", f"event {event_id} belongs to another task")
+                raise Denied(
+                    "state",
+                    f"event {event_id} belongs to another task",
+                    reason="task_board_conflict",
+                    params={"task_id": task_id, "parent_task_id": None},
+                )
             return self.get(task_id), False
         task = self.get(task_id)
         self._check_transition(task, to, reason)
@@ -197,22 +238,49 @@ class TaskBoard:
     @staticmethod
     def _check_transition(task: ResearchTask, to: TaskState, reason: str) -> None:
         if task.state in TASK_TERMINAL or to not in _ALLOWED.get(task.state, frozenset()):
-            raise Denied("state", f"task {task.id}: {task.state.value} -> {to.value} not allowed")
+            raise Denied(
+                "state",
+                f"task {task.id}: {task.state.value} -> {to.value} not allowed",
+                reason="task_transition_not_allowed",
+                params={
+                    "task_id": task.id,
+                    "from_status": task.state.value,
+                    "to_status": to.value,
+                },
+            )
         if (task.state, to) in _REASON_REQUIRED and not reason.strip():
-            raise Denied("state", f"task {task.id}: ending from {task.state.value} needs a reason")
+            raise Denied(
+                "state",
+                f"task {task.id}: ending from {task.state.value} needs a reason",
+                reason="task_end_needs_reason",
+                params={"task_id": task.id},
+            )
 
     def _check_depth(self, task: ResearchTask) -> None:
         if task.parent_task_id is None:
             return
         parent = self.get(task.parent_task_id)
         if parent.project_id != task.project_id:
-            raise Denied("state", "parent task belongs to another project")
+            raise Denied(
+                "state",
+                "parent task belongs to another project",
+                reason="task_board_conflict",
+                params={"task_id": task.id, "parent_task_id": task.parent_task_id},
+            )
         depth, cursor = 1, parent
         while cursor.parent_task_id is not None:
             depth += 1
             cursor = self.get(cursor.parent_task_id)
         if depth > parent.budget.max_delegation_depth:
-            raise Denied("budget", f"delegation depth {depth} exceeds the limit")
+            raise Denied(
+                "budget",
+                f"delegation depth {depth} exceeds the limit",
+                reason="budget_depth_limit",
+                params={
+                    "depth": depth,
+                    "max_depth": parent.budget.max_delegation_depth,
+                },
+            )
 
     @staticmethod
     def _load(row: sqlite3.Row) -> ResearchTask:

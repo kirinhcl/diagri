@@ -274,7 +274,7 @@ test("a draft restored after a lost session still says it corrects a record", ()
 test("a refused correction names the corrected record, not the field", async () => {
   const { ctx, form } = formView();
   ctx.api.post = async () => {
-    throw new ApiError(422, "validation", "invalid", [{ loc: ["body", "corrects"], msg: "no such measurement" }]);
+    throw new ApiError(422, "validation", "invalid", [{ loc: ["body", "corrects"], msg: "no such measurement", type: "missing", limits: {} }]);
   };
   form.update(RECORDED);
   form.correct(RECORDED[0]);
@@ -282,7 +282,7 @@ test("a refused correction names the corrected record, not the field", async () 
   await settle();
   await settle();
   const text = visibleText(form.element);
-  assert.match(text, /被更正的记录: no such measurement/);
+  assert.match(text, /被更正的记录：必须填写/);
   assert.ok(!text.includes("corrects:"), text);
 });
 

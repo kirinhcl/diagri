@@ -18,6 +18,8 @@ from growbridge.compute.service import ComputeService
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import PathId
+from growbridge.workbench.scope import admin_only, project_write, visible_task
+from growbridge.workflow.access import Access
 from growbridge.workflow.tasks import TaskBoard
 
 MAX_NOTE_CHARS = 500
@@ -45,6 +47,7 @@ def add_compute_routes(
     fresh: Dependency,
     compute: ComputeService,
     tasks: TaskBoard,
+    access: Access | None = None,
 ) -> None:
     """Mount the routes on ``router``; ``operator`` and ``fresh`` are the workbench's operator
     dependencies (``fresh`` also asks for a recent re-authentication)."""
@@ -53,15 +56,23 @@ def add_compute_routes(
 
     @router.post("/compute/balance")
     async def record_balance(body: BalanceIn, actor: Fresh):
+        admin_only(access, actor)
         compute.record_balance(body.cpu_hours, actor.id, body.note)
         return compute.overview()["balance"]
 
     @router.post("/compute/tasks/{task_id}/budget")
     async def set_budget(task_id: PathId, body: BudgetIn, actor: Fresh):
+        unknown = Denied(  # another's task answers as one that does not exist
+            "scope",
+            f"unknown task {task_id}",
+            reason="compute_task_unknown",
+            params={"task_id": task_id},
+        )
         try:
-            tasks.get(task_id)
+            task = tasks.get(task_id)
         except Denied:
-            raise Denied("scope", f"unknown task {task_id}") from None
+            raise unknown from None
+        project_write(access, actor, task.project_id, lambda: unknown)
         compute.set_task_budget(task_id, body.cpu_hours, body.storage_gb)
         (row,) = [t for t in compute.overview()["tasks"] if t["task_id"] == task_id]
         return row
@@ -69,6 +80,7 @@ def add_compute_routes(
     @router.post("/compute/attempts/{attempt_id}/settle")
     async def settle(attempt_id: PathId, body: SettleIn, actor: Fresh):
         """End an attempt nobody can recover, charged as unknown (see ``settle_attempt``)."""
+        admin_only(access, actor)
         attempt = await compute.settle_attempt(attempt_id, actor.id, body.reason)
         return {
             "attempt_id": attempt.id,
@@ -85,4 +97,11 @@ def add_compute_routes(
 
     @router.get("/compute")
     async def overview(actor: Operator):
-        return compute.overview()
+        found = compute.overview()
+        if access is None or access.is_admin(actor):
+            return found
+        mine = lambda row: visible_task(access, actor, tasks, row["task_id"])  # noqa: E731
+        lists = {
+            name: [row for row in found[name] if mine(row)] for name in ("tasks", "jobs", "stuck")
+        }
+        return {**found, **lists, "balance": None, "service": None}  # no project-wide figures

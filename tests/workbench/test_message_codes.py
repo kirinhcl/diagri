@@ -29,6 +29,7 @@ FAMILIES = {
     "compute_stuck",
     "chat_end",
     "estimate",
+    "denial",
 }
 
 

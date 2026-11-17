@@ -1,7 +1,7 @@
 // Evidence cards: every card with its source and verification, a form to enter one, and verification of a model's card.
 import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
-import { simpleForm } from "../ui/forms.js";
+import { confirmOrCancel, simpleForm } from "../ui/forms.js";
 import { roleLabel } from "../ui/names.js";
 import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 
@@ -36,6 +36,7 @@ export function enterFields(ctx) {
 function enterForm(ctx) {
   const submitLabel = ctx.t("evidence.enter");
   const onSubmit = async ({ calibrated, ...rest }) => {
+    await confirmOrCancel(ctx, { title: ctx.t("evidence.enterTitle"), lines: [ctx.t("evidence.enterLine")], confirmLabel: submitLabel });
     const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated === "yes" }, { action: submitLabel });
     afterWrite(ctx, ctx.t("evidence.entered", { claim: claimName(card?.claim ?? rest.claim) }));
   };
@@ -46,10 +47,11 @@ function verifyForm(ctx, card) {
   const submitLabel = ctx.t("evidence.verify");
   const fields = [
     { name: "note", label: ctx.t("evidence.note"), type: "text" },
-    { name: "calibrated", label: ctx.t("evidence.attest"), type: "select", value: "no", options: yesNo(ctx) },
+    { name: "calibrated", label: ctx.t("evidence.attest"), type: "checkbox" },
   ];
   const onSubmit = async ({ note: text, calibrated }) => {
-    const body = { note: text || "", calibrated: calibrated === "yes" };
+    await confirmOrCancel(ctx, { title: ctx.t("evidence.verifyTitle"), lines: [ctx.t("evidence.verifyLine")], confirmLabel: submitLabel });
+    const body = { note: text || "", calibrated: calibrated === true };
     await ctx.api.post(`/evidence/${encodeURIComponent(card.id)}/verify`, body, { action: submitLabel });
     afterWrite(ctx, ctx.t("evidence.verified", { claim: claimName(card.claim) }));
   };

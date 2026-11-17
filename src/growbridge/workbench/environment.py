@@ -17,8 +17,9 @@ from growbridge.archive.models import Channel, Ownership
 from growbridge.archive.readings import bucketed_samples
 from growbridge.archive.store import Archive
 from growbridge.observer.alerts import AlertBook
-from growbridge.ports import Actor, ControlPort
+from growbridge.ports import Actor, ControlPort, Denied
 from growbridge.workbench.planned import planned_series
+from growbridge.workflow.access import Access
 from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
@@ -111,6 +112,49 @@ def active_stage(workflow: WorkflowService, now: float, window: float) -> dict |
     }
 
 
+class EnvironmentView:
+    """What one caller sees of the greenhouse (multi-user): its lock holder sees what happened
+    since they locked it, and of stages, experiments and alerts only those they may see."""
+
+    def __init__(self, access: Access | None, actor: Actor, workflow: WorkflowService):
+        self.access, self.actor, self.workflow = access, actor, workflow
+        self.full = access is None or access.is_admin(actor)
+        if not self.full and not access.sees_device(actor, access.local_device):
+            raise Denied(
+                "not_lock_holder",
+                "lock this greenhouse to see its environment",
+                reason="local_greenhouse_not_held",
+            )
+
+    def since(self, start: float) -> float:
+        if self.full:
+            return start
+        locked_at = self.access.locks.locked_at(self.access.local_device)
+        return start if locked_at is None else max(start, locked_at)
+
+    def reading(self, latest: dict | None, since: float) -> dict | None:
+        if latest is None or self.full:
+            return latest
+        if latest["timestamp"] < since:
+            return None  # from before the caller held the greenhouse
+        experiment = latest.get("experiment_id")
+        if experiment is not None and not self._sees_experiment(experiment):
+            latest = {**latest, "experiment_id": None}
+        return latest
+
+    def _sees_experiment(self, experiment_id: str) -> bool:
+        projects = self.workflow.store.projects_of_experiment(experiment_id)
+        return any(self.access.sees_project(self.actor, p) for p in projects)
+
+    def stage(self, stage: dict | None) -> dict | None:
+        if stage is None or self.full:
+            return stage
+        return stage if self.access.sees_stage(self.actor, stage["stage_id"]) else None
+
+    def sees_alert(self, alert) -> bool:
+        return self.full or self.access.sees_alert(self.actor, alert)
+
+
 def add_environment_routes(
     router: APIRouter,
     operator,
@@ -119,8 +163,20 @@ def add_environment_routes(
     control: ControlPort,
     clock: Clock,
     alerts: AlertBook | None = None,
+    access: Access | None = None,
+    *,
+    max_pump_seconds: float,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
+
+    @router.get("/capabilities")
+    async def capabilities(actor: Operator):
+        caps = control.capabilities()
+        return {
+            "level_ranges": {c.value: list(r) for c, r in caps.level_ranges.items()},
+            "sensors": caps.sensors,
+            "max_pump_seconds": max_pump_seconds,
+        }
 
     @router.get("/environment")
     async def environment(
@@ -129,18 +185,20 @@ def add_environment_routes(
         points: Annotated[int, Query(ge=2, le=MAX_POINTS)] = DEFAULT_POINTS,
     ):
         now = clock.now()
+        view = EnvironmentView(access, actor, workflow)
         caps = control.capabilities()
         open_alerts = () if alerts is None else alerts.open()
         severities: dict[str, int] = {}
-        for alert in open_alerts:
+        for alert in (a for a in open_alerts if view.sees_alert(a)):
             severities[alert.severity] = severities.get(alert.severity, 0) + 1
+        since = view.since(now - window)
         return {
             "now": now,
             "clock_synced": clock.synced,
-            "latest": latest_reading(archive, caps.outlets, now),
-            "stage": active_stage(workflow, now, window),
+            "latest": view.reading(latest_reading(archive, caps.outlets, now), since),
+            "stage": view.stage(active_stage(workflow, now, window)),
             "sensors": caps.sensors,
             "level_ranges": {c.value: list(r) for c, r in caps.level_ranges.items()},
             "alerts": severities,
-            "readings": bucketed_samples(archive.db, None, now - window, now, points),
+            "readings": bucketed_samples(archive.db, None, since, now, points),
         }

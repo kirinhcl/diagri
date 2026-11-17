@@ -35,7 +35,7 @@ There are 10 subcommands. `operator`, `host` and `recovery` each take one nested
 | `mcp` | none | yes | yes, every tool calls it | works in both modes; the tools differ |
 | `status` | none | yes | yes | works in both modes |
 | `dashboard` | `--no-open` | yes | yes | works in both modes; the dashboard cannot write in DiAGRI mode |
-| `operator add` | `name` (positional, required) | yes | no | meant for it; the command does not check `auto_research` |
+| `operator add` | `name` (positional, required), `--admin` (make the operator an administrator; multi-user) | yes | no | meant for it; the command does not check `auto_research` |
 | `host register` | none | yes | no | meant for it; the command does not check `auto_research` |
 | `recovery bump` | `--reason REASON` (required) | yes | no, it must be stopped | meant for it; the command does not check `auto_research` |
 | `simulate` | none | no | no | builds its own DiAGRI runtime in a temporary directory |

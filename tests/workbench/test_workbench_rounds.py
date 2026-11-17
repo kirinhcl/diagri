@@ -822,4 +822,42 @@ def test_protocol_without_variables_is_refused_by_name(bench, operator):
     refused = bench.post(operator, "/wb/protocols", {"protocol": protocol})
 
     assert detail(refused)["code"] == "param"
+    assert detail(refused)["reason"] == "protocol_variables_invalid"
     assert "variables" in detail(refused)["message"]
+
+
+def _goal_language(bench, operator, project_id: str, **fields):
+    answer = bench.post(operator, "/wb/goals", {"project_id": project_id, "goal": GOAL, **fields})
+    return answer, bench.tasks.list(project_id)
+
+
+def test_a_goal_stores_the_console_language_and_defaults_to_chinese(bench, operator):
+    project_id, _round = funded(bench, operator)
+
+    _answer, (asked,) = _goal_language(bench, operator, project_id, language="en")
+    _answer, (_, plain) = _goal_language(bench, operator, project_id)
+
+    assert (asked.language, plain.language) == ("en", "zh")
+
+
+def test_a_resent_goal_in_another_language_returns_the_first_task(bench, operator):
+    project_id, _round = funded(bench, operator)
+    first, _tasks = _goal_language(
+        bench, operator, project_id, request_id="goal-0001", language="en"
+    )
+
+    again, tasks = _goal_language(
+        bench, operator, project_id, request_id="goal-0001", language="zh"
+    )
+
+    assert again.status_code == 200 and again.json()["reused"] is True
+    assert again.json()["task_id"] == first.json()["task_id"]
+    assert [t.language for t in tasks] == ["en"]
+
+
+def test_an_unknown_language_is_refused(bench, operator):
+    project_id, _round = funded(bench, operator)
+
+    refused, tasks = _goal_language(bench, operator, project_id, language="fr")
+
+    assert refused.status_code == 422 and tasks == ()

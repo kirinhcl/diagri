@@ -3,11 +3,13 @@
 import { ApiError } from "../api.js";
 import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
-import { jsonEditor, simpleForm } from "../ui/forms.js";
+import { confirmOrCancel, simpleForm } from "../ui/forms.js";
 import { displayName, nameDetails } from "../ui/names.js";
 import { afterWrite, errorParts, keyValues, note, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 
+// The server's MAX_SCRIPT_CHARS.
+const MAX_SCRIPT_CHARS = 20000;
 const array = (value) => (Array.isArray(value) ? value : []);
 const STATE_KEYS = {
   notStarted: "analysis.state.notStarted",
@@ -69,25 +71,31 @@ function snapshotsView(ctx, analysis) {
 
 function freezeEditor(ctx, round) {
   const submitLabel = ctx.t("analysis.freeze");
-  const onSubmit = async (body) => {
+  const protocol = ctx.t("round.protocolValue", { id: round.protocol_id, v: round.protocol_version });
+  const field = { name: "script", label: ctx.t("analysis.form.script"), type: "textarea", code: true, required: true, maxlength: MAX_SCRIPT_CHARS, hint: ctx.t("analysis.form.scriptHint") };
+  const onSubmit = async ({ script }) => {
+    const lines = [ctx.t("analysis.freezeConfirm.protocol", { name: protocol }), ctx.t("analysis.freezeConfirm.line")];
+    await confirmOrCancel(ctx, { title: ctx.t("analysis.freezeConfirm.title"), lines, confirmLabel: submitLabel });
+    const body = { project_id: round.project_id, script };
     await ctx.api.post(`/protocols/${encodeURIComponent(round.protocol_id)}/analysis`, body, { action: submitLabel });
     frozenFor = round.round_id;
     afterWrite(ctx, ctx.t("analysis.frozen"));
   };
-  const value = { project_id: round.project_id, script: "" };
-  const label = ctx.t("analysis.freezeJson");
-  return jsonEditor({ label, value, submitLabel, onSubmit, draftKey: `freeze:${round.protocol_id}`, ctx });
+  return simpleForm({ fields: [field], submitLabel, onSubmit, draftKey: `freeze:${round.protocol_id}`, ctx });
 }
 
 function runForm(ctx, round, analysis) {
   const submitLabel = ctx.t("analysis.run");
   const snapshots = array(analysis.snapshots);
+  if (!snapshots.length) return null; // nothing to run on: the snapshots block above already says so
   const label = ctx.t("analysis.snapshot");
-  const options = snapshots.map((row) => ({ value: row.snapshot_id, label: displayName(ctx, "snapshot", row) }));
-  const field = snapshots.length
-    ? { name: "snapshot_id", label, type: "select", options, required: true }
-    : { name: "snapshot_id", label, type: "text", required: true };
+  const options = [{ value: "", label: ctx.t("form.choose") }, ...snapshots.map((row) => ({ value: row.snapshot_id, label: displayName(ctx, "snapshot", row) }))];
+  const field = { name: "snapshot_id", label, type: "select", options, required: true };
   const onSubmit = async ({ snapshot_id: snapshotId }) => {
+    const row = snapshots.find((item) => item.snapshot_id === snapshotId);
+    const lines = [ctx.t("analysis.runConfirm.line")];
+    if (row) lines.push(ctx.t("analysis.runConfirm.snapshot", { name: displayName(ctx, "snapshot", row) }));
+    await confirmOrCancel(ctx, { title: ctx.t("analysis.runConfirm.title"), lines, confirmLabel: submitLabel });
     const body = { project_id: round.project_id, protocol_id: round.protocol_id, snapshot_id: snapshotId };
     const run = await ctx.api.post("/analysis/runs", body, { action: submitLabel });
     lastRun = { roundId: round.round_id, run };

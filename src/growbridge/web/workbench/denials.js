@@ -1,4 +1,4 @@
-// Plain-language messages for every denial code (33 from the wiki, plus four client-side codes).
+// Plain-language messages for every denial code (38 from the wiki, plus four client-side codes).
 // Row: [code, zh text, zh advice, en text, en advice]
 const ROWS = [
   ["host_unregistered", "这台电脑不是该设备登记的写入主机。", "请在登记的主机上操作，或先把这台电脑登记为写入主机。", "This computer is not the registered write host for the device.", "Work from the registered host, or register this computer as the write host first."],
@@ -18,7 +18,7 @@ const ROWS = [
   ["approval_invalid", "这个阶段没有有效的批准，或批准后内容已变化。", "处理运行单上的问题后，重新批准这个阶段。", "The stage has no valid approval, or it changed after it was approved.", "Resolve the findings on the run sheet and approve the stage again."],
   ["state", "对象不存在、当前状态不允许这个操作，或请求执行时它已经变了。", "刷新页面看最新状态，再决定是否重试。", "The item does not exist, is not in a state that allows this, or changed while the request ran.", "Refresh the page to see the current state, then decide whether to try again."],
   ["safety_conflict", "安全配置里的保护规则作用在运行单没有交给主机控制的通道上。", "修改运行单（生成新版本）或安全配置，然后重新批准。", "A protection rule in the safety configuration acts on a channel the run sheet does not hand to the host.", "Change the run sheet (a new version) or the safety configuration, then approve again."],
-  ["budget", "项目的调用或费用预算已用完，或还没设置。", "先停下。请由操作员设置或提高项目预算，或亲自决定这个任务。", "The project's call or cost budget is used up, or was never set.", "Stop. An operator should set or raise the budget, or decide the task personally."],
+  ["budget", "项目的调用或费用预算已用完，或还没设置。", "请在项目页的预算一栏设置或提高预算；在此之前，模型的工作会暂停。", "The project's call or cost budget is used up, or was never set.", "Set or raise the budget in the project's budget section; model work stays paused until then."],
   ["session", "没有登录，或登录已失效。", "请重新登录。", "You are not signed in, or the session has ended.", "Sign in again."],
   ["member", "提交人没有对应的 CSC 项目成员身份。", "只有启用了计算服务才会出现；请联系管理员核对成员映射。", "The submitter is not mapped to a CSC project member.", "Only seen when the compute service is on. Ask an administrator to check the member mapping."],
   ["quota", "计算额度不够，或已达到重试上限。", "请联系管理员核对任务预算和项目余额。", "There is not enough compute budget, or the retry limit is reached.", "Ask an administrator to check the task budget and project balance."],
@@ -34,6 +34,11 @@ const ROWS = [
   ["cooldown", "正在浇水，或距上一次浇水还不够久。", "等一会儿再浇。", "Irrigation is running, or the last one started too recently.", "Wait a while, then irrigate again."],
   ["unavailable", "这个功能的后端没有配置（搜索、计算服务、隔离环境或留出集登记）。", "你无法解决；这个服务在部署时没有包含它。", "An optional backend is not configured (search, compute service, sandbox or holdout registry).", "Nothing you can do; this installation was set up without it."],
   ["locked", "登录失败次数过多，已锁定 15 分钟。", "等 15 分钟后再试。", "Too many failed sign-ins; locked for 15 minutes.", "Wait 15 minutes, then try again."],
+  ["lock_taken", "你选的温室里有的已被别人锁定，这次一个也没有锁上。", "去掉被占用的温室后重新锁定。", "Some of the greenhouses you picked are locked by someone else, so none were locked.", "Leave out the taken ones and lock again."],
+  ["greenhouse_busy", "这个温室上还有没结束的阶段，不能释放。", "先停止或结束那个阶段（或中止轮次），再释放。", "A stage on this greenhouse has not ended or stopped, so it cannot be released.", "Stop or end that stage (or abort its round) first, then release."],
+  ["not_owner", "管理员不能替别人操作他们的项目。", "请项目所有者操作；需要时可以先停用其账号，再把项目转给别人。", "Administrators do not act on another operator's project.", "Ask the project's owner. If needed, disable their account and hand the project to someone else."],
+  ["not_lock_holder", "你没有锁定这个温室。", "先在「温室」页锁定它，再重试。", "You do not hold this greenhouse.", "Lock it on the Greenhouses page first, then try again."],
+  ["admin_only", "只有管理员能做这个操作。", "请联系管理员。", "Only an administrator can do this.", "Ask an administrator."],
   ["validation", "有些输入不符合要求。", "按字段旁的提示改正后再提交。", "Some of the input is not valid.", "Fix the fields marked below and submit again."],
   ["reauth_failed", "密码不对，没有重新认证。", "请再试一次；连续输错会被暂时锁定。", "The password was wrong, so you were not re-authenticated.", "Try again. Several wrong tries in a row lock sign-in for a while."],
   ["network", "连不上服务器，或没有收到答复。", "检查网络连接，稍后再试。", "Could not reach the server, or no answer came back.", "Check the network connection and try again in a moment."],

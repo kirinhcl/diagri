@@ -171,7 +171,7 @@ test("a refusal of a hidden field is written with the field's label, not its nam
     { name: "metric", label: "Metric", required: true },
     { name: "link", type: "hidden", label: "Corrected record" },
   ];
-  const refusal = new ApiError(422, "validation", "invalid", [{ loc: ["body", "link"], msg: "no such record" }]);
+  const refusal = new ApiError(422, "validation", "invalid", [{ loc: ["body", "link"], msg: "no such record", type: "missing", limits: {} }]);
   const onSubmit = async () => {
     throw refusal;
   };
@@ -180,6 +180,23 @@ test("a refusal of a hidden field is written with the field's label, not its nam
   form.dispatchEvent(new Event("submit"));
   await settle();
   const text = visibleText(form);
-  assert.match(text, /Corrected record: no such record/);
+  assert.match(text, /Corrected record: This is required\./);
   assert.ok(!/\blink\b/.test(text), text);
+});
+
+test("a datetime or select field keeps working next to a hint, a unit and a check box", async () => {
+  installFakeDom();
+  const sent = [];
+  const fields = [
+    { name: "when", label: "When", type: "datetime", hint: "Local time", required: true },
+    { name: "kind", label: "Kind", type: "select", options: ["a", "b"] },
+    { name: "ok", label: "OK", type: "checkbox", value: true },
+  ];
+  const form = simpleForm({ fields, submitLabel: "Save", onSubmit: async (values) => sent.push(values), timeZone: "UTC", ctx: testCtx({ lang: "en", timezone: "UTC" }) });
+  formControls(form).set({ when: 1796594755 });
+  form.dispatchEvent(new Event("submit"));
+  await settle();
+  assert.deepEqual(sent, [{ when: 1796594700, kind: "a", ok: true }]);
+  const when = elements(form, "input").find((input) => input.getAttribute("name") === "when");
+  assert.match(when.getAttribute("aria-describedby"), /zone.* .*hint.* .*error/);
 });

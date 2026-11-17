@@ -193,7 +193,10 @@ async def test_a_round_ends_in_a_confirmatory_conclusion_through_the_workbench(w
             await reauthenticate(client)
             late = {"project_id": project, "script": SCRIPT}
             refused = await send(client, "POST", path, late, expect=409)
-            assert refused["detail"]["code"] == "state" and "6.5" in refused["detail"]["message"]
+            assert (
+                refused["detail"]["code"] == "state"
+                and "already started" in refused["detail"]["message"]
+            )
         await freeze_data(runtime, project, round_id, stage, number)
     state = await send(client, "GET", f"{path}?project_id={project}")
     snapshot_ids = [item["snapshot_id"] for item in state["snapshots"]]

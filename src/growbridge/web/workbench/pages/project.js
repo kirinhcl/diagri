@@ -8,7 +8,7 @@ import { errorParts, foldedText, keyValues, note, pageHead, section, techDetails
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
 import { conversationSection } from "./conversation.js";
-import { budgetForm, goalEditor, holdoutEditor, protocolEditor, startRoundForm } from "./project-forms.js";
+import { budgetForm, holdoutEditor, protocolEditor, startRoundForm } from "./project-forms.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
 const POLL_SECONDS = 4;
@@ -131,7 +131,7 @@ export async function render(ctx, params) {
     techDetails(ctx.t, nameDetails(project, ctx.t)),
     section(ctx.t("chat.title"), chat.element),
     section(ctx.t("project.rounds.title"), roundsTable(ctx, project), startRoundForm(ctx, project)),
-    section(ctx.t("project.goals.title"), tasksTable(ctx, project), goalEditor(ctx, project)),
+    section(ctx.t("project.goals.title"), tasksTable(ctx, project)),
     section(ctx.t("project.protocols.title"), protocolsTable(ctx, project), protocolEditor(ctx, project)),
     section(ctx.t("project.budget.title"), budgetView(ctx, project), budgetForm(ctx, project)),
     holdoutsBlock(ctx, project, read),

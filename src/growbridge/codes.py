@@ -21,7 +21,12 @@ logger = logging.getLogger(__name__)
 class Code:
     params: tuple[str, ...] = ()
     action: bool = True
+    of: str | None = None  # a denial reason names the coarse ``Denied`` code it refines
 
+
+# denial_codes needs Code and codes needs DENIAL_CODES: whichever loads first still finds both,
+# because denial_codes binds the dict before it imports Code.
+from growbridge.denial_codes import DENIAL_CODES  # noqa: E402
 
 CODES: dict[str, dict[str, Code]] = {
     "alert": {
@@ -160,6 +165,7 @@ CODES: dict[str, dict[str, Code]] = {
         "too_few_blocks": Code(("blocks", "min_blocks")),
         "sampled_p": Code(("flips", "blocks"), action=False),
     },
+    "denial": DENIAL_CODES,
 }
 
 
@@ -179,12 +185,24 @@ def checked(family: str, code: str, params: Mapping[str, object]) -> dict[str, o
     return dict(params)
 
 
+def checked_denial(code: str, reason: str, params: Mapping[str, object]) -> dict[str, object]:
+    """Like ``checked("denial", reason, params)``, and logs a reason registered under another
+    coarse code. Never raises."""
+    declared = DENIAL_CODES.get(reason)
+    if declared is not None and declared.of != code:
+        logger.warning("denial reason %s is registered under %s, not %s", reason, declared.of, code)
+    return checked("denial", reason, params)
+
+
 def export() -> dict[str, dict[str, dict[str, object]]]:
-    """The registry as plain data for the console: {family: {code: {params, action}}}."""
-    return {
-        family: {
-            code: {"params": list(spec.params), "action": spec.action}
-            for code, spec in entries.items()
-        }
-        for family, entries in CODES.items()
-    }
+    """The registry as plain data for the console: {family: {code: {params, action}}}; a
+    denial reason also carries ``of``, its coarse code."""
+    out: dict[str, dict[str, dict[str, object]]] = {}
+    for family, entries in CODES.items():
+        out[family] = {}
+        for code, spec in entries.items():
+            item: dict[str, object] = {"params": list(spec.params), "action": spec.action}
+            if family == "denial":
+                item["of"] = spec.of
+            out[family][code] = item
+    return out

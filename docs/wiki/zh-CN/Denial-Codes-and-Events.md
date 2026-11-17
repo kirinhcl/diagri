@@ -8,7 +8,7 @@
 
 ## 拒绝码
 
-一次拒绝就是 [`ports.py`](../../../src/growbridge/ports.py) 里的异常 `Denied(code, message)`。`Denied` 的文档字符串列了 33 个拒绝码，代码里抛出的也正好是这 33 个。工作台把拒绝转成 HTTP 响应：`state` 是 409，`session` 是 401，`locked` 是 429，其余都是 403，见 [HTTP、工作台与 MCP 接口](API-Reference.md#工作台路由)。
+一次拒绝就是 [`ports.py`](../../../src/growbridge/ports.py) 里的异常 `Denied(code, message)`。`Denied` 的文档字符串列了 38 个拒绝码，代码里抛出的也正好是这 38 个。工作台把拒绝转成 HTTP 响应：`state`、`lock_taken` 和 `greenhouse_busy` 是 409，`session` 是 401，`locked` 是 429，其余都是 403，见 [HTTP、工作台与 MCP 接口](API-Reference.md#工作台路由)。
 
 | 拒绝码 | 含义 | 由谁抛出 | 调用方该怎么做 |
 | --- | --- | --- | --- |
@@ -45,6 +45,11 @@
 | `cooldown` | 有一次灌溉正在进行，或者距上一次开始还不到 `pump_cooldown_seconds`。 | 控制服务 | 等一等，再重新发送灌溉请求。 |
 | `unavailable` | 某个可选后端没有配置：搜索、计算服务、沙箱或留出数据登记。 | [`agents/handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) | 调用方无法解决；守护进程构建时就没有这个后端。 |
 | `locked` | 15 分钟内登录失败次数过多：同一名字从同一地址失败 5 次，或者同一名字从所有地址累计失败 25 次。 | `workbench/auth.py` | 等到这些失败记录超过 15 分钟。 |
+| `lock_taken` | 要锁定的温室里有已被别人锁定的，这次一个也没锁上（多用户）。 | `workflow/locks.py` | 去掉被占用的温室后重新锁定。 |
+| `greenhouse_busy` | 温室上还有没结束的阶段，不能释放（多用户）。 | `workflow/locks.py` | 先停止或结束阶段（或中止轮次），再释放。 |
+| `not_owner` | 管理员试图操作别人的项目；管理员对别人的阶段只能暂停和停止（多用户）。 | `workflow/access.py` | 请所有者操作，或先停用其账号再把项目转出。 |
+| `not_lock_holder` | 项目所有者没有锁定阶段或运行单用到的温室（多用户）。 | `workflow/access.py`、`workbench/api.py` | 先锁定这个温室。 |
+| `admin_only` | 只有管理员能做（多用户）。 | `workflow/access.py` | 请联系管理员。 |
 
 关于哪些拒绝码实际会出现。`member`、`quota`，以及 `param`、`scope`、`state` 和 `snapshot_incomplete` 里和计算有关的情况，只在守护进程配置了计算服务时才会出现。后三者来自对计算输入的检查：别的项目的快照或含有留出结果的快照（`scope`）、已被作废的快照（`state`）、校验不通过的快照（`snapshot_incomplete`）。`batches` 只由 `HoldoutRegistry.register` 抛出，而 `src/` 里没有任何地方调用它。`script_hash` 和 `already_run` 来自 `ConfirmatoryRunner.freeze_analysis` 和 `run_frozen`，经由工作台的两个分析路由出现。另外，工作台在 HTTP 422 的响应体里也用了 `param` 这个词作为 code，那不是 `Denied`。
 
@@ -53,7 +58,7 @@
 | 谁收到这次拒绝 | 它看到什么 |
 | --- | --- |
 | 工作台的 HTTP 客户端 | 上面说的状态码，以及响应体 `{"detail": {"code": "<code>", "message": "<text>"}}`。 |
-| 操作员控制台（`/workbench`） | 33 个拒绝码各有一条中文或英文的白话提示，并说明下一步该做什么。控制台自己还有三个服务器不会发出的码：`validation`（表单没通过自己的检查，或服务器返回 `422`）、`network`（连不上服务器）和 `reauth_failed`（重新认证对话框里的口令不对）。见 [`web/workbench/`](../../../src/growbridge/web/workbench) 里的 `denials.js`。 |
+| 操作员控制台（`/workbench`） | 38 个拒绝码各有一条中文或英文的白话提示，并说明下一步该做什么。控制台自己还有三个服务器不会发出的码：`validation`（表单没通过自己的检查，或服务器返回 `422`）、`network`（连不上服务器）和 `reauth_failed`（重新认证对话框里的口令不对）。见 [`web/workbench/`](../../../src/growbridge/web/workbench) 里的 `denials.js`。 |
 | 模型角色（在工具调用里） | 一条错误的工具结果 `Error: denied (<code>): <message>`，最多 500 个字符。 |
 | 调度器（工具调用之外，例如 `budget`） | 任务转为 `needs_attention`，原因是 `<code>: <message>`。 |
 | 执行 Agent | 这一拍跳过这次写入，并把 `<request_id>: <code>` 记入 `TickReport.denied`。之后的 tick 会再试。 |

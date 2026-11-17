@@ -153,7 +153,7 @@ def test_freezing_after_a_stage_started_is_refused_and_says_why(seeded, operator
     late = freeze(seeded, operator)
 
     assert late.status_code == 409 and detail(late)["code"] == "state"
-    assert "6.5" in detail(late)["message"]
+    assert "has already started" in detail(late)["message"]
     assert seeded.runner.frozen_info(latest(seeded)) is None
 
 
@@ -636,3 +636,35 @@ def test_a_run_uses_the_version_the_snapshot_was_collected_under_not_the_latest(
 
     assert response.status_code == 200 and response.json()["status"] == "succeeded"
     assert seeded.runner.status(snap.id, seeded.workflow.store.protocol(PROTOCOL, 1)) == "succeeded"
+
+
+def same_protocol_id_snapshot(bench):
+    """A snapshot of another project that saved a later version under this protocol's id (ids
+    are unique per project only) and ran a stage of it."""
+    designer = bench.designer
+    project = bench.workflow.create_project("other series", designer)
+    protocol = make_protocol(project_id=project, id=PROTOCOL, version=2, stages=("vegetative",))
+    bench.workflow.save_protocol(protocol, designer)
+    round_id = bench.workflow.create_round(project, PROTOCOL, designer)
+    change = {
+        "project_id": project,
+        "protocol_id": PROTOCOL,
+        "protocol_version": 2,
+        "experiment_id": "experiment-p2",
+    }
+    bench.workflow.submit_run_sheet(
+        round_id, bench.sheet("stage-2").model_copy(update=change), designer
+    )
+    return snapshot_of(bench, experiment="experiment-p2")
+
+
+def test_a_snapshot_of_another_project_under_the_same_protocol_id_is_refused(seeded, operator):
+    # the run must not reach the other project's protocol version, frozen script or holdout
+    freeze(seeded, operator)
+    snapshot_id = same_protocol_id_snapshot(seeded).id
+
+    response = run(seeded, operator, snapshot_id)
+
+    assert response.status_code == 403
+    assert (detail(response)["code"], detail(response)["reason"]) == ("scope", "not_this_protocol")
+    assert nothing_ran(seeded, snapshot_id)

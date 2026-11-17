@@ -44,7 +44,15 @@ STEPS = (
     "CREATE TABLE login_failures(name TEXT NOT NULL, at REAL NOT NULL)",
     "CREATE INDEX login_failures_name ON login_failures(name, at)",
     "ALTER TABLE login_failures ADD COLUMN source TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE operators ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
+    "ALTER TABLE operators ADD COLUMN disabled_at REAL",
+    # Who added, disabled or reset whose account, and when (append-only; actor NULL: the command
+    # line). A secret reset lets an administrator sign in as that account, so it is never silent.
+    "CREATE TABLE operator_events(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, "
+    "action TEXT NOT NULL, actor TEXT, detail TEXT, at REAL NOT NULL)",
 )
+EVENT_LIMIT = 200  # the account history a listing shows, newest first
+ROLES = ("user", "admin")
 
 _NO_SALT = bytes(SALT_BYTES)  # stands in for an unknown name so the work done stays the same
 _NO_HASH = bytes(KEY_BYTES)
@@ -52,6 +60,15 @@ _NO_HASH = bytes(KEY_BYTES)
 
 def _token_hash(token: str) -> str:
     return hashlib.sha256((token or "").encode()).hexdigest()
+
+
+class AccountRefused(ValueError):
+    """An account change ``Operators`` refuses; ``case`` names which one, so the workbench can say
+    why (``workbench/admin.py``). Still a ``ValueError`` for the command line and older callers."""
+
+    def __init__(self, case: str, message: str):
+        super().__init__(message)
+        self.case = case
 
 
 class Operators:
@@ -65,22 +82,105 @@ class Operators:
 
     # --- accounts ------------------------------------------------------------------------------
 
-    def add(self, name: str, secret: str) -> None:
-        """Register an operator; ``ValueError`` for a duplicate, empty name or weak secret."""
+    def add(self, name: str, secret: str, role: str = "user", *, by: str | None = None) -> None:
+        """Register an operator; ``ValueError`` for a duplicate, empty name, weak secret or an
+        unknown role."""
         name = name.strip()
         if not name or len(name) > NAME_LIMIT:
-            raise ValueError(f"an operator name is 1..{NAME_LIMIT} characters")
-        if not MIN_SECRET_LENGTH <= len(secret) <= MAX_SECRET_LENGTH:
-            raise ValueError(f"a secret is {MIN_SECRET_LENGTH}..{MAX_SECRET_LENGTH} characters")
-        salt = secrets.token_bytes(SALT_BYTES)
-        key = self._derive(secret, salt, self.scrypt_n)
+            raise AccountRefused("name_length", f"an operator name is 1..{NAME_LIMIT} characters")
+        if role not in ROLES:
+            raise AccountRefused("role", f"a role is one of {', '.join(ROLES)}")
+        salt, key = self._hashed(secret)
         with self.db.transaction():
             if self.db.one("SELECT 1 FROM operators WHERE name = ?", (name,)) is not None:
-                raise ValueError(f"operator {name!r} already exists")
+                raise AccountRefused("name_taken", f"operator {name!r} already exists")
             self.db.execute(
-                "INSERT INTO operators(name, salt, hash, n, created_at) VALUES (?, ?, ?, ?, ?)",
-                (name, salt, key, self.scrypt_n, self.clock.now()),
+                "INSERT INTO operators(name, salt, hash, n, created_at, role) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (name, salt, key, self.scrypt_n, self.clock.now(), role),
             )
+            self._record(name, "add", by, role)
+
+    def _hashed(self, secret: str) -> tuple[bytes, bytes]:
+        if not MIN_SECRET_LENGTH <= len(secret) <= MAX_SECRET_LENGTH:
+            raise AccountRefused(
+                "secret_length", f"a secret is {MIN_SECRET_LENGTH}..{MAX_SECRET_LENGTH} characters"
+            )
+        salt = secrets.token_bytes(SALT_BYTES)
+        return salt, self._derive(secret, salt, self.scrypt_n)
+
+    def role(self, name: str) -> str | None:
+        row = self.db.one("SELECT role FROM operators WHERE name = ?", (name,))
+        return None if row is None else row["role"]
+
+    def active(self, name: str) -> bool:
+        row = self.db.one("SELECT disabled_at FROM operators WHERE name = ?", (name,))
+        return row is not None and row["disabled_at"] is None
+
+    def disable(self, name: str, *, by: str | None = None) -> None:
+        """Stop an operator from signing in and end their sessions; their locks stay. Nothing in
+        the console enables an account again, so ``by`` (the administrator asking) cannot disable
+        themselves and the last active administrator is never disabled (``ValueError``)."""
+        with self.db.transaction():
+            self._require_known(name)
+            if by == name:
+                raise AccountRefused(
+                    "own_account", "an administrator cannot disable their own account"
+                )
+            if self.role(name) == "admin" and self.active(name):
+                others = self.db.one(
+                    "SELECT COUNT(*) AS n FROM operators"
+                    " WHERE role = 'admin' AND disabled_at IS NULL AND name != ?",
+                    (name,),
+                )
+                if others["n"] == 0:
+                    raise AccountRefused(
+                        "last_admin", "the last active administrator cannot be disabled"
+                    )
+            self.db.execute(
+                "UPDATE operators SET disabled_at = ? WHERE name = ?", (self.clock.now(), name)
+            )
+            self.db.execute("DELETE FROM operator_sessions WHERE name = ?", (name,))
+            self._record(name, "disable", by)
+
+    def reset_secret(self, name: str, secret: str, *, by: str | None = None) -> None:
+        """Replace an operator's secret and end their sessions; recorded with ``by``."""
+        salt, key = self._hashed(secret)
+        with self.db.transaction():
+            self._require_known(name)
+            self.db.execute(
+                "UPDATE operators SET salt = ?, hash = ?, n = ? WHERE name = ?",
+                (salt, key, self.scrypt_n, name),
+            )
+            self.db.execute("DELETE FROM operator_sessions WHERE name = ?", (name,))
+            self._record(name, "reset_secret", by)
+
+    def _record(self, name: str, action: str, by: str | None, detail: str | None = None) -> None:
+        self.db.execute(
+            "INSERT INTO operator_events(name, action, actor, detail, at) VALUES (?, ?, ?, ?, ?)",
+            (name, action, by, detail, self.clock.now()),
+        )
+
+    def events(self, limit: int = EVENT_LIMIT) -> list[dict]:
+        """The account history, newest first: ``name``, ``action`` (add, disable, reset_secret),
+        ``actor`` (``None``: the command line), ``detail`` (the role an account was added with)
+        and ``at``."""
+        rows = self.db.query(
+            "SELECT name, action, actor, detail, at FROM operator_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        return [dict(row) for row in rows]
+
+    def listing(self) -> list[dict]:
+        """Every account without its secret, oldest first."""
+        rows = self.db.query(
+            "SELECT name, role, created_at, disabled_at FROM operators ORDER BY created_at, name"
+        )
+        return [dict(row) for row in rows]
+
+    def _require_known(self, name: str) -> None:
+        if self.db.one("SELECT 1 FROM operators WHERE name = ?", (name,)) is None:
+            raise AccountRefused("unknown_operator", f"no operator {name!r}")
 
     @staticmethod
     def _derive(secret: str, salt: bytes, n: int) -> bytes:
@@ -141,8 +241,12 @@ class Operators:
         )
 
     def actor(self, token: str, recovery_number: int) -> Actor:
-        """The operator behind ``token``; an unknown, expired or outdated session is denied."""
+        """The operator behind ``token``; an unknown, expired or outdated session is denied, and so
+        is one whose account was disabled (a login racing the disable may outlive its delete)."""
         row = self._session(token)
+        if not self.active(row["name"]):
+            self.logout(token)
+            raise Denied("session", "the session is no longer valid", reason="session_expired")
         bound = row["recovery_number"]
         if bound is None:
             self.db.execute(
@@ -152,12 +256,13 @@ class Operators:
             )
         elif bound != recovery_number:
             self.logout(token)
-            raise Denied("session", "the session is no longer valid")
+            raise Denied("session", "the session is no longer valid", reason="session_expired")
         return Actor(
             kind="operator",
             id=row["name"],
             entry=Entry(row["entry"]),
             reauth_at=row["reauth_at"],
+            role=self.role(row["name"]),
         )
 
     def logout(self, token: str) -> None:
@@ -168,10 +273,10 @@ class Operators:
             "SELECT * FROM operator_sessions WHERE token_hash = ?", (_token_hash(token),)
         )
         if row is None:
-            raise Denied("session", "the session is not valid")
+            raise Denied("session", "the session is not valid", reason="session_expired")
         if row["expires_at"] <= self.clock.now():
             self.logout(token)
-            raise Denied("session", "the session is not valid")
+            raise Denied("session", "the session is not valid", reason="session_expired")
         return row
 
     # --- credential check and rate limit -------------------------------------------------------
@@ -181,16 +286,19 @@ class Operators:
         source = source[: NAME_LIMIT * 2]
         now = self.clock.now()
         self._require_unlocked(key, source, now, session)
-        row = self.db.one("SELECT salt, hash, n FROM operators WHERE name = ?", (name,))
+        row = self.db.one(
+            "SELECT salt, hash, n, disabled_at FROM operators WHERE name = ?", (name,)
+        )
         if row is None:
             salt, expected, cost = _NO_SALT, _NO_HASH, self.scrypt_n
         else:
             salt, expected, cost = bytes(row["salt"]), bytes(row["hash"]), row["n"]
         fits = len(secret) <= MAX_SECRET_LENGTH
         derived = self._derive(secret if fits else "", salt, cost)
-        if row is None or not fits or not hmac.compare_digest(derived, expected):
+        refused = row is None or row["disabled_at"] is not None  # same work either way
+        if refused or not fits or not hmac.compare_digest(derived, expected):
             self._record_failure(key, source, now)
-            raise Denied("session", "invalid credentials")
+            raise Denied("session", "invalid credentials", reason="bad_credentials")
         self.db.execute("DELETE FROM login_failures WHERE name = ? AND source = ?", (key, source))
 
     def _failures(self, condition: str, params: tuple) -> int:
@@ -203,14 +311,24 @@ class Operators:
         since = now - FAILURE_WINDOW_SECONDS
         pair = self._failures("name = ? AND source = ? AND at > ?", (key, source, since))
         if pair >= MAX_FAILURES:
-            raise Denied("locked", "too many failed attempts; try again later")
+            raise Denied(
+                "locked",
+                "too many failed attempts; try again later",
+                reason="login_locked",
+                params={"window_seconds": FAILURE_WINDOW_SECONDS},
+            )
         if session:
             return
         everywhere = self._failures(
             "name = ? AND source NOT LIKE ? AND at > ?", (key, SESSION_SOURCE + "%", since)
         )
         if everywhere >= MAX_GLOBAL_FAILURES:
-            raise Denied("locked", "too many failed attempts; try again later")
+            raise Denied(
+                "locked",
+                "too many failed attempts; try again later",
+                reason="login_locked",
+                params={"window_seconds": FAILURE_WINDOW_SECONDS},
+            )
 
     def _record_failure(self, key: str, source: str, now: float) -> None:
         with self.db.transaction():

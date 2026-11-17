@@ -9,6 +9,7 @@ import { clear, h } from "../ui/dom.js";
 import { displayName } from "../ui/names.js";
 import { note, pageHead, section, timeText } from "../ui/section.js";
 import { statePillKeeper } from "../ui/status.js";
+import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 
 export const WINDOWS = [3600, 6 * 3600, 24 * 3600, 7 * 86400];
 export const POLL_SECONDS = 5;
@@ -176,7 +177,13 @@ async function load(ctx) {
 }
 
 export async function render(ctx) {
-  let env = await load(ctx);
+  let env;
+  try {
+    env = await load(ctx);
+  } catch (error) {
+    if (!isNotLockHolder(error)) throw error;
+    return { element: lockFirst(ctx, ctx.t("nav.environment")) };
+  }
   const status = h("div");
   const now = h("div");
   const trends = h("div");

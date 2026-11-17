@@ -196,3 +196,33 @@ async def test_a_new_task_tells_the_orchestrator_to_end_its_run_instead_of_waiti
     outcome = await env.invoke_as(parent.id, "orchestrator", "delegate_task", **fields)
 
     assert "End your turn now" in json.loads(outcome.content)["next"]
+
+
+async def test_the_model_record_names_the_language(env):
+    task = env.task("orchestrator", "ev-goal", language="en")
+    client = ScriptedClient([text_reply("ok")])
+
+    await dispatcher(env, client).run_task(task.id)
+
+    assert handoff(client)["language"] == "en"
+
+
+async def test_an_old_task_without_language_takes_the_latest_goal_language(env):
+    env.task("orchestrator", "goal:p:alice:1", language="en")
+    env.task("orchestrator", "goal:p:alice:2", language="zh")
+    env.task("orchestrator", "goal:p:alice:3", language="en")
+    old = env.task("planner", "ev-old")
+    client = ScriptedClient([text_reply("ok")])
+
+    await dispatcher(env, client).run_task(old.id)
+
+    assert handoff(client)["language"] == "en"
+
+
+async def test_without_any_goal_the_record_names_chinese(env):
+    old = env.task("planner", "ev-old")
+    client = ScriptedClient([text_reply("ok")])
+
+    await dispatcher(env, client).run_task(old.id)
+
+    assert handoff(client)["language"] == "zh"

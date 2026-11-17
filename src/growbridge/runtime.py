@@ -41,7 +41,7 @@ from growbridge.config import Settings
 from growbridge.control.ledger import Ledger
 from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
-from growbridge.observer.alerts import Alert, AlertBook
+from growbridge.observer.alerts import Alert, AlertBook, Scope
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
@@ -59,11 +59,12 @@ from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
+from growbridge.runtime_access import AccessParts, build_access, workbench_access
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
+from growbridge.runtime_alerts import expire_tasks, stage_alerts
 from growbridge.runtime_backup import Backups
 from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
 from growbridge.runtime_mirror import InterventionMirror
-from growbridge.runtime_waiting import waiting_message, waiting_params
 from growbridge.service import Bridge
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
@@ -142,7 +143,12 @@ def register_write_host(settings: Settings, clock: Clock | None = None) -> str:
     db = Database(settings.data_dir / "control.sqlite3")
     try:
         if not Ledger(db).register_host(str(settings.device), host_id, clock.now()):
-            raise Denied("host_unregistered", "another host is registered for this device")
+            raise Denied(
+                "host_unregistered",
+                "another host is registered for this device",
+                reason="other_host_registered",
+                params={"device_id": str(settings.device)},
+            )
     finally:
         db.close()
     return host_id
@@ -167,10 +173,6 @@ def default_channels() -> dict[str, NotifyChannel]:
     if mails and os.environ.get(SMTP_HOST_ENV):
         found["email"] = EmailChannel(mails)
     return found
-
-
-STAGE_ALERT = "stage_waiting"
-OPERATOR_PAUSE = "pause"  # the history event of a pause that an operator asked for
 
 
 class _GuardedBridge(Bridge):
@@ -224,6 +226,7 @@ class Runtime:
     failing: set[str] = field(default_factory=set)
     stopped: bool = False
     last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
+    access_parts: AccessParts | None = None  # multi-user locks and rules; None when off
 
     # --- life cycle ----------------------------------------------------------------------------
 
@@ -273,7 +276,8 @@ class Runtime:
     def workbench(self, role_tokens: Mapping[str, str] | None = None) -> APIRouter:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
-        return create_workbench(*args, role_tokens or {}, *more, conversation=self.conversation)
+        extra = {"conversation": self.conversation, **workbench_access(self.access_parts)}
+        return create_workbench(*args, role_tokens or {}, *more, **extra)
 
     @property
     def _device(self) -> str:
@@ -295,12 +299,13 @@ class Runtime:
         key: str,
         message: str,
         severity: Any = "critical",
+        scope: Scope | None = None,
         *,
         code: str | None = None,
         params: Mapping[str, object] | None = None,
     ) -> None:
         """Raise an alert, critical by default (and queue its notification); never raises."""
-        self._alert(kind, key, message, severity, code=code, params=params)
+        self._alert(kind, key, message, severity, scope, code=code, params=params)
 
     def role_tools(self) -> dict[str, list[Tool]]:
         return role_tools(self, private_dir(self.settings.data_dir / "agent_work"))
@@ -377,22 +382,25 @@ class Runtime:
         key: str,
         message: str,
         severity: Any = "critical",
+        scope: Scope | None = None,
         *,
         code: str | None = None,
         params: Mapping[str, object] | None = None,
     ) -> bool:
         """Raise an alert and queue its notification; never raises. True when it was stored."""
         try:
-            alert = self.book.raise_alert(kind, key, severity, message, code=code, params=params)
+            alert = self.book.raise_alert(
+                kind, key, severity, message, scope, code=code, params=params
+            )
         except Exception:
             log.exception("could not record a runtime alert")
             return False
         self._safely(lambda: self._announce(alert))  # a lost notification is logged
         return True
 
-    def resolve_alert(self, kind: str, key: str) -> bool:
+    def resolve_alert(self, kind: str, key: str, scope=None) -> bool:
         """Close an open alert (a no-op when none is open); never raises. False when not stored."""
-        return self._safely(lambda: self.book.resolve(kind, key))
+        return self._safely(lambda: self.book.resolve(kind, key, scope))
 
     def _announce(self, alert: Alert) -> None:
         if alert.count != 1:
@@ -441,38 +449,13 @@ class Runtime:
             raise failures[0]  # the tick reports it as a failing step
 
     def _stage_alerts(self) -> None:
-        """One open alert per stage that stopped by itself, for as long as it waits.
-
-        The key names the history entry, so a new cause is a new alert and a new notification.
-        A pause that an operator asked for raises none.
-        """
-        waiting = {
-            f"{item['stage_id']}:{item['entry']}": item
-            for item in self.workflow.waiting_stages()
-            if item["event"] != OPERATOR_PAUSE
-        }
-        known = {alert.key for alert in self.book.open() if alert.kind == STAGE_ALERT}
-        for key in known - set(waiting):
-            self.book.resolve(STAGE_ALERT, key)
-        for key, item in waiting.items():
-            if key not in known:
-                checking = item["state"] == StageState.RECOVERY_CHECK.value
-                severity = "critical" if checking else "warning"
-                message, params = waiting_message(item), waiting_params(item)
-                self._alert(
-                    STAGE_ALERT, key, message, severity, code="stage_waiting", params=params
-                )
+        stage_alerts(self)
 
     async def _deliver(self) -> None:
         await self.outbox.deliver(self.channels)
 
     def _expire(self) -> None:
-        for task in self.tasks.expire(self.clock.now()):
-            message = f"Research task {task.id} is past its deadline and needs attention"
-            params = {"task_id": task.id, "project_id": task.project_id, "role": task.owner_role}
-            self._alert(
-                "task_deadline", task.id, message, "warning", code="task_deadline", params=params
-            )
+        expire_tasks(self)
 
     async def _recover_compute(self) -> None:
         if self.compute is not None:  # rate-limited inside: reconciles what nobody answered
@@ -653,9 +636,10 @@ def build_runtime(
         ),
         on_intervention=mirror,
     )
+    parts = build_access(settings, dbs["workflow"], clock, flow, control)
     storage = StorageGuard(data_dir, STORAGE_LOW_BYTES, STORAGE_CRITICAL_BYTES, shutil.disk_usage)
     executor = ExecutorEngine(control, flow, clock, storage.allows)
-    book = AlertBook(dbs["observer"], clock)
+    book = AlertBook(dbs["observer"], clock, settings.device)
     outbox = Outbox(dbs["observer"], clock, OUTBOX_BASE_SECONDS, OUTBOX_CAP_SECONDS)
     selected = default_channels() if channels is None else dict(channels)
     # only channels that have a sender: a notification queued for any other name is never sent
@@ -716,6 +700,7 @@ def build_runtime(
         conversation=ConversationLog(dbs["agents"], clock),
         backups=backups,
         databases=tuple(dbs.values()),
+        access_parts=parts,
     )
     mirror.alert = runtime._alert
     executor.watchdog.alert = runtime._alert

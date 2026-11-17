@@ -13,6 +13,7 @@ from typing import Any
 from growbridge.archive.clock import Clock
 from growbridge.archive.models import RightKind, RunSheet
 from growbridge.ports import Actor, ControlPort, Denied, StageRuntime
+from growbridge.workflow.access import Access, guard_stage
 from growbridge.workflow.permissions import require_operator
 from growbridge.workflow.states import STAGE_TERMINAL, StageState
 from growbridge.workflow.store import Grant, Plan, StageRow, WorkflowStore, care_if_missing
@@ -24,6 +25,7 @@ class StageRecovery:
     store: WorkflowStore
     control: ControlPort
     clock: Clock
+    access: Access | None
 
     async def on_restart(self) -> None:
         """Process start: every live stage needs checking and every old write right is void."""
@@ -49,8 +51,8 @@ class StageRecovery:
     async def restore_care(self) -> None:
         """Re-issue the care right of the last finished stage once old writes are confirmed gone."""
         stage = self.store.active()
-        if stage is None or stage.care_right is not None:
-            return
+        if stage is None or stage.care_right is not None or stage.care_released:
+            return  # a released greenhouse keeps no care
         finished = stage.state in STAGE_TERMINAL
         recovering = stage.state is S.RECOVERY_CHECK and stage.prior_state is not S.MANUAL
         if not (finished or recovering) or stage.recovery_number != self.control.recovery_number():
@@ -115,8 +117,14 @@ class StageRecovery:
     async def record_onsite_check(self, stage_id: str, actor: Actor, note: str) -> StageRuntime:
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
+        guard_stage(self.access, actor, stage)  # before anything reaches the control service
         if stage.state not in (S.RECOVERY_CHECK, S.PAUSED, S.MANUAL):
-            raise Denied("state", f"stage {stage_id} is {stage.state.value}; no check is open")
+            raise Denied(
+                "state",
+                f"stage {stage_id} is {stage.state.value}; no check is open",
+                reason="onsite_check_not_open",
+                params={"stage_id": stage_id, "state": stage.state.value},
+            )
         await self.control.onsite_check(actor.id, note)
         recovering = stage.state is S.RECOVERY_CHECK
         plan = Plan(

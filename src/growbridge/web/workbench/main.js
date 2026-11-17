@@ -5,7 +5,7 @@ import { clearOnHandOver } from "./intents.js";
 import { LANGS, initialLang, makeT } from "./i18n.js";
 import { inboxCounts } from "./pages/inbox.js";
 import * as loginPage from "./pages/login.js";
-import { PAGES, hrefFor, parseHash } from "./router.js";
+import { PAGES, homeFor, hrefFor, parseHash } from "./router.js";
 import { askSecret } from "./ui/dialog.js";
 import { clear, h } from "./ui/dom.js";
 import { bindFormContext, dropDetachedDraftSavers, errorDetail, errorLines, saveAllDrafts } from "./ui/forms.js";
@@ -147,7 +147,7 @@ function notFoundView() {
 function showFatal(error) {
   state.frame = null;
   state.at = null;
-  const view = problemView(errorLines(error, state.lang, state.t), true, errorDetail(error, state.t));
+  const view = problemView(errorLines(error, state.lang, state.t, state), true, errorDetail(error, state.t));
   clear(app).append(h("main", { class: "wb-fatal" }, view));
 }
 
@@ -173,7 +173,7 @@ async function renderPage(page, ctx, params) {
     if (result && result.element) return result;
     return { element: problemView([state.t("page.loadFailed")], true) };
   } catch (error) {
-    return { element: problemView(errorLines(error, state.lang, state.t), true, errorDetail(error, state.t)) };
+    return { element: problemView(errorLines(error, state.lang, state.t, state), true, errorDetail(error, state.t)) };
   }
 }
 
@@ -238,8 +238,8 @@ async function loadMe(token) {
   const changed = handOver(state.lastOperator, state.me.operator);
   state.lastOperator = state.me.operator;
   if (changed) state.returnTo = null;
-  if (changed && location.hash !== hrefFor("inbox")) {
-    navigate(hrefFor("inbox"));
+  if (changed && location.hash !== homeFor(state.me)) {
+    navigate(homeFor(state.me));
     return false;
   }
   return true;
@@ -275,7 +275,7 @@ const pollOnce = singleFlight(async () => {
   try {
     await poll.refresh();
   } catch (error) {
-    if (poll.token === state.token) notify(errorLines(error, state.lang, state.t).join(" "), "error");
+    if (poll.token === state.token) notify(errorLines(error, state.lang, state.t, state).join(" "), "error");
   }
   if (poll.page !== "inbox" && state.frame && poll.token === state.token) await refreshCounts(state.frame);
 });

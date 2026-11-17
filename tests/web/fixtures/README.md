@@ -57,6 +57,9 @@ against the server's enums and literals.
 | projects.json | `/projects` |
 | project.json | `/projects/{project_id}` (Lettuce light series) |
 | holdouts.json | `/holdouts?project_id={project_id}` |
+| greenhouses.json | `/greenhouses` (multi-user; synthetic) |
+| admin-operators.json | `/admin/operators` (multi-user; synthetic) |
+| admin-locks.json | `/admin/locks` (multi-user; synthetic) |
 | conversation.json | `/projects/{project_id}/conversation?after=0` |
 | round.json | `/rounds/{round_id}` (delivered round) |
 | report.json | `/rounds/{round_id}/report` |
@@ -64,7 +67,9 @@ against the server's enums and literals.
 | stage.json, run-sheet.json, readings.json, measurements.json, history.json, manual-tasks.json | `/stages/{stage_id}`, `/run-sheet`, `/readings?points=120`, `/measurements`, `/history`, `/manual-tasks` of the ended stage |
 | round-pending.json, stage-pending.json, run-sheet-pending.json, readings-pending.json, measurements-pending.json, history-pending.json, manual-tasks-pending.json | the same reads for `stage-dev`, the dev seed's stage waiting for review |
 | environment.json | `/environment?window=3600&points=360` |
+| capabilities.json | `/capabilities` (synthetic, see below) |
 | safety.json | `/safety` |
+| safety-none.json | `/safety` when no limits are approved yet (`{"safety": null}`, synthetic; give it as `fixtures: {"safety.json": ...}`) |
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
 | compute.json | `/compute` (synthetic) |
@@ -84,6 +89,21 @@ The top-level `budget` gained `used_calls`, `used_cost`, `max_calls` and `max_co
 server now answers (beside the captured `calls_left` and `cost_left`). Values are synthetic but
 consistent with the captured left-overs: 103 left of 120 calls (17 used), 97.06714 left of 100 cost
 (2.93286 used).
+
+## capabilities, approval, protocol summary (batch 3, task 3)
+
+All three are additive server fields, added to the fixtures by hand (not captured):
+
+- capabilities.json is new. `level_ranges` and `sensors` are copied from environment.json
+  (the server reads both from the same `capabilities()`). `max_pump_seconds: 5.0` is the server's default setting.
+- run-sheet.json and run-sheet-pending.json gained `approval` beside `state`. The ended stage's run
+  sheet was approved: `{approved_at: 1794780100.5, run_sheet_version: 1}` (about two minutes before
+  the stage's `started_at`, version 1 as the sheet's). The pending stage is not approved, so its
+  `approval` is `null`. The server only sets `approval` when the approval's digest equals the current
+  run sheet's digest.
+- project.json: each `protocols[]` row gained `primary_endpoint: "canopy_area_growth"` and
+  `method: "paired_block"`, the values of the protocol body the dev project was frozen with (the same
+  endpoint report.json names). Both are `null` on the server when the stored body has none.
 
 ## variables.json and variables-pending.json (variable catalog, task 5)
 

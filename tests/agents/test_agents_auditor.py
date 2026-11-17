@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from vocab_support import TEST_CATALOG
 
 from growbridge.agents.handlers_auditor import FindingInput
-from growbridge.agents.handlers_common import bind_task
+from growbridge.agents.handlers_common import bind_task, local_time
 from growbridge.agents.handlers_researcher import InspectInput, _inspect, stage_preview
 from growbridge.agents.tools import build_toolset
 from growbridge.archive.db import Database
@@ -82,11 +82,13 @@ def _held_out_deps(env):
 async def test_get_stage_records_lists_tasks_measurements_and_open_alerts(env):
     await _start(env)
     _measure(env, "m-in", START + 1)
-    env.book.raise_alert("stage_gap", "stage-1:x", "warning", "gap")
-    env.book.raise_alert("stage_gap", "stage-2:x", "warning", "other stage")
-    env.book.raise_alert("stage_gap", "stage-10:x", "warning", "a stage that shares the prefix")
-    env.book.raise_alert("stage_gap", "stage-1b:x", "warning", "another one")
-    env.book.raise_alert("stage_gap", "stage-b:x", "warning", "a stage of another project")
+    env.book.raise_alert("stage_gap", "stage-1:x", "warning", "gap", ("stage", "stage-1"))
+    env.book.raise_alert("stage_gap", "stage-2:x", "warning", "other stage", ("stage", "stage-2"))
+    env.book.raise_alert(
+        "stage_gap", "stage-10:x", "warning", "shares prefix", ("stage", "stage-10")
+    )
+    env.book.raise_alert("stage_gap", "stage-1b:x", "warning", "another", ("stage", "stage-1b"))
+    env.book.raise_alert("stage_gap", "stage-b:x", "warning", "other project", ("stage", "stage-b"))
     env.clock.advance(5)
 
     body = _body(await _call(env, "get_stage_records", stage_id="stage-1"))
@@ -140,7 +142,9 @@ async def test_get_stage_records_hides_the_outside_window_alert_of_a_held_out_ou
     _measure(env, "m-hold", late, metric="yield", batch="batch-h", value=987.5)
     for mid, metric in (("m-late", "height"), ("m-hold", "yield")):
         text = f"Measurement {mid} ({metric}) is dated outside the stage's data window"
-        env.book.raise_alert("measurement_outside_window", f"stage-1:{mid}", "warning", text)
+        env.book.raise_alert(
+            "measurement_outside_window", f"stage-1:{mid}", "warning", text, ("stage", "stage-1")
+        )
 
     outcome = await _call(env, "get_stage_records", deps, stage_id="stage-1")
 
@@ -241,3 +245,48 @@ async def test_the_researcher_inspect_still_returns_the_same_preview(env):
         viewed = _inspect(env.audit_deps, InspectInput(task_id=task.id, stage_id="stage-1"))
 
     assert viewed == stage_preview(env.audit_deps, stage)
+
+
+async def test_get_stage_records_matches_alerts_by_scope_not_prefix(env):
+    await _start(env)
+    # another stage "stage-1:x" would share the prefix; its alert must not appear here
+    env.book.raise_alert("task_missed", "stage-1:x:1", "warning", "private", ("stage", "stage-1:x"))
+    env.book.raise_alert("task_missed", "stage-1:t:1", "warning", "mine", ("stage", "stage-1"))
+
+    body = _body(await _call(env, "get_stage_records", stage_id="stage-1"))
+
+    assert [a["message"] for a in body["open_alerts"]] == ["mine"]
+
+
+async def test_stage_records_and_run_status_carry_local_times_beside_epochs(env):
+    await _start(env)
+    _measure(env, "m-in", START + 1)
+    env.clock.advance(5)
+    deps = env.make_deps(alerts=env.book, timezone="Europe/Helsinki")
+    expected = local_time(START, "Europe/Helsinki")
+
+    body = _body(await _call(env, "get_stage_records", deps, stage_id="stage-1"))
+
+    assert body["stage"]["started_at"] == START
+    assert body["stage"]["started_at_local"] == expected
+    assert body["stage"]["ended_at_local"] is None
+    assert body["window_local"][0] == expected
+    assert body["window_local"][1] == local_time(body["window"][1], "Europe/Helsinki")
+    assert body["measurements"][0]["measured_at_local"] == local_time(START + 1, "Europe/Helsinki")
+    for row in body["manual_tasks"]:
+        assert row["due_at_local"] == local_time(row["due_at"], "Europe/Helsinki")
+
+    status = _body(await env.invoke("orchestrator", "get_run_status", deps, stage_id="stage-1"))
+
+    assert status["started_at"] == START and status["started_at_local"] == expected
+    assert status["paused_at_local"] is None
+    assert status["history"]
+    for entry in status["history"]:
+        assert entry["at_local"] == local_time(entry["at"], "Europe/Helsinki")
+
+
+def test_local_time_formats_in_the_reporting_time_zone_and_passes_none_through():
+    assert local_time(0, "UTC") == "1970-01-01 00:00"
+    assert local_time(0, "Europe/Helsinki") == "1970-01-01 02:00"
+    assert local_time(1_785_000_000.0, "Europe/Helsinki") == "2026-07-25 20:20"
+    assert local_time(None, "Europe/Helsinki") is None

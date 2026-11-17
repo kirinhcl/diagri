@@ -3,6 +3,9 @@ import { ApiError, singleFlight } from "../api.js";
 import { describeDenial } from "../denials.js";
 import { saveDraft, stripSecrets, takeDraft } from "../drafts.js";
 import { formatTime, zonedToEpoch } from "../format.js";
+import { messageParts } from "../messages.js";
+import { locatedText, problemText } from "../validation.js";
+import { confirmAction } from "./dialog.js";
 import { clear, h } from "./dom.js";
 import { techDetails } from "./section.js";
 
@@ -58,10 +61,12 @@ const OWN_REFUSAL = "not_approved";
 
 // At most two plain lines; what the server said in its own words is in errorDetail. No answer at all
 // is one line; a known code is [explanation, advice]; a 404 without a code is "not found".
-export function errorLines(error, lang, t) {
+export function errorLines(error, lang, t, ctx = { lang, t }) {
   const code = error instanceof ApiError ? error.code : null;
   if (code === "network") return [t("error.network")];
   if (code === OWN_REFUSAL && error.message) return [t("error.title"), String(error.message)];
+  const reasoned = error instanceof ApiError && error.reason ? messageParts(ctx, "denial", error.reason, error.params) : null;
+  if (reasoned?.known) return reasoned.action ? [reasoned.text, reasoned.action] : [reasoned.text];
   const known = code ? describeDenial(code, lang) : null;
   if (known) return [known.text, known.advice];
   if (error instanceof ApiError && error.status === 404 && !code) return [t("error.notFound")];
@@ -70,6 +75,12 @@ export function errorLines(error, lang, t) {
 
 // What api.js writes itself when the server's answer had no words of its own ("HTTP 502: not JSON").
 const CONSOLE_MESSAGE = /^HTTP \d+/;
+
+// Pydantic's own words for each problem, with where it was found (for the technical details).
+function validationLines(fields) {
+  if (!Array.isArray(fields) || fields.length === 0) return null;
+  return fields.map(({ loc, msg }) => `${(loc || []).join(" › ")}: ${msg}`).join("\n");
+}
 
 // [label, value] pairs for the technical details: HTTP status, code and the message as it came (a
 // message that only repeats the code is left out). The labels use t, else the bound page's.
@@ -82,9 +93,26 @@ export function errorDetail(error, t = bound.t) {
   const entries = [
     [t("tech.httpStatus"), answered ? error.status : null],
     [t("tech.code"), isApi ? error.code : null],
+    [t("tech.reason"), isApi ? error.reason : null],
+    [t("tech.params"), isApi && error.reason && Object.keys(error.params || {}).length > 0 ? error.params : null],
     [t(fromServer ? "tech.serverMessage" : "tech.message"), isApi && message === error.code ? null : message],
+    [t("tech.validation"), isApi ? validationLines(error.fields) : null],
   ];
   return entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
+}
+
+// Thrown from a form's onSubmit when the person said no in a confirm dialog: nothing happened,
+// so the form says nothing.
+export class Cancelled extends Error {
+  constructor() {
+    super("cancelled");
+    this.name = "Cancelled";
+  }
+}
+
+// Asks the confirm dialog; returns when confirmed, throws Cancelled when not.
+export async function confirmOrCancel(ctx, prompt) {
+  if (!(await confirmAction(ctx.t, prompt))) throw new Cancelled();
 }
 
 // Plain lines, then (for a refusal) the folded technical details.
@@ -118,8 +146,9 @@ function formFrame(submitLabel, children, run, getCtx) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     guarded().catch((error) => {
-      const { lang, t } = getCtx();
-      showRefusal(status, error, t, errorLines(error, lang, t));
+      if (error instanceof Cancelled) return showStatus(status, [], "info");
+      const ctx = getCtx();
+      showRefusal(status, error, ctx.t, errorLines(error, ctx.lang, ctx.t, ctx));
     });
   });
   return { form, status };
@@ -127,10 +156,14 @@ function formFrame(submitLabel, children, run, getCtx) {
 
 // Every refusal is written to the form's own status line; some also keep a draft or reload the page.
 function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
-  const lines = errorLines(error, ctx.lang, ctx.t);
+  if (error instanceof Cancelled) {
+    showStatus(status, [], "info");
+    return;
+  }
+  const lines = errorLines(error, ctx.lang, ctx.t, ctx);
   const code = error instanceof ApiError ? error.code : null;
   if (code === "validation") {
-    showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields)]);
+    showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields, ctx)]);
     return;
   }
   showRefusal(status, error, ctx.t, lines);
@@ -142,8 +175,9 @@ function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
   }
 }
 
-function initialText(field, timeZone, lang) {
+export function initialText(field, timeZone, lang) {
   if (field.type === "password" || field.value === undefined || field.value === null) return "";
+  if (Array.isArray(field.value)) return field.value.join("\n");
   if (field.type === "datetime" && typeof field.value === "number") {
     return formatTime(field.value, timeZone, lang).replace(" ", "T");
   }
@@ -160,12 +194,16 @@ function optionList(field, value) {
 }
 
 function control(field, attrs, value) {
-  if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs, text: value });
+  const limits = { min: field.min, max: field.max, maxlength: field.maxlength };
+  if (field.type === "checkbox") return h("input", { class: "input-check", attrs: { ...attrs, type: "checkbox", checked: value === "true" } });
+  // `code` fields (a script) are monospace, tall, never spell-checked, and have no maxlength attribute: a browser would cut a long paste silently, so the length is checked (in code points) beside the field instead.
+  if (field.type === "textarea" && field.code) return h("textarea", { class: "input input-area input-code", attrs: { ...attrs, rows: 10, spellcheck: "false" }, text: value });
+  if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs: { ...attrs, maxlength: limits.maxlength }, text: value });
   if (field.type === "select") return h("select", { class: "input", attrs }, optionList(field, value));
   const types = { number: "number", datetime: "datetime-local", password: "password", hidden: "hidden" };
   const type = types[field.type] || "text";
-  const extra = { type, value: type === "password" ? null : value };
-  if (type === "number") extra.step = field.step ?? "any";
+  const extra = { type, value: type === "password" ? null : value, maxlength: limits.maxlength };
+  if (type === "number") Object.assign(extra, { step: field.step ?? "any", min: limits.min, max: limits.max });
   if (type === "password") extra.autocomplete = "current-password";
   return h("input", { class: "input", attrs: { ...attrs, ...extra } });
 }
@@ -175,12 +213,20 @@ function suggestionOptions(values) {
   return (values || []).map((value) => h("option", { attrs: { value: String(value) } }));
 }
 
-function fieldRow(field, value, timeZone) {
+// The text a control holds; a check box holds "true" or "false".
+const readText = (entry) => (entry.field.type === "checkbox" ? String(entry.input.checked) : entry.input.value);
+function writeText(entry, text) {
+  if (entry.field.type === "checkbox") entry.input.checked = text === "true";
+  else entry.input.value = text;
+}
+
+export function fieldRow(field, value, timeZone) {
   const id = nextId("field");
   const errorId = `${id}-error`;
   const zoneId = `${id}-zone`;
+  const hintId = `${id}-hint`;
   const isTime = field.type === "datetime";
-  const describedBy = isTime ? `${zoneId} ${errorId}` : errorId;
+  const describedBy = [isTime && zoneId, field.hint && hintId, errorId].filter(Boolean).join(" ");
   const list = Array.isArray(field.suggestions) ? h("datalist", { attrs: { id: `${id}-list` } }, suggestionOptions(field.suggestions)) : null;
   const attrs = { id, name: field.name, required: Boolean(field.required), "aria-describedby": describedBy, list: list && `${id}-list` };
   const input = control(field, attrs, value);
@@ -191,23 +237,37 @@ function fieldRow(field, value, timeZone) {
     "div",
     { class: "field" },
     h("label", { class: "field-label", attrs: { for: id }, text: field.label }),
-    h("div", { class: "field-control" }, input, zone, list),
+    h("div", { class: "field-control" }, input, field.unit !== undefined && h("span", { class: "field-unit", text: field.unit }), zone, list),
+    field.hint && h("p", { class: "field-hint", attrs: { id: hintId }, text: field.hint }),
     error,
   );
   return { field, input, row, error, list };
 }
 
-function setFieldError(entry, message) {
+export function setFieldError(entry, message) {
   entry.error.textContent = message || "";
   entry.error.hidden = !message;
   if (message) entry.input.setAttribute("aria-invalid", "true");
   else entry.input.removeAttribute("aria-invalid");
 }
 
+function limitError(field, value, t) {
+  if (typeof value === "number") {
+    if (field.min !== undefined && value < field.min) return t("form.tooSmall", { min: field.min });
+    if (field.max !== undefined && value > field.max) return t("form.tooBig", { max: field.max });
+  } else if (field.maxlength !== undefined && [...String(value)].length > field.maxlength) {
+    return t("form.tooLong", { max: field.maxlength });
+  }
+  return null;
+}
+
 function convertOne(field, text, timeZone, t) {
+  if (field.parse) return field.parse(text, t);
   if (field.type === "number") {
     const number = Number(text);
-    return Number.isFinite(number) ? { value: number } : { error: t("form.badNumber") };
+    if (!Number.isFinite(number)) return { error: t("form.badNumber") };
+    const error = limitError(field, number, t);
+    return error ? { error } : { value: number };
   }
   if (field.type === "datetime") {
     try {
@@ -216,24 +276,30 @@ function convertOne(field, text, timeZone, t) {
       return { error: t("form.badTime", { zone: timeZone }) };
     }
   }
-  return { value: text };
+  const error = limitError(field, text, t);
+  return error ? { error } : { value: text };
 }
 
 // Empty optional fields are left out of the request so the server applies its defaults.
-function convert(entries, timeZone, t) {
+export function convert(entries, timeZone, t) {
   const values = {};
   let valid = true;
   for (const entry of entries) {
-    const text = entry.input.value;
-    if (text === "") {
+    const text = readText(entry);
+    if (entry.field.type === "checkbox") {
+      const unticked = entry.field.required && text !== "true";
+      setFieldError(entry, unticked ? t("form.required") : "");
+      valid = valid && !unticked;
+      values[entry.field.name] = text === "true";
+    } else if (text === "") {
       if (entry.field.required) setFieldError(entry, t("form.required"));
       valid = valid && !entry.field.required;
-      continue;
+    } else {
+      const result = convertOne(entry.field, text, timeZone, t);
+      setFieldError(entry, result.error);
+      if (result.error) valid = false;
+      else values[entry.field.name] = result.value;
     }
-    const result = convertOne(entry.field, text, timeZone, t);
-    setFieldError(entry, result.error);
-    if (result.error) valid = false;
-    else values[entry.field.name] = result.value;
   }
   return valid ? values : null;
 }
@@ -241,17 +307,19 @@ function convert(entries, timeZone, t) {
 // Puts each 422 error beside its field; returns the lines for errors that match no field. A hidden
 // field's error could not be seen beside it, so it is one of those lines, under the field's label
 // (never its name), or alone when the field has none.
-function placeFieldErrors(entries, fieldErrors) {
+export function placeFieldErrors(entries, fieldErrors, ctx) {
   const byName = (hidden) => new Map(entries.filter((entry) => (entry.field.type === "hidden") === hidden).map((entry) => [entry.field.name, entry]));
   const shown = byName(false);
   const unseen = byName(true);
   const rest = [];
-  for (const { loc, msg } of fieldErrors) {
+  for (const problem of fieldErrors) {
+    const { loc } = problem;
     const name = loc.find((part) => shown.has(part));
     const hidden = unseen.get(loc.find((part) => unseen.has(part)));
-    if (name) setFieldError(shown.get(name), msg);
-    else if (hidden) rest.push(hidden.field.label ? `${hidden.field.label}: ${msg}` : msg);
-    else rest.push(`${loc.filter((part) => part !== "body").join(" › ")}: ${msg}`);
+    const what = problemText(ctx, problem);
+    if (name) setFieldError(shown.get(name), what);
+    else if (hidden) rest.push(hidden.field.label ? `${hidden.field.label}${ctx.t("validation.sep")}${what}` : what);
+    else rest.push(locatedText(ctx, problem));
   }
   return rest;
 }
@@ -264,7 +332,7 @@ function formEntries(fields, draft, zone, lang) {
   });
 }
 
-const rawValues = (entries) => Object.fromEntries(entries.map((entry) => [entry.field.name, entry.input.value]));
+const rawValues = (entries) => Object.fromEntries(entries.map((entry) => [entry.field.name, readText(entry)]));
 
 // On a lost session the form keeps its values (never a password) when they differ from what it
 // started with, or when it started from a restored draft.
@@ -273,12 +341,20 @@ export function worthKeeping(start, now) {
   return Object.keys(now).some((name) => now[name] !== start[name]);
 }
 
-function keepOnSessionLoss(form, draftKey, entries, restored) {
+// A part may keep its own draft: draft() gives plain data, restore(data) takes it back. A form with
+// such parts saves {fields, parts: {name: data}}; a draft of plain fields (older) restores as before.
+const partDrafts = (parts) => Object.fromEntries(parts.filter((part) => part.draft).map((part) => [part.name, part.draft()]));
+const packDraft = (parts, fields, partData) => (parts.some((part) => part.draft) ? { fields, parts: partData } : fields);
+const isPackedDraft = (draft) => Boolean(draft) && Object.hasOwn(draft, "fields") && Object.hasOwn(draft, "parts");
+
+function keepOnSessionLoss(form, draftKey, entries, restored, parts) {
   const secretNames = entries.filter((entry) => entry.field.type === "password").map((entry) => entry.field.name);
-  const start = restored ? null : stripSecrets(rawValues(entries), secretNames);
+  const read = () => ({ fields: stripSecrets(rawValues(entries), secretNames), data: partDrafts(parts) });
+  const start = restored ? null : read();
   registerDraftSaver(form, () => {
-    const now = stripSecrets(rawValues(entries), secretNames);
-    if (worthKeeping(start, now)) saveDraft(draftKey, now);
+    const now = read();
+    const same = start && JSON.stringify(start.data) === JSON.stringify(now.data);
+    if (!same || worthKeeping(start && start.fields, now.fields)) saveDraft(draftKey, packDraft(parts, now.fields, now.data));
   });
 }
 
@@ -297,11 +373,11 @@ function partOf(form, name) {
 // seconds; null empties the field); suggest(name, values) replaces a field's suggestions;
 // onChange(name, handler) calls handler(value) each time the person changes that field (not set).
 export function formControls(form) {
-  const get = (name) => partOf(form, name).entry.input.value;
+  const get = (name) => readText(partOf(form, name).entry);
   const set = (values) => {
     for (const [name, value] of Object.entries(values)) {
       const { entry, own } = partOf(form, name);
-      entry.input.value = initialText({ ...entry.field, value }, own.zone, own.lang);
+      writeText(entry, initialText({ ...entry.field, value }, own.zone, own.lang));
       setFieldError(entry, "");
     }
   };
@@ -318,20 +394,28 @@ export function formControls(form) {
   return { get, set, suggest, focus, onChange };
 }
 
-export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own }) {
+// parts: [{name, element, values(): object | null, placeErrors(problems): problems, draft?(), restore?(data)}] (a rowGroup is one).
+// Their elements follow the fields; their values merge into the submitted object (null blocks the
+// send); on a 422 each part places its own problems first, the form's fields get the rest.
+export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, ctx: own, parts = [] }) {
   const getCtx = () => contextOf(own);
   const me = getCtx().me;
   const zone = timeZone || (me && me.timezone) || "UTC";
   const draft = draftKey ? takeDraft(draftKey) : null;
-  const entries = formEntries(fields, draft, zone, getCtx().lang);
+  const packed = isPackedDraft(draft);
+  const entries = formEntries(fields, packed ? draft.fields : draft, zone, getCtx().lang);
+  for (const part of parts) if (packed && part.restore && draft.parts[part.name]) part.restore(draft.parts[part.name]);
   const secrets = entries.filter((entry) => entry.field.type === "password");
   const attempt = async () => {
     const ctx = getCtx();
     for (const entry of entries) setFieldError(entry, "");
     showStatus(status, [], "info");
-    const values = convert(entries, zone, ctx.t);
-    if (!values) return;
+    const own = convert(entries, zone, ctx.t);
+    const given = parts.map((part) => part.values());
+    if (!own || given.some((value) => value === null)) return;
+    const values = Object.assign({}, own, ...given);
     const raw = rawValues(entries);
+    const rowsNow = partDrafts(parts);
     const secretNames = secrets.map((entry) => entry.field.name);
     try {
       await onSubmit(values);
@@ -339,8 +423,8 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
     } catch (error) {
       handleFailure(error, ctx, {
         status,
-        keepDraft: () => draftKey && saveDraft(draftKey, stripSecrets(raw, secretNames)),
-        showValidation: (fieldErrors) => placeFieldErrors(entries, fieldErrors),
+        keepDraft: () => draftKey && saveDraft(draftKey, packDraft(parts, stripSecrets(raw, secretNames), rowsNow)),
+        showValidation: (fieldErrors, ctx) => placeFieldErrors(entries, parts.reduce((left, part) => part.placeErrors(left), fieldErrors), ctx),
       });
     }
   };
@@ -352,9 +436,9 @@ export function simpleForm({ fields, submitLabel, onSubmit, draftKey, timeZone, 
       for (const entry of secrets) entry.input.value = "";
     }
   };
-  const { form, status } = formFrame(submitLabel, entries.map((entry) => entry.row), run, getCtx);
+  const { form, status } = formFrame(submitLabel, [...entries.map((entry) => entry.row), ...parts.map((part) => part.element)], run, getCtx);
   formParts.set(form, { entries, zone, lang: getCtx().lang });
-  if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft));
+  if (draftKey) keepOnSessionLoss(form, draftKey, entries, Boolean(draft), parts);
   if (draft) showStatus(status, [getCtx().t("form.draftRestored")], "info");
   return form;
 }
@@ -387,7 +471,7 @@ export function jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx:
       handleFailure(error, ctx, {
         status,
         keepDraft: () => draftKey && saveDraft(draftKey, { text }),
-        showValidation: (fieldErrors) => placeFieldErrors([], fieldErrors),
+        showValidation: (fieldErrors, ctx) => placeFieldErrors([], fieldErrors, ctx),
       });
     }
   };

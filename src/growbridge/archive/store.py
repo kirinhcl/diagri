@@ -326,9 +326,13 @@ class Archive:
     def add_measurement(self, record: ManualMeasurement) -> None:
         with self.db.transaction():
             if record.corrects is not None:
-                known = self.db.one("SELECT 1 FROM measurements WHERE id = ?", (record.corrects,))
+                known = self.db.one(
+                    "SELECT experiment_id FROM measurements WHERE id = ?", (record.corrects,)
+                )
                 if known is None:
                     raise ValueError(f"cannot correct unknown measurement {record.corrects!r}")
+                if known["experiment_id"] != record.experiment_id:
+                    raise ValueError("cannot correct a measurement of another experiment")
             extra = {
                 "experiment_id": record.experiment_id,
                 "corrects": record.corrects,

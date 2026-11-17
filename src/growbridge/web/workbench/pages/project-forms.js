@@ -1,46 +1,21 @@
-// The write forms of the project page: start a round, set the budget, save a protocol, give a goal,
-// register a holdout. All but the first wait closed under "Edit…".
+// The write forms of the project page: start a round, set the budget, save a protocol, register a holdout.
+// Goals are set in the project conversation, not here. All but the first wait closed under "Edit…".
 import { hasDraft } from "../drafts.js";
 import { formatMoney, formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
-import { jsonEditor, simpleForm } from "../ui/forms.js";
+import { advancedJson, linesField } from "../ui/field-forms.js";
+import { simpleForm } from "../ui/forms.js";
 import { afterWrite } from "../ui/section.js";
+import { protocolForm, protocolSkeleton, versionRefusal } from "./protocol-form.js";
+
+const MAX_HOLDOUT_ITEMS = 50; // the server's HoldoutIn limits
+const MAX_HOLDOUT_CHARS = 100;
 
 // A write form closed under "Edit…"; it opens by itself when it brings back a draft not yet sent.
 function editFold(ctx, draftKey, build) {
   const open = hasDraft(draftKey);
   return h("details", { class: "edit-fold", attrs: { open } }, h("summary", { text: ctx.t("project.edit") }), build(draftKey));
-}
-
-// A minimal protocol that passes the server's checks (same shape as growbridge.sim.fixtures.make_protocol).
-export function protocolExample(projectId, number) {
-  return {
-    id: `protocol-${number}-${projectId.slice(-6)}`, // protocol ids are shared by all projects, so the suggestion carries a project mark
-    project_id: projectId,
-    version: 1,
-    question: "",
-    hypothesis: "",
-    crop: "lettuce",
-    batch: "batch-1",
-    treatments: [
-      { id: "control", name: "light 40 %", factors: { light: 40 } },
-      { id: "high", name: "light 70 %", factors: { light: 70 } },
-    ],
-    control_treatment_id: "control",
-    allocations: [
-      { round: 1, block: 1, unit: "tent-1", treatment_id: "high" },
-      { round: 2, block: 1, unit: "tent-1", treatment_id: "control" },
-      { round: 3, block: 2, unit: "tent-1", treatment_id: "control" },
-      { round: 4, block: 2, unit: "tent-1", treatment_id: "high" },
-    ],
-    randomization_seed: 20261118,
-    variables: ["canopy_area_growth"],
-    analysis: { primary_endpoint: "canopy_area_growth", target_effect: 0.15, method: "paired_block" },
-    stages: ["vegetative"],
-    rounds: 4,
-    blocks: 2,
-  };
 }
 
 // With no saved protocol the field is free text, so a refusal can still be tried and read.
@@ -75,35 +50,54 @@ export function budgetForm(ctx, project) {
   return editFold(ctx, `budget:${project.project_id}`, (draftKey) => simpleForm({ fields, submitLabel, onSubmit, draftKey, ctx }));
 }
 
+// A form with the whole JSON under "Advanced (JSON)". The fold keeps the old draft key (so an old JSON draft still comes back);
+// the form has its own. The editor opens by itself when either brings back a draft.
+// `open` is read before the form and the fold are built, because building them takes their drafts.
+const hasEditDraft = (jsonKey) => hasDraft(jsonKey) || hasDraft(`${jsonKey}-form`);
+function formWithJson(ctx, { open, jsonKey, lead, form, json }) {
+  const advanced = advancedJson({ ctx, draftKey: jsonKey, ...json });
+  return h("details", { class: "edit-fold", attrs: { open } }, h("summary", { text: ctx.t("project.edit") }), lead, form, advanced);
+}
+
 export function protocolEditor(ctx, project) {
   const submitLabel = ctx.t("project.protocols.save");
-  const value = protocolExample(project.project_id, (project.protocols || []).length + 1);
-  const onSubmit = async (protocol) => {
+  const post = async (protocol) => {
     const saved = await ctx.api.post("/protocols", { protocol }, { action: submitLabel });
     afterWrite(ctx, ctx.t("project.protocols.saved", { id: saved.protocol_id, version: saved.version }));
   };
-  const label = ctx.t("project.protocols.json");
-  return editFold(ctx, `protocol:${project.project_id}`, (draftKey) => jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx }));
-}
-
-export function goalEditor(ctx, project) {
-  const submitLabel = ctx.t("project.goals.submit");
-  const value = { project_id: project.project_id, goal: "", constraints: [] };
-  const onSubmit = async (goal) => {
-    await ctx.api.post("/goals", goal, { action: submitLabel });
-    afterWrite(ctx, ctx.t("project.goals.saved"));
+  // The fold reads the saved versions again before it sends: a stale page can never reuse a version.
+  const fromJson = async (protocol) => {
+    const fresh = await ctx.api.get(`/projects/${encodeURIComponent(project.project_id)}`);
+    const refusal = versionRefusal(ctx, fresh && fresh.protocols ? fresh.protocols : [], protocol);
+    if (refusal) throw refusal;
+    await post(protocol);
   };
-  const label = ctx.t("project.goals.json");
-  return editFold(ctx, `goal:${project.project_id}`, (draftKey) => jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx }));
+  const jsonKey = `protocol:${project.project_id}`;
+  const open = hasEditDraft(jsonKey);
+  const value = protocolSkeleton(project.project_id, project.protocols || []);
+  const form = protocolForm(ctx, { project, onSubmit: ({ protocol }) => post(protocol) });
+  const json = { label: ctx.t("project.protocols.json"), value, onSubmit: fromJson, submitLabel };
+  return formWithJson(ctx, { open, jsonKey, lead: null, form, json });
 }
 
+// Three lists, one batch or field per line; the server takes 1 to 50 of each, up to 100 characters per line.
 export function holdoutEditor(ctx, project) {
   const submitLabel = ctx.t("project.holdouts.register");
-  const value = { project_id: project.project_id, batch_ids: [], development_batch_ids: [], outcome_fields: [] };
-  const onSubmit = async (holdout) => {
-    await ctx.api.post("/holdouts", holdout, { action: submitLabel });
+  const list = (name, label) => linesField({ name, label, required: true, maxItems: MAX_HOLDOUT_ITEMS, maxItemLength: MAX_HOLDOUT_CHARS, hint: ctx.t("holdout.form.lineHint") });
+  const fields = [
+    list("batch_ids", ctx.t("project.holdouts.batches")),
+    list("development_batch_ids", ctx.t("project.holdouts.development")),
+    list("outcome_fields", ctx.t("project.holdouts.fields")),
+  ];
+  const post = async (body) => {
+    await ctx.api.post("/holdouts", body, { action: submitLabel });
     afterWrite(ctx, ctx.t("project.holdouts.saved"));
   };
-  const label = ctx.t("project.holdouts.json");
-  return editFold(ctx, `holdout:${project.project_id}`, (draftKey) => jsonEditor({ label, value, submitLabel, onSubmit, draftKey, ctx }));
+  const jsonKey = `holdout:${project.project_id}`;
+  const open = hasEditDraft(jsonKey);
+  const form = simpleForm({ fields, submitLabel, onSubmit: (values) => post({ project_id: project.project_id, ...values }), draftKey: `${jsonKey}-form`, ctx });
+  const value = { project_id: project.project_id, batch_ids: [], development_batch_ids: [], outcome_fields: [] };
+  const json = { label: ctx.t("project.holdouts.json"), value, onSubmit: post, submitLabel };
+  const lead = h("p", { class: "note", text: ctx.t("holdout.form.hint") });
+  return formWithJson(ctx, { open, jsonKey, lead, form, json });
 }

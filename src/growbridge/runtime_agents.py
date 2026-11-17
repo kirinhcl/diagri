@@ -8,9 +8,10 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from growbridge.agents.context import project_context
+from growbridge.agents.context import project_context, task_language
 from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.handlers import Deps, build_role_tools
+from growbridge.agents.handlers_common import local_time
 from growbridge.agents.llm import ModelClient
 from growbridge.agents.tools import ROLE_TOOLS, Tool
 from growbridge.archive.ids import new_id
@@ -44,6 +45,7 @@ def role_tools(runtime: Any, work_root: Path) -> dict[str, list[Tool]]:
         search=None,
         holdout=runtime.holdout,
         alerts=runtime.book,
+        timezone=runtime.settings.report_timezone,
     )
     return build_role_tools(deps)
 
@@ -103,12 +105,14 @@ def schedule_audits(runtime: Any) -> int:
     if any(t.trigger_event_id.startswith(prefix) for t in open_audits):
         return 0
     start, end = data_window(stage)
+    zone = runtime.settings.report_timezone
     task = ResearchTask(
         id=new_id("task"),
         project_id=stage.project_id,
         question=(
-            f"Audit stage {stage.stage_id} at {label}. Data window {start:.0f} to {end:.0f} "
-            "(epoch seconds). Compare the run sheet with the records since the last audit."
+            f"Audit stage {stage.stage_id} at {label}. Data window {local_time(start, zone)} to "
+            f"{local_time(end, zone)} ({zone}). "
+            "Compare the run sheet with the records since the last audit."
         ),
         owner_role=AUDIT_ROLE,
         budget=Budget(max_calls=AUDIT_MAX_CALLS, max_cost=1.0),
@@ -116,6 +120,7 @@ def schedule_audits(runtime: Any) -> int:
         correlation_id=new_id("audit"),
         input_refs=(f"{STAGE_REF}{stage.stage_id}",),
         deadline=now + AUDIT_DEADLINE_SECONDS,
+        language=task_language(None, runtime.tasks, stage.project_id),
     )
     stored = runtime.tasks.create(task)
     return int(stored.id == task.id)
@@ -130,11 +135,13 @@ def _report_failure(runtime: Any, task: ResearchTask, message: str, *, failed: b
     if task.owner_role != AUDIT_ROLE:
         code = f"agent_task_{outcome}"  # agent_task_failed / agent_task_attention
         params = {"task_id": task.id, "project_id": task.project_id, "role": task.owner_role}
-        runtime.alert("agent_task", task.id, message, code=code, params=params)
+        scope = ("project", task.project_id)
+        runtime.alert("agent_task", task.id, message, "critical", scope, code=code, params=params)
         return
     code = f"audit_task_{outcome}"  # audit_task_failed / audit_task_attention
     params = {"stage_id": _audit_stage(task), "task_id": task.id}
-    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning", code=code, params=params)
+    scope = _audit_scope(task)
+    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning", scope, code=code, params=params)
 
 
 def _audit_stage(task: ResearchTask) -> str | None:
@@ -147,6 +154,12 @@ def _audit_key(task: ResearchTask) -> str:
     """The failed-audit warning an audit task reports to: its stage's, or its own when it names
     no stage."""
     return audit_task_key(_audit_stage(task) or task.id)
+
+
+def _audit_scope(task: ResearchTask) -> tuple[str, str]:
+    """The stage the audit was for, or its project when it names no stage."""
+    stage = _audit_stage(task)
+    return ("stage", stage) if stage is not None else ("project", task.project_id)
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:
@@ -175,5 +188,5 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             _report_failure(runtime, task, f"model task {task.id} needs attention", failed=False)
         elif state is TaskState.DONE and task.owner_role == AUDIT_ROLE:
             # an audit that finished shows the stage's audits work again
-            runtime.resolve_alert(AUDIT_TASK, _audit_key(task))
+            runtime.resolve_alert(AUDIT_TASK, _audit_key(task), _audit_scope(task))
     return finished

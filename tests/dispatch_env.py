@@ -1,5 +1,8 @@
 """The dispatch tests' environment, shared by the dispatch and agent test packages."""
 
+import inspect
+
+import pytest
 from dispatch_helpers import make_task
 
 from growbridge.agents.budget import CallBudget
@@ -11,7 +14,7 @@ from growbridge.archive.models import Budget, Channel, RuleAction, RunSheet, Tim
 from growbridge.archive.store import Archive
 from growbridge.config import RoleModel
 from growbridge.planning.validate import validate_run_sheet
-from growbridge.ports import Actor
+from growbridge.ports import Actor, Denied
 from growbridge.sim.fixtures import make_protocol, make_run_sheet
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.tasks import TaskBoard
@@ -94,6 +97,21 @@ class Env:
         toolset = build_toolset(role, self.tools(deps)[role])
         with bind_task(bound):
             return await toolset.call(name, fields)
+
+    async def refusal(
+        self, role: str, name: str, deps: Deps | None = None, /, bound: str | None = None, **fields
+    ) -> Denied:
+        """The ``Denied`` a tool raises (the toolset text hides its reason, params)."""
+        tool = next(t for t in self.tools(deps)[role] if t.name == name)
+        given = fields.get("task_id")
+        task_id = bound or (given if isinstance(given, str) else self.task(role, "ev-refusal").id)
+        bound_field = {"task_id": task_id} if "task_id" in tool.input_model.model_fields else {}
+        args = tool.input_model.model_validate({**bound_field, **fields})
+        with bind_task(task_id), pytest.raises(Denied) as caught:
+            result = tool.handler(args)
+            if inspect.isawaitable(result):
+                await result
+        return caught.value
 
     async def invoke_unbound(self, role: str, name: str, deps: Deps | None = None, /, **fields):
         """Call a tool outside any dispatched run."""

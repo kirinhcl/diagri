@@ -179,6 +179,16 @@ def test_freeze_is_denied_while_clock_is_unsynced(archive, clock):
     assert archive.snapshots("exp-1") == ()
 
 
+def test_clock_unsynced_carries_no_params(archive, clock):
+    fill(archive, 10)
+    clock.synced = False
+
+    with pytest.raises(Denied) as caught:
+        freeze(archive, clock)
+
+    assert (caught.value.reason, caught.value.params) == ("clock_unsynced", {})
+
+
 def test_freeze_rejects_empty_or_reversed_window(archive, clock):
     with pytest.raises(ValueError):
         snap.freeze(archive, "exp-1", clock, START, START, **FREEZE)

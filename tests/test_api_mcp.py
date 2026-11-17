@@ -44,3 +44,107 @@ async def test_a_lone_surrogate_in_a_bridge_body_is_a_readable_422(bridge, setti
     assert response.status_code == 422
     assert response.json()["detail"][0]["loc"][-1] == "request_id"
     assert not device.commands
+
+
+def coded(response, status, detail, code, reason, params=None):
+    assert response.status_code == status
+    body = response.json()
+    assert body["detail"] == detail and isinstance(body["detail"], str)
+    assert (body["code"], body["reason"], body["params"]) == (code, reason, params or {})
+
+
+async def test_a_missing_bearer_is_not_signed_in(bridge, settings):
+    app = create_app(settings, bridge[0])
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get("/status", headers={"Authorization": "Bearer wrong"})
+    coded(response, 401, "Authentication required", "session", "not_signed_in")
+
+
+async def test_an_unknown_device_is_record_not_found(bridge, settings):
+    app = create_app(settings, bridge[0])
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/control/heater",
+            json={"request_id": "unknown-001", "level": 5},
+            headers={"Authorization": f"Bearer {settings.token}"},
+        )
+    coded(
+        response,
+        404,
+        "Unknown device",
+        "state",
+        "record_not_found",
+        {"record_kind": "device", "record_id": "heater"},
+    )
+
+
+async def test_a_plain_interlock_bridge_error_has_no_code(bridge, settings):
+    core, _ = bridge
+    core.interlock = True
+    app = create_app(settings, core)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.post(
+            "/pump",
+            json={"request_id": "pump-9001", "seconds": 1},
+            headers={"Authorization": f"Bearer {settings.token}"},
+        )
+    # a plain BridgeError (the interlock refusal): no code, reason null
+    coded(
+        response,
+        409,
+        "Pump off is unconfirmed; resolve before further controls",
+        None,
+        None,
+    )
+
+
+async def test_the_pump_off_unconfirmed_error_is_interlock_pump_unconfirmed(settings, bridge):
+    from growbridge.service import PumpOffUnconfirmed
+
+    app = create_app(settings, bridge[0])
+
+    @app.get("/boom")
+    async def boom():
+        raise PumpOffUnconfirmed("Pump off unconfirmed; check the pump physically")
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        response = await client.get("/boom")
+    coded(
+        response,
+        409,
+        "Pump off unconfirmed; check the pump physically",
+        "interlock",
+        "pump_unconfirmed",
+        {"device_id": None},
+    )
+
+
+async def test_old_clients_still_read_a_string_detail(bridge, settings):
+    app = create_app(settings, bridge[0])
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://testserver"
+    ) as client:
+        auth = {"Authorization": f"Bearer {settings.token}"}
+        bodies = [
+            (await client.get("/status")).json(),
+            (await client.get("/status", headers={"Authorization": "Bearer no"})).json(),
+            (
+                await client.post(
+                    "/control/heater", json={"request_id": "old-client-1", "level": 5}, headers=auth
+                )
+            ).json(),
+            (
+                await client.post(
+                    "/pump", json={"request_id": "old-client-2", "seconds": 6}, headers=auth
+                )
+            ).json(),
+        ]
+    assert all(isinstance(body["detail"], str) for body in bodies)

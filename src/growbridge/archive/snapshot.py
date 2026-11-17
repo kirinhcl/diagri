@@ -142,7 +142,12 @@ def freeze(
     rest to ``samples_untrusted.jsonl``; ``measurement_filter`` returning False leaves a
     measurement out (the count is recorded in the manifest)."""
     if not clock.synced:
-        raise Denied("clock_unsynced", "the clock is not synchronised; data cannot be frozen")
+        raise Denied(
+            "clock_unsynced",
+            "the clock is not synchronised; data cannot be frozen",
+            reason="clock_unsynced",
+            params={},
+        )
     if end <= start:
         raise ValueError("snapshot window must have end > start")
     catalog = catalog or packaged_catalog()

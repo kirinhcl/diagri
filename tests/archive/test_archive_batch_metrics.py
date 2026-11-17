@@ -50,8 +50,10 @@ def test_a_measurement_without_a_batch_matches_any_batch(archive):
 
 
 def test_a_corrected_measurement_still_matches_and_so_does_its_correction(archive):
+    # a correction stays in its experiment; exp-2 holds an uncorrected outcome of the same batch
     archive.add_measurement(row("m1", experiment="exp-1"))
-    archive.add_measurement(row("m2", experiment="exp-2", corrects="m1"))
+    archive.add_measurement(row("m2", experiment="exp-1", corrects="m1"))
+    archive.add_measurement(row("m3", experiment="exp-2"))
 
     assert archive.batch_metrics(("b3",)) == (("exp-1", "yield_g"), ("exp-2", "yield_g"))
 

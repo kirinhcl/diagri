@@ -29,12 +29,14 @@ from growbridge.research.preregistration import (
 )
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import Ident, PathId
+from growbridge.workbench.scope import project_read, project_write
+from growbridge.workflow.access import Access
 from growbridge.workflow.service import WorkflowService
 
 OUTPUT_LIMIT = 4000
 STARTED = (
     "a confirmatory analysis must be frozen before outcome data is seen: a stage of this"
-    " protocol version has already started (architecture doc §6.5)"
+    " protocol version has already started"
 )
 FROZEN_NOTE = (
     "The script is frozen and cannot be corrected afterwards; to change the analysis, save the "
@@ -76,13 +78,23 @@ class AnalysisRoutes:
     def protocol(self, protocol_id: str, project_id: str) -> ResearchProtocol:
         found = self.workflow.store.latest_protocol(protocol_id, project_id)
         if found is None:
-            raise Denied("state", f"no protocol {protocol_id} in project {project_id}")
+            raise Denied(
+                "state",
+                f"no protocol {protocol_id} in project {project_id}",
+                reason="protocol_not_found",
+                params={"protocol_id": protocol_id, "project_id": project_id},
+            )
         return found
 
     def freeze(self, protocol_id: str, body: FreezeIn, actor: Actor) -> dict:
         protocol = self.protocol(protocol_id, body.project_id)
         if self.workflow.store.protocol_started(protocol.id, protocol.version):
-            raise Denied("state", STARTED)
+            raise Denied(
+                "state",
+                STARTED,
+                reason="analysis_freeze_too_late",
+                params={"protocol_id": protocol.id, "version": protocol.version},
+            )
         self.require_no_data_yet(protocol)
         self.runner.freeze_analysis(protocol, body.script.encode("utf-8"), actor.id)
         info = self.runner.frozen_info(protocol)
@@ -136,6 +148,8 @@ class AnalysisRoutes:
                 raise Denied(
                     "state",
                     f"experiment {experiment} already has a snapshot or a measurement: {RULE}",
+                    reason="analysis_freeze_too_late",
+                    params={"protocol_id": protocol.id, "version": protocol.version},
                 )
 
     def snapshot_of(
@@ -145,23 +159,40 @@ class AnalysisRoutes:
 
         The version comes from the rounds that have a stage for the snapshot's experiment, not
         from the latest saved version. An experiment shared by rounds of more than one version
-        (or of another protocol) is ambiguous and refused.
+        (or of another protocol) is ambiguous and refused. Protocols are stored by id and version,
+        so another project may hold other versions of the same id: a snapshot of another
+        project's experiment is refused as one of another protocol, since its version, frozen
+        script and holdout are that project's.
         """
         snap = self.archive.snapshot(snapshot_id)
-        versions = (
-            () if snap is None else self.workflow.store.protocol_versions_of(snap.experiment_id)
-        )
+        store = self.workflow.store
+        versions = () if snap is None else store.protocol_versions_of(snap.experiment_id)
         mine = [version for protocol_id, version in versions if protocol_id == line.id]
-        if snap is None or not mine:
-            raise Denied("scope", f"snapshot {snapshot_id} is not a snapshot of this protocol")
+        ours = snap is not None and line.project_id in store.projects_of_experiment(
+            snap.experiment_id
+        )
+        if snap is None or not mine or not ours:
+            raise Denied(
+                "scope",
+                f"snapshot {snapshot_id} is not a snapshot of this protocol",
+                reason="not_this_protocol",
+                params={"protocol_id": line.id},
+            )
         if len(versions) > 1:
             raise Denied(
                 "scope",
                 f"the experiment of snapshot {snapshot_id} belongs to rounds of more than one "
                 "protocol version",
+                reason="mixed_protocol",
+                params={},
             )
         if self.archive.is_invalid(snap.id):
-            raise Denied("state", f"snapshot {snap.id} was invalidated by a later correction")
+            raise Denied(
+                "state",
+                f"snapshot {snap.id} was invalidated by a later correction",
+                reason="snapshot_invalidated",
+                params={"snapshot_id": snap.id},
+            )
         protocol = self.workflow.store.protocol(line.id, mine[0])
         assert protocol is not None  # a round runs it
         return snap, protocol
@@ -171,7 +202,12 @@ class AnalysisRoutes:
         snap, protocol = self.snapshot_of(line, body.snapshot_id)
         info = self.runner.frozen_info(protocol)
         if info is None or self.runner.frozen_script(protocol) is None:
-            raise Denied("state", "no analysis script is frozen for this protocol version")
+            raise Denied(
+                "state",
+                "no analysis script is frozen for this protocol version",
+                reason="analysis_script_not_frozen",
+                params={"protocol_id": protocol.id, "version": protocol.version},
+            )
         starts = self.workflow.store.stage_starts(snap.experiment_id)
         require_stages_after(info.frozen_at, snap.id, starts)
         directory = self.archive.root / "snapshots" / snap.id
@@ -201,15 +237,29 @@ def add_analysis_routes(
     archive: Archive,
     runner: ConfirmatoryRunner,
     holdout: HoldoutRegistry | None = None,
+    *,
+    access: Access | None = None,
 ) -> None:
     """Mount the routes on ``router``; ``operator`` and ``fresh`` are the workbench's operator
     dependencies (``fresh`` also asks for a recent re-authentication)."""
+
+    def owned(actor: Actor, protocol_id: str, project_id: str, write: bool = True) -> None:
+        unknown = Denied(  # as ``protocol`` answers a protocol that is not in the project
+            "state",
+            f"no protocol {protocol_id} in project {project_id}",
+            reason="protocol_not_found",
+            params={"protocol_id": protocol_id, "project_id": project_id},
+        )
+        check = project_write if write else project_read
+        check(access, actor, project_id, lambda: unknown)
+
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
     Fresh = Annotated[Actor, Depends(fresh)]  # noqa: N806
     routes = AnalysisRoutes(workflow, archive, runner, holdout)
 
     @router.post("/protocols/{protocol_id}/analysis")
     async def freeze_script(protocol_id: PathId, body: FreezeIn, actor: Fresh):
+        owned(actor, protocol_id, body.project_id)
         return routes.freeze(protocol_id, body, actor)
 
     @router.get("/protocols/{protocol_id}/analysis")
@@ -218,8 +268,10 @@ def add_analysis_routes(
         project_id: Annotated[str, Query(min_length=1, max_length=100)],
         actor: Operator,
     ):
+        owned(actor, protocol_id, project_id, write=False)
         return routes.state(protocol_id, project_id)
 
     @router.post("/analysis/runs")
     async def start_run(body: RunIn, actor: Fresh):
+        owned(actor, body.protocol_id, body.project_id)
         return await routes.start(body, actor)

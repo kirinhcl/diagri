@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -60,22 +61,23 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
     stages = Stages(clock.now() if started else None, state)
     book = AlertBook(db, clock)
 
-    def resolve_alert(kind, key):
+    def resolve_alert(kind, key, scope=None):
         # Runtime.resolve_alert's contract: never raises, False when not stored
         try:
-            book.resolve(kind, key)
+            book.resolve(kind, key, scope)
         except Exception:
             return False
         return True
 
     return SimpleNamespace(
+        settings=SimpleNamespace(report_timezone="UTC"),
         workflow=stages,
         tasks=board,
         budget=calls,
         clock=clock,
         book=book,
-        alert=lambda kind, key, message, severity="critical", *, code=None, params=None: (
-            book.raise_alert(kind, key, severity, message, code=code, params=params)
+        alert=lambda kind, key, message, severity="critical", scope=None, **fields: (
+            book.raise_alert(kind, key, severity, message, scope, **fields)
         ),
         resolve_alert=resolve_alert,
     )
@@ -334,3 +336,40 @@ async def test_another_roles_failing_task_is_still_a_critical_agent_task_alert(d
 def test_an_audit_has_eight_model_calls_by_default():
     # raised from 6 after the final review, to leave slack for a refused or repeated call
     assert AUDIT_MAX_CALLS == 8
+
+
+def test_an_audit_uses_the_projects_latest_goal_language_or_chinese(db):
+    runtime = rig(db)
+    runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+    schedule_audits(runtime)
+    (first_audit,) = audits(runtime)
+    runtime.tasks.transition(first_audit.id, TaskState.DONE, "done-1")
+    runtime.tasks.create(
+        make_task("orchestrator", "goal:p1:alice:1", project_id=PROJECT, language="en")
+    )
+    runtime.tasks.create(
+        make_task("orchestrator", "goal:other:alice:1", project_id="other", language="zh")
+    )
+    runtime.clock.wall += AUDIT_DAY_SECONDS
+    schedule_audits(runtime)
+
+    first, second = (t for t in audits(runtime) if t.owner_role == "auditor")
+
+    assert (first.language, second.language) == ("zh", "en")
+
+
+def test_an_audit_question_has_no_epoch_seconds_and_says_the_window_in_local_time(db):
+    runtime = rig(db)
+    runtime.settings.report_timezone = "Europe/Helsinki"
+    runtime.clock.wall += AUDIT_DAY_SECONDS + 5
+    schedule_audits(runtime)
+
+    (task,) = audits(runtime)
+
+    assert not re.search(r"\b\d{10}(\.\d+)?\b", task.question)
+    assert re.search(
+        r"Data window \d{4}-\d{2}-\d{2} \d{2}:\d{2} to \d{4}-\d{2}-\d{2} \d{2}:\d{2} "
+        r"\(Europe/Helsinki\)",
+        task.question,
+    )
+    assert STAGE in task.question and "stage day 1" in task.question

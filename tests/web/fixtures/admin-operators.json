@@ -1,0 +1,48 @@
+{
+  "operators": [
+    {
+      "name": "dev",
+      "role": "admin",
+      "created_at": 1794800000.0,
+      "disabled_at": null,
+      "unfinished_stages": 0
+    },
+    {
+      "name": "alice",
+      "role": "user",
+      "created_at": 1794800100.0,
+      "disabled_at": null,
+      "unfinished_stages": 1
+    },
+    {
+      "name": "bob",
+      "role": "user",
+      "created_at": 1794800200.0,
+      "disabled_at": 1794810000.0,
+      "unfinished_stages": 0
+    }
+  ],
+  "events": [
+    {
+      "name": "alice",
+      "action": "reset_secret",
+      "actor": "dev",
+      "detail": null,
+      "at": 1794810100.0
+    },
+    {
+      "name": "bob",
+      "action": "disable",
+      "actor": "dev",
+      "detail": null,
+      "at": 1794810000.0
+    },
+    {
+      "name": "dev",
+      "action": "add",
+      "actor": null,
+      "detail": "admin",
+      "at": 1794800000.0
+    }
+  ]
+}

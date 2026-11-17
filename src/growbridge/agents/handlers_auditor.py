@@ -15,6 +15,7 @@ from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
     clip,
+    local_time,
     require_bound,
     require_stage_project,
 )
@@ -41,9 +42,21 @@ class FindingInput(ToolInput):
     task_id: str
     stage_id: str
     severity: Literal["info", "warning"]
-    summary: str = Field(min_length=1, max_length=MAX_LINE)
+    summary: str = Field(
+        min_length=1,
+        max_length=MAX_LINE,
+        description=(
+            "One sentence for the operator under the writing rules: the problem "
+            "and what to do about it, with no ids or field names."
+        ),
+    )
     evidence: tuple[Annotated[str, Field(max_length=MAX_LINE)], ...] = Field(
-        default=(), max_length=MAX_EVIDENCE
+        default=(),
+        max_length=MAX_EVIDENCE,
+        description=(
+            "One fact per item, written for the operator under the "
+            "writing rules: plain words, local times, no ids or field names."
+        ),
     )
 
 
@@ -52,7 +65,12 @@ def _started_stage(deps: Deps, task_id: str, stage_id: str):
     require_stage_project(deps, stage_id)
     stage = deps.workflow.stage(stage_id)
     if stage.started_at is None:
-        raise Denied("state", f"stage {stage_id} never started; there is no data yet")
+        raise Denied(
+            "state",
+            f"stage {stage_id} never started; there is no data yet",
+            reason="stage_not_started",
+            params={"stage_id": stage_id},
+        )
     return stage
 
 
@@ -80,6 +98,7 @@ def _task_rows(deps: Deps, stage, start: float, end: float) -> tuple[list[dict],
             "task_id": item.task_id,
             "kind": item.kind,
             "due_at": item.due_at,
+            "due_at_local": local_time(item.due_at, deps.timezone),
             "status": state,
             "record": None if record is None else record.model_dump(mode="json"),
         }
@@ -94,7 +113,9 @@ def _kept_measurements(deps: Deps, stage) -> list:
     return [m for m in deps.archive.measurements(stage.experiment_id) if keep is None or keep(m)]
 
 
-def _measurement_rows(kept: list, start: float, end: float) -> tuple[list[dict], int, int]:
+def _measurement_rows(
+    kept: list, start: float, end: float, timezone: str
+) -> tuple[list[dict], int, int]:
     """``(rows, left out by the list limit, timed before the stage)``. Every stage of a round
     shares one experiment, so a measurement timed before this stage started is an earlier
     stage's: it is counted, not listed."""
@@ -105,6 +126,7 @@ def _measurement_rows(kept: list, start: float, end: float) -> tuple[list[dict],
             "metric": m.metric,
             "value": m.value,
             "measured_at": m.measured_at,
+            "measured_at_local": local_time(m.measured_at, timezone),
             "in_window": m.measured_at <= end + MEASUREMENT_GRACE_SECONDS,
         }
         for m in found[-MAX_LISTED:]
@@ -117,11 +139,11 @@ def _open_alerts(deps: Deps, stage_id: str, kept_ids: set[str]) -> list[dict]:
     one about a measurement that is not in ``kept_ids`` (a held-out outcome) is left out."""
     if deps.alerts is None:
         return []
-    prefix = f"{stage_id}:"
+    prefix, scope = f"{stage_id}:", ("stage", stage_id)
     return [
         {"kind": a.kind, "key": a.key, "severity": a.severity, "message": clip(a.message, 600)}
         for a in deps.alerts.open()
-        if (a.key == stage_id or a.key.startswith(prefix))
+        if a.scope == scope  # by the stage it was raised for, never by a key prefix
         and (a.kind != OUTSIDE_WINDOW or a.key[len(prefix) :] in kept_ids)
     ]
 
@@ -131,15 +153,18 @@ def stage_records(deps: Deps, data: StageInput) -> dict:
     start, end = data_window(stage)
     tasks, tasks_left_out = _task_rows(deps, stage, start, end)
     kept = _kept_measurements(deps, stage)
-    measurements, measurements_left_out, before = _measurement_rows(kept, start, end)
+    measurements, measurements_left_out, before = _measurement_rows(kept, start, end, deps.timezone)
     return {
         "stage": {
             "id": stage.stage_id,
             "state": stage.state.value,
             "started_at": stage.started_at,
+            "started_at_local": local_time(stage.started_at, deps.timezone),
             "ended_at": stage.ended_at,
+            "ended_at_local": local_time(stage.ended_at, deps.timezone),
         },
         "window": [start, end],
+        "window_local": [local_time(start, deps.timezone), local_time(end, deps.timezone)],
         "run_sheet": _run_sheet(stage),
         "manual_tasks": tasks,
         "manual_tasks_left_out": tasks_left_out,
@@ -154,7 +179,12 @@ def raise_finding(deps: Deps, data: FindingInput) -> dict:
     require_bound(deps, data.task_id)
     require_stage_project(deps, data.stage_id)
     if deps.alerts is None:
-        raise Denied("state", "no alert book is available; the finding cannot be recorded")
+        raise Denied(
+            "state",
+            "no alert book is available; the finding cannot be recorded",
+            reason="alert_book_unavailable",
+            params={},
+        )
     key = f"{data.stage_id}:{sha256(data.summary.encode()).hexdigest()[:12]}"
     message = "\n".join((data.summary, *data.evidence))
     params = {
@@ -162,8 +192,9 @@ def raise_finding(deps: Deps, data: FindingInput) -> dict:
         "summary": data.summary,
         "evidence": list(data.evidence),
     }
+    scope = ("stage", data.stage_id)
     alert = deps.alerts.raise_alert(
-        AUDIT_FINDING, key, data.severity, message, code="audit_finding", params=params
+        AUDIT_FINDING, key, data.severity, message, scope, code="audit_finding", params=params
     )
     return {"raised": True, "kind": AUDIT_FINDING, "key": key, "event_id": alert.event_id}
 
