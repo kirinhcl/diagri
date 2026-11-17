@@ -28,11 +28,22 @@ class Site(NamedTuple):
     line: int
     code: str | None
     reason: str | None
+    keys: frozenset[str] | None = None  # the keys of a literal ``params={...}``, if there is one
 
 
 def _literal(node: ast.expr) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
+    return None
+
+
+def literal_keys(call: ast.Call) -> frozenset[str] | None:
+    """The keys of the call's ``params={...}`` when it is a dict literal of plain string keys."""
+    for keyword in call.keywords:
+        value = keyword.value
+        if keyword.arg == "params" and isinstance(value, ast.Dict):
+            keys = [_literal(k) if k is not None else None for k in value.keys]
+            return None if None in keys else frozenset(k for k in keys if k)
     return None
 
 
@@ -52,20 +63,34 @@ def refusal_sites(root: Path) -> list[Site]:
                 "param" if called == "rejected" else (_literal(node.args[0]) if node.args else None)
             )
             reason = next((_literal(k.value) for k in node.keywords if k.arg == "reason"), None)
-            found.append(Site(path.relative_to(root).as_posix(), node.lineno, code, reason))
+            found.append(
+                Site(
+                    path.relative_to(root).as_posix(), node.lineno, code, reason, literal_keys(node)
+                )
+            )
+    return found
+
+
+def coded_http_sites(root: Path) -> list[tuple[str, str | None, str | None]]:
+    """(file, literal ``code=``, literal ``reason=``) of every ``CodedHTTPError(...)`` call."""
+    found: list[tuple[str, str | None, str | None]] = []
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "CodedHTTPError":
+                literals = {k.arg: _literal(k.value) for k in node.keywords}
+                found.append(
+                    (
+                        path.relative_to(root).as_posix(),
+                        literals.get("code"),
+                        literals.get("reason"),
+                    )
+                )
     return found
 
 
 def coded_http_reasons(root: Path) -> set[str]:
     """The literal ``reason=`` of every ``CodedHTTPError(...)`` call under ``root``."""
-    found: set[str] = set()
-    for path in sorted(root.rglob("*.py")):
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "CodedHTTPError":
-                found |= {
-                    r for k in node.keywords if k.arg == "reason" and (r := _literal(k.value))
-                }
-    return found
+    return {reason for _, _, reason in coded_http_sites(root) if reason}
 
 
 def sent_elsewhere() -> set[str]:
@@ -148,3 +173,39 @@ def test_every_refusal_names_a_registered_reason_of_its_code() -> None:
 def test_every_registered_reason_is_sent_somewhere() -> None:
     sent = {s.reason for s in refusal_sites(SRC)} | sent_elsewhere()
     assert set(DENIAL_CODES) <= sent
+
+
+def test_a_literal_params_dict_has_exactly_the_keys_the_registry_lists() -> None:
+    for site in refusal_sites(SRC):
+        if site.reason in DENIAL_CODES and site.keys is not None:
+            assert site.keys == set(DENIAL_CODES[site.reason].params), site
+
+
+def test_a_coded_http_error_has_the_code_its_reason_refines() -> None:
+    sites = coded_http_sites(SRC)
+    assert sites, "the root app sends coded errors"
+    for path, code, reason in sites:
+        assert reason in DENIAL_CODES, (path, reason)
+        assert code == DENIAL_CODES[reason].of, (path, code, reason)
+
+
+def test_registering_a_reason_twice_is_refused_and_leaves_the_first_in_place(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from growbridge.denial_codes import _register
+
+    monkeypatch.setitem(DENIAL_CODES, "demo_twice", Code(("a",), of="state"))
+    with pytest.raises(ValueError, match="demo_twice"):
+        _register("scope", ("demo_twice", ("b",)))
+    assert DENIAL_CODES["demo_twice"] == Code(("a",), of="state")
+
+
+def test_rejected_logs_a_reason_under_another_code_or_with_other_params_and_still_answers(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    wrong_code = rejected("m", reason="stage_not_pausable", params={"stage_id": "s", "state": "x"})
+    wrong_params = rejected("m", reason="id_length", params={"surprise": 1})
+
+    assert wrong_code.status_code == wrong_params.status_code == 422
+    assert "stage_not_pausable is registered under state, not param" in caplog.text
+    assert "id_length" in caplog.text and "surprise" in caplog.text

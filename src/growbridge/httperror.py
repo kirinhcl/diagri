@@ -5,6 +5,8 @@ registered ``reason`` and the ``params`` beside it, at the top level."""
 
 from collections.abc import Mapping
 
+from .jsonsafe import json_safe
+
 
 class CodedHTTPError(Exception):
     def __init__(
@@ -25,8 +27,8 @@ class CodedHTTPError(Exception):
 
     def body(self) -> dict[str, object]:
         return {
-            "detail": self.message,
+            "detail": json_safe(self.message),
             "code": self.code,
             "reason": self.reason,
-            "params": self.params,
+            "params": json_safe(self.params),
         }

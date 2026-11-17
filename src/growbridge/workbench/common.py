@@ -6,6 +6,9 @@ from collections.abc import Mapping
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict
 
+from growbridge.codes import checked_denial
+from growbridge.jsonsafe import json_safe
+
 REQUEST_ID = r"^[a-zA-Z0-9_-]{8,100}$"
 UNPROCESSABLE = 422
 
@@ -13,7 +16,13 @@ UNPROCESSABLE = 422
 def rejected(
     message: str, *, reason: str | None = None, params: Mapping[str, object] | None = None
 ) -> HTTPException:
-    detail = {"code": "param", "reason": reason, "params": dict(params or {}), "message": message}
+    carried = checked_denial("param", reason, params or {}) if reason else dict(params or {})
+    detail = {
+        "code": "param",
+        "reason": reason,
+        "params": json_safe(carried),
+        "message": json_safe(message),
+    }
     return HTTPException(UNPROCESSABLE, detail=detail)
 
 

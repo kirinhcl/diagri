@@ -29,6 +29,7 @@ from growbridge.archive.models import (
 from growbridge.archive.store import Archive
 from growbridge.compute.service import ComputeService
 from growbridge.config import Settings
+from growbridge.jsonsafe import json_safe
 from growbridge.observer.alerts import AlertBook
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -142,8 +143,8 @@ def refusal(error: Denied, status: int | None = None) -> JSONResponse:
             "detail": {
                 "code": error.code,
                 "reason": error.reason,
-                "params": error.params,
-                "message": str(error),
+                "params": json_safe(error.params),
+                "message": json_safe(str(error)),
             }
         },
     )
