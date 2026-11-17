@@ -93,9 +93,27 @@ export function rowGroup({ ctx, name, label, fields, rows = [], addLabel, remove
   return { name, element, values, rows: rowValues, setRows, placeErrors, draft, restore };
 }
 
+const findByClass = (node, name) => {
+  if (node.classList && node.classList.contains(name)) return node;
+  for (const child of node.children || []) {
+    const found = findByClass(child, name);
+    if (found) return found;
+  }
+  return null;
+};
+
 // The existing JSON editor, tucked under a closed fold (open only when it brings back a draft).
+// fold.refresh(value) puts a new start text in, unless the person has typed unsent edits there.
 export function advancedJson({ ctx, label, value, onSubmit, draftKey, submitLabel }) {
   const open = Boolean(draftKey) && hasDraft(draftKey);
   const editor = jsonEditor({ label, value, submitLabel: submitLabel || ctx.t("forms.advancedSubmit"), onSubmit, draftKey, ctx });
-  return h("details", { class: "edit-fold", attrs: { open } }, h("summary", { text: ctx.t("forms.advanced") }), editor);
+  const fold = h("details", { class: "edit-fold", attrs: { open } }, h("summary", { text: ctx.t("forms.advanced") }), editor);
+  const area = findByClass(editor, "input-code");
+  let start = area.value;
+  fold.refresh = (next) => {
+    if (area.value !== start) return;
+    start = JSON.stringify(next ?? {}, null, 2);
+    area.value = start;
+  };
+  return fold;
 }

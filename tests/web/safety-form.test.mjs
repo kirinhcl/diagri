@@ -318,6 +318,7 @@ test("rule rows survive a lost session", async () => {
   fillRow(rowsOf(form)[0]);
   document.body.append(first.element);
   assert.ok(saveAllDrafts() >= 1);
+  first.element.remove();
   const second = await open(NONE);
   const [row] = rowsOf(formOf(second.element));
   assert.equal(named(row, "sensor")[0].value, "humi");
@@ -331,4 +332,72 @@ test("the empty choice of a select says Choose, and the level takes whole steps"
   const [row] = rowsOf(element);
   for (const name of ["sensor", "op", "channel"]) assert.equal(byTag(named(row, name)[0], "option")[0].textContent, "Choose…");
   assert.equal(named(row, "level")[0].getAttribute("step"), "1");
+});
+
+const foldOf = (element) => byClass(element, "edit-fold")[0];
+const sendFold = async (element, edit) => {
+  const area = byTag(foldOf(element), "textarea")[0];
+  area.value = JSON.stringify(edit(JSON.parse(area.value)));
+  await submit(byTag(foldOf(element), "form")[0]);
+};
+
+test("a raw dialog line names the rule that changed, not the first one", async () => {
+  const { element } = await open({ fixtures: approvedWith([rule("one-a", "temp", "light"), rule("two-b", "humi", "fan")]) });
+  await sendFold(element, (config) => {
+    config.rules[1].sensor = "mystery";
+    config.rules[1].extra = 2;
+    return config;
+  });
+  const text = openDialogs()[0].textContent;
+  assert.match(text, /rules\[1\]\.sensor/);
+  assert.match(text, /rules\[1\]\.extra/);
+  assert.doesNotMatch(text, /rules\[0\]/);
+  answerNextDialog(false);
+  await settle();
+});
+
+test("a second approval through the fold sends the next version, and typed edits in the fold are kept", async () => {
+  const { element, ctx } = await open();
+  let approved = FIXTURES["safety.json"].safety;
+  const read = ctx.api.get;
+  const write = ctx.api.post;
+  ctx.api.get = async (path) => (path === "/safety" ? { safety: structuredClone(approved) } : read(path));
+  ctx.api.post = async (path, body, options) => {
+    approved = { ...body.config, approved_by: "dev", approved_at: 1794800000 };
+    return write(path, body, options);
+  };
+  change(named(formOf(element), "temp")[0], "100");
+  await approveNow(formOf(element));
+  const area = byTag(foldOf(element), "textarea")[0];
+  assert.equal(JSON.parse(area.value).version, 3, "the fold now starts from the approved set");
+  await submit(byTag(foldOf(element), "form")[0]);
+  answerNextDialog(true);
+  await settle();
+  const posts = ctx.api.calls.filter((call) => call.method === "POST");
+  assert.deepEqual(posts.map((call) => call.body.config.version), [2, 3]);
+  area.value = "{ typed";
+  await submit(formOf(element));
+  assert.equal(area.value, "{ typed", "unsent edits in the fold stay");
+  answerNextDialog(false);
+  await settle();
+});
+
+test("a set that changed between the two reads is never overwritten, and the refusal is shown", async () => {
+  const { element, ctx } = await open();
+  const read = ctx.api.get;
+  let reads = 0;
+  ctx.api.get = async (path) => {
+    const body = await read(path);
+    if (path !== "/safety") return body;
+    reads += 1;
+    return reads >= 2 ? { safety: { ...body.safety, version: 9, approved_at: 1794900000 } } : body;
+  };
+  const form = formOf(element);
+  await submit(form);
+  answerNextDialog(true);
+  await settle();
+  assert.equal(post(ctx), undefined);
+  const status = byClass(element, "form-status")[0];
+  assert.ok(!status.hidden);
+  assert.ok(status.textContent.includes(ctx.t("safety.changedMeanwhile")));
 });

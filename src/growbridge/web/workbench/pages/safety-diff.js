@@ -35,14 +35,16 @@ function ruleLines(sides, t) {
   lines.push(...was.filter((rule) => !now.some((fresh) => fresh.id === rule.id)).map((rule) => t("safety.diff.ruleRemoved", { rule: ruleSentence(t, rule) })));
   const common = (rules, other) => rules.filter((rule) => other.some((x) => x.id === rule.id)).map((rule) => rule.id);
   if (common(was, now).join("\n") !== common(now, was).join("\n")) lines.push(t("safety.diff.order"));
-  for (const rule of now) {
+  now.forEach((rule, index) => {
     const old = was.find((candidate) => candidate.id === rule.id);
-    if (!old) continue;
-    const alone = { before: { rules: [old] }, after: { rules: [rule] } };
+    if (!old) return;
+    // The rule keeps its real place in the path, so a raw line still points at the right rule.
+    const at = (value) => Object.assign(new Array(index + 1), { [index]: value });
+    const sideAt = { before: { rules: at(old) }, after: { rules: at(rule) } };
     for (const change of configDiff(old, rule)) {
-      lines.push(describeChange({ ...change, path: `rules[0].${change.path}` }, t, alone, formatValue));
+      lines.push(describeChange({ ...change, path: `rules[${index}].${change.path}` }, t, sideAt, formatValue));
     }
-  }
+  });
   return lines;
 }
 

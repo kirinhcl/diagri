@@ -97,15 +97,19 @@ function approver(ctx, state, outcome, readCurrent, refreshCurrent) {
   };
 }
 
+// The fold starts from the approved set with the next version number, so an unedited send never repeats a version.
+const foldValue = (current) => (current ? { ...current, version: current.version + 1 } : safetySkeleton());
+
 export async function render(ctx) {
   const state = { current: null };
-  const shown = { form: null };
+  const shown = { form: null, fold: null };
   const currentBox = h("div", { class: "safety-current" });
   const readCurrent = async () => {
     const data = await ctx.api.get("/safety");
     state.current = (data && data.safety) || null;
     clear(currentBox).append(currentView(ctx, state.current));
     if (shown.form && shown.form.showVersion) shown.form.showVersion(state.current);
+    if (shown.fold) shown.fold.refresh(foldValue(state.current));
   };
   const refreshCurrent = () =>
     readCurrent().catch((error) => ctx.notify(errorLines(error, ctx.lang, ctx.t, ctx).join(" "), "error"));
@@ -118,11 +122,12 @@ export async function render(ctx) {
   const advanced = advancedJson({
     ctx: editorCtx,
     label: ctx.t("safety.json"),
-    value: state.current || safetySkeleton(),
+    value: foldValue(state.current),
     submitLabel: ctx.t("safety.approve"),
     onSubmit: approve,
     draftKey: "safety",
   });
+  shown.fold = advanced;
   const lead = state.current ? note(ctx.t("safety.editLead")) : null;
   const element = h(
     "div",
