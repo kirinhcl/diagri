@@ -5,7 +5,7 @@ from compute_support import GOOD_PARAMS, INPUTS
 
 from growbridge.compute import service as service_module
 from growbridge.compute.backend import BackendError, OutputTooLarge
-from growbridge.compute.service import OUTPUT_LIMIT_MARK
+from growbridge.compute.errors import OUTPUT_LIMIT_MARK
 from growbridge.ports import Denied
 from growbridge.workflow.states import TaskState
 

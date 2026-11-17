@@ -157,7 +157,14 @@ def raise_finding(deps: Deps, data: FindingInput) -> dict:
         raise Denied("state", "no alert book is available; the finding cannot be recorded")
     key = f"{data.stage_id}:{sha256(data.summary.encode()).hexdigest()[:12]}"
     message = "\n".join((data.summary, *data.evidence))
-    alert = deps.alerts.raise_alert(AUDIT_FINDING, key, data.severity, message)
+    params = {
+        "stage_id": data.stage_id,
+        "summary": data.summary,
+        "evidence": list(data.evidence),
+    }
+    alert = deps.alerts.raise_alert(
+        AUDIT_FINDING, key, data.severity, message, code="audit_finding", params=params
+    )
     return {"raised": True, "kind": AUDIT_FINDING, "key": key, "event_id": alert.event_id}
 
 

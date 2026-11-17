@@ -12,7 +12,9 @@
         "message": "No backup_dir is configured: the databases are not being backed up",
         "count": 2,
         "last_at": 1794821385.612114,
-        "never_read": true
+        "never_read": true,
+        "code": "backup_unconfigured",
+        "params": {}
       }
     },
     {
@@ -27,7 +29,9 @@
         "message": "No notification channel is configured: alerts are not sent anywhere",
         "count": 2,
         "last_at": 1794821385.6131048,
-        "never_read": true
+        "never_read": true,
+        "code": "notify_unconfigured",
+        "params": {}
       }
     },
     {
@@ -42,6 +46,52 @@
         "message": "No external heartbeat is configured (GROWBRIDGE_HEARTBEAT_HOST_URL and GROWBRIDGE_HEARTBEAT_RUN_URL): nobody is told if this host or the run stops",
         "count": 2,
         "last_at": 1794821385.6133492,
+        "never_read": true,
+        "code": "monitor_unconfigured",
+        "params": {}
+      }
+    },
+    {
+      "kind": "alert",
+      "id": "alert_5a1e0000000000000000000000000001",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794800000.5,
+      "detail": {
+        "alert_kind": "stage_waiting",
+        "severity": "critical",
+        "message": "Stage stage:a-1 is paused after disconnect_affects: {'seconds': 600, 'reasons': ['pump_off', 'light_off']}",
+        "count": 1,
+        "last_at": 1794821000.5,
+        "never_read": true,
+        "code": "stage_waiting",
+        "params": {
+          "stage_id": "stage:a-1",
+          "entry_id": 7,
+          "state": "paused",
+          "event": "disconnect_affects",
+          "detail": {
+            "seconds": 600,
+            "reasons": [
+              "pump_off",
+              "light_off"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "kind": "alert",
+      "id": "alert_5a1e0000000000000000000000000004",
+      "project_id": null,
+      "round_id": null,
+      "since": 1794800000.5,
+      "detail": {
+        "alert_kind": "data_gap",
+        "severity": "info",
+        "message": "No readings for 20 min",
+        "count": 1,
+        "last_at": 1794821000.5,
         "never_read": true
       }
     },
@@ -58,6 +108,91 @@
       "detail": {
         "state": "pending_review",
         "device_id": "SIMULATED"
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796588800.0,
+      "detail": {
+        "attempt_id": "att_1a3c5e7f9b2d4f6a8c0e2a4c6e8a0c2e",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "reconcile",
+        "reason": "waiting for reconciliation: the outcome of the submit is unknown",
+        "reason_code": "reconcile_wait",
+        "reason_params": {
+          "age_seconds": 5400
+        }
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_2b4d6f8a0c2e4a6c8e0a2c4e6a8c0e2a",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796585200.0,
+      "detail": {
+        "attempt_id": "att_2b4d6f8a0c2e4a6c8e0a2c4e6a8c0e2a",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "queued",
+        "reason": "not refreshed for 7200 seconds",
+        "reason_code": "not_refreshed",
+        "reason_params": {
+          "age_seconds": 7200
+        }
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796587000.0,
+      "detail": {
+        "attempt_id": "att_3c5e7a9b1d3f5a7c9e1b3d5f7a9c1e3b",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "needs_review",
+        "reason": "error: output limit: the outputs total 9000000000 bytes, over the limit of 5000000000",
+        "reason_code": "error",
+        "reason_params": {},
+        "error_code": "output_limit",
+        "error_params": {
+          "limit_kind": "total",
+          "bytes": 9000000000,
+          "limit": 5000000000
+        }
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_4d6f8a0b2e4a6c8e0a2c4e6a8c0e2a4d",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796586000.0,
+      "detail": {
+        "attempt_id": "att_4d6f8a0b2e4a6c8e0a2c4e6a8c0e2a4d",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "fetching",
+        "reason": "error: scheduler unreachable",
+        "reason_code": "error",
+        "reason_params": {},
+        "error_code": "",
+        "error_params": {}
+      }
+    },
+    {
+      "kind": "compute_stuck",
+      "id": "att_5e7a9b1c3f5a7c9e1b3d5f7a9c1e3b5e",
+      "project_id": null,
+      "round_id": null,
+      "since": 1796584000.0,
+      "detail": {
+        "attempt_id": "att_5e7a9b1c3f5a7c9e1b3d5f7a9c1e3b5e",
+        "task_id": "task_3f1c9a7e5b2d4c8e9a0b1c2d3e4f5a6b",
+        "phase": "running",
+        "reason": "No result after 2 h on the cluster"
       }
     }
   ],

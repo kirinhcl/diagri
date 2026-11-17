@@ -50,6 +50,7 @@
 .data-table tbody tr:last-child td { border-bottom: 0; }
 .data-table tbody tr:hover td { background: color-mix(in srgb, var(--pale) 45%, var(--paper)); }
 .cell-stack { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.model-note { margin: 4px 0; padding-left: 12px; border-left: 3px solid var(--muted); }
 .text-link {
   font-weight: 600;
   color: var(--green);
@@ -125,7 +126,7 @@ code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.tech-copy { min-height: 28px; padding: 3px 10px; font-size: 12px; user-select: none; } /* not part of a selected list */
+.tech-copy { min-height: 28px; padding: 3px 10px; font-size: 12px; -webkit-user-select: none; user-select: none; } /* not part of a selected list */
 .form-status .tech-details { margin-top: 8px; }
 .wb-problem .tech-details { margin: 0 0 14px; }
 .activity-detail .tech-details { margin: 4px 0; }
@@ -243,6 +244,13 @@ code {
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }
+.chart-plan {
+  fill: none;
+  stroke: var(--muted-strong);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.chart-plan-key::before { content: "- - "; letter-spacing: 1px; }
 .chart-hit { fill: var(--green); opacity: 0; transition: opacity var(--fast); }
 .chart-hit:hover { opacity: 1; }
 .chart-lone { fill: var(--green); stroke: var(--paper); stroke-width: 1; vector-effect: non-scaling-stroke; }

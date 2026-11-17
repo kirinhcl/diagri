@@ -4,7 +4,7 @@ import test from "node:test";
 import { groupFindings, findingsList } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
 import { reviewView, sectionOrder } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { installFakeDom, FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
-import { assertNoLeaks, exemptStrings, visibleText } from "./support/leaks.mjs";
+import { assertNoLeaks, exemptStrings, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 
 installFakeDom();
 
@@ -121,4 +121,45 @@ test("every label of the run sheet's hash calls it a fingerprint, never a digest
     assert.match(en(key), /fingerprint/i, key);
     assert.doesNotMatch(en(key), /digest/i, key);
   }
+});
+
+const SENTENCE_FINDINGS = [
+  { code: "manual_task", blocking: false, message: "manual irrigation irrigate-daily needs the user at 09:00", variant: "irrigation", params: { task_id: "irrigate-daily", at_local: "09:00", seconds: 20 } },
+  { code: "manual_task", blocking: false, message: "manual photo canopy-photo needs the user at 10:00", variant: "", params: { task_kind: "photo", task_id: "canopy-photo", at_local: "10:00" } },
+];
+
+test("each finding reads as a sentence and its group says how to fix it once", () => {
+  const ctx = testCtx({ lang: "en" });
+  const node = findingsList(ctx, SENTENCE_FINDINGS);
+  const text = visibleText(node);
+  assert.match(text, /Someone must be on site every day at 09:00 to start a/);
+  assert.match(text, /Photo task: someone must be on site every day at 10:00\./);
+  assert.ok(!text.includes("irrigate-daily") && !text.includes("manual irrigation"));
+  assert.equal(text.split(ctx.t("stage.review.howToFix")).length - 1, 1);
+  assert.match(text, /How to fix:/);
+  const all = visibleTextIncludingDetails(node);
+  assert.ok(all.includes("irrigate-daily") && all.includes("manual photo canopy-photo needs the user at 10:00"));
+  assert.ok(all.includes("manual_task.irrigation"));
+});
+
+test("a finding the catalog lacks says unknown and keeps the server's words in the details", () => {
+  const ctx = testCtx({ lang: "en" });
+  const node = findingsList(ctx, [{ code: "brand_new", blocking: true, message: "server words here", variant: "", params: {} }]);
+  assert.ok(visibleText(node).includes(ctx.t("common.unknown")));
+  assert.ok(!visibleText(node).includes("server words here"));
+  assert.ok(visibleTextIncludingDetails(node).includes("server words here"));
+});
+
+test("a finding without params or variant still reads (old data)", () => {
+  const ctx = testCtx({ lang: "en" });
+  const node = findingsList(ctx, [{ code: "no_evidence", blocking: true, message: "old" }]);
+  assert.ok(!visibleText(node).includes("old"));
+});
+
+test("a name a planner chose is shown in quotes", () => {
+  const ctx = testCtx({ lang: "en" });
+  const fx = FIXTURES["run-sheet.json"].findings;
+  const text = visibleText(findingsList(ctx, fx));
+  assert.ok(text.includes("\u201clight-on\u201d") || text.includes('"light-on"'), text);
+  assertNoLeaks(findingsList(ctx, fx), exemptStrings("stage"));
 });

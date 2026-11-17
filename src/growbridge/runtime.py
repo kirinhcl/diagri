@@ -8,9 +8,7 @@ and the later steps still run. ``tick`` never calls a model.
 """
 
 import asyncio
-import hashlib
 import inspect
-import json
 import logging
 import os
 import secrets
@@ -64,6 +62,8 @@ from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltS
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_backup import Backups
 from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
+from growbridge.runtime_mirror import InterventionMirror
+from growbridge.runtime_waiting import waiting_message, waiting_params
 from growbridge.service import Bridge
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
@@ -173,58 +173,6 @@ STAGE_ALERT = "stage_waiting"
 OPERATOR_PAUSE = "pause"  # the history event of a pause that an operator asked for
 
 
-def waiting_message(item: Mapping[str, Any]) -> str:
-    """Why a stage waits: its state, the event that put it there and what the event carried."""
-    detail = {
-        name: value
-        for name, value in item["detail"].items()
-        if name != "right_number" and value != item["event"]
-    }
-    text = f"Stage {item['stage_id']} is {item['state']} after {item['event']}"
-    return f"{text}: {json.dumps(detail, sort_keys=True)}" if detail else text
-
-
-MIRROR_NAMESPACE = "runtime_mirror"
-MIRROR_STEPS = ("CREATE TABLE intervention_mirror(key TEXT PRIMARY KEY, record_id TEXT NOT NULL)",)
-
-
-class InterventionMirror:
-    """Copies each workflow intervention into the archive exactly once.
-
-    The key is a digest of the intervention's content, kept in a table of the archive database
-    so the copy and its key are saved together; a repeat (restart, replay) finds the key.
-    """
-
-    def __init__(self, db: Database, archive: Archive):
-        self.db = db
-        self.archive = archive
-        self.alert: Callable[[str, str, str], None] | None = None
-        db.migrate(MIRROR_NAMESPACE, MIRROR_STEPS)
-
-    def __call__(self, item: dict) -> None:
-        try:
-            self._mirror(item)
-        except Exception as error:
-            log.exception("intervention could not be copied to the archive")
-            if self.alert is not None:
-                message = f"{item.get('kind')} not copied to the archive: {error}"
-                self.alert("intervention_mirror", "archive", message)
-
-    def _mirror(self, item: dict) -> None:
-        key = hashlib.sha256(json.dumps(item, sort_keys=True).encode()).hexdigest()
-        with self.db.transaction():
-            if self.db.one("SELECT 1 FROM intervention_mirror WHERE key = ?", (key,)):
-                return
-            record_id = self.archive.record_intervention(
-                item["experiment_id"],
-                item["stage_id"],
-                item["kind"],
-                item["detail"],
-                item["operator"],
-            )
-            self.db.execute("INSERT INTO intervention_mirror VALUES (?, ?)", (key, record_id))
-
-
 class _GuardedBridge(Bridge):
     """The BLE connection opens only on the registered write host, whoever asks to start it."""
 
@@ -284,18 +232,29 @@ class Runtime:
         self.runner.settle_interrupted()  # a run the last process left open cannot be running
         if self.backups.directory is None:
             message = "No backup_dir is configured: the databases are not being backed up"
-            self._alert("backup_unconfigured", "backups", message, "warning")
+            self._alert(
+                "backup_unconfigured", "backups", message, "warning", code="backup_unconfigured"
+            )
         if self.channels:
             self._safely(lambda: self.book.resolve("notify_unconfigured", "channels"))
         else:
             message = "No notification channel is configured: alerts are not sent anywhere"
-            self._alert("notify_unconfigured", "channels", message, "warning")
+            self._alert(
+                "notify_unconfigured", "channels", message, "warning", code="notify_unconfigured"
+            )
         if self.monitor is None:
-            self._alert("monitor_unconfigured", "heartbeats", UNCONFIGURED_MESSAGE, "warning")
+            self._alert(
+                "monitor_unconfigured",
+                "heartbeats",
+                UNCONFIGURED_MESSAGE,
+                "warning",
+                code="monitor_unconfigured",
+            )
         else:
             self._safely(lambda: self.book.resolve("monitor_unconfigured", "heartbeats"))
         if not self.control.host_registered():
-            self._alert("runtime", "write_host", "This host is not the registered write host")
+            message = "This host is not the registered write host"
+            self._alert("runtime", "write_host", message, code="not_write_host")
             return
         await self.bridge.start()
         await self._await_link()
@@ -330,9 +289,18 @@ class Runtime:
 
     # --- model roles (never called from tick) --------------------------------------------------
 
-    def alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> None:
+    def alert(
+        self,
+        kind: str,
+        key: str,
+        message: str,
+        severity: Any = "critical",
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> None:
         """Raise an alert, critical by default (and queue its notification); never raises."""
-        self._alert(kind, key, message, severity)
+        self._alert(kind, key, message, severity, code=code, params=params)
 
     def role_tools(self) -> dict[str, list[Tool]]:
         return role_tools(self, private_dir(self.settings.data_dir / "agent_work"))
@@ -387,7 +355,8 @@ class Runtime:
         except Exception as error:
             log.exception("tick step %s failed", name)
             self.failing.add(name)
-            self._alert("tick_step", name, f"{name}: {type(error).__name__}: {error}")
+            message = f"{name}: {type(error).__name__}: {error}"
+            self._alert("tick_step", name, message, code="tick_step", params={"step": name})
             return
         if name in self.failing:
             self.failing.discard(name)
@@ -402,10 +371,19 @@ class Runtime:
             return False
         return True
 
-    def _alert(self, kind: str, key: str, message: str, severity: Any = "critical") -> bool:
+    def _alert(
+        self,
+        kind: str,
+        key: str,
+        message: str,
+        severity: Any = "critical",
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> bool:
         """Raise an alert and queue its notification; never raises. True when it was stored."""
         try:
-            alert = self.book.raise_alert(kind, key, severity, message)
+            alert = self.book.raise_alert(kind, key, severity, message, code=code, params=params)
         except Exception:
             log.exception("could not record a runtime alert")
             return False
@@ -440,7 +418,10 @@ class Runtime:
                 if stored < INGEST_BATCH:
                     return
         except SourceRewound as error:
-            self._alert("source_rewound", "legacy_samples", str(error))
+            params = {"top_rowid": error.top_rowid, "cursor": error.cursor}
+            self._alert(
+                "source_rewound", "legacy_samples", str(error), code="source_rewound", params=params
+            )
 
     async def _follow_up(self) -> None:
         # every stage in recovery check, not only the active one: a stage that was waiting for
@@ -477,7 +458,10 @@ class Runtime:
             if key not in known:
                 checking = item["state"] == StageState.RECOVERY_CHECK.value
                 severity = "critical" if checking else "warning"
-                self._alert(STAGE_ALERT, key, waiting_message(item), severity)
+                message, params = waiting_message(item), waiting_params(item)
+                self._alert(
+                    STAGE_ALERT, key, message, severity, code="stage_waiting", params=params
+                )
 
     async def _deliver(self) -> None:
         await self.outbox.deliver(self.channels)
@@ -485,7 +469,10 @@ class Runtime:
     def _expire(self) -> None:
         for task in self.tasks.expire(self.clock.now()):
             message = f"Research task {task.id} is past its deadline and needs attention"
-            self._alert("task_deadline", task.id, message, "warning")
+            params = {"task_id": task.id, "project_id": task.project_id, "role": task.owner_role}
+            self._alert(
+                "task_deadline", task.id, message, "warning", code="task_deadline", params=params
+            )
 
     async def _recover_compute(self) -> None:
         if self.compute is not None:  # rate-limited inside: reconciles what nobody answered
@@ -551,7 +538,9 @@ class Runtime:
         if health.ok:
             self.book.resolve("run_health", "run")
         else:
-            self._alert("run_health", "run", "Run health failing: " + ", ".join(health.failures))
+            message = "Run health failing: " + ", ".join(health.failures)
+            params = {"failures": list(health.failures)}
+            self._alert("run_health", "run", message, code="run_health", params=params)
         if self.monitor is not None and self._beat_due(health.ok):
             self._monitor_alerts(await self.monitor.beat(health))
 
@@ -569,7 +558,14 @@ class Runtime:
         for name, delivered in signals.items():
             if delivered is False:
                 message = f"The external {name} heartbeat could not be delivered"
-                self._alert("external_monitor", name, message, "warning")
+                self._alert(
+                    "external_monitor",
+                    name,
+                    message,
+                    "warning",
+                    code="external_monitor",
+                    params={"signal": name},
+                )
             elif delivered:
                 self._safely(lambda n=name: self.book.resolve("external_monitor", n))
 

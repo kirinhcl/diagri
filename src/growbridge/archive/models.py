@@ -308,6 +308,9 @@ class TaskRecord(Model):
     irrigation_request_id: str | None = None
     ran_seconds: float | None = None
     ended_early: str | None = None
+    # a message code for ended_early (task_end family); old records have none
+    ended_early_code: str | None = None
+    ended_early_params: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _done_has_a_time(self) -> "TaskRecord":
@@ -467,10 +470,15 @@ class ActionRecord(Model):
     confirmed_at: float | None = None
     confirmed_level: int | None = None
     error: str | None = None
+    # a message code for ``error`` (receipt family) with its params; old records have none
+    error_code: str | None = None
+    error_params: dict[str, Any] = Field(default_factory=dict)
     supersedes: str | None = None  # the unknown or failed request this one redoes
     settled_at: float | None = None  # when an operator recorded an on-site check
     ran_seconds: float | None = None  # an irrigation: how long the pump was held on
     ended_early: str | None = None  # an irrigation ended before its time: why
+    ended_early_code: str | None = None  # the same as a message code (task_end family)
+    ended_early_params: dict[str, Any] = Field(default_factory=dict)
 
 
 class ManualMeasurement(Model):

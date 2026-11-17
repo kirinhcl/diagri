@@ -149,7 +149,14 @@ class FrozenWatch:
     def _raise(self, name: str, value: float, critical: frozenset[str]) -> None:
         severity = "critical" if name in critical else "warning"
         message = f"{name} has reported exactly {value:g} without change (frozen reading)"
-        self.book.raise_alert(KIND, name, severity, message)
+        self.book.raise_alert(
+            KIND,
+            name,
+            severity,
+            message,
+            code="frozen_reading",
+            params={"sensor": name, "value": value},
+        )
 
     def _open_alert(self, name: str) -> Alert | None:
         for alert in self.book.open():

@@ -192,7 +192,12 @@ async def test_stage_runs_to_its_end_while_the_model_fails_on_every_call(world):
 
     assert client.calls >= 1
     assert runtime.tasks.get("task-ev-plan").state is TaskState.NEEDS_ATTENTION
-    assert [a.key for a in runtime.book.open() if a.kind == "agent_task"] == ["task-ev-plan"]
+    (alert,) = [a for a in runtime.book.open() if a.kind == "agent_task"]
+    assert alert.key == "task-ev-plan"
+    assert (alert.code, alert.params) == (
+        "agent_task_attention",
+        {"task_id": "task-ev-plan", "project_id": project, "role": "planner"},
+    )
     await world.run_until_ended(runtime)
     assert runtime.workflow.stage(STAGE).state is StageState.ENDED
 
@@ -271,7 +276,13 @@ async def test_one_failing_task_does_not_stop_the_others(world, monkeypatch):
 
     assert await runtime.run_agents(object()) == 1
     assert seen == ["task-ev-a", "task-ev-b"]
-    assert [a.key for a in runtime.book.open() if a.kind == "agent_task"] == ["task-ev-a"]
+    (alert,) = [a for a in runtime.book.open() if a.kind == "agent_task"]
+    assert alert.key == "task-ev-a"
+    assert (alert.code, alert.params) == (
+        "agent_task_failed",
+        {"task_id": "task-ev-a", "project_id": project, "role": "orchestrator"},
+    )
+    assert "dispatcher bug" in alert.message
 
 
 async def test_missing_model_client_raises_an_alert_and_serving_goes_on(world, monkeypatch):
@@ -284,3 +295,19 @@ async def test_missing_model_client_raises_an_alert_and_serving_goes_on(world, m
 
     assert model_client_or_none(runtime) is None
     assert [a.kind for a in runtime.book.open() if a.kind == "model_client"] == ["model_client"]
+    (alert,) = [a for a in runtime.book.open() if a.kind == "model_client"]
+    assert (alert.code, alert.params) == ("model_client", {})
+
+
+async def test_a_task_past_its_deadline_raises_an_alert_with_its_ids(world):
+    runtime = await world.boot()
+    project, _protocol, _round = await design(world, runtime)
+    deadline = world.clock.now() + 10
+    runtime.tasks.create(task(project, "researcher", "ev-late", deadline=deadline))
+
+    await world.beat(runtime, 60)
+
+    (alert,) = [a for a in runtime.book.open() if a.kind == "task_deadline"]
+    assert (alert.key, alert.severity) == ("task-ev-late", "warning")
+    assert alert.code == "task_deadline"
+    assert alert.params == {"task_id": "task-ev-late", "project_id": project, "role": "researcher"}

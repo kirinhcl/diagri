@@ -796,3 +796,20 @@ def test_a_round_without_a_report_has_none_to_read(bench, operator):
     response = operator.get(f"/wb/rounds/{round_id}/report")
 
     assert response.status_code == 409 and "no published report" in response.text
+
+
+def test_the_report_read_names_the_primary_endpoint(bench, operator):
+    round_id, _ = _published(bench, {"label": "descriptive"})
+
+    body = operator.get(f"/wb/rounds/{round_id}/report").json()
+
+    assert body["primary_endpoint"] == "canopy_area_growth"
+
+
+def test_a_report_whose_protocol_is_gone_has_no_primary_endpoint(bench, operator):
+    round_id, _ = _published(bench, {"label": "descriptive"})
+    bench.workflow.store.db.execute("DELETE FROM wf_protocols")  # test database only
+
+    body = operator.get(f"/wb/rounds/{round_id}/report").json()
+
+    assert body["primary_endpoint"] is None

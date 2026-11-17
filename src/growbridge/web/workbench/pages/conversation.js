@@ -2,6 +2,7 @@
 // tools it used, in order. Sending a message gives the orchestrator a new goal; nothing said here
 // approves anything (approval is a separate, re-authenticated action on the stage page).
 import { labelOr } from "../i18n.js";
+import { messageParts } from "../messages.js";
 import { newRequestId } from "../receipts.js";
 import { h } from "../ui/dom.js";
 import { displayName, roleLabel } from "../ui/names.js";
@@ -107,16 +108,23 @@ export function statusText(ctx, entry) {
   return ctx.t("chat.taskEnded", { role, state: labelOr(ctx.t, "state", entry.text) });
 }
 
+// A status entry: the sentence, then why it ended and what to do next when the server gave a code.
+// One fold holds the state, the reason, the ids and the code's own details.
 export function statusView(ctx, entry) {
   const detail = entry.detail || {};
   const tone = entry.text === "needs_attention" ? "chat-status chat-status-warn" : "chat-status";
+  const coded = typeof detail.code === "string" ? messageParts(ctx, "chat_end", detail.code, detail.params) : null;
   const fold = techDetails(ctx.t, [
     [ctx.t("chat.tech.state"), entry.text],
     [ctx.t("chat.tech.reason"), detail.reason],
     [ctx.t("tech.id.task_id"), entry.task_id],
     [ctx.t("chat.tech.nextTask"), detail.task_id],
+    ...(coded ? coded.details : []),
   ]);
-  return h("li", { class: ["chat-entry", tone] }, h("p", { text: statusText(ctx, entry) }), fold);
+  const lines = [h("p", { text: statusText(ctx, entry) })];
+  if (coded) lines.push(h("p", { class: "message-text", text: coded.text }));
+  if (coded && coded.action) lines.push(h("p", { class: "message-action", text: coded.action }));
+  return h("li", { class: ["chat-entry", tone] }, ...lines, fold);
 }
 
 function entryView(ctx, entry) {

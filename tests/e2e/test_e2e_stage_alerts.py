@@ -32,6 +32,14 @@ async def test_stage_paused_by_a_panel_change_raises_an_alert_that_says_why(worl
     assert alert.severity == "warning"
     assert STAGE in alert.message and "external_change" in alert.message
     assert '"channel": "light"' in alert.message and '"actual": 5' in alert.message
+    (waiting,) = runtime.workflow.waiting_stages()
+    assert alert.code == "stage_waiting"
+    assert set(alert.params) == {"stage_id", "entry_id", "state", "event", "detail"}
+    assert alert.params["stage_id"] == STAGE
+    assert alert.params["entry_id"] == waiting["entry"]
+    assert (alert.params["state"], alert.params["event"]) == ("paused", "external_change")
+    assert alert.params["detail"] == waiting["detail"]
+    assert alert.params["detail"] and "external_change" not in alert.params["detail"]
     await world.beat(runtime, 1)  # the outbox delivers on the next tick
     assert [text for text in channel.sent if "external_change" in text] == [
         f"[warning] {alert.message}"
@@ -101,3 +109,14 @@ async def test_stage_paused_after_the_recovery_check_keeps_an_alert_until_it_is_
     await second.workflow.resume_stage(STAGE, world.operator)
     await world.beat(second, 1)
     assert stage_alerts(second) == []
+
+
+async def test_runtime_alert_passes_code_and_params_through(world):
+    runtime = await world.boot(channels={})
+
+    runtime.alert("probe", "k", "m", code="probe_code", params={"n": 1})
+    assert runtime._alert("probe2", "k", "m", code="c2", params={"n": 2}) is True
+
+    found = {a.kind: (a.code, a.params) for a in runtime.book.open()}
+    assert found["probe"] == ("probe_code", {"n": 1})
+    assert found["probe2"] == ("c2", {"n": 2})

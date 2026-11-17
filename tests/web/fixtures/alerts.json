@@ -12,7 +12,9 @@
       "resolved_at": null,
       "read_by": null,
       "read_at": null,
-      "read_severity": null
+      "read_severity": null,
+      "code": "backup_unconfigured",
+      "params": {}
     },
     {
       "event_id": "alert_a71084164435490a9d4344321ed49313",
@@ -26,7 +28,9 @@
       "resolved_at": null,
       "read_by": null,
       "read_at": null,
-      "read_severity": null
+      "read_severity": null,
+      "code": "notify_unconfigured",
+      "params": {}
     },
     {
       "event_id": "alert_c5d2e7ef8405499989f36367965ab6d4",
@@ -37,6 +41,95 @@
       "count": 2,
       "first_at": 1794779648.2454982,
       "last_at": 1794821385.6133492,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null,
+      "code": "monitor_unconfigured",
+      "params": {}
+    },
+    {
+      "event_id": "alert_5a1e0000000000000000000000000001",
+      "kind": "stage_waiting",
+      "key": "stage:a-1",
+      "severity": "critical",
+      "message": "Stage stage:a-1 is paused after disconnect_affects: {'seconds': 600, 'reasons': ['pump_off', 'light_off']}",
+      "code": "stage_waiting",
+      "params": {
+        "stage_id": "stage:a-1",
+        "entry_id": 7,
+        "state": "paused",
+        "event": "disconnect_affects",
+        "detail": {
+          "seconds": 600,
+          "reasons": [
+            "pump_off",
+            "light_off"
+          ]
+        }
+      },
+      "count": 1,
+      "first_at": 1794800000.5,
+      "last_at": 1794821000.5,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null
+    },
+    {
+      "event_id": "alert_5a1e0000000000000000000000000002",
+      "kind": "audit_finding",
+      "key": "stage:a-1:audit",
+      "severity": "warning",
+      "message": "Audit finding for stage:a-1: The light stayed off during the day.\n- light off 09:00-11:00\n- no operator note",
+      "code": "audit_finding",
+      "params": {
+        "stage_id": "stage:a-1",
+        "summary": "The light stayed off during the day.",
+        "evidence": [
+          "light off 09:00-11:00",
+          "no operator note"
+        ]
+      },
+      "count": 1,
+      "first_at": 1794800000.5,
+      "last_at": 1794821000.5,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null
+    },
+    {
+      "event_id": "alert_5a1e0000000000000000000000000003",
+      "kind": "threshold",
+      "key": "rule-temp-high",
+      "severity": "warning",
+      "message": "temperature above 30 for 600 s (rule temp-high)",
+      "code": "threshold",
+      "params": {
+        "sensor": "temp",
+        "op": ">",
+        "value": 31.5,
+        "duration_seconds": 600,
+        "rule": "temp-high"
+      },
+      "count": 1,
+      "first_at": 1794800000.5,
+      "last_at": 1794821000.5,
+      "resolved_at": null,
+      "read_by": null,
+      "read_at": null,
+      "read_severity": null
+    },
+    {
+      "event_id": "alert_5a1e0000000000000000000000000004",
+      "kind": "data_gap",
+      "key": "gap-1",
+      "severity": "info",
+      "message": "No readings for 20 min",
+      "count": 1,
+      "first_at": 1794800000.5,
+      "last_at": 1794821000.5,
       "resolved_at": null,
       "read_by": null,
       "read_at": null,

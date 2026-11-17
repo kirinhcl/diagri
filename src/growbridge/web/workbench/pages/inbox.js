@@ -7,6 +7,8 @@ import { clear, h } from "../ui/dom.js";
 import { deviceName, displayName, nameDetails, roleLabel } from "../ui/names.js";
 import { errorParts, foldedText, replaceParts, techDetails, timeText } from "../ui/section.js";
 import { severityPill, statePill, unknownCode } from "../ui/status.js";
+import { alertSentences } from "./alert-text.js";
+import { stuckSentences } from "./compute-stuck.js";
 
 const POLL_SECONDS = 15;
 // Most urgent first: on-site checks and alerts, then decisions waiting on a person, then the rest.
@@ -96,20 +98,23 @@ export const DESCRIBERS = {
     ],
     meta: [],
   }),
-  alert: (ctx, item, d) => ({
-    title: foldedText(ctx, d.message || ""),
-    plain: d.message || "",
-    pill: severityPill(ctx.t, d.severity, BARE),
-    meta: [
-      labelOr(ctx.t, "alert.kind", d.alert_kind),
-      say(ctx.t, "inbox.alertCount", { count: d.count }),
-      d.last_at ? ctx.t("inbox.lastAt", { time: timeText(ctx, d.last_at) }) : null,
-    ],
-  }),
+  alert: (ctx, item, d) => {
+    const s = alertSentences(ctx, d, ctx.t("inbox.tech.alertKind"));
+    return {
+      title: s.legacy || !s.known ? labelOr(ctx.t, "alert.kind", d.alert_kind) : s.text,
+      pill: severityPill(ctx.t, d.severity, BARE),
+      lines: [s.legacy ? ctx.t("alerts.legacy") : s.action],
+      meta: [
+        labelOr(ctx.t, "alert.kind", d.alert_kind),
+        say(ctx.t, "inbox.alertCount", { count: d.count }),
+        d.last_at ? ctx.t("inbox.lastAt", { time: timeText(ctx, d.last_at) }) : null,
+      ],
+    };
+  },
   compute_stuck: (ctx, item, d) => ({
     title: ctx.t("inbox.title.stuck", { phase: labelOr(ctx.t, "state", d.phase) }),
     pill: statePill(ctx.t, d.phase, BARE),
-    lines: [d.reason],
+    lines: stuckSentences(ctx, d).lines,
     meta: [],
   }),
   task: (ctx, item, d) => ({
@@ -132,8 +137,8 @@ export function describe(ctx, item) {
 // choice, the device of a stage, the raw alert code, the code of an unknown state or severity.
 function detailEntries(ctx, item, d) {
   if (item.kind === "round_choice") return [[ctx.t("tech.id.stage_id"), d.awaiting_choice]];
-  if (item.kind === "alert") return [[ctx.t("inbox.tech.alertKind"), d.alert_kind], ...unknownCode(ctx.t, "severity", d.severity)];
-  if (item.kind === "compute_stuck") return unknownCode(ctx.t, "state", d.phase);
+  if (item.kind === "alert") return [...alertSentences(ctx, d, ctx.t("inbox.tech.alertKind")).entries, ...unknownCode(ctx.t, "severity", d.severity)];
+  if (item.kind === "compute_stuck") return [...unknownCode(ctx.t, "state", d.phase), ...stuckSentences(ctx, d).entries];
   const device = STAGE_KINDS.has(item.kind) ? [[ctx.t("stage.review.device"), d.device_id]] : [];
   return [...device, ...unknownCode(ctx.t, "state", d.state)];
 }
@@ -145,7 +150,7 @@ function itemDetails(ctx, item) {
   const key = STAGE_KINDS.has(item.kind) ? own.stage : own[item.kind];
   const row = key ? { ...item, id: undefined, [key]: item.id } : item;
   if (item.kind === "compute_stuck") row.task_id = d.task_id;
-  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...detailEntries(ctx, item, d)]);
+  return techDetails(ctx.t, [...nameDetails(row, ctx.t), ...unknownCode(ctx.t, "inbox.kind", item.kind), ...detailEntries(ctx, item, d)]);
 }
 
 // "Waiting 3 h 20 min", or the full time when the clock says the item is from the future.
@@ -209,6 +214,7 @@ export function groupView(ctx, group) {
       "header",
       { class: "inbox-group-head" },
       h("h2", { attrs: { id: headingId }, text: labelOr(ctx.t, "inbox.kind", group.kind) }),
+      techDetails(ctx.t, unknownCode(ctx.t, "inbox.kind", group.kind)),
       h("span", { class: "inbox-group-count", text: String(count) }),
     ),
     h("ul", { class: "inbox-list" }, group.items.map((item) => itemView(ctx, item))),

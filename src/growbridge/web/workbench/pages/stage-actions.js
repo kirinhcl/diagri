@@ -8,6 +8,7 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { errorLines, jsonEditor, simpleForm } from "../ui/forms.js";
+import { messageParts, messageView } from "../messages.js";
 import { displayName } from "../ui/names.js";
 import { formatDuration, levelText, shortDigest } from "../format.js";
 import { differenceText } from "./stage-diff.js";
@@ -109,12 +110,43 @@ export function groupFindings(findings) {
   return [...groups.filter((g) => g.blocking), ...groups.filter((g) => !g.blocking)];
 }
 
+// The message code of a finding: its code, plus the variant when it has one. Old data has neither
+// a variant nor params.
+function findingCode(item) {
+  return item.variant ? `${item.code}.${item.variant}` : item.code;
+}
+
+function findingParams(item) {
+  const p = item.params;
+  return p && typeof p === "object" && !Array.isArray(p) ? p : {};
+}
+
+// What the group's fold holds: the group code, then each item's message code (when it differs from
+// the group's), the server's own sentence and its id parameters.
+function groupDetails(ctx, group, parts) {
+  const details = [[ctx.t("tech.code"), group.code]];
+  group.items.forEach((item, i) => {
+    const code = findingCode(item);
+    if (code !== group.code) details.push([ctx.t("tech.code"), code]);
+    if (item.message) details.push([ctx.t("tech.serverMessage"), item.message]);
+    details.push(...parts[i].details.filter(([name]) => name !== ctx.t("tech.code") && name !== ctx.t("tech.params")));
+  });
+  return details;
+}
+
+function howToFix(ctx, parts) {
+  const actions = [...new Set(parts.map((p) => p.action).filter(Boolean))];
+  if (!actions.length) return null;
+  return h("p", { class: "finding-fix", text: `${ctx.t("stage.review.howToFix")} ${actions.join(" ")}` });
+}
+
 export function findingsList(ctx, findings) {
   const groups = groupFindings(findings);
   if (!groups.length) return note(ctx.t("stage.review.noFindings"));
   const pillClass = (blocking) => ["pill", blocking ? "pill-onsite" : "pill-waiting"];
-  const entry = (group) =>
-    h(
+  const entry = (group) => {
+    const parts = group.items.map((item) => messageParts(ctx, "finding", findingCode(item), findingParams(item)));
+    return h(
       "li",
       { class: "finding-group" },
       h(
@@ -123,9 +155,11 @@ export function findingsList(ctx, findings) {
         h("span", { class: pillClass(group.blocking), text: ctx.t(group.blocking ? "finding.blocking" : "finding.hint") }),
         h("strong", { text: ctx.t("stage.review.groupTitle", { label: labelOr(ctx.t, "finding", group.code), n: group.items.length }) }),
       ),
-      h("ul", { class: "finding-items" }, group.items.map((item) => h("li", { class: "finding-text", text: item.message }))),
-      techDetails(ctx.t, [[ctx.t("tech.code"), group.code]]),
+      howToFix(ctx, parts),
+      h("ul", { class: "finding-items" }, parts.map((p) => h("li", { class: "finding-text", text: p.text }))),
+      techDetails(ctx.t, groupDetails(ctx, group, parts)),
     );
+  };
   return h("ul", { class: "findings" }, groups.map(entry));
 }
 
@@ -362,6 +396,10 @@ export function logItem(ctx, title, record) {
       pill.className = RECEIPT_TONE[status];
       pill.textContent = labelOr(ctx.t, "receipt", status);
     }
+    // a failed receipt, and an unknown one with a code, brings its own fold (with the request id);
+    // the item keeps just the one
+    const ownFold = status === "failed" || (status === "unknown" && lines.some(isFold));
+    if (ownFold && details) details.remove();
     replaceParts(detail, lines.filter(Boolean).map((line) => (typeof line === "string" ? h("p", { text: line }) : line)));
   };
   return { element, show };
@@ -374,14 +412,33 @@ export function checkParts(ctx, error) {
   return [ctx.t("receipt.checkFailed", { error: errorLines(error, ctx.lang, ctx.t).join(" ") }), errorFold(ctx, error)];
 }
 
+// The entries of a settled receipt's own fold: the request id and the server's English.
+const receiptExtra = (ctx, record) => [[ctx.t("receipt.requestId"), record.request_id], [ctx.t("tech.serverMessage"), record.error]];
+const isFold = (line) => Boolean(line) && typeof line === "object" && line.localName === "details";
+
+// A failed write: its code through the catalog; the server's English and the request id in one fold.
+function failedLines(ctx, record) {
+  if (!record) return [null];
+  const extra = receiptExtra(ctx, record);
+  if (record.error_code) return messageView(ctx, "receipt", record.error_code, record.error_params, { extra });
+  return [ctx.t("receipt.failedUnknown"), techDetails(ctx.t, extra)];
+}
+
+// A write whose result is unknown: its code through the catalog, with the same one fold as a failed
+// write; a record without a code (written before codes) has the general note.
+function unknownLines(ctx, record) {
+  if (!record || !record.error_code) return [ctx.t("receipt.unknownNote")];
+  return messageView(ctx, "receipt", record.error_code, record.error_params, { extra: receiptExtra(ctx, record) });
+}
+
 export function outcomeLines(ctx, { outcome, record, error }, channel) {
   const problem = error ? checkParts(ctx, error) : [];
   if (outcome === "applied") {
     const level = record && record.confirmed_level;
     return [level === null || level === undefined ? null : ctx.t("receipt.confirmedLevel", { level: levelText(ctx.t, channel, level) })];
   }
-  if (outcome === "unknown") return [ctx.t("receipt.unknownNote")];
-  if (outcome === "failed") return [record && record.error ? ctx.t("receipt.error", { error: record.error }) : null];
+  if (outcome === "unknown") return unknownLines(ctx, record);
+  if (outcome === "failed") return failedLines(ctx, record);
   return [ctx.t("receipt.unsettledNote", { duration: formatDuration(ctx.t, RECEIPT_LIMIT_MS / 1000) }), ...problem];
 }
 

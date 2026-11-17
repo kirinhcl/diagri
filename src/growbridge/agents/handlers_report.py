@@ -30,6 +30,7 @@ from growbridge.archive.models import (
     ResearchTask,
     Snapshot,
     TaskRecord,
+    Treatment,
 )
 from growbridge.planning import manual_tasks
 from growbridge.planning.design import check_experimental_design
@@ -184,13 +185,21 @@ class TreatmentCheck:
     unverified: tuple[dict, ...] = ()  # rounds whose samples record no level to compare
 
     def notes(self) -> list[Note]:
-        failed = [note("treatment_not_applied", **d) for d in self.details]
+        failed = [
+            note(
+                "treatment_not_applied",
+                round=d["round"],
+                treatment=d["treatment"],
+                problems=d["problems"],
+            )
+            for d in self.details
+        ]
         unread = [
             note(
                 "treatment_unverified",
                 round=d["round"],
-                treatment_id=d["treatment_id"],
-                channels=", ".join(d["channels"]),
+                treatment=d["treatment"],
+                channels=d["channels"],
             )
             for d in self.unverified
         ]
@@ -201,6 +210,14 @@ def _samples(deps: Deps, snap: Snapshot) -> list[dict]:
     path = deps.archive.root / "snapshots" / snap.id / "samples.jsonl"
     lines = path.read_text(encoding="utf-8").splitlines()
     return [json.loads(line).get("data", {}) for line in lines if line]
+
+
+def _identified(number: int, treatment: Treatment) -> dict:
+    return {
+        "round": number,
+        "treatment_id": treatment.id,
+        "treatment": treatment.name or treatment.id,
+    }
 
 
 def _treatment_check(deps: Deps, protocol: ResearchProtocol, frozen: Frozen) -> TreatmentCheck:
@@ -216,10 +233,10 @@ def _treatment_check(deps: Deps, protocol: ResearchProtocol, frozen: Frozen) -> 
         problems = delivered(rows, treatment)
         if problems:
             failed.add(snap.experiment_id)
-            details.append({"round": number, "treatment_id": treatment.id, "problems": problems})
+            details.append({**_identified(number, treatment), "problems": problems})
         channels = unread(rows, treatment)
         if channels:
-            unverified.append({"round": number, "treatment_id": treatment.id, "channels": channels})
+            unverified.append({**_identified(number, treatment), "channels": channels})
     return TreatmentCheck(frozenset(failed), tuple(details), tuple(unverified))
 
 
@@ -242,7 +259,7 @@ class ManualCheck:
                 round=d["round"],
                 missed=d["missed"],
                 total=d["total"],
-                detail=manual_tasks.by_kind_text(d["by_kind"]),
+                by_kind=d["by_kind"],
             )
             for d in self.details
             if d["missed"]

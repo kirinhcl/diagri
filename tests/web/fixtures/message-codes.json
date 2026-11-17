@@ -1,0 +1,687 @@
+{
+  "alert": {
+    "data_gap": {
+      "params": [
+        "sensor"
+      ],
+      "action": true
+    },
+    "threshold": {
+      "params": [
+        "sensor",
+        "op",
+        "value",
+        "duration_seconds",
+        "rule"
+      ],
+      "action": true
+    },
+    "frozen_watch": {
+      "params": [],
+      "action": true
+    },
+    "stage_checks": {
+      "params": [],
+      "action": true
+    },
+    "frozen_reading": {
+      "params": [
+        "sensor",
+        "value"
+      ],
+      "action": true
+    },
+    "task_missed": {
+      "params": [
+        "stage_id",
+        "task_id",
+        "task_kind",
+        "due_at"
+      ],
+      "action": true
+    },
+    "measurement_missing": {
+      "params": [
+        "stage_id",
+        "task_id",
+        "window_start",
+        "window_end",
+        "timezone"
+      ],
+      "action": true
+    },
+    "measurement_outside_window": {
+      "params": [
+        "stage_id",
+        "measurement_id",
+        "metric",
+        "measured_at"
+      ],
+      "action": true
+    },
+    "pump_unexpected_off": {
+      "params": [],
+      "action": true
+    },
+    "pump_unexpected_interlocked": {
+      "params": [],
+      "action": true
+    },
+    "pump_unexpected_failed": {
+      "params": [],
+      "action": true
+    },
+    "pump_unreadable": {
+      "params": [],
+      "action": true
+    },
+    "pump_watchdog_step": {
+      "params": [],
+      "action": true
+    },
+    "pump_watchdog_record": {
+      "params": [],
+      "action": true
+    },
+    "backup_unconfigured": {
+      "params": [],
+      "action": true
+    },
+    "notify_unconfigured": {
+      "params": [],
+      "action": true
+    },
+    "monitor_unconfigured": {
+      "params": [],
+      "action": true
+    },
+    "not_write_host": {
+      "params": [],
+      "action": true
+    },
+    "tick_step": {
+      "params": [
+        "step"
+      ],
+      "action": true
+    },
+    "source_rewound": {
+      "params": [
+        "top_rowid",
+        "cursor"
+      ],
+      "action": true
+    },
+    "intervention_mirror": {
+      "params": [
+        "intervention_kind"
+      ],
+      "action": true
+    },
+    "stage_waiting": {
+      "params": [
+        "stage_id",
+        "entry_id",
+        "state",
+        "event",
+        "detail"
+      ],
+      "action": true
+    },
+    "task_deadline": {
+      "params": [
+        "task_id",
+        "project_id",
+        "role"
+      ],
+      "action": true
+    },
+    "run_health": {
+      "params": [
+        "failures"
+      ],
+      "action": true
+    },
+    "external_monitor": {
+      "params": [
+        "signal"
+      ],
+      "action": true
+    },
+    "backup": {
+      "params": [],
+      "action": true
+    },
+    "agent_task_failed": {
+      "params": [
+        "task_id",
+        "project_id",
+        "role"
+      ],
+      "action": true
+    },
+    "agent_task_attention": {
+      "params": [
+        "task_id",
+        "project_id",
+        "role"
+      ],
+      "action": true
+    },
+    "audit_task_failed": {
+      "params": [
+        "stage_id",
+        "task_id"
+      ],
+      "action": true
+    },
+    "audit_task_attention": {
+      "params": [
+        "stage_id",
+        "task_id"
+      ],
+      "action": true
+    },
+    "audit_schedule": {
+      "params": [],
+      "action": true
+    },
+    "model_client": {
+      "params": [],
+      "action": true
+    },
+    "audit_finding": {
+      "params": [
+        "stage_id",
+        "summary",
+        "evidence"
+      ],
+      "action": true
+    }
+  },
+  "finding": {
+    "device_owned_write": {
+      "params": [
+        "source_kind",
+        "source",
+        "channel"
+      ],
+      "action": true
+    },
+    "pump_action": {
+      "params": [
+        "source_kind",
+        "source"
+      ],
+      "action": true
+    },
+    "level_range": {
+      "params": [
+        "source_kind",
+        "source",
+        "channel",
+        "level",
+        "min",
+        "max"
+      ],
+      "action": true
+    },
+    "pump_device_owned": {
+      "params": [],
+      "action": true
+    },
+    "unknown_sensor": {
+      "params": [
+        "rule",
+        "sensor"
+      ],
+      "action": true
+    },
+    "unit_mismatch": {
+      "params": [
+        "rule",
+        "sensor",
+        "device_unit",
+        "rule_unit"
+      ],
+      "action": true
+    },
+    "humidity_exhaust_only": {
+      "params": [
+        "rule"
+      ],
+      "action": true
+    },
+    "rule_conflict": {
+      "params": [
+        "rule_a",
+        "rule_b",
+        "channel",
+        "priority"
+      ],
+      "action": true
+    },
+    "safety_conflict": {
+      "params": [
+        "rule",
+        "protection",
+        "channel",
+        "level",
+        "protection_level"
+      ],
+      "action": true
+    },
+    "sampling.validity": {
+      "params": [
+        "rule",
+        "validity_seconds",
+        "interval_seconds"
+      ],
+      "action": true
+    },
+    "sampling.interval": {
+      "params": [
+        "interval_seconds"
+      ],
+      "action": true
+    },
+    "sampling.max_gap": {
+      "params": [
+        "max_gap_seconds"
+      ],
+      "action": true
+    },
+    "duration.rule": {
+      "params": [
+        "rule",
+        "duration_seconds",
+        "min_switch_seconds"
+      ],
+      "action": true
+    },
+    "duration.protection": {
+      "params": [
+        "protection",
+        "duration_seconds"
+      ],
+      "action": true
+    },
+    "duration.run": {
+      "params": [
+        "duration_seconds"
+      ],
+      "action": true
+    },
+    "wait": {
+      "params": [
+        "max_wait_seconds"
+      ],
+      "action": true
+    },
+    "missing_tolerance": {
+      "params": [
+        "channel"
+      ],
+      "action": true
+    },
+    "manual_task": {
+      "params": [
+        "task_kind",
+        "task_id",
+        "at_local"
+      ],
+      "action": true
+    },
+    "manual_task.irrigation": {
+      "params": [
+        "task_id",
+        "at_local",
+        "seconds"
+      ],
+      "action": true
+    },
+    "no_evidence": {
+      "params": [
+        "source_kind",
+        "source"
+      ],
+      "action": true
+    },
+    "unverified_source": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id"
+      ],
+      "action": true
+    },
+    "uncalibrated": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id"
+      ],
+      "action": true
+    },
+    "unknown_treatment": {
+      "params": [
+        "treatments"
+      ],
+      "action": true
+    },
+    "missing_control.undefined": {
+      "params": [
+        "control"
+      ],
+      "action": true
+    },
+    "missing_control.unallocated": {
+      "params": [
+        "control",
+        "control_id"
+      ],
+      "action": true
+    },
+    "no_replication": {
+      "params": [
+        "treatments",
+        "treatment_ids"
+      ],
+      "action": true
+    },
+    "unbalanced_block": {
+      "params": [
+        "block"
+      ],
+      "action": true
+    },
+    "confounded_with_time": {
+      "params": [],
+      "action": true
+    },
+    "seed_mismatch.unreproducible": {
+      "params": [],
+      "action": true
+    },
+    "seed_mismatch.differs": {
+      "params": [],
+      "action": true
+    },
+    "treatment_not_applied": {
+      "params": [
+        "round",
+        "treatment",
+        "treatment_id",
+        "problems"
+      ],
+      "action": true
+    },
+    "treatment_not_applied.none": {
+      "params": [
+        "round",
+        "treatments",
+        "treatment_ids"
+      ],
+      "action": true
+    }
+  },
+  "receipt": {
+    "not_sent": {
+      "params": [],
+      "action": true
+    },
+    "device_rejected": {
+      "params": [],
+      "action": true
+    },
+    "no_receipt": {
+      "params": [],
+      "action": true
+    },
+    "link_broke": {
+      "params": [],
+      "action": true
+    },
+    "readback_level": {
+      "params": [
+        "channel",
+        "expected"
+      ],
+      "action": true
+    },
+    "readback_unavailable": {
+      "params": [],
+      "action": true
+    },
+    "readback_mode": {
+      "params": [
+        "mode"
+      ],
+      "action": true
+    },
+    "void_recovery_changed": {
+      "params": [],
+      "action": true
+    },
+    "void_handover": {
+      "params": [],
+      "action": true
+    },
+    "void_restart": {
+      "params": [],
+      "action": true
+    },
+    "void_superseded": {
+      "params": [
+        "channel"
+      ],
+      "action": true
+    },
+    "void_denied": {
+      "params": [
+        "denied_code"
+      ],
+      "action": true
+    },
+    "internal_error": {
+      "params": [],
+      "action": true
+    },
+    "lost_receipt": {
+      "params": [],
+      "action": true
+    },
+    "pump_off_unconfirmed": {
+      "params": [],
+      "action": true
+    },
+    "settled_applied": {
+      "params": [
+        "channel",
+        "level"
+      ],
+      "action": false
+    },
+    "settled_not_applied": {
+      "params": [
+        "channel",
+        "level",
+        "mode"
+      ],
+      "action": true
+    }
+  },
+  "task_end": {
+    "handover": {
+      "params": [],
+      "action": false
+    },
+    "protection_write": {
+      "params": [
+        "channel"
+      ],
+      "action": true
+    },
+    "pump_off_interlock": {
+      "params": [],
+      "action": true
+    },
+    "pump_off_watchdog": {
+      "params": [],
+      "action": true
+    },
+    "pump_off_unconfirmed": {
+      "params": [],
+      "action": true
+    },
+    "not_confirmed": {
+      "params": [
+        "action_state"
+      ],
+      "action": true
+    },
+    "other": {
+      "params": [],
+      "action": true
+    }
+  },
+  "compute_error": {
+    "submit_rejected": {
+      "params": [],
+      "action": true
+    },
+    "submit_failed": {
+      "params": [],
+      "action": true
+    },
+    "orphan_not_cancelled": {
+      "params": [],
+      "action": true
+    },
+    "late_cancelled": {
+      "params": [],
+      "action": false
+    },
+    "backend_error": {
+      "params": [],
+      "action": true
+    },
+    "cancelled_no_job": {
+      "params": [],
+      "action": false
+    },
+    "cancel_unknown": {
+      "params": [],
+      "action": true
+    },
+    "outcome_unknown": {
+      "params": [],
+      "action": true
+    },
+    "cancel_failed": {
+      "params": [],
+      "action": true
+    },
+    "cleanup_failed": {
+      "params": [],
+      "action": true
+    },
+    "settled_by_operator": {
+      "params": [],
+      "action": false
+    },
+    "output_limit": {
+      "params": [
+        "limit_kind",
+        "bytes",
+        "limit"
+      ],
+      "action": true
+    },
+    "too_many_files": {
+      "params": [
+        "file_count",
+        "limit_count"
+      ],
+      "action": true
+    },
+    "artifact_missing": {
+      "params": [
+        "name"
+      ],
+      "action": true
+    },
+    "artifact_mismatch": {
+      "params": [
+        "name"
+      ],
+      "action": true
+    },
+    "no_artifacts": {
+      "params": [],
+      "action": true
+    }
+  },
+  "compute_stuck": {
+    "reconcile_wait": {
+      "params": [
+        "age_seconds"
+      ],
+      "action": true
+    },
+    "not_refreshed": {
+      "params": [
+        "age_seconds"
+      ],
+      "action": true
+    },
+    "error": {
+      "params": [],
+      "action": false
+    }
+  },
+  "chat_end": {
+    "denied": {
+      "params": [
+        "denied_code"
+      ],
+      "action": true
+    },
+    "model_unavailable": {
+      "params": [],
+      "action": true
+    },
+    "model_stopped": {
+      "params": [
+        "stop_reason"
+      ],
+      "action": true
+    },
+    "undelivered": {
+      "params": [
+        "role"
+      ],
+      "action": true
+    },
+    "run_finished": {
+      "params": [],
+      "action": false
+    }
+  },
+  "estimate": {
+    "too_few_blocks": {
+      "params": [
+        "blocks",
+        "min_blocks"
+      ],
+      "action": true
+    },
+    "sampled_p": {
+      "params": [
+        "flips",
+        "blocks"
+      ],
+      "action": false
+    }
+  }
+}

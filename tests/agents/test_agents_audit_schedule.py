@@ -74,8 +74,8 @@ def rig(db, state=StageState.RUNNING, budget=True, started=True):
         budget=calls,
         clock=clock,
         book=book,
-        alert=lambda kind, key, message, severity="critical": book.raise_alert(
-            kind, key, severity, message
+        alert=lambda kind, key, message, severity="critical", *, code=None, params=None: (
+            book.raise_alert(kind, key, severity, message, code=code, params=params)
         ),
         resolve_alert=resolve_alert,
     )
@@ -220,6 +220,8 @@ async def test_the_schedule_alert_resolves_after_a_scheduling_that_did_not_raise
     monkeypatch.setattr(runtime_agents, "schedule_audits", broken)
     assert await run_agents(runtime, dispatcher=None) == 0
     assert ("audit_schedule", "schedule") in open_alerts(runtime)
+    schedule = open_alerts(runtime)[("audit_schedule", "schedule")]
+    assert (schedule.code, schedule.params) == ("audit_schedule", {})
 
     monkeypatch.undo()
     assert await run_agents(runtime, dispatcher=None) == 0
@@ -278,6 +280,8 @@ async def test_an_audit_that_fails_on_two_stage_days_is_one_warning(db):
     (alert,) = runtime.book.open()
     assert (alert.kind, alert.key) == ("audit_task", f"audit:{STAGE}")
     assert (alert.severity, alert.count) == ("warning", 2)
+    assert alert.code == "audit_task_attention"
+    assert alert.params == {"stage_id": STAGE, "task_id": audits(runtime)[-1].id}
 
 
 async def test_an_audit_that_ends_done_closes_its_stages_failed_audit_warning(db):
@@ -301,6 +305,8 @@ async def test_an_audit_run_that_raises_is_a_warning_not_a_critical_alert(db):
 
     (alert,) = runtime.book.open()
     assert (alert.kind, alert.key, alert.severity) == ("audit_task", f"audit:{STAGE}", "warning")
+    assert alert.code == "audit_task_failed"
+    assert alert.params == {"stage_id": STAGE, "task_id": audits(runtime)[-1].id}
 
 
 async def test_an_audit_task_without_a_stage_reference_is_keyed_by_its_task(db):
@@ -311,6 +317,8 @@ async def test_an_audit_task_without_a_stage_reference_is_keyed_by_its_task(db):
 
     (alert,) = runtime.book.open()
     assert (alert.kind, alert.key, alert.severity) == ("audit_task", f"audit:{task.id}", "warning")
+    assert alert.code == "audit_task_failed"
+    assert alert.params == {"stage_id": None, "task_id": task.id}
 
 
 async def test_another_roles_failing_task_is_still_a_critical_agent_task_alert(db):

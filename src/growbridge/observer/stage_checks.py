@@ -4,6 +4,7 @@ window. Closes those alerts, the auditor's findings and the warning of its faile
 their stage is no longer the active one. Reads stored records only; never reports a stage event
 or pauses anything."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -74,10 +75,39 @@ class StageChecks:
             if item.due_at > now:
                 continue
             slot = f"{stage.stage_id}:{item.task_id}:{int(item.due_at)}"
-            self._set(state == "missed", TASK_MISSED, slot, self._missed_text(item))
+            missed = {
+                "stage_id": stage.stage_id,
+                "task_id": item.task_id,
+                "task_kind": item.kind,
+                "due_at": item.due_at,
+            }
+            self._set(
+                state == "missed",
+                TASK_MISSED,
+                slot,
+                self._missed_text(item),
+                code="task_missed",
+                params=missed,
+            )
             gap = self._unmeasured(item, record, current, now, end)
-            text = "" if gap is None else self._lacks_text(item, gap, stage.run_sheet.timezone)
-            self._set(gap is not None, MEASUREMENT_MISSING, slot, text)
+            zone = stage.run_sheet.timezone
+            text = "" if gap is None else self._lacks_text(item, gap, zone)
+            window = (0.0, 0.0) if gap is None else gap
+            lacking = {
+                "stage_id": stage.stage_id,
+                "task_id": item.task_id,
+                "window_start": window[0],
+                "window_end": window[1],
+                "timezone": zone,
+            }
+            self._set(
+                gap is not None,
+                MEASUREMENT_MISSING,
+                slot,
+                text,
+                code="measurement_missing",
+                params=lacking,
+            )
 
     @staticmethod
     def _unmeasured(item, record, current, now: float, end: float) -> tuple[float, float] | None:
@@ -113,16 +143,37 @@ class StageChecks:
                 "and will not be in its snapshot. Enter it again with the time it was taken, "
                 "or record a correction."
             )
-            self.book.raise_alert(OUTSIDE_WINDOW, f"{stage.stage_id}:{mid}", SEVERITY, text)
+            self.book.raise_alert(
+                OUTSIDE_WINDOW,
+                f"{stage.stage_id}:{mid}",
+                SEVERITY,
+                text,
+                code="measurement_outside_window",
+                params={
+                    "stage_id": stage.stage_id,
+                    "measurement_id": mid,
+                    "metric": row["metric"],
+                    "measured_at": row["measured_at"],
+                },
+            )
         prefix = f"{stage.stage_id}:"
         for alert in self.book.open():
             if alert.kind == OUTSIDE_WINDOW and alert.key.startswith(prefix):
                 if alert.key[len(prefix) :] not in outside:
                     self.book.resolve(OUTSIDE_WINDOW, alert.key)
 
-    def _set(self, active: bool, kind: str, key: str, message: str) -> None:
+    def _set(
+        self,
+        active: bool,
+        kind: str,
+        key: str,
+        message: str,
+        *,
+        code: str | None = None,
+        params: Mapping[str, object] | None = None,
+    ) -> None:
         if active:
-            self.book.raise_alert(kind, key, SEVERITY, message)
+            self.book.raise_alert(kind, key, SEVERITY, message, code=code, params=params)
         else:
             self.book.resolve(kind, key)
 

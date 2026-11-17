@@ -3,6 +3,7 @@
 // person on the on-site entry; the stage keeps running. Records are appended, the latest counts.
 import { formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
+import { messageParts } from "../messages.js";
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { displayName } from "../ui/names.js";
@@ -41,10 +42,14 @@ export function irrigationNotice(answer) {
   return { key: "tasks.irrigated", tone: "ok" };
 }
 
-function partialText(ctx, record) {
-  const why = record.ended_early || "";
-  if (typeof record.ran_seconds !== "number") return ctx.t("tasks.partialUnconfirmed", { why });
-  return ctx.t("tasks.partialRan", { seconds: Math.round(record.ran_seconds * 10) / 10, why });
+// How long the pump ran, then why it stopped (the task_end message) and what to do. Without a code
+// (an old record) it reads "ended early"; the server's English stays in the details.
+function partialParts(ctx, record) {
+  const ran = typeof record.ran_seconds === "number" ? ctx.t("tasks.partialRan", { duration: formatDuration(ctx.t, record.ran_seconds) }) : ctx.t("tasks.partialUnconfirmed");
+  const code = record.ended_early_code || "other";
+  const parts = messageParts(ctx, "task_end", code, record.ended_early_params);
+  const details = record.ended_early_code ? parts.details : [];
+  return { lines: [ran, parts.text, parts.action].filter(Boolean), details: [...details, [ctx.t("tech.serverMessage"), record.ended_early]] };
 }
 
 // A fold's key across the minute's redraw: the tasks' own folds by name, a row's by its occurrence.
@@ -60,6 +65,7 @@ function taskDetails(ctx, row) {
     [ctx.t("tech.id.task_id"), row.task_id],
     [ctx.t("tech.recordId"), record.id],
     [ctx.t("receipt.requestId"), record.irrigation_request_id],
+    ...(record.outcome === "partial" ? partialParts(ctx, record).details : []),
   ]);
   return foldKey(fold, `task:${row.task_id}@${row.due_at}`);
 }
@@ -68,7 +74,7 @@ function recordMeta(ctx, record) {
   if (!record) return [];
   const when = record.done_at ? ctx.t("tasks.doneAt", { time: timeText(ctx, record.done_at), who: record.operator }) : ctx.t("tasks.by", { who: record.operator });
   const meta = [h("span", { class: "task-meta", text: when })];
-  if (record.outcome === "partial") meta.push(h("span", { class: "task-meta", text: partialText(ctx, record) }));
+  if (record.outcome === "partial") meta.push(...partialParts(ctx, record).lines.map((text) => h("span", { class: "task-meta", text })));
   return meta;
 }
 

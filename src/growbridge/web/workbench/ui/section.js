@@ -15,7 +15,8 @@ function siteZone(ctx) {
   return (ctx.me && ctx.me.timezone) || "UTC";
 }
 
-function nowSeconds(ctx) {
+// The page's clock in epoch seconds: the ctx's `now` when one is given (tests pin it), else the browser's.
+export function nowSeconds(ctx) {
   return ctx.now ?? Date.now() / 1000;
 }
 

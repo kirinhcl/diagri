@@ -14,6 +14,7 @@ from typing import Annotated, Protocol
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
 
+from growbridge.agents.budget import BudgetUsage
 from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
@@ -48,6 +49,8 @@ class ProjectBudget(Protocol):
     def set(self, project_id: str, budget: Budget) -> None: ...
 
     def remaining(self, project_id: str) -> tuple[int, float]: ...
+
+    def usage(self, project_id: str) -> BudgetUsage | None: ...
 
 
 # --- request bodies ----------------------------------------------------------------------------
@@ -123,8 +126,10 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
         raise Denied("state", f"the report file of round {round_id} is missing")
     if path.stat().st_size > MAX_REPORT_BYTES or file_digest(path) != artifact.sha256:
         raise Denied("state", f"the report of round {round_id} no longer matches its digest")
+    protocol = workflow.store.protocol(rnd.protocol_id, rnd.protocol_version)
     return {
         "round_id": round_id,
+        "primary_endpoint": None if protocol is None else protocol.analysis.primary_endpoint,
         "artifact_id": artifact.id,
         "label": artifact.label,
         "sha256": artifact.sha256,

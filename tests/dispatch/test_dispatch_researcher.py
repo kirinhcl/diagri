@@ -520,9 +520,14 @@ async def test_a_round_the_device_never_ran_at_its_level_is_a_deviation(env, tmp
     assert failed == {
         "round": 1,
         "treatment_id": "high",
-        "problems": ["light was never at 70 (recorded [20])"],
+        "treatment": "light 70 %",
+        "problems": [
+            {"channel": "light", "kind": "never_at", "level": 70, "recorded": [20], "share": 0.0}
+        ],
     }
-    assert any("第 1 轮没有按分配的处理 high" in x for x in _report(env, outcome)["limitations"])
+    assert any(
+        "第 1 轮没有按分配的处理 light 70 %" in x for x in _report(env, outcome)["limitations"]
+    )
 
 
 async def test_rounds_without_recorded_levels_are_reported_as_unverified(env):

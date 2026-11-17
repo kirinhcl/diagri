@@ -62,3 +62,33 @@ test("time labels take the year from the page clock", () => {
   assert.ok(!/2026/.test(visibleText(thisYear)));
   assert.ok(/ 2026 /.test(visibleText(later)));
 });
+
+const fanOnly = LEVELS.filter((m) => m.key === "fan");
+
+test("a level chart draws the plan as a dashed step line with a legend", () => {
+  const { t } = testCtx({ lang: "en" });
+  const planned = { fan: [[1796590000, 1], [1796592000, 3]] };
+  const chart = readingsChart(t, readings, { timeZone: "UTC", lang: "en", metrics: fanOnly, planned });
+  const nodes = walk(chart);
+  const dashed = nodes.filter((n) => n.localName === "polyline" && classes(n).includes("chart-plan"));
+  assert.equal(dashed.length, 1);
+  assert.ok(dashed[0].getAttribute("stroke-dasharray"));
+  // a step: the line holds level 1 until 1796592000, then rises
+  const coords = dashed[0].getAttribute("points").split(" ").map((p) => p.split(",").map(Number));
+  assert.equal(coords.length, 4);
+  assert.equal(coords[1][1], coords[0][1]);
+  assert.equal(coords[1][0], coords[2][0]);
+  const text = visibleText(chart);
+  assert.ok(text.includes("Planned"));
+  assert.ok(text.includes("Planned level"));
+});
+
+test("without a plan there is no plan line and no legend", () => {
+  const { t } = testCtx({ lang: "en" });
+  for (const planned of [undefined, {}, { light: [[1796590000, 5]] }]) {
+    const chart = readingsChart(t, readings, { timeZone: "UTC", lang: "en", metrics: fanOnly, planned });
+    assert.equal(walk(chart).filter((n) => classes(n).includes("chart-plan")).length, 0);
+    const text = visibleText(chart);
+    assert.ok(!text.includes("Planned"));
+  }
+});

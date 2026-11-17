@@ -402,12 +402,18 @@ class FirecrestBackend:
     def _check_listing(listed: list[tuple[str, int]], max_bytes: int) -> None:
         if len(listed) > MAX_OUTPUT_FILES:
             raise OutputTooLarge(
-                f"output limit: {len(listed)} output files, over the limit of {MAX_OUTPUT_FILES}"
+                f"output limit: {len(listed)} output files, over the limit of {MAX_OUTPUT_FILES}",
+                limit_kind="files",
+                file_count=len(listed),
+                limit_count=MAX_OUTPUT_FILES,
             )
         total = sum(size for _, size in listed)
         if total > max_bytes:
             raise OutputTooLarge(
-                f"output limit: the outputs total {total} bytes, over the limit of {max_bytes}"
+                f"output limit: the outputs total {total} bytes, over the limit of {max_bytes}",
+                limit_kind="total",
+                size=total,
+                limit=max_bytes,
             )
 
     async def _download_all(
@@ -427,7 +433,10 @@ class FirecrestBackend:
             if size > remaining:
                 raise OutputTooLarge(
                     f"output limit: a file listed at {size} bytes does not fit in the {remaining}"
-                    f" bytes left of the limit of {max_bytes}"
+                    f" bytes left of the limit of {max_bytes}",
+                    limit_kind="file",
+                    size=size,
+                    limit=remaining,
                 )
             target = out_dir / name
             downloaded.append(target)  # before the download: a partial file is removed as well
@@ -448,7 +457,10 @@ class FirecrestBackend:
                 await asyncio.wait({task}, timeout=WATCH_INTERVAL_SECONDS)
                 if not task.done() and _on_disk(target, missing_ok=True) > remaining:
                     raise OutputTooLarge(
-                        f"output limit: a download passed the {remaining} bytes left of the limit"
+                        f"output limit: a download passed the {remaining} bytes left of the limit",
+                        limit_kind="download",
+                        size=_on_disk(target, missing_ok=True),
+                        limit=remaining,
                     )
             task.result()  # a failed download raises here
         finally:
@@ -459,7 +471,10 @@ class FirecrestBackend:
         if size > remaining:
             raise OutputTooLarge(
                 f"output limit: a download of {size} bytes passed the {remaining} bytes left"
-                " of the limit"
+                " of the limit",
+                limit_kind="download",
+                size=size,
+                limit=remaining,
             )
         return size
 

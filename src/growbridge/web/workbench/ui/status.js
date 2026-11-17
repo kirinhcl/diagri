@@ -65,6 +65,20 @@ export function statePill(t, state, { fold = true } = {}) {
   return fold ? withCode(t, "state", state, pill) : pill;
 }
 
+// A state pill that stays the same element while the state does, for a part its page draws again on
+// every poll: a fold the reader opened beside it stays open until the state changes.
+export function statePillKeeper(t) {
+  let shown;
+  let kept = null;
+  return (state) => {
+    if (kept === null || state !== shown) {
+      shown = state;
+      kept = statePill(t, state);
+    }
+    return kept;
+  };
+}
+
 export function severityPill(t, severity, { fold = true } = {}) {
   const group = SEVERITY_GROUP.get(String(severity)) || "other";
   const pill = h("span", { class: ["pill", `pill-${group}`], text: labelOr(t, "severity", severity) });

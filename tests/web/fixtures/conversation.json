@@ -59,7 +59,9 @@
       "kind": "status",
       "text": "done",
       "detail": {
-        "reason": "run finished"
+        "reason": "run finished",
+        "code": "run_finished",
+        "params": {}
       },
       "at": 1794779698.759553
     },
@@ -189,7 +191,9 @@
       "kind": "status",
       "text": "done",
       "detail": {
-        "reason": "run finished"
+        "reason": "run finished",
+        "code": "run_finished",
+        "params": {}
       },
       "at": 1794779788.733253
     },
@@ -225,7 +229,9 @@
       "kind": "status",
       "text": "done",
       "detail": {
-        "reason": "run finished"
+        "reason": "run finished",
+        "code": "run_finished",
+        "params": {}
       },
       "at": 1794779833.616833
     },
@@ -328,7 +334,9 @@
       "kind": "status",
       "text": "done",
       "detail": {
-        "reason": "run finished"
+        "reason": "run finished",
+        "code": "run_finished",
+        "params": {}
       },
       "at": 1796594813.003714
     },
@@ -482,7 +490,9 @@
       "kind": "status",
       "text": "done",
       "detail": {
-        "reason": "run finished"
+        "reason": "run finished",
+        "code": "run_finished",
+        "params": {}
       },
       "at": 1796594946.66594
     },

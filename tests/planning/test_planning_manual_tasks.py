@@ -107,7 +107,6 @@ def test_missed_counts_everything_not_done_in_time_and_the_limit():
     assert (missed, total, by_kind) == (1, 20, {"irrigation": 1})
     assert not mt.deviates(missed, total)  # 5 % is within the limit
     assert mt.deviates(3, 20) and not mt.deviates(0, 0)
-    assert mt.by_kind_text({"irrigation": 2, "photo": 1}) == "irrigation 2, photo 1"
 
 
 def _daily_photo_week():

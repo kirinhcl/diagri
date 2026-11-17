@@ -539,3 +539,12 @@ async def test_a_real_watch_resolves_the_failure_alert_only_after_a_completed_ch
     rig.clock.mono += 1
     await observer.tick()  # a check completed
     assert not failure_open() and len(calls) == 2
+
+
+async def test_frozen_reading_alert_carries_the_sensor_and_value(rig):
+    rig.feed(121, temp=24.0, humi=moving, co2=moving)
+    await rig.check()
+    (alert,) = rig.alerts()
+    assert alert.code == "frozen_reading"
+    assert alert.params == {"sensor": "temp", "value": 24.0}
+    assert alert.message == "temp has reported exactly 24 without change (frozen reading)"

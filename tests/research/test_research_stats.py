@@ -193,3 +193,28 @@ def test_units_of_other_metrics_do_not_matter():
     ]
 
     assert unit_means(rows, protocol.allocations, METRIC, ROUND_OF) == {(1, "high"): 1.0}
+
+
+def test_an_estimate_with_too_few_blocks_carries_a_note_code():
+    estimate = paired_block_estimate({(1, "control"): 1.0, (1, "high"): 2.0}, "control", "high")
+
+    assert estimate.note_code == "too_few_blocks"
+    assert estimate.note_params == {"blocks": 1, "min_blocks": 2}
+    assert estimate.note.startswith("fewer than 2 complete blocks")
+
+
+def test_a_sampled_estimate_names_its_flips_and_exact_has_no_code():
+    values = {}
+    for block in range(1, 26):
+        values[(block, "control")] = 1.0
+        values[(block, "high")] = 2.0 + block
+    sampled = paired_block_estimate(values, "control", "high")
+    exact = paired_block_estimate(
+        {(1, "control"): 1.0, (1, "high"): 2.0, (2, "control"): 1.0, (2, "high"): 3.0},
+        "control",
+        "high",
+    )
+
+    assert sampled.note_code == "sampled_p"
+    assert sampled.note_params == {"flips": 20_000, "blocks": 25}
+    assert exact.note_code == "" and exact.note_params == {} and exact.note == ""

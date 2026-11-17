@@ -1,6 +1,7 @@
 """Project-level model-call and cost budget shared by every model role (architecture doc §5.2)."""
 
 import sqlite3
+from dataclasses import dataclass
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
@@ -13,6 +14,16 @@ STEPS = (
     "project_id TEXT PRIMARY KEY, max_calls INTEGER NOT NULL, max_cost REAL NOT NULL, "
     "used_calls INTEGER NOT NULL DEFAULT 0, used_cost REAL NOT NULL DEFAULT 0)",
 )
+
+
+@dataclass(frozen=True)
+class BudgetUsage:
+    """What a project has used and may use in all; ``used_cost`` can exceed ``max_cost``."""
+
+    used_calls: int
+    used_cost: float
+    max_calls: int
+    max_cost: float
 
 
 class CallBudget:
@@ -62,6 +73,13 @@ class CallBudget:
             max(0, row["max_calls"] - row["used_calls"]),
             max(0.0, row["max_cost"] - row["used_cost"]),
         )
+
+    def usage(self, project_id: str) -> BudgetUsage | None:
+        """Used and total, unclamped; None when the project has no budget."""
+        row = self.db.one("SELECT * FROM call_budget WHERE project_id = ?", (project_id,))
+        if row is None:
+            return None
+        return BudgetUsage(row["used_calls"], row["used_cost"], row["max_calls"], row["max_cost"])
 
     def _row(self, project_id: str) -> sqlite3.Row:
         row = self.db.one("SELECT * FROM call_budget WHERE project_id = ?", (project_id,))

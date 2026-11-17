@@ -34,6 +34,32 @@ function span(readings, samples) {
   return { start: Math.min(...times), end: Math.max(...times) };
 }
 
+// The run sheet's plan for one channel as a dashed step line: it holds each level until the next
+// change, and runs on to the end of the span. plan: [[epoch, level], ...] (the server's `planned`).
+function planLine(plan, series, box) {
+  const [lo, hi] = series.domain;
+  const x = (t) => (box.end > box.start ? ((Math.min(Math.max(t, box.start), box.end) - box.start) / (box.end - box.start)) * WIDTH : WIDTH / 2);
+  const y = (v) => (hi > lo ? Math.min(HEIGHT, Math.max(0, HEIGHT - ((v - lo) / (hi - lo)) * HEIGHT)) : HEIGHT / 2);
+  const steps = [];
+  for (const [t, level] of plan) {
+    if (steps.length > 0) steps.push([x(t), steps[steps.length - 1][1]]);
+    steps.push([x(t), y(level)]);
+  }
+  steps.push([x(box.end), steps[steps.length - 1][1]]);
+  const attrs = { class: "chart-plan", points: steps.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" "), "stroke-dasharray": "6 4" };
+  return svg("polyline", attrs);
+}
+
+// The level planned at an instant: the latest plan point at or before it; null before the plan begins.
+function plannedAt(plan, t) {
+  let level = null;
+  for (const [at, value] of plan) {
+    if (at > t) break;
+    level = value;
+  }
+  return level;
+}
+
 function pointTitle(t, point, metric, options) {
   const text = `${valueLabel(point.v, metric, options.lang)} · ${timeLabel(point.t, options.timeZone, options.lang, options.now)}`;
   return point.flagged ? `${text} · ${t("chart.flaggedPoint")}` : text;
@@ -82,11 +108,15 @@ function xTicks(span, options) {
   );
 }
 
-function dataTable(t, series, metric, options) {
+function dataTable(t, series, metric, options, plan) {
   const columns = [
     { label: t("chart.table.time"), cell: (point) => timeLabel(point.t, options.timeZone, options.lang, options.now) },
     { label: t("chart.table.value"), cell: (point) => valueLabel(point.v, metric, options.lang) },
   ];
+  if (plan) {
+    const planned = (point) => plannedAt(plan, point.t);
+    columns.push({ label: t("chart.table.planned"), cell: (point) => (planned(point) === null ? "–" : valueLabel(planned(point), metric, options.lang)) });
+  }
   return h(
     "details",
     { class: "chart-fold", attrs: { "data-fold": `${metric.key}:table` } },
@@ -95,7 +125,7 @@ function dataTable(t, series, metric, options) {
   );
 }
 
-function plot(t, series, segments, metric, options) {
+function plot(t, series, segments, metric, options, planNode) {
   const { points } = series;
   const summary = t("chart.summary", {
     metric: t(`metric.${metric.key}`),
@@ -111,6 +141,7 @@ function plot(t, series, segments, metric, options) {
       { transform: `translate(${PAD} ${PAD})` },
       svg("line", { class: "chart-rule", x1: 0, y1: 0, x2: WIDTH, y2: 0 }),
       svg("line", { class: "chart-rule", x1: 0, y1: HEIGHT, x2: WIDTH, y2: HEIGHT }),
+      planNode,
       lines(segments),
       pointMarks(t, segments, metric, options),
     ),
@@ -118,7 +149,7 @@ function plot(t, series, segments, metric, options) {
 }
 
 // The latest value is the current reading; its time and any problem with it are said beside it.
-function chartHead(t, series, metric, options) {
+function chartHead(t, series, metric, options, hasPlan) {
   const latest = series.points[series.points.length - 1];
   const when = t("chart.latestAt", { time: timeLabel(latest.t, options.timeZone, options.lang, options.now) });
   const range = t("chart.range", {
@@ -133,6 +164,7 @@ function chartHead(t, series, metric, options) {
     h("span", { class: "chart-value", text: valueLabel(latest.v, metric, options.lang) }),
     h("span", { class: "chart-meta", text: latest.flagged ? `${when} · ${t("chart.flaggedPoint")}` : when }),
     h("span", { class: "chart-meta", text: range }),
+    hasPlan ? h("span", { class: "chart-meta chart-plan-key", text: t("chart.planned") }) : null,
   );
 }
 
@@ -154,6 +186,12 @@ function notes(t, readings, samples, options, hasGaps) {
   );
 }
 
+// The plan of one metric: a non-empty [[epoch, level], ...], or null when the stage has none.
+function planOf(planned, key) {
+  const plan = planned && planned[key];
+  return Array.isArray(plan) && plan.length > 0 ? plan : null;
+}
+
 function domainOf(series, metric) {
   const fixed = DEFAULT_LEVEL_RANGES[metric.key];
   if (fixed) return fixed;
@@ -165,10 +203,12 @@ function domainOf(series, metric) {
 // sampleSeconds: the run sheet's sampling interval, when known; it widens the gap limit so a series
 // sampled more slowly than the bucket width is not cut into dots. metrics: the readings to draw
 // (default the sensors; LEVELS draws the channel levels); empty: the text when nothing is drawn.
+// planned: { channel: [[epoch, level], ...] } from the running stage; each channel with a plan
+// gets a dashed step line, a "Planned" key and a planned-level column in its data table.
 export function readingsChart(
   t,
   readings,
-  { timeZone = "UTC", lang = "en", sampleSeconds = null, metrics = METRICS, empty = "chart.empty", now, scope = "readings" } = {},
+  { timeZone = "UTC", lang = "en", sampleSeconds = null, metrics = METRICS, empty = "chart.empty", now, scope = "readings", planned = null } = {},
 ) {
   const samples = readings && Array.isArray(readings.samples) ? readings.samples : [];
   const options = { timeZone, lang, now, scope };
@@ -183,8 +223,10 @@ export function readingsChart(
     const series = seriesPoints(samples, metric.key, { ...box, domain: domainOf(own, metric) });
     const segments = splitAtGaps(series.points, maxGap);
     hasGaps = hasGaps || segments.length > 1;
-    const body = h("div", { class: "chart-body" }, yTicks(series, metric, options), plot(t, series, segments, metric, options));
-    const figure = h("figure", { class: "chart" }, chartHead(t, series, metric, options), body, xTicks(box, options), dataTable(t, series, metric, options));
+    const plan = planOf(planned, metric.key);
+    const planNode = plan ? planLine(plan, series, box) : null;
+    const body = h("div", { class: "chart-body" }, yTicks(series, metric, options), plot(t, series, segments, metric, options, planNode));
+    const figure = h("figure", { class: "chart" }, chartHead(t, series, metric, options, plan !== null), body, xTicks(box, options), dataTable(t, series, metric, options, plan));
     figures.push(figure);
   }
   if (figures.length === 0) return h("p", { class: "chart-empty", text: t(empty) });

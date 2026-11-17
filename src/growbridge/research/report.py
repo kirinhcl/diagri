@@ -29,7 +29,7 @@ def _effective_label(
 ) -> tuple[Label, tuple[Note, ...]]:
     """A confirmatory label needs a complete snapshot behind it."""
     if decision.label == "confirmatory" and not snapshot.complete:
-        return "exploratory", (note("snapshot_incomplete", coverage=f"{snapshot.coverage:.0%}"),)
+        return "exploratory", (note("snapshot_incomplete", coverage=snapshot.coverage),)
     return decision.label, ()
 
 

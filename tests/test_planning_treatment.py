@@ -81,9 +81,13 @@ def test_recorded_levels_must_show_the_treatment():
     night_and_day = [reading(70)] * 16 + [reading(0)] * 8
 
     assert delivered(night_and_day, HIGH) == []
-    assert delivered([reading(20)] * 10, HIGH) == ["light was never at 70 (recorded [20])"]
+    assert delivered([reading(20)] * 10, HIGH) == [
+        {"channel": "light", "kind": "never_at", "level": 70, "recorded": [20], "share": 0.0}
+    ]
     slipped = delivered([reading(70)] * 5 + [reading(50)] * 5, HIGH)
-    assert slipped == ["light was at other levels in 50 % of the readings"]
+    assert slipped == [
+        {"channel": "light", "kind": "other_share", "level": 70, "recorded": [50, 70], "share": 0.5}
+    ]
 
 
 def test_samples_without_a_level_cannot_be_checked_and_say_so():

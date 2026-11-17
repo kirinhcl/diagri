@@ -6,7 +6,7 @@ done in time as a protocol deviation.
 """
 
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -130,7 +130,3 @@ def unsettled(
 
 def deviates(missed_count: int, total: int) -> bool:
     return total > 0 and missed_count / total > MAX_MISSED_SHARE
-
-
-def by_kind_text(counts: Mapping[str, int]) -> str:
-    return ", ".join(f"{kind} {count}" for kind, count in counts.items())

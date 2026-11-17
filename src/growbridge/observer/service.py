@@ -76,7 +76,9 @@ class Observer:
     def _track_gaps(self, gaps: Sequence[str]) -> None:
         for sensor in gaps:
             message = f"No usable {sensor} data; threshold alerts for it are suspended"
-            self.book.raise_alert("data_gap", sensor, "warning", message)
+            self.book.raise_alert(
+                "data_gap", sensor, "warning", message, code="data_gap", params={"sensor": sensor}
+            )
         for sensor in {rule.sensor for rule in self.rules} - set(gaps):
             self.book.resolve("data_gap", sensor)
 
@@ -93,7 +95,20 @@ class Observer:
                 f"{rule.sensor} {rule.condition.op} {rule.condition.value} "
                 f"for {rule.duration_seconds:g} s ({rule.name})"
             )
-            alert = self.book.raise_alert("threshold", rule.name, rule.severity, message)
+            alert = self.book.raise_alert(
+                "threshold",
+                rule.name,
+                rule.severity,
+                message,
+                code="threshold",
+                params={
+                    "sensor": rule.sensor,
+                    "op": rule.condition.op,
+                    "value": rule.condition.value,
+                    "duration_seconds": rule.duration_seconds,
+                    "rule": rule.name,
+                },
+            )
             if rule.pause_stage:
                 await self._pause(rule, alert)
         await self._watch_frozen()
@@ -108,7 +123,12 @@ class Observer:
         except Exception:
             log.exception("frozen-reading check failed")
             self.book.raise_alert(
-                "frozen_watch", "check", "critical", "The frozen-reading check is failing"
+                "frozen_watch",
+                "check",
+                "critical",
+                "The frozen-reading check is failing",
+                code="frozen_watch",
+                params={},
             )
         else:
             if checked:  # only a completed check shows the failure is over
@@ -122,7 +142,12 @@ class Observer:
         except Exception:
             log.exception("stage checks failed")
             self.book.raise_alert(
-                "stage_checks", "check", "critical", "The stage checks are failing"
+                "stage_checks",
+                "check",
+                "critical",
+                "The stage checks are failing",
+                code="stage_checks",
+                params={},
             )
         else:
             if checked:  # only a completed check shows the failure is over

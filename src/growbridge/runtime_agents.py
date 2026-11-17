@@ -121,21 +121,32 @@ def schedule_audits(runtime: Any) -> int:
     return int(stored.id == task.id)
 
 
-def _report_failure(runtime: Any, task: ResearchTask, message: str) -> None:
-    """Alert on a model task that failed or needs attention. A top-level task gets no follow-up,
-    so the alert is what keeps a round from stalling silently: critical. An audit is advisory and
-    repeats every stage day, so its failures merge into one warning per stage."""
+def _report_failure(runtime: Any, task: ResearchTask, message: str, *, failed: bool) -> None:
+    """Alert on a model task that failed (``failed``: it raised) or needs attention. A top-level
+    task gets no follow-up, so the alert is what keeps a round from stalling silently: critical.
+    An audit is advisory and repeats every stage day, so its failures merge into one warning per
+    stage."""
+    outcome = "failed" if failed else "attention"
     if task.owner_role != AUDIT_ROLE:
-        runtime.alert("agent_task", task.id, message)
+        code = f"agent_task_{outcome}"  # agent_task_failed / agent_task_attention
+        params = {"task_id": task.id, "project_id": task.project_id, "role": task.owner_role}
+        runtime.alert("agent_task", task.id, message, code=code, params=params)
         return
-    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning")
+    code = f"audit_task_{outcome}"  # audit_task_failed / audit_task_attention
+    params = {"stage_id": _audit_stage(task), "task_id": task.id}
+    runtime.alert(AUDIT_TASK, _audit_key(task), message, "warning", code=code, params=params)
+
+
+def _audit_stage(task: ResearchTask) -> str | None:
+    """The stage an audit task names, or ``None``."""
+    stages = (ref[len(STAGE_REF) :] for ref in task.input_refs if ref.startswith(STAGE_REF))
+    return next(stages, None)
 
 
 def _audit_key(task: ResearchTask) -> str:
     """The failed-audit warning an audit task reports to: its stage's, or its own when it names
     no stage."""
-    stages = (ref[len(STAGE_REF) :] for ref in task.input_refs if ref.startswith(STAGE_REF))
-    return audit_task_key(next(stages, task.id))
+    return audit_task_key(_audit_stage(task) or task.id)
 
 
 async def run_agents(runtime: Any, dispatcher: Any) -> int:
@@ -144,7 +155,8 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
         schedule_audits(runtime)
     except Exception as error:
         log.exception("audit scheduling failed")
-        runtime.alert("audit_schedule", "schedule", f"{type(error).__name__}: {error}")
+        message = f"{type(error).__name__}: {error}"
+        runtime.alert("audit_schedule", "schedule", message, code="audit_schedule")
     else:
         runtime.resolve_alert("audit_schedule", "schedule")
     finished = 0
@@ -153,13 +165,14 @@ async def run_agents(runtime: Any, dispatcher: Any) -> int:
             run = await dispatcher.run_task(task.id)
         except Exception as error:
             log.exception("agent task %s failed", task.id)
-            _report_failure(runtime, task, f"{task.id}: {type(error).__name__}: {error}")
+            message = f"{task.id}: {type(error).__name__}: {error}"
+            _report_failure(runtime, task, message, failed=True)
             continue
         finished += run is not None
         state = runtime.tasks.get(task.id).state
         # whether the run was refused or ended without delivering
         if state is TaskState.NEEDS_ATTENTION:
-            _report_failure(runtime, task, f"model task {task.id} needs attention")
+            _report_failure(runtime, task, f"model task {task.id} needs attention", failed=False)
         elif state is TaskState.DONE and task.owner_role == AUDIT_ROLE:
             # an audit that finished shows the stage's audits work again
             runtime.resolve_alert(AUDIT_TASK, _audit_key(task))
