@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use DiAGRI in your research, please cite it as below."
+type: software
+title: "DiAGRI: an agentic research system for plant-growth experiments"
+abstract: >-
+  DiAGRI takes a research question through a whole plant-growth experiment.
+  Language-model agents design the study, analyse the result and audit the
+  records; deterministic programs run the approved plan on a grow tent and
+  watch over it. Every reading, write, approval and report is kept, so the
+  study can be traced and repeated. A person approves each run sheet before
+  anything touches the plants, and no safety check depends on a model.
+authors:
+  - name: "DiAGRI contributors"
+version: "0.2.0"
+license: MIT
+repository-code: "https://github.com/kirinhcl/diagri"
+keywords:
+  - research automation
+  - plant growth experiments
+  - controlled environment agriculture
+  - language-model agents
+  - reproducibility
+  - Model Context Protocol

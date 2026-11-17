@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 56 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 59 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -210,8 +210,9 @@
 | --- | --- | --- |
 | 401 | 拒绝码 `session` | `{"detail": {"code": "<code>", "message": "<text>"}}` |
 | 403 | 本表没有单独列出的其他所有拒绝码 | 同样的结构 |
-| 409 | 拒绝码 `state` | 同样的结构 |
+| 409 | 拒绝码 `state`；打开 `multi_user` 时还有 `lock_taken` 和 `greenhouse_busy` | 同样的结构 |
 | 429 | 拒绝码 `locked` | 同样的结构 |
+| 503 | 拒绝码 `unavailable`：构建工作台时没有传入设备日志存储（运行时总会传入） | 同样的结构 |
 | 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数，以及安全配置或运行单里有重复的 id 或超出范围的值（见上面关于模型的一段） | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
@@ -224,13 +225,13 @@
 | --- | --- | --- | --- | --- |
 | `GET /wb/greenhouses` | 操作员 | | `greenhouses`：`id`、`name`、`state`（`free`、`mine`、`taken`）、`locked_at`；管理员另有 `holder` | |
 | `POST /wb/greenhouses/lock` | 操作员，需重新认证 | `greenhouse_ids`（1 到 64 个） | `locked` | `lock_taken`、`state` |
-| `POST /wb/greenhouses/{id}/release` | 锁定它的操作员 | | `released` | `not_lock_holder`、`greenhouse_busy`、`state` |
+| `POST /wb/greenhouses/{greenhouse_id}/release` | 锁定它的操作员 | | `released` | `not_lock_holder`、`greenhouse_busy`、`state` |
 | `GET /wb/admin/operators` | 管理员 | | `operators`：`name`、`role`、`created_at`、`disabled_at`、`unfinished_stages`；`events`（最近 200 条，新的在前）：`name`、`action`（`add`、`disable`、`reset_secret`）、`actor`（`null` 表示命令行）、`detail`（添加账号时的角色）、`at` | `admin_only` |
 | `POST /wb/admin/operators` | 管理员，需重新认证 | `name`、`secret`、`role` | `name`、`role` | `admin_only`、`param` |
 | `POST /wb/admin/operators/disable` | 管理员，需重新认证 | `name` | `disabled` | `admin_only`、`param` |
 | `POST /wb/admin/operators/secret` | 管理员，需重新认证 | `name`、`secret` | `reset` | `admin_only`、`param` |
 | `GET /wb/admin/locks` | 管理员 | | `locks`、`events` | `admin_only` |
-| `POST /wb/admin/greenhouses/{id}/release` | 管理员，需重新认证 | `note`（1 到 500 字） | `released` | `admin_only`、`greenhouse_busy` |
+| `POST /wb/admin/greenhouses/{greenhouse_id}/release` | 管理员，需重新认证 | `note`（1 到 500 字） | `released` | `admin_only`、`greenhouse_busy` |
 | `POST /wb/admin/projects/{project_id}/owner` | 管理员，需重新认证 | `owner`、`note` | `project_id`、`owner` | `admin_only`、`state`（原所有者仍可操作、有未结束阶段，或新所有者不可用） |
 
 每个拒绝都会说明原因。工作台路由的 `detail` 对象多出 `reason`（`denial` 族的一个代码，没有原因的拒绝为 `null`）和 `params`（对象，原因不带参数时为空）：`{"detail": {"code": "<code>", "message": "<text>", "reason": "<reason>", "params": {}}}`。桥接路由的 `detail` 仍是字符串，响应体多出顶层的 `code`、`reason` 和 `params`。粗码和状态码不变，`message` 仍是英文文本。一个原因属于一个粗码（它的 `of`）；控制台按页面语言写出该原因的句子，旧客户端或没有原因时退回到粗码。`tests/web/fixtures/message-codes.json` 的 `denial` 族列出每个原因及其 `params`、`action`（控制台给出的下一步）和 `of`。表单字段在发出请求之前显示的文字由控制台自己给出（`msg.validation.*`），不属于这个 API。模型看到的仍是 `Error: denied (<code>): <message>`，看不到原因。
@@ -252,7 +253,7 @@
 
 ## 模型角色的工具
 
-来源：[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`，以及 [`handlers_orchestrator.py`](../../../src/growbridge/agents/handlers_orchestrator.py)、[`handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)、[`handlers_report.py`](../../../src/growbridge/agents/handlers_report.py) 和 [`handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 里的处理函数。编排 Agent 有 7 个工具，计划 Agent 有 8 个，研究 Agent 有 7 个。这些工具由守护进程内部的模型调用，既不是 HTTP 路由，也不是 MCP 工具。
+来源：[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`，以及 [`handlers_orchestrator.py`](../../../src/growbridge/agents/handlers_orchestrator.py)、[`handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)、[`handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py) 和 [`handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 里的处理函数。编排 Agent 有 7 个工具，计划 Agent 有 11 个，研究 Agent 有 9 个，监察 Agent 有 6 个。这些工具由守护进程内部的模型调用，既不是 HTTP 路由，也不是 MCP 工具。
 
 "类别"取值为 `read`、`write`、`web`（结果是不可信的网页内容）或 `sandbox`。一个角色在一次运行里调用过 `web` 工具之后，它的 `write` 和 `sandbox` 工具在这次运行的剩余部分都会被拒绝。输入里有未知字段时校验失败。被拒绝时，模型收到的是一条错误结果，格式为 `Error: denied (<code>): <message>`。
 
@@ -264,6 +265,7 @@
 | orchestrator | `delegate_task` | write | `project_id`、`to_role`、`goal`、`budget`、`trigger_event_id`、`correlation_id` | 带完整交接信息，给计划 Agent 或研究 Agent 创建一个研究任务。 |
 | orchestrator | `get_task_status` | read | `task_id` | 读取正在运行的任务或它下面委派出去的任务的状态，以及它的产物 ID。 |
 | orchestrator | `read_artifact` | read | `artifact_id` | 核对摘要后读取一个已登记的文本产物。 |
+| orchestrator | `read_round_history` | read | `round_id` | 读取本项目以前某一轮的完整记录：报告（或它为什么不能用：`invalid`、`held_out`、`unavailable`）、人做的决定，以及该轮运行期间设备上的经历。别的项目的轮次按不存在处理。只作背景。 |
 | planner | `get_device_capabilities` | read | 无 | 读取设备的传感器、通道和档位范围。 |
 | planner | `find_prior_runs` | read | `experiment_id` | 列出一个实验的数据快照和测量条数。 |
 | planner | `lookup_crop_conditions` | web | `crop` | 搜索某种作物的生长条件。 |
@@ -274,6 +276,7 @@
 | planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
 | planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
 | planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。没有执行本轮分配处理的运行单（`treatment_not_applied`）不会保存。 |
+| planner | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
 | researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、人工任务是否按时完成、已有快照），不写入任何东西。留出批次的测量只给条数。 |
 | researcher | `freeze_dataset` | write | `task_id`、`stage_id` | 把一个阶段的数据冻结成经过校验的数据快照；带 `round_id` 且快照完整时，还会推进轮次。 |
 | researcher | `query_evidence` | read | 无 | 在项目档案里搜索证据卡。 |
@@ -282,6 +285,13 @@
 | researcher | `get_compute_job` | read | `attempt_id` | 读取计算作业的状态。 |
 | researcher | `fetch_compute_artifacts` | write | `attempt_id` | 取回并校验计算作业的输出。 |
 | researcher | `publish_research_report` | write | `task_id`、`protocol_id`、`treatment_id`、`snapshots` | 发布本轮的报告；带 `round_id` 且报告为最终版时，还会交付轮次。返回 `treatment_check`：设备记录的档位和分配处理不符的轮次（按方案偏离计算），以及样本里没有档位、无法核对的轮次；`manual_task_check`：每轮计划的人工任务数和没有按时完成的次数；`server_notes`：服务器加进报告的每条说明，含中英文。 |
+| researcher | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
+| auditor | `get_project_state` | read | `project_id` | 与编排 Agent 相同。 |
+| auditor | `get_run_status` | read | `stage_id` | 与编排 Agent 相同。 |
+| auditor | `inspect_stage_data` | read | `task_id`、`stage_id` | 与研究 Agent 相同：在冻结会用的时间窗口内汇总一个已开始阶段的数据，不写入任何东西。 |
+| auditor | `get_stage_records` | read | `task_id`、`stage_id` | 读取一个已开始阶段的计划和记录：运行单、人工任务及其状态和记录、测量值，以及该阶段未处理的告警。 |
+| auditor | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
+| auditor | `raise_audit_finding` | write | `task_id`、`stage_id`、`severity`、`summary` | 发出一条建议性的 `audit_finding` 告警（`info` 或 `warning`），可附若干行 `evidence`。它不暂停任何东西，也不改动别的东西。 |
 
 证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
 
@@ -289,7 +299,7 @@
 
 另外两个角色以同样的方式绑定。编排和计划 Agent 调用里的每个 `project_id`、`round_id`、`stage_id` 和 `experiment_id`，都必须属于正在运行的任务所在的项目，而且该实验必须只有一个所属项目。`get_task_status` 只回答正在运行的任务和它下面委派出去的任务；`read_artifact` 只回答本项目任务的产物；`delegate_task` 只接受正在运行的任务作为 `parent_task_id`。以上情况都以 `scope` 拒绝。
 
-`growbridge serve` 构建的守护进程没有传入搜索后端，所以 `lookup_crop_conditions` 和 `search_and_verify_sources` 返回 `denied (unavailable)`。`submit_compute_job`、`get_compute_job` 和 `fetch_compute_artifacts` 只在配置了计算服务时才可用（见[启用 DiAGRI](Enable-DiAGRI.md)第 5 步），否则同样返回 `denied (unavailable)`。计算输入的 `ref` 是 `<快照 id>` 或 `<快照 id>/<文件>`，服务只接受任务所属项目的、已通过校验且不含留出结果的快照；其他一律在任何字节离开本机之前被拒绝。工作台的三个计算路由只在有计算服务时存在。沙箱只在 macOS 上存在；在其他系统上，`run_local_analysis` 返回 `denied (sandbox_unavailable)`。
+`growbridge serve` 构建的守护进程没有传入搜索后端，所以 `lookup_crop_conditions` 和 `search_and_verify_sources` 返回 `denied (unavailable)`。`submit_compute_job`、`get_compute_job` 和 `fetch_compute_artifacts` 只在配置了计算服务时才可用（见[启用 DiAGRI](Enable-DiAGRI.md)第 5 步），否则同样返回 `denied (unavailable)`。计算输入的 `ref` 是 `<快照 id>` 或 `<快照 id>/<文件>`，服务只接受任务所属项目的、已通过校验且不含留出结果的快照；其他一律在任何字节离开本机之前被拒绝。工作台的四个计算路由只在有计算服务时存在。沙箱只在 macOS 上存在；在其他系统上，`run_local_analysis` 返回 `denied (sandbox_unavailable)`。
 
 `agents/tools.py` 的 `CONTROL_TOOLS` 列出了 14 个阶段和设备控制类的工具名，任何模型角色都拿不到它们。这些名字都没有对应的处理函数。
 

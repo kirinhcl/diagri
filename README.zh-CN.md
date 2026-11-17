@@ -214,6 +214,8 @@ args = ["mcp"]
 
 [DiAGRI Wiki](docs/wiki/README.md)（[简体中文](docs/wiki/zh-CN/Home.md)、[English](docs/wiki/en/Home.md)）覆盖整个平台：架构、控制与安全模型、研究方法、参考页面，以及哪些已经验证、哪些还没有。
 
+想参与贡献，请先读 [CONTRIBUTING.md](CONTRIBUTING.md#参与贡献)。报告安全漏洞请按 [SECURITY.md](SECURITY.md#安全策略) 处理，不要开公开 issue。引用 DiAGRI 请用 [CITATION.cff](CITATION.cff)（GitHub 上的“Cite this repository”）。
+
 ## 开发验证
 
 ```sh

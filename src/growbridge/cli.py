@@ -173,7 +173,9 @@ async def _serve_auto_research(settings) -> None:
         await runtime.stop()
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    """The command line: global options and every subcommand (the wiki's CLI reference is
+    checked against it)."""
     parser = argparse.ArgumentParser(description="Local Spider Farmer BLE service and MCP tools")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--config", type=Path, default=default_config())
@@ -212,6 +214,11 @@ def main():
     bump = recovery_sub.add_parser("bump", help="Raise the recovery number (daemon stopped)")
     bump.add_argument("--reason", required=True, help="Why: restore, host change, ...")
     sub.add_parser("simulate", help="Run a short simulated stage (no radio, no network)")
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     os.umask(0o077)
     if args.command == "init":
