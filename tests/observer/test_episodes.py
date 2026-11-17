@@ -360,3 +360,19 @@ def test_coverage_gaps_are_absolute_and_daily_metrics_unchanged(world):
     assert coverage_gaps(samples, T0, T0 + DAY, 600.0) == ((T0 + HOUR - 300 + 600, T0 + 2 * HOUR),)
     metrics = compute_daily_metrics(samples, date(2026, 1, 1), "UTC", 600.0, {})
     assert [(g.start_offset, g.end_offset) for g in metrics.gaps] == [(HOUR + 300, 2 * HOUR)]
+
+
+def test_recurring_counts_only_up_to_the_report_day(world):
+    from growbridge.observer.episodes import recurring_for_report
+
+    world.stage("s1", T0)
+    for day in range(4):
+        world.protect("s1", T0 + day * DAY + 14 * HOUR)
+    world.at(T0 + 5 * DAY)
+
+    def lines(end):
+        return recurring_for_report(world.store, world.archive, world.book, PROJECT, end, "UTC")
+
+    assert lines(T0 + 3 * DAY) == ("protect:hot on 3 of the last 7 days, around 14:00",)
+    assert lines(T0 + 4 * DAY) == ("protect:hot on 4 of the last 7 days, around 14:00",)
+    assert lines(T0 + 2 * DAY) == ()

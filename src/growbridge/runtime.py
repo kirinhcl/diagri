@@ -44,6 +44,7 @@ from growbridge.executor.engine import ExecutorEngine
 from growbridge.observer.alerts import Alert, AlertBook, Scope
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
 from growbridge.observer.device_notes import DeviceNotes
+from growbridge.observer.episodes import recurring_for_report
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
@@ -504,8 +505,13 @@ class Runtime:
             protective_actions=protective,
             manual_interventions=interventions,
             frozen_readings=frozen,
+            recurring=recurring_for_report(*self._episode_sources(stage), end, zone),
         )
         return render_daily_report(metrics, context)
+
+    def _episode_sources(self, stage: StageRuntime) -> tuple:
+        """Store, archive, alert book and project: what a daily report's episodes come from."""
+        return self.workflow.store, self.archive, self.book, stage.project_id
 
     def _capture_limit(self) -> float:
         stage = self.workflow.active_stage()

@@ -257,3 +257,12 @@ def recurring_lines(found: Sequence[Pattern]) -> tuple[str, ...]:
         for p in found
         if p.recurring
     )[:MAX_RECURRING_LINES]
+
+
+def recurring_for_report(
+    store: Any, archive: Any, book: Any, project_id: str, end: float, timezone: str
+) -> tuple[str, ...]:
+    """The recurring problems a daily report ending at ``end`` lists, as known at ``end``."""
+    since = end - EPISODE_DAYS * DAY
+    found = project_episodes(store, archive, book, project_id, since, end, hide_values=False)
+    return recurring_lines(patterns(found, end, timezone))
