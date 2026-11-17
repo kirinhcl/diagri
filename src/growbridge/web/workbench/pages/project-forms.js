@@ -35,6 +35,7 @@ export function protocolExample(projectId, number) {
       { round: 4, block: 2, unit: "tent-1", treatment_id: "high" },
     ],
     randomization_seed: 20261118,
+    variables: ["canopy_area_growth"],
     analysis: { primary_endpoint: "canopy_area_growth", target_effect: 0.15, method: "paired_block" },
     stages: ["vegetative"],
     rounds: 4,

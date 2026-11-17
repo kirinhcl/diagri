@@ -148,6 +148,15 @@ class WorkflowStore:
         )
         return None if row is None else ResearchProtocol.model_validate_json(row["body"])
 
+    def protocol_variables_before(self, protocol_id: str, version: int) -> frozenset[str]:
+        rows = self.db.query(
+            "SELECT body FROM wf_protocols WHERE id = ? AND version < ?", (protocol_id, version)
+        )
+        declared: set[str] = set()
+        for row in rows:
+            declared.update(ResearchProtocol.model_validate_json(row["body"]).variables)
+        return frozenset(declared)
+
     def latest_protocol(self, protocol_id: str, project_id: str) -> ResearchProtocol | None:
         row = self.db.one(
             "SELECT body FROM wf_protocols WHERE id = ? AND project_id = ?"

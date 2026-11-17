@@ -30,6 +30,8 @@ from growbridge.ports import (
     StageEventKind,
     StageRuntime,
 )
+from growbridge.vocab import Catalog, packaged_catalog
+from growbridge.vocab.checks import check_protocol
 from growbridge.workflow.permissions import require_kind, require_operator
 from growbridge.workflow.recovery import StageRecovery
 from growbridge.workflow.states import ROUND_TERMINAL, STAGE_TERMINAL, RoundState, StageState
@@ -83,6 +85,7 @@ class WorkflowService(StageRecovery):
         validate: Callable[[RunSheet], Sequence[Finding]] | None = None,
         on_intervention: Callable[[dict], None] | None = None,
         check_treatments: bool = True,
+        catalog: Catalog | None = None,
     ):
         self.db = db
         self.clock = clock
@@ -93,6 +96,7 @@ class WorkflowService(StageRecovery):
         self.check_treatments = check_treatments
         self.on_intervention = on_intervention  # hands each recorded intervention on, once saved
         self.store = WorkflowStore(db)
+        self.catalog = catalog or packaged_catalog()
         self._unsent: list[dict] = []  # saved in a transaction, not yet handed on
 
     # --- design --------------------------------------------------------------------------------
@@ -111,6 +115,10 @@ class WorkflowService(StageRecovery):
             raise Denied("state", f"unknown project {protocol.project_id}")
         saved = self.store.protocol(protocol.id, protocol.version)
         if saved is None:
+            before = self.store.protocol_variables_before(protocol.id, protocol.version)
+            problems = check_protocol(protocol, self.catalog, before)
+            if problems:
+                raise Denied("param", "; ".join(problems))
             self.store.put_protocol(protocol, self.clock.now())
             return protocol
         if saved.digest() != protocol.digest():

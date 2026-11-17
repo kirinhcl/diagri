@@ -436,6 +436,16 @@ class ResearchProtocol(Model):
     rounds: int
     blocks: int
     experimental_unit: str = "tent"
+    variables: tuple[str, ...] = ()  # catalog IDs of every variable this protocol measures
+
+    @model_serializer(mode="wrap")
+    def _without_empty_variables(self, handler):
+        # A protocol without variables dumps as it did before the field existed, so the digest
+        # of a protocol saved earlier stays the same.
+        data = handler(self)
+        if isinstance(data, dict) and not data.get("variables"):
+            data.pop("variables", None)
+        return data
 
 
 # --- records ----------------------------------------------------------------------------------

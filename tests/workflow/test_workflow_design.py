@@ -1,4 +1,5 @@
 import pytest
+from vocab_support import WITH_OLD
 
 from growbridge.archive.models import RunSheet
 from growbridge.ports import Denied, Finding
@@ -158,3 +159,30 @@ async def test_design_state_survives_a_new_service_instance(world, db, clock, co
     again = WorkflowService(db, clock, control)
     assert again.stage("stage-1").state.value == "running"
     assert again.active_stage().stage_id == "stage-1"
+
+
+def test_save_protocol_refuses_undeclared_variables(world):
+    project_id = world.svc.create_project("lettuce", world.op)
+    with pytest.raises(Denied) as caught:
+        world.svc.save_protocol(make_protocol(project_id=project_id, variables=()), world.op)
+    assert caught.value.code == "param"
+
+
+def test_saving_the_same_stored_version_skips_the_checks(world):
+    project_id = world.svc.create_project("lettuce", world.op)
+    protocol = make_protocol(project_id=project_id, variables=())
+    world.svc.store.put_protocol(protocol, 0.0)
+    assert world.svc.save_protocol(protocol, world.op) == protocol
+
+
+def test_new_version_may_keep_a_deprecated_variable(world, db, clock, control):
+    service = WorkflowService(db, clock, control, check_treatments=False, catalog=WITH_OLD)
+    project_id = service.create_project("lettuce", world.op)
+    kept = ("canopy_area_growth", "canopy_growth_old")
+    service.store.put_protocol(make_protocol(project_id=project_id, variables=kept), 0.0)
+    second = make_protocol(project_id=project_id, version=2, variables=kept)
+    assert service.save_protocol(second, world.op) == second
+    other = make_protocol(project_id=project_id, id="protocol-2", variables=kept)
+    with pytest.raises(Denied) as caught:
+        service.save_protocol(other, world.op)
+    assert caught.value.code == "param"

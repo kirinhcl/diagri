@@ -813,3 +813,13 @@ def test_a_report_whose_protocol_is_gone_has_no_primary_endpoint(bench, operator
     body = operator.get(f"/wb/rounds/{round_id}/report").json()
 
     assert body["primary_endpoint"] is None
+
+
+def test_protocol_without_variables_is_refused_by_name(bench, operator):
+    project_id = bench.post(operator, "/wb/projects", {"name": "lettuce"}).json()["project_id"]
+    protocol = protocol_json(project_id)
+    del protocol["variables"]
+    refused = bench.post(operator, "/wb/protocols", {"protocol": protocol})
+
+    assert detail(refused)["code"] == "param"
+    assert "variables" in detail(refused)["message"]
