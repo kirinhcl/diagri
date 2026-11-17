@@ -19,7 +19,7 @@ from workbench_support import LAN_HOST, LAN_PORT, MAIN_PORT, SECRET
 
 from growbridge.archive.models import ActionRecord, ActionState, Channel, RightKind
 from growbridge.planning.manual_tasks import ON_TIME_SECONDS
-from growbridge.workbench.auth import SESSION_SECONDS
+from growbridge.workbench.auth import FAILURE_WINDOW_SECONDS, SESSION_SECONDS
 from growbridge.workbench.manual_tasks import MAX_ATTEMPTS
 from growbridge.workflow.states import StageState
 
@@ -72,10 +72,16 @@ def test_bad_credentials_carries_no_params(bench):
     refused(response, 401, "session", "bad_credentials", {})
 
 
-def test_login_locked_carries_no_params_when_the_wait_is_not_known(bench):
+def test_login_locked_carries_the_lock_out_window_in_seconds(bench):
     for _ in range(5):
         assert bench.login(bench.lan, secret="definitely not the secret").status_code == 401
-    refused(bench.login(bench.lan, secret=SECRET), 429, "locked", "login_locked", {})
+    refused(
+        bench.login(bench.lan, secret=SECRET),
+        429,
+        "locked",
+        "login_locked",
+        {"window_seconds": FAILURE_WINDOW_SECONDS},
+    )
 
 
 # --- entry -------------------------------------------------------------------------------------

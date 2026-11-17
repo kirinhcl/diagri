@@ -204,7 +204,10 @@ class Operators:
         pair = self._failures("name = ? AND source = ? AND at > ?", (key, source, since))
         if pair >= MAX_FAILURES:
             raise Denied(
-                "locked", "too many failed attempts; try again later", reason="login_locked"
+                "locked",
+                "too many failed attempts; try again later",
+                reason="login_locked",
+                params={"window_seconds": FAILURE_WINDOW_SECONDS},
             )
         if session:
             return
@@ -213,7 +216,10 @@ class Operators:
         )
         if everywhere >= MAX_GLOBAL_FAILURES:
             raise Denied(
-                "locked", "too many failed attempts; try again later", reason="login_locked"
+                "locked",
+                "too many failed attempts; try again later",
+                reason="login_locked",
+                params={"window_seconds": FAILURE_WINDOW_SECONDS},
             )
 
     def _record_failure(self, key: str, source: str, now: float) -> None:

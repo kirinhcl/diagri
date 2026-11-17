@@ -16,6 +16,8 @@ from growbridge.codes import Code  # noqa: E402
 
 def _register(coarse: str, *reasons: tuple[str, tuple[str, ...]], action: bool = True) -> None:
     for reason, params in reasons:
+        if reason in DENIAL_CODES:
+            raise ValueError(f"denial reason registered twice: {reason}")
         DENIAL_CODES[reason] = Code(params, action=action, of=coarse)
 
 
@@ -158,7 +160,7 @@ _register(
     ("session_expired", ()),
     ("bad_credentials", ()),
 )
-_register("locked", ("login_locked", ()))
+_register("locked", ("login_locked", ("window_seconds",)))
 _register(
     "entry",
     ("unknown_address", ()),
@@ -189,7 +191,7 @@ _register(
     ("skipped_has_time", ()),
     ("level_out_of_range", ("channel", "level", "min", "max")),
 )
-_register("param", ("measurement_rejected", ("detail",)), action=False)
+_register("param", ("measurement_rejected", ("detail",)))
 
 # --- compute service (compute/service.py, via compute/refusals.py) ----------------------------
 _register(

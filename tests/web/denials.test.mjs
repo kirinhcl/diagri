@@ -53,6 +53,23 @@ test("the re-authentication and lock-out denials say password, and a lock-out sa
   assert.match(describeDenial("locked", "en").text, /locked for 15 minutes/);
 });
 
+test("the sign-in, re-authentication and lock-out reasons shown on screen say password, and a lock-out says how long", () => {
+  const REASONS = ["not_signed_in", "bad_credentials", "session_expired", "login_locked", "reauth_required"];
+  for (const lang of ["zh", "en"]) {
+    const c = testCtx({ lang });
+    const wording = lang === "zh" ? /密码/ : /password/i;
+    const old = lang === "zh" ? /口令|密钥/ : /secret/i;
+    for (const reason of REASONS) {
+      const parts = messageParts(c, "denial", reason, { window_seconds: 900 });
+      const said = `${parts.text} ${parts.action}`;
+      assert.doesNotMatch(said, old, `${lang} ${reason}`);
+      if (["not_signed_in", "bad_credentials", "reauth_required"].includes(reason)) assert.match(said, wording, `${lang} ${reason}`);
+    }
+    const locked = messageParts(c, "denial", "login_locked", { window_seconds: 900 });
+    assert.match(locked.action, lang === "zh" ? /15 分钟/ : /15 min/);
+  }
+});
+
 const CODES = JSON.parse(readFileSync(new URL("./fixtures/message-codes.json", import.meta.url), "utf8"));
 const DEMO = {
   "msg.denial.demo_paused": "阶段现在是{state}，不能再暂停。",

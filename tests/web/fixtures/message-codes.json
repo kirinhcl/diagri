@@ -1336,7 +1336,9 @@
       "of": "session"
     },
     "login_locked": {
-      "params": [],
+      "params": [
+        "window_seconds"
+      ],
       "action": true,
       "of": "locked"
     },
@@ -1473,7 +1475,7 @@
       "params": [
         "detail"
       ],
-      "action": false,
+      "action": true,
       "of": "param"
     },
     "param_too_long": {
