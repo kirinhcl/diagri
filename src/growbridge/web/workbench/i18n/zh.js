@@ -90,7 +90,7 @@ export default {
   "reauth.submit": "确认",
   "form.done": "已完成。",
   "form.required": "这一项必填。",
-  "form.choose": "请选择",
+  "form.choose": "请选择…",
   "form.badNumber": "请输入数字。",
   "form.badTime": "这个时间无效，或者在 {zone} 不存在（例如夏令时跳过的时间）。",
   "form.badJson": "这不是有效的 JSON：{error}",

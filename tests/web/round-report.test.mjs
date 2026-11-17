@@ -255,7 +255,7 @@ test("snapshots are named by date and completeness, their ids in the details", a
   const name = displayName(c, "snapshot", snapshot);
   const text = visibleText(root);
   assert.equal(count(text, name), 2, "the table row and the run form's option");
-  assert.deepEqual(elements(root, "option").map((option) => option.textContent), ["请选择", name]);
+  assert.deepEqual(elements(root, "option").map((option) => option.textContent), ["请选择…", name]);
   assert.deepEqual(elements(root, "option").map((option) => option.getAttribute("value")), ["", snapshot.snapshot_id]);
   assert.ok(text.includes(zh["analysis.runState.none"]) && !/\bnone\b/.test(text), text);
   for (const id of [snapshot.snapshot_id, snapshot.experiment_id]) {
@@ -456,4 +456,40 @@ test("the estimate names the measured quantity", () => {
   assert.ok(visibleText(view).includes("指标：「canopy_area_growth」"));
   const none = reportView(testCtx({ lang: "zh" }), withEstimate(TOO_FEW, { primary_endpoint: null }));
   assert.ok(!visibleText(none).includes("指标"));
+});
+
+// --- the round choice asks, every choice with its own consequence (RND-04) -----------------------
+test("the round choice starts on 'choose' and every choice is asked with its consequence", async () => {
+  const waiting = { ...ROUND, state: "running", awaiting_choice: ROUND.stages[0].stage_id };
+  const { element, ctx: page } = await renderPage("round", { roundId: ROUND.round_id }, { lang: "en", fixtures: { "round.json": waiting } });
+  const form = elements(sectionTitled(element, en["round.choiceTitle"]), "form")[0];
+  const options = elements(form, "option");
+  assert.equal(options[0].textContent, "Choose…");
+  assert.equal(options[0].getAttribute("value"), "");
+  assert.equal(elements(form, "select")[0].value, "");
+  const posts = () => page.api.calls.filter((call) => call.method === "POST");
+  const submit = async () => {
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    await settle();
+  };
+  await submit();
+  assert.equal(posts().length, 0, "a blank choice is refused");
+  for (const choice of ["redo", "next", "verify", "abort"]) {
+    formControls(form).set({ choice });
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+    const [dialog] = openDialogs();
+    if (choice !== "abort") assert.ok(en[`round.choice.${choice}.line`], `${choice} has its own line`);
+    assert.ok(dialog.textContent.includes(en[`round.choice.${choice}.line`] || displayName(page, "round", waiting)), `${choice}: ${dialog.textContent}`);
+    answerNextDialog(false);
+    await settle();
+    await settle();
+    assert.equal(posts().length, 0, `${choice}: cancelling sends nothing`);
+    assert.equal(visibleText(form).includes("Chosen"), false);
+  }
+  formControls(form).set({ choice: "redo" });
+  answerNextDialog(true);
+  await submit();
+  assert.deepEqual(posts().map((call) => call.body), [{ choice: "redo" }]);
 });

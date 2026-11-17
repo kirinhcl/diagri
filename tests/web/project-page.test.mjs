@@ -256,6 +256,7 @@ test("compute, round and analysis writes say what was done", async () => {
   const stage = FIXTURES["round.json"].stages[0];
   const waiting = { ...FIXTURES["round.json"], state: "running", awaiting_choice: stage.stage_id };
   const round = await withNotices("round", { roundId: waiting.round_id }, { lang: "zh", fixtures: { "round.json": waiting } });
+  answerNextDialog(true);
   await submit(formIn(round.element, zh["round.choiceTitle"]), { choice: "redo" });
   assert.deepEqual(round.notices.map((n) => n.message), [`已选择：${zh["round.choice.redo"]}`]);
 

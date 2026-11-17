@@ -139,4 +139,12 @@ export default {
   "runsheet.form.pumpOnlyWatering": "只有浇水任务才有水泵运行时间。请清空秒数，或把种类改为浇水。",
   "runsheet.form.end": "阶段结束时",
   "runsheet.form.draftStale": "运行单在你保存草稿之后变了，草稿没有恢复。请重新输入你的修改。",
+  "round.choice.redo.line": "再跑一次这个阶段，已有的数据保留。",
+  "round.choice.next.line": "进入下一阶段，这个阶段不再重跑。",
+  "round.choice.verify.line": "进入这一轮的数据核验。",
+  "evidence.verifyTitle": "核实这张证据卡片？",
+  "evidence.verifyLine": "核验后这张卡片不能再改。",
+  "tasks.skipTitle": "跳过这项任务？",
+  "tasks.skipLine": "之后再记一次，以最后一次为准。",
+  "tasks.skipReason": "理由（可不填）",
 };

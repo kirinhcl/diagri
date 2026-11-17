@@ -89,3 +89,29 @@ export function confirmAction(t, { title, lines = [], confirmLabel } = {}) {
   );
   return openDialog(dialog, () => confirmed);
 }
+
+// A confirmation with a plain text box that may stay empty. Resolves with the trimmed text (maybe
+// ""), or null when cancelled.
+export function askReason(t, { title, lines = [], label, maxlength, confirmLabel } = {}) {
+  const titleId = nextId("dialog-title");
+  const inputId = nextId("dialog-reason");
+  const attrs = { id: inputId, type: "text", name: "reason", autocomplete: "off" };
+  if (maxlength) attrs.maxlength = String(maxlength);
+  const input = h("input", { class: "input", attrs });
+  let reason = null;
+  const submit = (event) => {
+    event.preventDefault();
+    reason = input.value.trim();
+    dialog.close();
+  };
+  const dialog = frame(
+    titleId,
+    submit,
+    h("h2", { attrs: { id: titleId }, text: title }),
+    lines.length ? h("ul", { class: "dialog-lines" }, lines.map((line) => h("li", { text: line }))) : null,
+    label ? h("label", { class: "field-label", attrs: { for: inputId }, text: label }) : null,
+    input,
+    actions(t, confirmLabel || t("common.confirm"), () => dialog.close()),
+  );
+  return openDialog(dialog, () => reason);
+}

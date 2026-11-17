@@ -4,12 +4,13 @@
 import { formatDuration } from "../format.js";
 import { labelOr } from "../i18n.js";
 import { messageParts } from "../messages.js";
-import { confirmAction } from "../ui/dialog.js";
+import { askReason, confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { displayName } from "../ui/names.js";
 import { errorBox, note, showErrors, techDetails, timeText } from "../ui/section.js";
 import { table } from "../ui/table.js";
 
+const REASON_CHARS = 200; // the server keeps a note up to this long
 export const AHEAD_SECONDS = 86400; // upcoming occurrences are listed one day ahead
 export const SHOWN_ROWS = 9; // three days of a typical sheet; older occurrences fold away
 const DONE = new Set(["done", "late"]);
@@ -74,6 +75,7 @@ function recordMeta(ctx, record) {
   if (!record) return [];
   const when = record.done_at ? ctx.t("tasks.doneAt", { time: timeText(ctx, record.done_at), who: record.operator }) : ctx.t("tasks.by", { who: record.operator });
   const meta = [h("span", { class: "task-meta", text: when })];
+  if (record.outcome === "skipped" && record.note) meta.push(h("span", { class: "task-meta", text: record.note }));
   if (record.outcome === "partial") meta.push(...partialParts(ctx, record).lines.map((text) => h("span", { class: "task-meta", text })));
   return meta;
 }
@@ -132,10 +134,18 @@ function actionsCell(env, body, row) {
   const base = `/stages/${encodeURIComponent(stage.stage_id)}/manual-tasks`;
   const occurrence = { task_id: row.task_id, due_at: row.due_at };
   const name = displayName(ctx, "manualTask", row);
-  const record = (outcome, label) => async () => {
-    await ctx.api.post(base, { ...occurrence, outcome }, { action: label });
+  const send = async (extra, label) => {
+    await ctx.api.post(base, { ...occurrence, ...extra }, { action: label });
     ctx.notify(ctx.t("tasks.recorded", { name }), "ok");
     await onChanged();
+  };
+  const record = (outcome, label) => () => send({ outcome }, label);
+  // Skipping asks first, with an optional reason sent as the note; a later record supersedes it.
+  const skip = async () => {
+    const label = ctx.t("tasks.markSkipped");
+    const prompt = { title: ctx.t("tasks.skipTitle"), lines: [ctx.t("tasks.skipLine")], label: ctx.t("tasks.skipReason"), maxlength: REASON_CHARS, confirmLabel: label };
+    const reason = await askReason(ctx.t, prompt);
+    if (reason !== null) await send(reason ? { outcome: "skipped", note: reason } : { outcome: "skipped" }, label);
   };
   const prompt = irrigationPrompt(ctx, row);
   const irrigate = async () => {
@@ -152,7 +162,7 @@ function actionsCell(env, body, row) {
   const buttons = [];
   if (allowed.irrigate) buttons.push(button(prompt.title, "primary", wrap(irrigate), box));
   if (!DONE.has(row.status)) buttons.push(button(ctx.t("tasks.markDone"), allowed.irrigate ? "quiet" : "primary", wrap(record("done", ctx.t("tasks.markDone"))), box));
-  if (row.status !== "skipped") buttons.push(button(ctx.t("tasks.markSkipped"), "quiet", wrap(record("skipped", ctx.t("tasks.markSkipped"))), box));
+  if (row.status !== "skipped" && !DONE.has(row.status)) buttons.push(button(ctx.t("tasks.markSkipped"), "quiet", wrap(skip), box));
   return h("div", { class: "task-actions" }, h("div", { class: "task-buttons" }, buttons), box);
 }
 
