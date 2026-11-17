@@ -24,8 +24,11 @@ def test_device_notes_newest_first_and_per_device(db, clock):
 
 def test_device_note_text_is_bounded(db, clock):
     notes = DeviceNotes(db, clock)
-    for text in ("x" * (NOTE_MAX + 1), "   "):
+    too_long = ("param_too_long", {"field": "text", "max_length": NOTE_MAX})
+    blank = ("param_required", {"field": "text"})
+    for text, (reason, params) in (("x" * (NOTE_MAX + 1), too_long), ("   ", blank)):
         with pytest.raises(Denied) as refused:
             notes.add("ac5-1", "alice", text)
         assert refused.value.code == "param"
+        assert (refused.value.reason, dict(refused.value.params)) == (reason, params)
     assert notes.add("ac5-1", "alice", "  ok  ").text == "ok"

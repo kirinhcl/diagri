@@ -35,8 +35,12 @@ class DeviceNotes:
 
     def add(self, device_id: str, actor: str, text: str, sensor: str | None = None) -> DeviceNote:
         body = text.strip()
-        if not body or len(body) > NOTE_MAX:
-            raise Denied("param", f"a device note has 1 to {NOTE_MAX} characters")
+        message = f"a device note has 1 to {NOTE_MAX} characters"
+        if not body:
+            raise Denied("param", message, reason="param_required", params={"field": "text"})
+        if len(body) > NOTE_MAX:
+            params = {"field": "text", "max_length": NOTE_MAX}
+            raise Denied("param", message, reason="param_too_long", params=params)
         cursor = self.db.execute(
             "INSERT INTO device_notes(device_id, at, actor, sensor, text) VALUES (?, ?, ?, ?, ?)",
             (device_id, self.clock.now(), actor, sensor, body),

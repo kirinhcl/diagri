@@ -19,7 +19,7 @@ def read_round_history(deps: Deps, data: RoundHistoryInput) -> dict:
     task = bound_task(deps)
     src = deps.memory
     if src is None:
-        raise Denied("state", "history is not available")
+        raise Denied("unavailable", "history is not available", reason="unavailable", params={})
     record = round_record(src, task.project_id, data.round_id)
     return {**record, "episodes": _round_episodes(src, task.project_id, data.round_id)}
 

@@ -74,6 +74,7 @@ STATUS_BY_CODE = {
     "locked": 429,
     "lock_taken": 409,
     "greenhouse_busy": 409,
+    "unavailable": 503,  # an optional store this workbench was built without
 }
 
 

@@ -60,8 +60,14 @@ def test_holder_writes_and_reads_notes(bench):
 def test_unknown_device_is_refused(bench):
     alice = bench.user("alice")
 
-    assert alice.get("/wb/devices/elsewhere/notes").status_code == 409
-    assert bench.post(alice, "/wb/devices/elsewhere/notes", {"text": "x"}).status_code == 409
+    for answer in (
+        alice.get("/wb/devices/elsewhere/notes"),
+        bench.post(alice, "/wb/devices/elsewhere/notes", {"text": "x"}),
+    ):
+        assert answer.status_code == 409
+        detail = answer.json()["detail"]
+        assert detail["reason"] == "record_not_found"
+        assert detail["params"] == {"record_kind": "device", "record_id": "elsewhere"}
 
 
 def test_environment_names_its_device(bench):
@@ -82,3 +88,4 @@ def test_device_notes_need_the_lock(tmp_path):
         assert client.get(NOTES).status_code == 200
     for answer in (bob.get(NOTES), bench.post(bob, NOTES, {"text": "x"})):
         assert answer.status_code == 403 and "not_lock_holder" in answer.text
+        assert answer.json()["detail"]["reason"] == "local_greenhouse_not_held"

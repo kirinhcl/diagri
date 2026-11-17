@@ -17,7 +17,7 @@ from typing import Any
 from growbridge.agents.memory_sources import MemorySources
 from growbridge.archive.ids import file_digest
 from growbridge.planning.treatment import allocated
-from growbridge.ports import Denied
+from growbridge.workflow import denials
 from growbridge.workflow.states import RoundState
 
 MAX_ROUNDS = 5
@@ -44,7 +44,7 @@ def round_record(src: MemorySources, project_id: str, round_id: str) -> dict:
     """One round of the project in full; another project's round reads as an unknown one."""
     rnd = src.workflow.store.round(round_id)
     if rnd.project_id != project_id:
-        raise Denied("state", f"unknown round {round_id}")
+        raise denials.unknown("round", round_id)
     downgrade, body = load_report(src, project_id, rnd.report_artifact_id)
     return {**_base(src, rnd), "report": downgrade or body, "decisions": decisions(src, round_id)}
 
