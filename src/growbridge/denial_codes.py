@@ -78,7 +78,7 @@ _register(
     ("report_file_missing", ("round_id",)),
     ("artifact_digest_mismatch", ("round_id", "artifact_id")),
     ("round_not_in_project", ("round_id", "project_id")),
-    ("no_check_open", _STAGE),
+    ("onsite_check_not_open", _STAGE),
     ("archive_not_mounted", ()),
 )
 _register(
@@ -86,9 +86,9 @@ _register(
     ("budget_calls_exhausted", ("project_id",)),
     ("budget_cost_exhausted", ("project_id",)),
     ("budget_revision_limit", ("task_id", "max_revisions")),
-    ("delegation_depth_exceeded", ("task_id", "depth", "max_depth")),
+    ("budget_depth_limit", ("depth", "max_depth")),
 )
-_register("model_role", ("model_no_controls", ()), action=False)
+_register("model_role", ("model_no_controls", ("role",)), action=False)
 _register("not_operator", ("not_operator", ()))
 _register("reauth_required", ("reauth_required", ()))
 _register("scope", ("compute_task_unknown", ("task_id",)))

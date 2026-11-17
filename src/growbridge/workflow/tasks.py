@@ -260,9 +260,8 @@ class TaskBoard:
             raise Denied(
                 "budget",
                 f"delegation depth {depth} exceeds the limit",
-                reason="delegation_depth_exceeded",
+                reason="budget_depth_limit",
                 params={
-                    "task_id": task.id,
                     "depth": depth,
                     "max_depth": parent.budget.max_delegation_depth,
                 },

@@ -16,6 +16,7 @@ def require_kind(actor: Actor, allowed: Collection[str]) -> None:
             "model_role",
             "model roles have no stage or approval controls",
             reason="model_no_controls",
+            params={"role": actor.id},
         )
     raise Denied("not_operator", f"{actor.kind} identities may not do this", reason="not_operator")
 

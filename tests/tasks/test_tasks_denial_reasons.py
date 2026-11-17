@@ -73,8 +73,8 @@ def test_budget_revision_limit_carries_the_task_and_the_limit(board, make_task):
     assert exc.params == {"task_id": "t1", "max_revisions": 1}
 
 
-def test_delegation_depth_exceeded_carries_the_task_the_depth_and_the_limit(board, make_task):
+def test_budget_depth_limit_carries_the_depth_and_the_limit(board, make_task):
     board.create(make_task(budget=Budget(max_calls=5, max_cost=1.0, max_delegation_depth=0)))
     exc = refused(lambda: board.create(make_task("t2", parent_task_id="t1")), "budget")
-    assert exc.reason == "delegation_depth_exceeded"
-    assert exc.params == {"task_id": "t2", "depth": 1, "max_depth": 0}
+    assert exc.reason == "budget_depth_limit"
+    assert exc.params == {"depth": 1, "max_depth": 0}

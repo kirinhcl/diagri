@@ -40,11 +40,11 @@ async def test_stage_changed_concurrently_carries_the_stage_of_a_stale_update(wo
     assert exc.reason == "stage_changed_concurrently" and exc.params == {"stage_id": "stage-1"}
 
 
-def test_model_no_controls_carries_no_params_for_a_model_identity(world):
+def test_model_no_controls_carries_the_model_role(world):
     exc = refused_now(
-        lambda: require_kind(Actor(kind="model", id="m"), ("operator",)), "model_role"
+        lambda: require_kind(Actor(kind="model", id="planner"), ("operator",)), "model_role"
     )
-    assert exc.reason == "model_no_controls" and exc.params == {}
+    assert exc.reason == "model_no_controls" and exc.params == {"role": "planner"}
 
 
 def test_not_operator_carries_no_params_for_another_identity(world):
@@ -62,9 +62,9 @@ def test_reauth_required_carries_no_params(world):
     assert exc.reason == "reauth_required" and exc.params == {}
 
 
-async def test_no_check_open_carries_the_stage_and_its_state(world):
+async def test_onsite_check_not_open_carries_the_stage_and_its_state(world):
     await world.running()
     with pytest.raises(Denied) as exc:
         await world.svc.record_onsite_check("stage-1", world.op, "looked")
-    assert exc.value.code == "state" and exc.value.reason == "no_check_open"
+    assert exc.value.code == "state" and exc.value.reason == "onsite_check_not_open"
     assert exc.value.params == {"stage_id": "stage-1", "state": "running"}
