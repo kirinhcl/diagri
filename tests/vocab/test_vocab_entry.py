@@ -43,6 +43,8 @@ def test_experiment_without_declared_variables_is_refused():
         record("canopy_area_growth", "cm2/d", 3.0), WITH_OLD, frozenset()
     )
     assert "declares no variables" in problem
+    # A new version only applies once a new round runs the experiment under it (Ruling 5).
+    assert "protocol version that declares them" in problem and "new round" in problem
 
 
 def test_near_names_are_refused_with_the_declared_ids():  # Review Focus 1

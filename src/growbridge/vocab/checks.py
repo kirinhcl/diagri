@@ -8,18 +8,16 @@ def check_protocol(
     protocol: ResearchProtocol, catalog: Catalog, declared_before: frozenset[str]
 ) -> list[str]:
     """Every problem found; an empty list means the protocol may be saved."""
-    if not protocol.variables:
-        return ["declare the protocol's variables (the `variables` list is empty)"]
     problems: list[str] = []
+    if not protocol.variables:
+        problems.append("declare the protocol's variables (the `variables` list is empty)")
     seen: set[str] = set()
     for name in protocol.variables:
         if name in seen:
             problems.append(f"variable {name} is listed twice")
         seen.add(name)
         problems.extend(_variable_problems(name, catalog, declared_before))
-    endpoint = protocol.analysis.primary_endpoint
-    if endpoint not in seen:
-        problems.append(f"the primary endpoint {endpoint} must be listed in variables")
+    problems.extend(_endpoint_problems(protocol.analysis.primary_endpoint, seen, catalog))
     for treatment in protocol.treatments:
         for key in treatment.factors:
             problems.extend(_factor_problems(treatment.id, key, catalog))
@@ -34,8 +32,22 @@ def _variable_problems(name: str, catalog: Catalog, declared_before: frozenset[s
             return [f"variable {name} is an alias: use the standard ID {found.id}"]
         return [f"variable {name} is not in the catalog"]
     if entry.deprecated and name not in declared_before:
-        return [f"variable {name} is deprecated: use {entry.replaced_by}"]
+        replacement = f": use {entry.replaced_by}" if entry.replaced_by else ""
+        return [f"variable {name} is deprecated{replacement}"]
     return []
+
+
+def _endpoint_problems(endpoint: str, declared: set[str], catalog: Catalog) -> list[str]:
+    """The endpoint is analysed from manual measurements only, so it must be a manual variable."""
+    problems: list[str] = []
+    if endpoint not in declared:
+        problems.append(f"the primary endpoint {endpoint} must be listed in variables")
+    entry = catalog.get(endpoint)
+    if entry is not None and entry.kind != "manual":
+        problems.append(
+            f"the primary endpoint {endpoint} is a {entry.kind} variable: it must be a manual one"
+        )
+    return problems
 
 
 def _factor_problems(treatment_id: str, key: str, catalog: Catalog) -> list[str]:
@@ -60,7 +72,7 @@ def check_measurement(
     if not declared:
         return [
             f"the protocol of experiment {record.experiment_id} declares no variables:"
-            " save a protocol version that declares them first"
+            " save a protocol version that declares them and run a new round with it first"
         ]
     entry = catalog.get(record.metric) if record.metric in declared else None
     if entry is None:

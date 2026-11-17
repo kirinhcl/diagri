@@ -29,6 +29,16 @@ def test_defining_fields_never_change():
     assert set(entries) <= {v.id for v in catalog.variables}, "entries are never removed"
 
 
+def test_no_packaged_entry_is_replaced_yet():
+    replaced = sorted(v.id for v in packaged_catalog().variables if v.replaced_by is not None)
+    assert replaced == [], (
+        f"{replaced} set replaced_by, but Catalog.canonical does not follow the replacement: a "
+        "holdout registered on the new ID would neither hide nor see at registration the held "
+        "rows recorded under the old one. Make holdout comparison follow the replacement chain "
+        "before the first deprecation ships."
+    )
+
+
 def test_catalog_ships_with_the_package():
     config = tomllib.loads(PYPROJECT.read_text())
     assert "vocab/*.toml" in config["tool"]["setuptools"]["package-data"]["growbridge"]
