@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from growbridge.agents.handlers_auditor import build_auditor_tools
 from growbridge.agents.handlers_common import Deps
+from growbridge.agents.handlers_memory import memory_tools
 from growbridge.agents.handlers_orchestrator import build_orchestrator_tools
 from growbridge.agents.handlers_planner import build_planner_tools
 from growbridge.agents.handlers_researcher import build_researcher_tools
@@ -25,6 +26,7 @@ def build_role_tools(deps: Deps) -> dict[str, list[Tool]]:
         "researcher": build_researcher_tools(deps),
         "auditor": build_auditor_tools(deps),
     }
+    tools = {role: [*built, *memory_tools(deps)] for role, built in tools.items()}
     for role, built in tools.items():
         names = {tool.name for tool in built}
         if names != ROLE_TOOLS[role] or names & CONTROL_TOOLS:

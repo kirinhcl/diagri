@@ -681,7 +681,10 @@ class WorkflowService(StageRecovery):
             changes["stages_done"] = rnd.stages_done + 1
         elif choice != "redo":
             raise denials.unknown_choice(choice)
-        return self.store.update_round(round_id, **changes).state
+        with self.db.transaction():
+            now = self.clock.now()
+            self.store.add_choice(round_id, rnd.awaiting_choice, choice, actor.id, now)
+            return self.store.update_round(round_id, **changes).state
 
     async def abort_round(self, round_id: str, actor: Actor) -> RoundState:
         require_operator(actor, self.clock.now())
@@ -702,8 +705,10 @@ class WorkflowService(StageRecovery):
                 fresh = self.store.round(round_id)
                 if fresh.state in ROUND_TERMINAL:
                     raise denials.round_already_ended(round_id, fresh.state.value)
+                now = self.clock.now()
+                self.store.add_choice(round_id, fresh.awaiting_choice, "abort", actor.id, now)
                 for stage in self.store.stages_of_round(round_id):
-                    self.store.abort_stage(stage, self.clock.now())
+                    self.store.abort_stage(stage, now)
                 changes = {"state": RoundState.ABORTED, "awaiting_choice": None}
                 state = self.store.update_round(round_id, **changes).state
             aborted = True

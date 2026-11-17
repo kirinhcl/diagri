@@ -160,3 +160,25 @@ test("an alert with an unknown code says unknown and keeps the code in the detai
   assert.doesNotMatch(outsideDetails(element), /brand_new_code/);
   assert.match(details(rowsOf(element)[1])[0].textContent, /brand_new_code/);
 });
+
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+const readPosts = (ctx) => ctx.api.calls.filter((c) => c.method === "POST" && c.path.endsWith("/read"));
+
+async function markRead(note) {
+  const { element, ctx } = await renderPage("alerts", {}, { fixtures: withAlerts([{}]), now: NOW });
+  const input = walk(element).find((el) => el.nodeName === "INPUT");
+  input.value = note;
+  walk(element).find((el) => el.nodeName === "BUTTON" && /标为已读/.test(el.textContent)).dispatchEvent(new Event("click"));
+  await flush();
+  return readPosts(ctx);
+}
+
+test("a reason typed beside mark-as-read is sent with the read", async () => {
+  const [call] = await markRead("  接线松了 ");
+  assert.deepEqual(call.body, { note: "接线松了" });
+});
+
+test("no reason typed: the read is sent with an empty body", async () => {
+  const [call] = await markRead("   ");
+  assert.deepEqual(call.body, {});
+});

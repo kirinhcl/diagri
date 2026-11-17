@@ -39,23 +39,66 @@ async function tour(page) {
   await d.sub(page, '', 0);
 }
 
+// The protocol the scene enters: two light treatments, four rounds in two blocks (as growbridge.sim.fixtures.make_protocol).
+const PROTOCOL = {
+  fields: [['crop', 'lettuce'], ['batch', 'batch-1'], ['randomization_seed', '20261118'], ['stages', 'vegetative'],
+    ['rounds', '4'], ['blocks', '2']],
+  treatments: [
+    { id: 'control', name: 'light 40 %', factors: 'light=40' },
+    { id: 'high', name: 'light 70 %', factors: 'light=70' },
+  ],
+  control: 'control',
+  allocations: [[1, 1, 'high'], [2, 1, 'control'], [3, 2, 'control'], [4, 2, 'high']], // round, block, treatment
+  unit: 'tent-1',
+  analysis: [['primary_endpoint', 'canopy_area_growth'], ['target_effect', '0.15'], ['method', 'paired_block']],
+};
+
+// The form's group of fields under a legend (Treatments, Allocation, ...).
+const group = (page, form, legend) => form.locator('fieldset')
+  .filter({ has: page.locator('legend', { hasText: new RegExp(`^\\s*${legend}\\s*$`) }) }).first();
+
+// Points at a field and fills it in one go (typing every value would make the scene minutes long).
+async function put(page, target, value, label) {
+  const el = await d.find(page, target, label);
+  await d.point(page, el);
+  await el.fill(String(value));
+  d.log('fill', label);
+  await d.pause(page, 200);
+}
+
 async function protocol(page, state) {
   const block = d.section(page, 'Protocols');
   await openFold(page, block, 'Protocols');
-  const editor = block.locator('textarea');
-  await d.find(page, editor, 'protocol editor');
-  const draft = JSON.parse(await editor.inputValue());
-  const filled = { ...draft, question: d.QUESTION, hypothesis: d.HYPOTHESIS };
-  state.protocolId = filled.id;
-  await d.click(page, editor, 'protocol editor', 300);
-  await editor.fill(JSON.stringify(filled, null, 2));
-  await editor.evaluate((n) => n.scrollTo({ top: 0 }));
-  await d.sub(page, 'The research protocol: light 40 % vs 70 %, 4 rounds in 2 blocks, endpoint canopy growth', 3000);
-  await editor.evaluate((n) => n.scrollTo({ top: n.scrollHeight * 0.35, behavior: 'smooth' }));
-  await d.pause(page, 2600);
-  await d.click(page, block.locator('button[type="submit"]'), 'Save protocol', 600);
-  await d.waitFor(page, 'protocol saved', async () => ((await d.api(page, `/projects/${state.projectId}`)).protocols || [])
-    .some((p) => p.protocol_id === state.protocolId), 15_000);
+  const form = block.locator('.protocol-form form').first();
+  await d.sub(page, 'The research protocol is a form: question, treatments, allocation to rounds, analysis', 600);
+  await d.typeInto(page, form.locator('textarea[name="question"]'), d.QUESTION, 'question', 14);
+  const mark = await d.lapseStart(page, 'entering the protocol', 10);
+  await put(page, form.locator('textarea[name="hypothesis"]'), d.HYPOTHESIS, 'hypothesis');
+  for (const [name, value] of PROTOCOL.fields) await put(page, form.locator(`[name="${name}"]`), value, name);
+  const treatments = group(page, form, 'Treatments');
+  for (const [i, row] of PROTOCOL.treatments.entries()) {
+    for (const name of ['id', 'name', 'factors']) {
+      await put(page, treatments.locator(`[name="${name}"]`).nth(i), row[name], `treatment ${i + 1} ${name}`);
+    }
+  }
+  await d.choose(page, form.locator('select[name="control_treatment_id"]'), PROTOCOL.control, 'control treatment');
+  const allocation = group(page, form, 'Allocation');
+  for (const [i, [round, blockNumber, treatment]] of PROTOCOL.allocations.entries()) {
+    await d.click(page, allocation.locator('button', { hasText: 'Add an allocation' }), 'Add an allocation', 300);
+    await put(page, allocation.locator('input[name="round"]').nth(i), round, `allocation ${i + 1} round`);
+    await put(page, allocation.locator('input[name="block"]').nth(i), blockNumber, `allocation ${i + 1} block`);
+    await put(page, allocation.locator('input[name="unit"]').nth(i), PROTOCOL.unit, `allocation ${i + 1} unit`);
+    await d.choose(page, allocation.locator('select[name="treatment_id"]').nth(i), treatment, `allocation ${i + 1} treatment`);
+  }
+  for (const [name, value] of PROTOCOL.analysis) await put(page, form.locator(`[name="${name}"]`), value, name);
+  await d.lapseEnd(page, mark);
+  await d.sub(page, 'The research protocol: light 40 % vs 70 %, 4 rounds in 2 blocks, endpoint canopy growth', 2600);
+  await d.click(page, form.locator('button[type="submit"]').last(), 'Save protocol', 600);
+  await d.waitFor(page, 'protocol saved', async () => {
+    const saved = (await d.api(page, `/projects/${state.projectId}`)).protocols || [];
+    if (saved.length) state.protocolId = saved[0].protocol_id;
+    return saved.length > 0;
+  }, 15_000);
   await d.pause(page, 1000);
   await d.sub(page, 'Protocols are versioned: a change makes a new version, never an overwrite', 2600);
 }

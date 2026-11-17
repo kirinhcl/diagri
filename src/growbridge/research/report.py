@@ -46,6 +46,7 @@ def publish_research_report(
     unresolved: Sequence[str],
     out_dir: Path,
     notes: Sequence[Note] = (),
+    holdout_id: str | None = None,
 ) -> tuple[Artifact, TaskState]:
     """Write the report, register it, and say whether it needs a human look first.
 
@@ -72,6 +73,7 @@ def publish_research_report(
         "notes": [n.entry("reason") for n in reasons] + [n.entry("limitation") for n in notes],
         "next_round": next_round,
         "unresolved": list(unresolved),
+        "holdout_id": holdout_id,  # the holdout this report read; null when it read none
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     artifact_id = new_id("artifact")

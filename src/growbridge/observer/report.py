@@ -31,6 +31,7 @@ class ReportContext(Model):
     observations: tuple[str, ...] = ()  # manual crop observations until cameras exist
     todos: tuple[str, ...] = ()
     treatment_deviation: float | None = None  # fraction of time the actual treatment deviated
+    recurring: tuple[str, ...] = ()  # problems that recur at about the same hour (episodes.py)
 
 
 def _clock(seconds: float) -> str:
@@ -115,6 +116,8 @@ def render_daily_report(
     lines += _section("Manual interventions", context.manual_interventions) + [""]
     lines += _section("Frozen readings", context.frozen_readings) + [""]
     lines += _section("Crop observations", context.observations) + [""]
+    if context.recurring:
+        lines += _section("Recurring", context.recurring) + [""]
     lines += _section("To do", context.todos)
     if narrative:
         lines += ["", "Narrative (model-written, no new figures):", narrative]

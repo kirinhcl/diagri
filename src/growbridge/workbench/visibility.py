@@ -15,6 +15,7 @@ checks each rule's routes with two operators. A new read route needs an entry an
 READ_RULES: dict[str, str] = {
     "/wb/alerts": "alerts",
     "/wb/compute": "compute",
+    "/wb/devices/{device_id}/notes": "device",
     "/wb/environment": "device",
     "/wb/capabilities": "public",
     "/wb/evidence": "public",

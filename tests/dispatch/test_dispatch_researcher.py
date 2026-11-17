@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 from dispatch_helpers import call, result_blocks, script_calls
@@ -823,6 +824,18 @@ async def test_the_first_holdout_evaluation_may_be_confirmatory_the_second_never
     assert _payload(one)["label"] == "confirmatory"
     assert _payload(two)["label"] == "exploratory"
     assert [r.label for r in registry.reads("hold-1")] == ["confirmatory", "exploratory"]
+
+
+async def test_publish_through_the_tool_records_the_holdout(env, tmp_path):
+    registry = _registry(env)
+    task = env.task("researcher")
+    rounds = _rounds(env, holdout=registry)
+    deps = _deps_with_confirmatory_runs(env, rounds, tmp_path, holdout=registry)
+
+    outcome = await _publish(env, task.id, rounds, deps, holdout_id="hold-1", model_sha="model-sha")
+
+    artifact = env.archive.artifact(_payload(outcome)["artifact_id"])
+    assert json.loads(Path(artifact.path).read_text())["holdout_id"] == "hold-1"
 
 
 async def test_holdout_inputs_come_as_a_pair_and_need_a_registered_model(env):

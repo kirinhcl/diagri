@@ -27,6 +27,7 @@ MAX_ERROR_CHARS = 4000
 ROLE_TOOLS: dict[str, frozenset[str]] = {
     "orchestrator": frozenset(
         {
+            "read_round_history",
             "get_project_state",
             "get_run_status",
             "create_research_task",
@@ -37,6 +38,7 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
     ),
     "planner": frozenset(
         {
+            "read_round_history",
             "get_device_capabilities",
             "find_prior_runs",
             "lookup_crop_conditions",
@@ -51,6 +53,7 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
     ),
     "researcher": frozenset(
         {
+            "read_round_history",
             "inspect_stage_data",
             "freeze_dataset",
             "query_evidence",
@@ -63,6 +66,7 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
     ),
     "auditor": frozenset(
         {
+            "read_round_history",
             "get_project_state",
             "get_run_status",
             "inspect_stage_data",

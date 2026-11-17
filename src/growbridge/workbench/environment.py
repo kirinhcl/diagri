@@ -166,6 +166,7 @@ def add_environment_routes(
     access: Access | None = None,
     *,
     max_pump_seconds: float,
+    device_id: str = "",
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
@@ -194,6 +195,7 @@ def add_environment_routes(
         since = view.since(now - window)
         return {
             "now": now,
+            "device_id": device_id,
             "clock_synced": clock.synced,
             "latest": view.reading(latest_reading(archive, caps.outlets, now), since),
             "stage": view.stage(active_stage(workflow, now, window)),

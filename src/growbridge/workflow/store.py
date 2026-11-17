@@ -74,6 +74,10 @@ STEPS = (
     "CREATE TABLE wf_project_owner_events(id INTEGER PRIMARY KEY AUTOINCREMENT,"
     " project_id TEXT NOT NULL, from_owner TEXT, to_owner TEXT NOT NULL, actor TEXT NOT NULL,"
     " at REAL NOT NULL, note TEXT NOT NULL)",
+    # memory: the choice made after a stage stopped, and who aborted a round
+    "CREATE TABLE wf_round_choices(id INTEGER PRIMARY KEY AUTOINCREMENT, round_id TEXT NOT NULL,"
+    " stage_id TEXT, choice TEXT NOT NULL, actor TEXT NOT NULL, at REAL NOT NULL)",
+    "CREATE INDEX wf_round_choices_round ON wf_round_choices(round_id)",
 )
 FINISHED_STATES = (StageState.ENDED, StageState.STOPPED)
 
@@ -278,6 +282,24 @@ class WorkflowStore:
         sets, values = _assignments(changes, set(RoundRow.model_fields) - {"id"})
         self.db.execute(f"UPDATE wf_rounds SET {sets} WHERE id = ?", (*values, round_id))
         return self.round(round_id)
+
+    def add_choice(
+        self, round_id: str, stage_id: str | None, choice: str, actor: str, at: float
+    ) -> None:
+        self.db.execute(
+            "INSERT INTO wf_round_choices(round_id, stage_id, choice, actor, at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (round_id, stage_id, choice, actor, at),
+        )
+
+    def choices(self, round_id: str) -> tuple[dict, ...]:
+        rows = self.db.query(
+            "SELECT * FROM wf_round_choices WHERE round_id = ? ORDER BY id", (round_id,)
+        )
+        return tuple(
+            {"at": r["at"], "stage_id": r["stage_id"], "choice": r["choice"], "by": r["actor"]}
+            for r in rows
+        )
 
     # --- run sheets ----------------------------------------------------------------------------
 

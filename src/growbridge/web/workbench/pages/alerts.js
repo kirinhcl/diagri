@@ -9,6 +9,7 @@ import { isNotMounted } from "./not-mounted.js";
 
 const SEVERITY_ORDER = ["info", "warning", "critical"]; // mildest first
 export const REASK_SECONDS = 24 * 3600; // observer/alerts.py REASK_SECONDS
+const NOTE_MAX = 500; // observer/device_notes.py NOTE_MAX, the limit of a read note too
 
 // The inbox's rule (observer/alerts.py awaits_reading): unread, or worse than the severity it was
 // read at, or read more than a day ago by the clock (`now`, in seconds); a clock behind the reading or the
@@ -40,12 +41,17 @@ function readCell(ctx, alert) {
   if (!alertWaiting(alert, nowSeconds(ctx))) return h("p", { class: "block-note", text: said });
   const box = errorBox();
   const label = ctx.t("alerts.markRead");
+  const reason = h("input", {
+    class: "input",
+    attrs: { type: "text", maxlength: String(NOTE_MAX), placeholder: ctx.t("alerts.readNote"), "aria-label": ctx.t("alerts.readNote") },
+  });
   const button = h("button", { class: "button button-quiet", attrs: { type: "button" }, text: label });
   button.addEventListener("click", async () => {
     box.hidden = true;
     button.disabled = true;
+    const note = reason.value.trim(); // optional: why it happened or what was done
     try {
-      await ctx.api.post(`/alerts/${encodeURIComponent(alert.event_id)}/read`, {}, { action: label });
+      await ctx.api.post(`/alerts/${encodeURIComponent(alert.event_id)}/read`, note ? { note } : {}, { action: label });
     } catch (error) {
       showErrors(box, error, ctx);
       button.disabled = false;
@@ -56,7 +62,7 @@ function readCell(ctx, alert) {
     ctx.reload();
   });
   const why = olderThanReask(ctx, alert) ? h("p", { class: "cell-sub", text: ctx.t("alerts.askAgain") }) : null;
-  return h("div", { class: "action" }, h("p", { class: "block-note", text: said }), why, button, box);
+  return h("div", { class: "action" }, h("p", { class: "block-note", text: said }), why, reason, button, box);
 }
 
 function alertsTable(ctx, alerts, focus) {
