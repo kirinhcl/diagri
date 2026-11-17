@@ -4,7 +4,7 @@
 
 这一页写给准备提交改动的人。它按步骤说明这个仓库目前是怎么做改动的，最后给出评审时用的检查清单。
 
-下面写的是目前的做法，不是正式的制度。仓库里没有 `CONTRIBUTING.md`，没有 Pull Request 模板，也没有自带的 Git 钩子。提交历史里还看不出来的习惯，本页会直接说明。
+下面写的是目前的做法，不是正式的制度。仓库根目录的 [`CONTRIBUTING.md`](../../../CONTRIBUTING.md) 是本页的简短入口；仓库没有 Pull Request 模板，也没有自带的 Git 钩子。提交历史里还看不出来的习惯，本页会直接说明。
 
 ## 开始之前
 
@@ -56,7 +56,7 @@ git switch -c feat/<short-name>
 | `perf` | 性能方面的改动 |
 | `ci` | CI 工作流 |
 
-`git log --oneline` 目前的实际情况：一共十个提交。最新的三个采用了这个格式，`feat:` 一次，`docs:` 两次。更早的七个是以动词开头的普通句子，例如“Add local dashboard with live controls, history charts and CSV export”。其余六种类型属于同一套约定，只是还没有出现过。
+`main` 的提交历史里，最早的七个提交是以动词开头的普通句子，例如“Add local dashboard with live controls, history charts and CSV export”。之后的提交都采用这个格式，只有两个用了表里没有的 `style:`。
 
 ### 5. 推送，等 CI 通过
 
@@ -88,7 +88,9 @@ git switch -c feat/<short-name>
 - 每个相对链接指向的文件都存在；
 - 每个页面都链接到另一种语言的版本。
 
-它不检查两个版本说的是不是同一件事，这要靠评审的人来看。
+另外两个测试用代码核对参考页面，两种语言都查。[`test_docs_reference.py`](../../../tests/docs/test_docs_reference.py) 核对拒绝码、CLI 命令和选项、`Settings` 与 `RoleModel` 的字段、MCP 工具（README 里的也查）和模型角色的工具，以及页面上写的数量，并检查 [`CITATION.cff`](../../../CITATION.cff) 写的是软件包的当前版本。[`test_docs_routes.py`](../../../tests/docs/test_docs_routes.py) 核对桥接和工作台的路由。测试失败时会列出页面漏了什么、写了哪些代码里没有的东西：两种语言的页面都要改。
+
+除了这些表格，没有测试检查两个版本说的是不是同一件事，这要靠评审的人来看。
 
 ### 不要绕过 Git 钩子
 

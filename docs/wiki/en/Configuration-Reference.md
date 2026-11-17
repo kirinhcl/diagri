@@ -18,7 +18,7 @@ The fields are `Settings` and `RoleModel` in [`config.py`](../../../src/growbrid
 
 ## `Settings` fields
 
-There are 25 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
+There are 27 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
 
 | Field | Type | Default | Allowed values | What it does | DiAGRI only |
 | --- | --- | --- | --- | --- | --- |

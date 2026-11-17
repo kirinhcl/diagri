@@ -95,7 +95,7 @@ Tests live in [`tests/`](../../../tests), one folder per area. The folders are n
 | `tests/transport/` | `halt` on both BLE transports, and the pid file and folder checks of the native transport. |
 | `tests/e2e/` | The assembled runtime: a full research round, interventions, model roles, the CLI commands, and a round driven through the HTTP routes. |
 | `tests/web/` | The operator console's scripts, run with `node --test` (see CI step 2): routing, formatting, texts, denials, receipts, the stage page's rules, the chart maths, and the ban on `innerHTML`. Node's own test runner, no npm packages. |
-| `tests/docs/` | This wiki: every page exists in `en/` and `zh-CN/`, the page table in [the wiki README](../README.md) lists exactly the pages that exist, relative links point at existing files, and every page links to its translation. |
+| `tests/docs/` | This wiki: every page exists in `en/` and `zh-CN/`, the page table in [the wiki README](../README.md) lists exactly the pages that exist, relative links point at existing files, and every page links to its translation. The reference tables list what the code has: denial codes, CLI, configuration fields, routes, MCP and model role tools. |
 | `tests/test_*.py` | The original bridge: protocol framing, device controls, the HTTP API with MCP, the dashboard. 32 tests. |
 
 Two things apply everywhere:

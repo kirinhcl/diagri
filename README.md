@@ -214,6 +214,8 @@ See [Installation and quick start](docs/wiki/en/Installation-and-Quick-Start.md)
 
 The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) covers the whole platform: its architecture, the control and safety model, the research methods, reference pages, and what has and has not been verified.
 
+To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, follow [SECURITY.md](SECURITY.md) and do not open a public issue. To cite DiAGRI, use [CITATION.cff](CITATION.cff) ("Cite this repository" on GitHub).
+
 ## Development and validation
 
 ```sh
