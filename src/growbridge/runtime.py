@@ -43,6 +43,8 @@ from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
 from growbridge.observer.alerts import Alert, AlertBook, Scope
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
+from growbridge.observer.device_notes import DeviceNotes
+from growbridge.observer.episodes import report_recurring
 from growbridge.observer.health import BeatStatus, ExternalMonitor, Heartbeat, RunHealthCheck
 from growbridge.observer.metrics import compute_daily_metrics, day_bounds
 from growbridge.observer.outbox import Outbox
@@ -227,6 +229,7 @@ class Runtime:
     stopped: bool = False
     last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
     access_parts: AccessParts | None = None  # multi-user locks and rules; None when off
+    notes: DeviceNotes | None = None  # notes people write about the device (memory)
 
     # --- life cycle ----------------------------------------------------------------------------
 
@@ -277,6 +280,7 @@ class Runtime:
         args = (self.workflow, self.control, self.archive, self.operators, self.settings)
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
         extra = {"conversation": self.conversation, **workbench_access(self.access_parts)}
+        extra["notes"] = self.notes
         return create_workbench(*args, role_tokens or {}, *more, **extra)
 
     @property
@@ -506,6 +510,7 @@ class Runtime:
             protective_actions=protective,
             manual_interventions=interventions,
             frozen_readings=frozen,
+            recurring=report_recurring(self, stage, end, zone),
         )
         return render_daily_report(metrics, context)
 
@@ -678,6 +683,7 @@ def build_runtime(
         outbox=outbox,
         observer=observer,
         reports=ReportStore(dbs["observer"]),
+        notes=DeviceNotes(dbs["observer"], clock),
         runner=ConfirmatoryRunner(dbs["agents"], clock, sandbox, data_dir / "analysis"),
         holdout=HoldoutRegistry(dbs["agents"], clock, outcomes, flow.catalog),
         sandbox=sandbox,

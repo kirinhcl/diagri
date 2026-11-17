@@ -47,6 +47,7 @@ class Deps:
     holdout: Any = None
     alerts: Any = None  # the AlertBook; only the auditor's finding tool uses it
     timezone: str = "UTC"  # the reporting time zone: the models are shown times in it
+    memory: Any = None  # MemorySources; read_round_history reads through it
 
 
 def local_time(epoch: float | None, timezone: str) -> str | None:

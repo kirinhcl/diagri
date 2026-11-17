@@ -1,0 +1,20 @@
+{
+  "notes": [
+    {
+      "id": 2,
+      "device_id": "SIMULATED",
+      "at": 1794820800.0,
+      "actor": "alice",
+      "sensor": "co2",
+      "text": "changed the CO2 probe"
+    },
+    {
+      "id": 1,
+      "device_id": "SIMULATED",
+      "at": 1794734400.0,
+      "actor": "bob",
+      "sensor": null,
+      "text": "<b>fan</b> cleaned"
+    }
+  ]
+}

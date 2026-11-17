@@ -13,6 +13,8 @@ from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.handlers import Deps, build_role_tools
 from growbridge.agents.handlers_common import local_time
 from growbridge.agents.llm import ModelClient
+from growbridge.agents.memory import build_history
+from growbridge.agents.memory_sources import MemorySources
 from growbridge.agents.tools import ROLE_TOOLS, Tool
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Budget, ResearchTask
@@ -46,8 +48,24 @@ def role_tools(runtime: Any, work_root: Path) -> dict[str, list[Tool]]:
         holdout=runtime.holdout,
         alerts=runtime.book,
         timezone=runtime.settings.report_timezone,
+        memory=memory_sources(runtime),
     )
     return build_role_tools(deps)
+
+
+def memory_sources(runtime: Any) -> MemorySources:
+    """What the memory of a model task is computed from."""
+    return MemorySources(
+        workflow=runtime.workflow,
+        archive=runtime.archive,
+        book=runtime.book,
+        notes=getattr(runtime, "notes", None),
+        holdout=runtime.holdout,
+        clock=runtime.clock,
+        timezone=runtime.settings.report_timezone,
+        device_id=runtime.settings.device,
+        multi_user=getattr(runtime, "access_parts", None) is not None,
+    )
 
 
 def make_dispatcher(runtime: Any, client: ModelClient, work_root: Path) -> Dispatcher:
@@ -61,7 +79,10 @@ def make_dispatcher(runtime: Any, client: ModelClient, work_root: Path) -> Dispa
     timezone = runtime.settings.report_timezone
 
     def context(task):
-        return project_context(runtime.workflow, runtime.control, timezone, task)
+        base = project_context(runtime.workflow, runtime.control, timezone, task)
+        shown = {item["round_id"] for item in base["rounds"]}
+        history = build_history(memory_sources(runtime), task.project_id, shown)
+        return {**base, "history": history}
 
     conversation = getattr(runtime, "conversation", None)
     return Dispatcher(*args, runtime.agents_db, context=context, conversation=conversation)

@@ -34,7 +34,12 @@ ESTIMATE = BlockEstimate(effect=1.0, blocks=8, p_value=0.01, estimable=True, not
 
 
 def publish(
-    tmp_path, label="confirmatory", unresolved=(), conclusion="supported", **snapshot_fields
+    tmp_path,
+    label="confirmatory",
+    unresolved=(),
+    conclusion="supported",
+    holdout=None,
+    **snapshot_fields,
 ):
     sink = ListSink()
     decision = AnalysisDecision(label=label, reasons=())
@@ -50,6 +55,7 @@ def publish(
         next_round="repeat with a second cultivar",
         unresolved=unresolved,
         out_dir=tmp_path,
+        **({} if holdout is None else {"holdout_id": holdout}),
     )
     return sink, artifact, state
 
@@ -119,3 +125,16 @@ def test_a_second_report_never_overwrites_the_first(tmp_path):
     assert first.path != second.path
     assert json.loads(Path(first.path).read_text())["conclusion"] == "supported"
     assert file_digest(first.path) == first.sha256
+
+
+def test_report_body_names_the_holdout_it_read(tmp_path):
+    _, artifact, _ = publish(tmp_path, holdout="h-1")
+
+    assert json.loads(Path(artifact.path).read_text())["holdout_id"] == "h-1"
+
+
+def test_report_body_has_a_null_holdout_without_one(tmp_path):
+    _, artifact, _ = publish(tmp_path)
+
+    body = json.loads(Path(artifact.path).read_text())
+    assert "holdout_id" in body and body["holdout_id"] is None

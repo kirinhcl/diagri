@@ -581,6 +581,7 @@ def publish(deps: Deps, data: PublishInput) -> dict:
         data.unresolved,
         deps.work_root / "reports" / task.id / new_id("report"),
         notes,
+        holdout_id=data.holdout_id,
     )
     body = {
         "artifact_id": artifact.id,

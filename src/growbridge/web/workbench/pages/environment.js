@@ -7,7 +7,7 @@ import { hrefFor } from "../router.js";
 import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { displayName } from "../ui/names.js";
-import { note, pageHead, section, timeText } from "../ui/section.js";
+import { errorBox, note, pageHead, section, showErrors, timeText } from "../ui/section.js";
 import { statePillKeeper } from "../ui/status.js";
 import { isNotLockHolder, lockFirst } from "./not-mounted.js";
 
@@ -172,6 +172,39 @@ function windowPicker(ctx, onPick) {
   return { group, mark };
 }
 
+const NOTE_MAX = 500; // observer/device_notes.py NOTE_MAX
+
+// Notes people write about the device (a probe changed, a loose wire): kept for whoever uses the
+// greenhouse later; models read them as background. Listed again after each write, not polled.
+function deviceNotes(ctx, deviceId) {
+  const path = `/devices/${encodeURIComponent(deviceId)}/notes`;
+  const list = h("div");
+  const box = errorBox();
+  const show = async () => {
+    const { notes } = await ctx.api.get(path);
+    const rows = notes.map((item) => h("li", {}, h("span", { class: "cell-sub", text: `${timeText(ctx, item.at)} · ${item.actor}` }), h("p", { text: item.text })));
+    clear(list).append(rows.length ? h("ul", { class: "plain-list" }, ...rows) : note(ctx.t("env.noNotes")));
+  };
+  const input = h("input", { class: "input", attrs: { type: "text", maxlength: String(NOTE_MAX), "aria-label": ctx.t("env.addNote") } });
+  const label = ctx.t("env.addNote");
+  const form = h("form", { class: "action" }, input, h("button", { class: "button", attrs: { type: "submit" }, text: label }), box);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    box.hidden = true;
+    try {
+      await ctx.api.post(path, { text }, { action: label });
+    } catch (error) {
+      showErrors(box, error, ctx);
+      return;
+    }
+    input.value = "";
+    await show();
+  });
+  return { element: section(ctx.t("env.notes"), list, form), show };
+}
+
 async function load(ctx) {
   return ctx.api.get(`/environment?window=${chosenWindow}&points=${POINTS}`);
 }
@@ -205,6 +238,8 @@ export async function render(ctx) {
     await refresh();
   });
   draw();
+  const notes = env.device_id ? deviceNotes(ctx, env.device_id) : null;
+  if (notes) await notes.show();
   const element = h(
     "div",
     { class: "page environment" },
@@ -212,6 +247,7 @@ export async function render(ctx) {
     status,
     section(ctx.t("env.now"), now),
     section(ctx.t("env.trends"), picker.group, trends),
+    notes ? notes.element : null,
   );
   return { element, refresh, pollSeconds: POLL_SECONDS };
 }

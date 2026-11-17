@@ -68,6 +68,7 @@ against the server's enums and literals.
 | round-pending.json, stage-pending.json, run-sheet-pending.json, readings-pending.json, measurements-pending.json, history-pending.json, manual-tasks-pending.json | the same reads for `stage-dev`, the dev seed's stage waiting for review |
 | environment.json | `/environment?window=3600&points=360` |
 | capabilities.json | `/capabilities` (synthetic, see below) |
+| device-notes.json | `/devices/{device_id}/notes` |
 | safety.json | `/safety` |
 | safety-none.json | `/safety` when no limits are approved yet (`{"safety": null}`, synthetic; give it as `fixtures: {"safety.json": ...}`) |
 | alerts.json | `/alerts` |

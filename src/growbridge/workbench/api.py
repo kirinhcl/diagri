@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
-from pydantic import ConfigDict, Field, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import new_id
@@ -31,6 +31,7 @@ from growbridge.compute.service import ComputeService
 from growbridge.config import Settings
 from growbridge.jsonsafe import json_safe
 from growbridge.observer.alerts import AlertBook
+from growbridge.observer.device_notes import NOTE_MAX, DeviceNotes
 from growbridge.ports import ActionRequest, Actor, ControlPort, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry
@@ -234,6 +235,7 @@ class Workbench:
         conversation: ConversationLog | None = None,
         access: Access | None = None,
         locks: GreenhouseLocks | None = None,
+        notes: DeviceNotes | None = None,
     ):
         self.access = access  # multi-user rules; None when multi_user is off
         self.locks = locks
@@ -268,6 +270,8 @@ class Workbench:
             compute=compute,
             max_pump_seconds=settings.max_pump_seconds,
             access=access,
+            notes=notes,
+            device_id=str(settings.device),
         )
         add_round_routes(
             self.router,
@@ -691,11 +695,22 @@ class Workbench:
             return {"alerts": [item.model_dump(mode="json") for item in shown]}
 
         @router.post("/alerts/{event_id}/read")
-        async def mark_read(event_id: str, actor: Annotated[Actor, Depends(self.operator)]):
+        async def mark_read(
+            event_id: str,
+            actor: Annotated[Actor, Depends(self.operator)],
+            body: ReadInput | None = None,
+        ):
             if self.access is not None and not self.access.sees_alert(actor, book.get(event_id)):
                 raise denials.unknown("alert", event_id)  # as AlertBook.get answers a missing one
-            book.mark_read(event_id, actor)
+            book.mark_read(event_id, actor, note=None if body is None else body.note)
             return {"event_id": event_id}
+
+
+class ReadInput(BaseModel):
+    """Marking an alert read; the optional note says why it happened or what was done."""
+
+    model_config = ConfigDict(extra="forbid")
+    note: str | None = Field(default=None, max_length=NOTE_MAX)
 
 
 def create_workbench(
@@ -714,6 +729,7 @@ def create_workbench(
     conversation: ConversationLog | None = None,
     access: Access | None = None,
     locks: GreenhouseLocks | None = None,
+    notes: DeviceNotes | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
     ``tasks`` and ``budget`` together add the call budget and research goal routes; ``runner``
@@ -722,4 +738,4 @@ def create_workbench(
     the goal routes) records each goal and adds the project conversation read."""
     args = (workflow, control, archive, operators, settings, role_tokens)
     more = (alerts, tasks, budget, runner, holdout, compute, conversation)
-    return Workbench(*args, *more, access=access, locks=locks).router
+    return Workbench(*args, *more, access=access, locks=locks, notes=notes).router
