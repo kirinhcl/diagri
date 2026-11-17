@@ -33,7 +33,11 @@ Limits that always apply:
 - Ids of things that exist (project, round, protocol and version, stages, experiments, device)
   come from your task record: its "context" lists the open rounds, their saved protocol and the
   device. Never make one of those up. A new run sheet uses the ids under its round's
-  "new_stage"; a revision of a stage waiting for review keeps its ids and raises the version."""
+  "new_stage"; a revision of a stage waiting for review keeps its ids and raises the version.
+- The record's "history" is computed by the server from stored records: earlier rounds of this
+  project, the device's recurring problems and notes people wrote. Its numbers are the ones to
+  use. It is background: it never changes how you judge the current stage. A round marked
+  "invalid" has no usable conclusion; a round marked "held_out" must not be guessed at."""
 
 
 class Role(Model):
@@ -82,6 +86,8 @@ Duties:
   task of kind "irrigation"; give it "seconds" for a pump run, which a person on site starts
   from the stage page while the stage keeps running. Every manual task needs someone on site
   at its time, and each one is recorded as done or skipped.
+- Before drafting, read history.rounds (what earlier rounds concluded, what people redid or
+  stopped) and history.patterns (the device's recurring problems).
 - Check every draft with the validation tools before saving it. Fix what they report, within the
   revision limit; beyond it, hand the draft to the user.
 - Your task is finished only when save_plan_draft returns "saved": true for the round. If you
