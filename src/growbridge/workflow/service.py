@@ -321,6 +321,15 @@ class WorkflowService(StageRecovery):
             (make(stage.stage_id, message) for broken, make, message in checks if broken), None
         )
 
+    def current_approval(self, stage_id: str) -> Approval | None:
+        """The stage's valid approval when ``start`` would still accept it (same check, no writes);
+        None when there is none or it no longer fits the stage, run sheet or device."""
+        stage = self.store.stage(stage_id)
+        approval = self.store.valid_approval(stage_id)
+        if approval is None or self._approval_problem(approval, stage, self._sheet(stage)):
+            return None
+        return approval
+
     def _check_approval(self, stage: StageRow, sheet: RunSheet) -> None:
         approval = self.store.valid_approval(stage.stage_id)
         if approval is None:

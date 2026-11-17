@@ -425,6 +425,23 @@ def test_a_review_says_whether_the_current_run_sheet_is_approved(bench, operator
     assert operator.get("/wb/stages/stage-1/run-sheet").json()["approval"] is None
 
 
+@pytest.mark.parametrize("change", ["capability_version", "recovery"])
+def test_an_approval_start_would_refuse_is_not_reported_as_approved(bench, operator, change):
+    bench.pending()
+    bench.approve(operator)
+    assert operator.get("/wb/stages/stage-1/run-sheet").json()["approval"] is not None
+
+    if change == "recovery":
+        bench.control.bump_recovery("test")
+        bench.login(operator)  # a session is bound to the recovery number
+    else:
+        bench.control.capability_version = "changed"
+
+    assert operator.get("/wb/stages/stage-1/run-sheet").json()["approval"] is None
+    # the read changed nothing: the approval is still stored as valid
+    assert bench.workflow.store.valid_approval("stage-1") is not None
+
+
 def test_project_protocol_rows_carry_endpoint_and_method(bench, operator):
     bench.seed_round()
     row = operator.get(f"/wb/projects/{bench.project_id}").json()["protocols"][0]

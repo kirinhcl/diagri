@@ -165,9 +165,7 @@ def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | Non
     if archive is not None:
         cards = {card.id: card for card in archive.evidence()}
         findings = (*findings, *check_evidence(sheet, cards))
-    approval = workflow.store.valid_approval(stage_id)
-    if approval is not None and approval.run_sheet_digest != sheet.digest():
-        approval = None
+    approval = workflow.current_approval(stage_id)
     return {
         "stage_id": stage.stage_id,
         "state": stage.state.value,
