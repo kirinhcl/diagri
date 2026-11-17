@@ -41,9 +41,21 @@ class FindingInput(ToolInput):
     task_id: str
     stage_id: str
     severity: Literal["info", "warning"]
-    summary: str = Field(min_length=1, max_length=MAX_LINE)
+    summary: str = Field(
+        min_length=1,
+        max_length=MAX_LINE,
+        description=(
+            "One sentence for the operator under the writing rules: the problem "
+            "and what to do about it, with no ids or field names."
+        ),
+    )
     evidence: tuple[Annotated[str, Field(max_length=MAX_LINE)], ...] = Field(
-        default=(), max_length=MAX_EVIDENCE
+        default=(),
+        max_length=MAX_EVIDENCE,
+        description=(
+            "One fact per item, written for the operator under the "
+            "writing rules: plain words, local times, no ids or field names."
+        ),
     )
 
 
