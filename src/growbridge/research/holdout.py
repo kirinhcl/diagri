@@ -235,7 +235,9 @@ class HoldoutRegistry:
         Registrations are read on every call, so holdouts registered later apply at once. A
         measurement without a batch cannot be placed and is treated as held out. Metrics are
         compared by catalog ID; a name the catalog cannot resolve is treated as an outcome, so a
-        misspelt outcome in a held-out batch is hidden (in a development batch it is kept).
+        misspelt outcome in a held-out batch is hidden (in a development batch it is kept). A
+        holdout whose stored outcome fields do not all resolve (registered before they had to)
+        cannot tell its outcomes apart, so every measurement of its held batches is hidden.
         """
         catalog = self.catalog
 
@@ -247,7 +249,7 @@ class HoldoutRegistry:
             )
             for row in rows:
                 fields = {catalog.canonical(f) for f in json.loads(row["outcome_fields"])}
-                if name is not None and name not in fields:
+                if name is not None and None not in fields and name not in fields:
                     continue
                 if not measurement.batch or measurement.batch in json.loads(row["batch_ids"]):
                     return False

@@ -6,6 +6,7 @@ from growbridge.archive.models import ManualMeasurement
 from growbridge.ports import Denied
 from growbridge.research.holdout import HoldoutRegistry, refuse_holdout_rows
 from growbridge.sim.clock import FakeClock
+from growbridge.vocab import packaged_catalog
 
 OUTCOMES = ("yield_g", "canopy_score")
 DEV = ("dev-1", "dev-2")
@@ -272,3 +273,13 @@ def test_snapshot_with_unresolved_held_row_is_refused(blinded, tmp_path):
 
     with pytest.raises(Denied):
         refuse_holdout_rows(blinded, "p1", "snap-1", rows)
+
+
+def test_a_stored_outcome_field_that_no_longer_resolves_hides_its_held_batches(blinded, db, clock):
+    # "yield_g" resolved when registered (TEST_CATALOG); the packaged catalog lacks it, as a
+    # holdout registered before outcome fields had to resolve may hold such a name.
+    keep = HoldoutRegistry(db, clock, catalog=packaged_catalog()).development_filter("p1")
+
+    assert keep(measurement("canopy_area_growth", "b3")) is False  # held batch: fail closed
+    assert keep(measurement("canopy_area_growth", "")) is False  # no batch: fail closed
+    assert keep(measurement("canopy_area_growth", "b1")) is True  # development batch
