@@ -86,7 +86,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/drafts/run-sheet` | operator, the planner's role token | LAN, overlay | no | only `session`, `entry`, `state`, and `model_role` for another role's token |
 | `POST` | `/wb/manual/{channel}` | operator | LAN, overlay | no | `pump_on_forbidden`, `state`, write codes |
 | `POST` | `/wb/irrigation` | operator | LAN only | no | `entry` (not on the LAN entry), `state`, `cooldown`, write codes |
-| `POST` | `/wb/measurements` | operator | LAN, overlay | no | `scope` |
+| `POST` | `/wb/measurements` | operator | LAN, overlay | no | `scope`, `param` |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks` | operator | LAN, overlay | no | `scope` (no such occurrence), `state` (not started, or not due within the hour), `param` (`done_at`) |
 | `POST` | `/wb/stages/{stage_id}/manual-tasks/irrigate` | operator | LAN only | no | `entry` (not on the LAN entry), `scope` (not a planned irrigation), `state` (stage not `running`, not due, past its deadline, already done, or the pump already ran for this occurrence), `cooldown`, write codes |
 | `POST` | `/wb/safety/approve` | operator | LAN, overlay | yes | `reauth_required`, `host_unregistered` |
@@ -95,7 +95,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `GET` | `/wb/alerts` | operator, role token | LAN, overlay | no | only `session`, `entry` |
 | `POST` | `/wb/alerts/{event_id}/read` | operator | LAN, overlay | no | `state` |
 | `POST` | `/wb/projects` | operator | LAN, overlay | no | `state` |
-| `POST` | `/wb/protocols` | operator | LAN, overlay | no | `state` |
+| `POST` | `/wb/protocols` | operator | LAN, overlay | no | `state`, `param` |
 | `POST` | `/wb/rounds` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/rounds/{round_id}` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/rounds/{round_id}/report` | operator | LAN, overlay | no | `state` |
@@ -123,6 +123,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `GET` | `/wb/stages/{stage_id}/readings` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/environment` | operator | LAN, overlay | no | — |
 | `GET` | `/wb/stages/{stage_id}/measurements` | operator | LAN, overlay | no | `state` |
+| `GET` | `/wb/experiments/{experiment_id}/variables` | operator | LAN, overlay | no | `scope` |
 | `GET` | `/wb/stages/{stage_id}/history` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/safety` | operator | LAN, overlay | no | none |
@@ -188,6 +189,8 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `GET` | `/wb/stages/{stage_id}/manual-tasks` | none | `stage_id`, `stage_state`, `timezone`, `on_time_seconds`, `early_seconds`, `now`, and `occurrences`: each daily occurrence of the run sheet's manual tasks in the stage window (`task_id`, `kind`, `due_at`, `make_up_allowed`, `seconds`), with its `status` (`upcoming`, `open`, `done`, `late`, `skipped`, `missed`) and the `record` that counts, or `null`; empty before the stage starts |
 | `GET` | `/wb/stages/{stage_id}/history` | none | `history` (the stage's state changes) and `interventions` (the experiment's interventions that belong to this stage) |
 | `GET` | `/wb/safety` | none | `safety`: the approved `SafetyConfig` (with `frozen`: `minutes` per sensor and `max_gap_seconds`), or `null` when none is approved |
+
+`GET /wb/experiments/{experiment_id}/variables` returns the variables a measurement of the experiment may name: `{"experiment_id": "...", "variables": [{"id", "label_en", "label_zh", "unit", "method", "min", "max", "deprecated"}]}`, sorted by `id`. An experiment that no stage runs is refused with `scope`. `POST /wb/measurements` is refused with 422 `param`, listing every problem, when the experiment declares no variables, the metric is not declared (the declared IDs are listed), the variable has the wrong kind, the unit is wrong (the right one is named), or the value lies outside `min` and `max` (inclusive). `POST /wb/protocols` is refused with 422 `param`, listing every problem, when `variables` is empty or has a duplicate, an ID is unknown, an alias or deprecated without an earlier declaration, the primary endpoint is not declared, or a treatment factor key is not a catalog factor ID. See [Variable catalog](Variable-Catalog.md).
 
 A saved protocol version is never overwritten: the same `id` and `version` with other content is refused with `state`. `POST /wb/rounds` uses the latest saved version. The `run_sheet_digest` of the read route is the digest an approval records. Setting a budget again changes the limits and keeps the recorded usage. `POST /wb/goals` creates a research task owned by the orchestrator and is refused with `budget` while the project has no budget or nothing is left of it. With a `request_id`, the same operator sending the same request for the same project again gets the first task back with `"reused": true`; another goal text, round or set of constraints under that id is refused with `state`. Without a `request_id` every request creates a task. The ids in the paths of these routes have 1 to 100 characters. The analysis routes freeze the analysis script of the latest protocol version, which is refused with `state` once a stage under that version has started, and run it once on a data snapshot; the order of their checks is in [Run a research round](Run-a-Research-Round.md#run-the-frozen-analysis).
 

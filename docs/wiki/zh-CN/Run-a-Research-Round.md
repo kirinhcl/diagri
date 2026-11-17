@@ -243,7 +243,21 @@ POST /wb/stages/STAGE_ID/start
 | 续跑 | `POST /wb/stages/STAGE_ID/resume`（需要重新认证） |
 | 人工接管 | [人工接管、灌溉与交还](Manual-Takeover-and-Irrigation.md) |
 
+### 记录一次测量
+
+在控制台里，测量表单把该实验已声明的变量列成指标下拉框（多于一个时带“选择变量”占位项），单位由变量决定。通过 HTTP，`GET /wb/experiments/EXPERIMENT_ID/variables` 列出这些变量。`POST /wb/measurements` 发现问题时以 422 `param` 拒绝，并列出找到的每一个问题：
+
+| 问题 | 怎么办 |
+| --- | --- |
+| 没有已声明的变量：该实验的协议没有声明任何变量 | 协议没有声明变量的实验不能记录测量。保存一个声明了变量的协议版本。 |
+| 指标没有被声明 | 提示里列出已声明的 ID。改用其中之一，或在新的协议版本里声明这个变量。 |
+| 种类不对 | 该变量是 sensor 或 factor，不是人工（`manual`）变量。改选一个人工变量。 |
+| 单位不对 | 提示里给出正确的单位。按这个单位填值。 |
+| 数值超出 `min` 和 `max` | 边界是闭区间。检查读数；不要为了迁就错误的数值去放宽目录。 |
+
 测量的请求体包含 `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`（UTC 秒）、`position`、`method`、`metric`、`value` 和 `unit`。要更正以前的一条测量，加上 `corrects` 并填那条记录的 ID；原记录会保留。
+
+更正是一条新记录，可以同时改指标和数值。写入更正会把包含原记录的每一份数据快照和每一份报告标为失效，所以之后要重新冻结快照、重新生成报告。人工记录总是保存标准 ID。
 
 ### 人工任务
 
