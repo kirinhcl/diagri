@@ -1,0 +1,11 @@
+[
+  {"t": 161.0, "seconds": 6, "label": "orchestrator's first reply: delegation and one-tent limits"},
+  {"t": 362.0, "seconds": 6, "label": "planning follow-up: what was filed"},
+  {"t": 366.5, "seconds": 7, "label": "planning follow-up: points to check, limitations, next step"},
+  {"t": 384.0, "seconds": 3, "label": "run sheet findings: hints only"},
+  {"t": 826.9, "seconds": 7, "label": "final summary: round 1 result"},
+  {"t": 829.8, "seconds": 6, "label": "final summary: open points and next step"},
+  {"t": 836.6, "seconds": 4, "label": "report: label and conclusion"},
+  {"t": 840.7, "seconds": 6, "label": "report: limitations"},
+  {"t": 845.4, "seconds": 5, "label": "report: open questions and next round"}
+]
