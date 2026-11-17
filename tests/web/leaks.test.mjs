@@ -5,6 +5,7 @@ import test from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { PAGES } from "../../src/growbridge/web/workbench/router.js";
+import { makeT } from "../../src/growbridge/web/workbench/i18n.js";
 import { h } from "../../src/growbridge/web/workbench/ui/dom.js";
 import { assertNoLeaks, exemptStrings, findLeaks, visibleText } from "./support/leaks.mjs";
 import { EXEMPTIONS } from "./support/leak-exemptions.mjs";
@@ -229,19 +230,26 @@ test("no page leaks internal text", async (t) => {
   }
 });
 
-// The leak scan above only means something for a form if the form is on the page it scans.
+// The leak scan above only means something for a form if the form is on the page it scans. Each page
+// must show the batch 3 form by its own label (pages also hold unrelated forms, so a count proves nothing).
+const BATCH_3_FORMS = [
+  { page: "safety", keys: ["safety.frozenGap"] },
+  { page: "project", params: { projectId: PROJECT.project_id }, keys: ["protocol.form.saveAs", "project.holdouts.batches"] },
+  { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id }, keys: ["runsheet.form.duration"] },
+  { page: "round", params: { roundId: FIXTURES["round.json"].round_id }, keys: ["analysis.form.script", "analysis.snapshot"] },
+];
+
 test("the batch 3 form pages show their forms in both languages", async () => {
   const forms = (node) => [...(node.localName === "form" ? [node] : []), ...[...node.children].flatMap(forms)];
-  const pages = [
-    { page: "safety", min: 1 },
-    { page: "project", params: { projectId: PROJECT.project_id }, min: 1 },
-    { page: "stage", params: { stageId: FIXTURES["stage-pending.json"].stage_id }, min: 1 },
-    { page: "round", params: { roundId: FIXTURES["round.json"].round_id }, min: 1 },
-  ];
-  for (const { page, params, min } of pages) {
+  for (const { page, params, keys } of BATCH_3_FORMS) {
     for (const lang of ["zh", "en"]) {
       const { element } = await renderPage(page, params, { lang });
-      assert.ok(forms(element).length >= min, `${page} (${lang}) shows no form`);
+      const t = makeT(lang);
+      for (const key of keys) {
+        const label = t(key);
+        assert.ok(label && label !== key, `${key} has a ${lang} text`);
+        assert.ok(forms(element).some((form) => form.textContent.includes(label)), `${page} (${lang}) shows no form with "${label}"`);
+      }
     }
   }
 });
