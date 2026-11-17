@@ -12,7 +12,6 @@ const DEFAULT_DEVIATION = 0.1;
 const FIXED_METHODS = ["paired_block", "two_group"];
 
 const PLAIN_DECIMAL = /^-?\d+(\.\d+)?$/;
-const LEADING_ZERO = /^-?0\d/;
 const array = (value) => (Array.isArray(value) ? value : []);
 const unique = (values) => [...new Set(values.filter((value) => typeof value === "string" && value !== ""))];
 const encode = encodeURIComponent;
@@ -30,7 +29,8 @@ const whole = (min) => (text, t) => {
   return number < min ? { error: t("form.tooSmall", { min }) } : { value: number };
 };
 
-// "key=value" per line; a plain decimal ("40", "-1.5") becomes a number, everything else ("0x10", "1e3", "007") stays text.
+// "key=value" per line; a plain decimal a number holds exactly as typed ("40", "-1.5") becomes a number. Everything
+// else stays text: "0x10", "1e3", "007", and "1.50" or 20 digits, which a number would change.
 function factors(text, t) {
   const found = {};
   for (const line of text.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
@@ -39,7 +39,7 @@ function factors(text, t) {
     const raw = at < 0 ? "" : line.slice(at + 1).trim();
     if (!key || !raw) return { error: t("protocol.form.factorLine") };
     if (Object.hasOwn(found, key)) return { error: t("protocol.form.factorTwice") };
-    found[key] = PLAIN_DECIMAL.test(raw) && !LEADING_ZERO.test(raw) ? Number(raw) : raw;
+    found[key] = PLAIN_DECIMAL.test(raw) && String(Number(raw)) === raw ? Number(raw) : raw;
   }
   return { value: found };
 }

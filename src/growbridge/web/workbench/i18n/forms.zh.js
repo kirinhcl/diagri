@@ -61,7 +61,7 @@ export default {
   "protocol.form.tname": "名字",
   "protocol.form.tdesc": "说明（可不填）",
   "protocol.form.tfactors": "因子（可不填）",
-  "protocol.form.tfactorsHint": "每行一项，写成 名称=值，例如 light=70。值是数字的会按数字保存。",
+  "protocol.form.tfactorsHint": "每行一项，写成 名称=值，例如 light=70。70、1.5 这样的普通数字按数字保存；其他写法（包括 1.50）按原样存为文字。",
   "protocol.form.control": "对照",
   "protocol.form.controlPick": "对照处理",
   "protocol.form.allocations": "分配",

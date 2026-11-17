@@ -62,7 +62,7 @@ export default {
   "protocol.form.tname": "Name",
   "protocol.form.tdesc": "Description (optional)",
   "protocol.form.tfactors": "Factors (optional)",
-  "protocol.form.tfactorsHint": "One per line, written name=value, for example light=70. A value that is a number is stored as a number.",
+  "protocol.form.tfactorsHint": "One per line, written name=value, for example light=70. A plain number such as 70 or 1.5 is stored as a number; any other value, 1.50 included, is kept as text exactly as typed.",
   "protocol.form.control": "Control",
   "protocol.form.controlPick": "Control treatment",
   "protocol.form.allocations": "Allocation",

@@ -431,6 +431,16 @@ test("only plain decimals in a factor value become numbers; 0x10, 1e3 and 007 st
   assert.deepEqual(sent[0].protocol.treatments[0].factors, { a: 40, b: -1.5, c: "0x10", d: "1e3", e: "007", f: 0.5, g: 0 });
 });
 
+test("a factor value a number cannot hold as typed stays text: no lost digits, no dropped zeros", async () => {
+  const { form, sent } = await open();
+  fill(form);
+  const [treatments] = groups(form);
+  change(named(rowsOf(treatments)[0], "factors")[0], "a=1.50\nb=12345678901234567890\nc=9007199254740993\nd=-0\ne=2.0\nf=1.25");
+  await submit(form);
+  assert.deepEqual(sent[0].protocol.treatments[0].factors, { a: "1.50", b: "12345678901234567890", c: "9007199254740993", d: "-0", e: "2.0", f: 1.25 });
+  for (const table of [en, zh]) assert.match(table["protocol.form.tfactorsHint"], /1\.50/, "the hint says which values stay text");
+});
+
 test("the control and allocation choices show the treatment's name; a code only tells equal names apart or stands in for no name", async () => {
   const { form } = await open();
   const [treatments] = groups(form);
