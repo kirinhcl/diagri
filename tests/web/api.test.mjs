@@ -217,3 +217,21 @@ test("a 5xx is never reported as a definitive refusal, whatever its body says", 
   await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 500);
   await assert.rejects(api.post("/x"), (e) => e.code === "server_error" && e.status === 502);
 });
+
+test("a 5xx answer with a reason in its body is still a server error", async () => {
+  const f = fakeFetch([reply(500, { detail: { code: "state", reason: "demo_paused", message: "m" } })]);
+  const api = createApi({ fetchImpl: f });
+  const error = await api.get("/inbox").catch((e) => e);
+  assert.equal(error.code, "server_error");
+  assert.equal(error.reason, null);
+});
+
+test("a denial carries its reason and params; params that are not an object become {}", async () => {
+  const body = (params) => reply(409, { detail: { code: "state", reason: "demo_paused", params, message: "m" } });
+  const f = fakeFetch([body({ state: "paused" }), body([1]), body("x")]);
+  const api = createApi({ fetchImpl: f });
+  const first = await api.get("/a").catch((e) => e);
+  assert.equal(first.reason, "demo_paused");
+  assert.deepEqual(first.params, { state: "paused" });
+  for (const _ of [1, 2]) assert.deepEqual((await api.get("/a").catch((e) => e)).params, {});
+});

@@ -10,7 +10,7 @@ const IN_CONSOLE = /^#\/\S*$/;
 function failureLines(error, ctx) {
   if (error instanceof ApiError && error.code === "session") return [ctx.t("login.failed")];
   if (error instanceof ApiError && error.code === "locked") return [ctx.t("login.locked")];
-  return errorLines(error, ctx.lang, ctx.t);
+  return errorLines(error, ctx.lang, ctx.t, ctx);
 }
 
 // Only an address inside the console, and never the sign-in page itself.

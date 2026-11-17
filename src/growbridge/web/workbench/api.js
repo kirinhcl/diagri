@@ -2,12 +2,14 @@
 const BASE = "/wb";
 
 export class ApiError extends Error {
-  constructor(status, code, message, fields = []) {
+  constructor(status, code, message, fields = [], { reason = null, params = {} } = {}) {
     super(message || code || "error");
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fields = fields;
+    this.reason = reason;
+    this.params = params;
   }
 }
 
@@ -36,7 +38,9 @@ function toError(status, body) {
     return new ApiError(status, "validation", "validation", fields);
   }
   if (detail && typeof detail === "object" && !Array.isArray(detail)) {
-    return new ApiError(status, detail.code || null, detail.message || detail.code);
+    const reason = typeof detail.reason === "string" && detail.reason !== "" ? detail.reason : null;
+    const plain = detail.params && typeof detail.params === "object" && !Array.isArray(detail.params);
+    return new ApiError(status, detail.code || null, detail.message || detail.code, [], { reason, params: plain ? detail.params : {} });
   }
   return new ApiError(status, null, `HTTP ${status}`);
 }

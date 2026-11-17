@@ -3,6 +3,7 @@ import { ApiError, singleFlight } from "../api.js";
 import { describeDenial } from "../denials.js";
 import { saveDraft, stripSecrets, takeDraft } from "../drafts.js";
 import { formatTime, zonedToEpoch } from "../format.js";
+import { messageParts } from "../messages.js";
 import { clear, h } from "./dom.js";
 import { techDetails } from "./section.js";
 
@@ -58,10 +59,12 @@ const OWN_REFUSAL = "not_approved";
 
 // At most two plain lines; what the server said in its own words is in errorDetail. No answer at all
 // is one line; a known code is [explanation, advice]; a 404 without a code is "not found".
-export function errorLines(error, lang, t) {
+export function errorLines(error, lang, t, ctx = { lang, t }) {
   const code = error instanceof ApiError ? error.code : null;
   if (code === "network") return [t("error.network")];
   if (code === OWN_REFUSAL && error.message) return [t("error.title"), String(error.message)];
+  const reasoned = error instanceof ApiError && error.reason ? messageParts(ctx, "denial", error.reason, error.params) : null;
+  if (reasoned?.known) return reasoned.action ? [reasoned.text, reasoned.action] : [reasoned.text];
   const known = code ? describeDenial(code, lang) : null;
   if (known) return [known.text, known.advice];
   if (error instanceof ApiError && error.status === 404 && !code) return [t("error.notFound")];
@@ -82,6 +85,8 @@ export function errorDetail(error, t = bound.t) {
   const entries = [
     [t("tech.httpStatus"), answered ? error.status : null],
     [t("tech.code"), isApi ? error.code : null],
+    [t("tech.reason"), isApi ? error.reason : null],
+    [t("tech.params"), isApi && error.reason && Object.keys(error.params || {}).length > 0 ? error.params : null],
     [t(fromServer ? "tech.serverMessage" : "tech.message"), isApi && message === error.code ? null : message],
   ];
   return entries.filter(([, value]) => value !== null && value !== undefined && value !== "");
@@ -118,8 +123,8 @@ function formFrame(submitLabel, children, run, getCtx) {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     guarded().catch((error) => {
-      const { lang, t } = getCtx();
-      showRefusal(status, error, t, errorLines(error, lang, t));
+      const ctx = getCtx();
+      showRefusal(status, error, ctx.t, errorLines(error, ctx.lang, ctx.t, ctx));
     });
   });
   return { form, status };
@@ -127,7 +132,7 @@ function formFrame(submitLabel, children, run, getCtx) {
 
 // Every refusal is written to the form's own status line; some also keep a draft or reload the page.
 function handleFailure(error, ctx, { status, keepDraft, showValidation }) {
-  const lines = errorLines(error, ctx.lang, ctx.t);
+  const lines = errorLines(error, ctx.lang, ctx.t, ctx);
   const code = error instanceof ApiError ? error.code : null;
   if (code === "validation") {
     showRefusal(status, error, ctx.t, [...lines, ...showValidation(error.fields)]);
