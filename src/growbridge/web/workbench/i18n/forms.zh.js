@@ -136,6 +136,7 @@ export default {
   "runsheet.form.pump": "水泵运行时间",
   "runsheet.form.pumpHint": "只有浇水任务填写，大于 0、至多 {max}。留空表示手动浇水。",
   "runsheet.form.pumpRange": "请填大于 0、至多 {max} 的数。",
-  "runsheet.form.pumpOnlyWatering": "只有浇水任务才有水泵运行时间。",
+  "runsheet.form.pumpOnlyWatering": "只有浇水任务才有水泵运行时间。请清空秒数，或把种类改为浇水。",
   "runsheet.form.end": "阶段结束时",
+  "runsheet.form.draftStale": "运行单在你保存草稿之后变了，草稿没有恢复。请重新输入你的修改。",
 };

@@ -5,7 +5,7 @@ import { afterEach, test } from "node:test";
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
 import { runSheetForm } from "../../src/growbridge/web/workbench/pages/run-sheet-form.js";
-import { bindFormContext } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { bindFormContext, saveAllDrafts } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { assertNoPendingDialogAnswers, resetDialogs } from "./support/dialogs.mjs";
 import { FIXTURES, testCtx } from "./support/render-page.mjs";
 
@@ -30,7 +30,7 @@ const change = (input, value) => {
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const errorsIn = (node) => byClass(node, "field-error").map((error) => error.textContent).filter(Boolean);
 
-function open({ review = PENDING, capabilities = CAPS, fail = null } = {}) {
+function open({ review = PENDING, capabilities = CAPS, fail = null, draftKey } = {}) {
   const ctx = testCtx({ lang: "en" });
   bindFormContext(ctx);
   const sent = [];
@@ -38,7 +38,7 @@ function open({ review = PENDING, capabilities = CAPS, fail = null } = {}) {
     sent.push(body);
     if (fail) throw fail;
   };
-  const form = runSheetForm(ctx, { review, roundId: "round-1", capabilities, onSubmit });
+  const form = runSheetForm(ctx, { review, roundId: "round-1", capabilities, onSubmit, draftKey });
   return { ctx, form, sent };
 }
 const submit = async (form) => {
@@ -209,11 +209,99 @@ test("rows can be added, and removing one keeps the others exactly as stored", a
 });
 
 test("end action rows follow their channel's range, and a row's 422 lands on that row", async () => {
-  const fail = new ApiError(422, "validation", "invalid", [{ loc: ["body", "run_sheet", "end_actions", 1, "level"], msg: "bad level", type: "value_error", limits: {} }]);
+  const fail = new ApiError(422, "validation", "invalid", [{ loc: ["body", "run_sheet", "end_actions", 1], msg: "bad level", type: "value_error", limits: {} }]);
   const { ctx, form, sent } = open({ review: FULL, fail });
   const rows = rowsOf(section(ctx, form, "runsheet.form.end"));
   await submit(form);
   assert.equal(sent.length, 1);
   assert.equal(errorsIn(rows[0]).length, 0);
   assert.equal(errorsIn(rows[1]).length, 1);
+});
+
+test("a timed action removed before one with its own evidence leaves that evidence on the later row", async () => {
+  const review = reviewWith((sheet) => {
+    sheet.timed_actions[1].evidence = "card-off";
+  });
+  const { ctx, form, sent } = open({ review });
+  find(rowsOf(section(ctx, form, "runsheet.form.timed"))[0], (el) => el.localName === "button")[0].dispatchEvent(new Event("click"));
+  await submit(form);
+  const expected = clone(review.run_sheet);
+  expected.timed_actions = expected.timed_actions.slice(1);
+  assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
+  assert.equal(sent[0].run_sheet.timed_actions[0].evidence, "card-off");
+});
+
+test("a row's own check (no field in the place) lands on that row's main field", async () => {
+  const fail = new ApiError(422, "validation", "invalid", [
+    { loc: ["body", "run_sheet", "timed_actions", 0], msg: "level out of range", type: "value_error", limits: {} },
+    { loc: ["body", "run_sheet", "manual_tasks", 2], msg: "only irrigation", type: "value_error", limits: {} },
+  ]);
+  const { ctx, form } = open({ review: FULL, fail });
+  await submit(form);
+  const timed = rowsOf(section(ctx, form, "runsheet.form.timed"));
+  const tasks = rowsOf(section(ctx, form, "runsheet.form.tasks"));
+  assert.equal(errorsIn(timed[0]).length, 1);
+  assert.equal(errorsIn(timed[1]).length, 0);
+  assert.equal(errorsIn(tasks[2]).length, 1);
+  assert.equal(errorsIn(field(tasks[2], "seconds").parentNode.parentNode).length, 1);
+});
+
+test("a 422 on a rule's duration does not land on the run length", async () => {
+  const fail = new ApiError(422, "validation", "invalid", [{ loc: ["body", "run_sheet", "feedback_rules", 0, "duration_seconds"], msg: "bad", type: "value_error", limits: {} }]);
+  const { ctx, form } = open({ fail });
+  await submit(form);
+  assert.equal(errorsIn(section(ctx, form, "runsheet.form.duration")).length, 0);
+});
+
+test("a stored retained level out of range does not block an unchanged form; a changed one is refused", async () => {
+  const review = reviewWith((sheet) => {
+    sheet.channels[2].retained_level = 40; // the fan stops at 10
+  });
+  const { ctx, form, sent } = open({ review });
+  await submit(form);
+  assert.equal(sent.length, 1);
+  assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(review.run_sheet));
+  const channels = rowsOf(section(ctx, form, "runsheet.form.channels"));
+  change(field(channels[2], "retained_level"), "41");
+  await submit(form);
+  assert.equal(sent.length, 1);
+  assert.equal(errorsIn(channels[2]).length, 1);
+});
+
+test("a draft kept on another run sheet is dropped with a note, never put on the new one", async () => {
+  const first = open({ draftKey: "run-sheet:test-form" });
+  change(field(first.form, "interval_seconds"), "99");
+  change(field(rowsOf(section(first.ctx, first.form, "runsheet.form.timed"))[0], "level"), "11");
+  document.body.append(first.form); // only a form on the page is kept
+  saveAllDrafts();
+  first.form.remove();
+  const next = reviewWith((sheet) => {
+    sheet.timed_actions = [{ id: "fan-low", channel: "fan", at: "03:00", level: 1, evidence: "card-FAN" }, ...sheet.timed_actions];
+    sheet.channels = [...sheet.channels].reverse();
+    sheet.duration_seconds = 14 * 86400;
+  });
+  next.run_sheet_digest = "other-digest";
+  const second = open({ review: next, draftKey: "run-sheet:test-form" });
+  const notes = find(second.form, (el) => el.localName === "p").map((p) => p.textContent);
+  assert.ok(notes.includes(second.ctx.t("runsheet.form.draftStale")));
+  assert.ok(!notes.includes(second.ctx.t("form.draftRestored")));
+  await submit(second.form);
+  assert.equal(JSON.stringify(second.sent[0].run_sheet), JSON.stringify(next.run_sheet));
+});
+
+test("a draft on the same run sheet is restored, and channels come back by name", async () => {
+  const first = open({ draftKey: "run-sheet:test-form" });
+  const channels = rowsOf(section(first.ctx, first.form, "runsheet.form.channels"));
+  change(field(channels[0], "retained_level"), "5"); // light
+  document.body.append(first.form); // only a form on the page is kept
+  saveAllDrafts();
+  first.form.remove();
+  const same = reviewWith((sheet) => {
+    sheet.channels = [...sheet.channels].reverse(); // same digest, other order
+  });
+  const second = open({ review: same, draftKey: "run-sheet:test-form" });
+  await submit(second.form);
+  const sent = second.sent[0].run_sheet.channels;
+  assert.equal(sent.find((plan) => plan.channel === "light").retained_level, 5);
+  assert.equal(sent.find((plan) => plan.channel === "pump").retained_level, 0);
 });

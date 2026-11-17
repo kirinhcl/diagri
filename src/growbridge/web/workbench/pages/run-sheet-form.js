@@ -3,6 +3,7 @@
 // sheet and only the values the operator changed are written back, so whatever the form does not show (rules, ids,
 // ownership, evidence, the number formats and key order of untouched values) goes back exactly as it was read.
 import { labelOr } from "../i18n.js";
+import { saveDraft, takeDraft } from "../drafts.js";
 import { h } from "../ui/dom.js";
 import { fieldsPart, rowGroup } from "../ui/field-forms.js";
 import { convert, fieldRow, initialText, placeFieldErrors, simpleForm } from "../ui/forms.js";
@@ -132,7 +133,7 @@ function lengthPart({ ctx, key, prefix, label, hint, stored }) {
     return { [key]: minutes * SECONDS_PER_MINUTE + number("rest") };
   };
   const placeErrors = (problems) => {
-    const mine = problems.filter((problem) => problem.loc.includes(key));
+    const mine = problems.filter((problem) => problem.loc[problem.loc.indexOf("run_sheet") + 1] === key);
     const target = part("minutes");
     placeFieldErrors([target], mine.map((problem) => ({ ...problem, loc: [target.field.name] })), ctx);
     return problems.filter((problem) => !mine.includes(problem));
@@ -145,8 +146,10 @@ function lengthPart({ ctx, key, prefix, label, hint, stored }) {
 
 function channelFields(ctx, plan, range) {
   const { t } = ctx;
-  const level = { name: "retained_level", label: t("runsheet.form.retained"), hint: t("runsheet.form.retainedHint"), type: "number", step: 1, parse: levelParse(range), value: plan.retained_level };
-  if (range) Object.assign(level, { min: range[0], max: range[1] });
+  // The server has no range check on a channel plan, so the range is checked only for a value the operator changed.
+  const stored = String(plan.retained_level);
+  const parse = (text, translate) => levelParse(text === stored ? null : range)(text, translate);
+  const level = { name: "retained_level", label: t("runsheet.form.retained"), hint: t("runsheet.form.retainedHint"), type: "number", step: 1, parse, value: plan.retained_level };
   const tolerance = { name: "max_tolerance_seconds", label: t("runsheet.form.tolerance"), unit: t("runsheet.form.seconds"), type: "number", min: 0, parse: plainNumber, value: plan.max_tolerance_seconds };
   return [level, tolerance];
 }
@@ -185,8 +188,11 @@ function channelsPart({ ctx, stored, capabilities }) {
     const row = at < 0 ? undefined : rows[problem.loc[at + 1]];
     return !(row && placeFieldErrors(row.entries, [{ ...problem, loc: problem.loc.slice(at + 2) }], ctx).length === 0);
   });
-  const draft = () => rows.map((row) => bind(row.entries));
-  const restore = (saved) => rows.forEach((row, index) => saved[index] && row.entries.forEach((entry) => Object.hasOwn(saved[index], entry.field.name) && (entry.input.value = saved[index][entry.field.name])));
+  const draft = () => rows.map((row) => ({ channel: row.plan.channel, ...bind(row.entries) }));
+  const restore = (saved) => rows.forEach((row) => {
+    const mine = array(saved).find((item) => item.channel === row.plan.channel);
+    if (mine) row.entries.forEach((entry) => Object.hasOwn(mine, entry.field.name) && (entry.input.value = mine[entry.field.name]));
+  });
   return { name: "channels", element, values, placeErrors, draft, restore };
 }
 
@@ -227,9 +233,17 @@ function seconds(ctx) {
   return (rows) => rows.flatMap((row, index) => (row.kind !== "irrigation" && row.seconds !== undefined ? [{ row: index, field: "seconds", error: ctx.t("runsheet.form.pumpOnlyWatering") }] : []));
 }
 
-function rowsPart({ ctx, name, label, fields, stored, addLabel, removeLabel, capabilities, ranged = false, check }) {
+function rowsPart({ ctx, name, label, fields, stored, addLabel, removeLabel, capabilities, ranged = false, check, mainField = "level" }) {
   const rows = array(stored).map((row, index) => ({ ...row, origin: index }));
-  return rowGroup({ ctx, name, label, fields: [originField, ...fields], rows, addLabel, removeLabel, onRow: ranged ? linkLevel(capabilities) : undefined, crossCheck: check });
+  const group = rowGroup({ ctx, name, label, fields: [originField, ...fields], rows, addLabel, removeLabel, onRow: ranged ? linkLevel(capabilities) : undefined, crossCheck: check });
+  // A row's own model check names the row but no field (loc ends at the row's number): it lands on the row's main field.
+  const place = group.placeErrors;
+  const wholeRow = (problem) => {
+    const at = problem.loc.indexOf(name);
+    return at >= 0 && problem.loc.length === at + 2 && Number.isInteger(problem.loc[at + 1]);
+  };
+  group.placeErrors = (problems) => place(problems.map((problem) => (wholeRow(problem) ? { ...problem, loc: [...problem.loc, mainField] } : problem)));
+  return group;
 }
 
 function rowParts(env) {
@@ -241,13 +255,13 @@ function rowParts(env) {
   return [
     rowsPart({ ...common, name: "timed_actions", ranged: true, label: t("runsheet.form.timed"), stored: sheet.timed_actions, fields: [{ name: "id", label: t("runsheet.form.name"), required: true, parse: trimmed }, channelChoice(ctx, channels), timeField(ctx, sheet.timezone, t("runsheet.form.at")), levelField(ctx)] }),
     rowsPart({
-      ...common, name: "manual_tasks", label: t("runsheet.form.tasks"), stored: sheet.manual_tasks, check: seconds(ctx),
+      ...common, name: "manual_tasks", mainField: "seconds", label: t("runsheet.form.tasks"), stored: sheet.manual_tasks, check: seconds(ctx),
       fields: [
         { name: "id", label: t("runsheet.form.name"), required: true, parse: trimmed },
         { name: "kind", label: t("runsheet.form.kind"), type: "select", required: true, options: [{ value: "", label: t("form.choose") }, ...kinds] },
         timeField(ctx, sheet.timezone, t("runsheet.form.at")),
         { name: "make_up_allowed", label: t("runsheet.form.makeUp"), type: "checkbox" },
-        { name: "seconds", label: t("runsheet.form.pump"), hint: t("runsheet.form.pumpHint", { max: MAX_IRRIGATION_SECONDS }), type: "number", unit: t("runsheet.form.seconds"), parse: pumpSeconds },
+        { name: "seconds", label: t("runsheet.form.pump"), hint: t("runsheet.form.pumpHint", { max: MAX_IRRIGATION_SECONDS }), type: "number", min: 0, max: MAX_IRRIGATION_SECONDS, unit: t("runsheet.form.seconds"), parse: pumpSeconds },
       ],
     }),
     rowsPart({ ...common, name: "end_actions", ranged: true, label: t("runsheet.form.end"), stored: sheet.end_actions, fields: [channelChoice(ctx, channels), levelField(ctx)] }),
@@ -269,12 +283,32 @@ function settingsPart(ctx, sheet) {
   return fieldsPart({ ctx, name: "settings", label: t("runsheet.form.settings"), fields });
 }
 
+// What the draft was made from: the review's digest, else the round and the sheet's version.
+const baseOf = (review, roundId) => review.run_sheet_digest || `${roundId}:${review.run_sheet.version}`;
+
+// A part that holds only the draft's base, so the draft says which sheet it was typed on.
+function basePart(base) {
+  return { name: "base", element: h("span", { attrs: { hidden: true } }), values: () => ({}), placeErrors: (problems) => problems, draft: () => base, restore: () => {} };
+}
+
+// A kept draft made on another run sheet is dropped, never put onto this one (its rows and channels would not line up).
+function dropStaleDraft(key, base) {
+  const saved = key ? takeDraft(key) : null;
+  if (!saved) return false;
+  const stale = !saved.parts || saved.parts.base !== base;
+  if (!stale) saveDraft(key, saved);
+  return stale;
+}
+
 // review: the run-sheet read (its run_sheet is the stored sheet); capabilities: the device's level ranges or null.
 // onSubmit({round_id, run_sheet}) sends it. Returns the form.
 export function runSheetForm(ctx, { review, roundId, capabilities, onSubmit, draftKey, submitLabel }) {
   const sheet = review.run_sheet;
   const { t } = ctx;
+  const base = baseOf(review, roundId);
+  const stale = dropStaleDraft(draftKey, base);
   const parts = [
+    basePart(base),
     lengthPart({ ctx, key: "duration_seconds", prefix: "duration", label: t("runsheet.form.duration"), hint: t("runsheet.form.durationHint"), stored: sheet.duration_seconds }),
     lengthPart({ ctx, key: "max_wait_seconds", prefix: "max_wait", label: t("runsheet.form.wait"), hint: t("runsheet.form.waitHint"), stored: sheet.max_wait_seconds }),
     settingsPart(ctx, sheet),
@@ -282,5 +316,7 @@ export function runSheetForm(ctx, { review, roundId, capabilities, onSubmit, dra
     ...rowParts({ ctx, sheet, capabilities }),
   ];
   const send = (values) => onSubmit({ round_id: roundId, run_sheet: buildRunSheet(sheet, values) });
-  return simpleForm({ fields: [], parts, ctx, onSubmit: send, draftKey, submitLabel: submitLabel || t("stage.draft.submit") });
+  const form = simpleForm({ fields: [], parts, ctx, onSubmit: send, draftKey, submitLabel: submitLabel || t("stage.draft.submit") });
+  if (stale) form.prepend(h("p", { class: "note", attrs: { role: "status" }, text: t("runsheet.form.draftStale") }));
+  return form;
 }

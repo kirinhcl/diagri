@@ -137,6 +137,7 @@ export default {
   "runsheet.form.pump": "Pump run",
   "runsheet.form.pumpHint": "Only for watering. More than 0 and at most {max}. Leave empty to water by hand.",
   "runsheet.form.pumpRange": "Enter more than 0 and at most {max}.",
-  "runsheet.form.pumpOnlyWatering": "Only a watering task has a pump run.",
+  "runsheet.form.pumpOnlyWatering": "Only a watering task has a pump run. Clear the seconds, or change the kind to watering.",
   "runsheet.form.end": "At the end of the stage",
+  "runsheet.form.draftStale": "The run sheet changed after your draft was kept, so the draft was not restored. Enter your changes again.",
 };
