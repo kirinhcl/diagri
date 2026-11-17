@@ -54,10 +54,30 @@ test("a text field refuses more than its maxlength beside the field", async () =
   const sent = [];
   const form = formWith([{ name: "note", label: "Note", maxlength: 3 }], async (values) => sent.push(values));
   const [input] = inputNamed(form, "note");
-  assert.equal(input.getAttribute("maxlength"), "3");
   input.value = "abcd";
   await submit(form);
   assert.deepEqual(sent, []);
+  assert.equal(textOf(byClass(form, "field-error")[0]), "Use at most 3 characters.");
+});
+
+// The server counts code points; a browser's maxlength counts UTF-16 units and would cut "🌱🌱🌱" (3 code
+// points, 6 units) at a limit of 3 without a word. So the limit is only checked beside the field.
+test("a length limit counts characters as the server does, and the browser never cuts the text", async () => {
+  installFakeDom();
+  const sent = [];
+  const fields = [{ name: "note", label: "Note", maxlength: 3 }, { name: "text", label: "Text", type: "textarea", maxlength: 3 }];
+  const form = formWith(fields, async (values) => sent.push(values));
+  const [note] = inputNamed(form, "note");
+  const [area] = inputNamed(form, "text");
+  assert.equal(note.getAttribute("maxlength"), null);
+  assert.equal(area.getAttribute("maxlength"), null);
+  note.value = "🌱🌱🌱";
+  area.value = "葉🌱a";
+  await submit(form);
+  assert.deepEqual(sent, [{ note: "🌱🌱🌱", text: "葉🌱a" }]);
+  note.value = "🌱🌱🌱🌱";
+  await submit(form);
+  assert.equal(sent.length, 1);
   assert.equal(textOf(byClass(form, "field-error")[0]), "Use at most 3 characters.");
 });
 

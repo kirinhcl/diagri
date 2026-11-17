@@ -3,7 +3,7 @@ import { ApiError } from "../api.js";
 import { formatMoney, formatNumber } from "../format.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
-import { displayName, nameDetails, roleLabel } from "../ui/names.js";
+import { displayName, nameDetails, protocolName, roleLabel } from "../ui/names.js";
 import { errorParts, foldedText, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
@@ -27,7 +27,7 @@ function roundsTable(ctx, project) {
   const columns = [
     { label: ctx.t("col.round"), cell: (row) => roundCell(ctx, row) },
     { label: ctx.t("col.state"), cell: (row) => statePill(ctx.t, row.state) },
-    { label: ctx.t("col.protocol"), cell: (row) => ctx.t("round.protocolValue", { id: row.protocol_id, v: row.protocol_version }) },
+    { label: ctx.t("col.protocol"), cell: (row) => protocolName(ctx.t, row.protocol_id, row.protocol_version) },
     { label: ctx.t("round.awaitingChoice"), cell: (row) => (row.awaiting_choice ? ctx.t("project.rounds.awaiting") : "—") },
     { label: ctx.t("col.created"), cell: (row) => timeText(ctx, row.created_at) },
   ];
@@ -38,7 +38,7 @@ function protocolsTable(ctx, project) {
   const protocols = array(project.protocols);
   if (!protocols.length) return note(ctx.t("project.protocols.empty"));
   const columns = [
-    { label: ctx.t("col.protocol"), cell: (row) => h("code", { text: row.protocol_id }) },
+    { label: ctx.t("col.protocol"), cell: (row) => h("span", { class: "cell-stack" }, protocolName(ctx.t, row.protocol_id), techDetails(ctx.t, nameDetails(row, ctx.t))) },
     { label: ctx.t("col.version"), cell: (row) => String(row.version) },
     { label: ctx.t("col.created"), cell: (row) => timeText(ctx, row.created_at) },
   ];

@@ -194,16 +194,15 @@ function optionList(field, value) {
 }
 
 function control(field, attrs, value) {
-  const limits = { min: field.min, max: field.max, maxlength: field.maxlength };
   if (field.type === "checkbox") return h("input", { class: "input-check", attrs: { ...attrs, type: "checkbox", checked: value === "true" } });
-  // `code` fields (a script) are monospace, tall, never spell-checked, and have no maxlength attribute: a browser would cut a long paste silently, so the length is checked (in code points) beside the field instead.
+  // No field has a maxlength attribute: a browser counts UTF-16 units and cuts a long paste silently, the server counts code points, so limitError checks the length (in code points) beside the field. `code` fields (a script) are monospace, tall, never spell-checked.
   if (field.type === "textarea" && field.code) return h("textarea", { class: "input input-area input-code", attrs: { ...attrs, rows: 10, spellcheck: "false" }, text: value });
-  if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs: { ...attrs, maxlength: limits.maxlength }, text: value });
+  if (field.type === "textarea") return h("textarea", { class: "input input-area", attrs, text: value });
   if (field.type === "select") return h("select", { class: "input", attrs }, optionList(field, value));
   const types = { number: "number", datetime: "datetime-local", password: "password", hidden: "hidden" };
   const type = types[field.type] || "text";
-  const extra = { type, value: type === "password" ? null : value, maxlength: limits.maxlength };
-  if (type === "number") Object.assign(extra, { step: field.step ?? "any", min: limits.min, max: limits.max });
+  const extra = { type, value: type === "password" ? null : value };
+  if (type === "number") Object.assign(extra, { step: field.step ?? "any", min: field.min, max: field.max });
   if (type === "password") extra.autocomplete = "current-password";
   return h("input", { class: "input", attrs: { ...attrs, ...extra } });
 }

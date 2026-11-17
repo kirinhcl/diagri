@@ -43,8 +43,22 @@ test("the review shows days, a short fingerprint, a version and a simulated devi
     assert.match(text, /[0-9a-f]{8}…/);
     assert.ok(text.includes(ctx.t("stage.review.simulated")));
     assert.ok(text.includes(ctx.t("stage.review.versionValue", { n: review.run_sheet_version })));
-    assert.ok(text.includes(ctx.t("stage.review.protocolValue", { id: review.run_sheet.protocol_id, v: review.run_sheet.protocol_version })));
+    assert.ok(text.includes(lang === "zh" ? "协议「protocol-lettuce-light」，第 1 版" : "Protocol “protocol-lettuce-light”, version 1"), text);
     assertNoLeaks(view, exemptStrings("stage", FIXTURES));
+  }
+});
+
+test("the review calls a protocol the console saved by its number, and keeps its id beside the fingerprint", () => {
+  const id = "protocol-2-9abf5a";
+  const base = FIXTURES["run-sheet.json"];
+  const review = { ...base, run_sheet: { ...base.run_sheet, protocol_id: id } };
+  for (const [lang, name] of [["zh", "协议 2，第 1 版"], ["en", "Protocol 2, version 1"]]) {
+    const ctx = testCtx({ lang });
+    const view = reviewView(ctx, review);
+    assert.ok(visibleText(view).includes(name), visibleText(view));
+    assert.ok(!visibleText(view).includes(id));
+    const ids = [...view.children].at(-1);
+    assert.ok(ids.textContent.includes(ctx.t("tech.id.protocol_id")) && ids.textContent.includes(id), "the id fold names the protocol id");
   }
 });
 

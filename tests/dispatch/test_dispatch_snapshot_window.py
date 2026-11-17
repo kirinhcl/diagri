@@ -5,6 +5,7 @@ executor ends it on the tick after its planned end), manual measurements up to t
 import json
 
 from test_dispatch_researcher import (
+    HOLE,
     _inspect,
     _measurement,
     _payload,
@@ -13,7 +14,9 @@ from test_dispatch_researcher import (
     _task_id,
 )
 
+from growbridge.agents.handlers_common import local_time
 from growbridge.archive import snapshot as snapshots
+from growbridge.archive.models import SamplingPlan
 from growbridge.sim.clock import START
 from growbridge.workflow.states import StageState
 
@@ -75,8 +78,14 @@ async def test_inspect_lists_the_measurements_left_outside_the_window(env):
 
     body = _payload(await _inspect(env))
 
+    late_at = end + GRACE + 60
     assert body["measurements_outside_window"] == [
-        {"id": "m-later", "metric": "canopy_area_growth", "measured_at": end + GRACE + 60}
+        {
+            "id": "m-later",
+            "metric": "canopy_area_growth",
+            "measured_at": late_at,
+            "measured_at_local": local_time(late_at, "UTC"),
+        }
     ]
 
 
@@ -95,3 +104,23 @@ async def test_inspect_counts_measurements_before_the_stage_start_and_does_not_l
     assert [m["id"] for m in body["measurements_outside_window"]] == ["m-later"]
     assert body["measurements_outside_count"] == 1
     assert body["measurements_before_stage"] == 1
+
+
+async def test_inspect_writes_the_local_time_beside_every_epoch(env):
+    # the model is shown times in the reporting time zone, as the auditor's records do (RND-18)
+    zone = "Europe/Helsinki"
+    sampling = SamplingPlan(interval_seconds=1, max_gap_seconds=2)
+    await _running_stage(env, seconds=HOLE, sampling=sampling)
+    end = _ended(env)
+    late_at = end + GRACE + 60
+    late = _measurement("experiment-stage-1", 3.0, "m-later", measured_at=late_at)
+    env.archive.add_measurement(late)
+
+    body = _payload(await _inspect(env, env.make_deps(timezone=zone)))
+
+    assert body["window_local"] == [local_time(at, zone) for at in body["window"]]
+    assert body["gaps"], "the silence in HOLE leaves a gap"
+    gaps = [[local_time(a, zone), local_time(b, zone)] for a, b in body["gaps"]]
+    assert body["gaps_local"] == gaps
+    [listed] = body["measurements_outside_window"]
+    assert listed["measured_at_local"] == local_time(late_at, zone)

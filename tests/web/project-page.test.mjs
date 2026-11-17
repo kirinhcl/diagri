@@ -110,11 +110,30 @@ test("rounds are named and their protocol read as a version; the round id is in 
   const rounds = sectionTitled(element, "轮次");
   assert.deepEqual(elements(rounds, "a").map((a) => a.textContent), ["第 1 轮"]);
   const text = visibleText(rounds);
-  assert.ok(text.includes("protocol-lettuce-light 第 1 版"), text);
+  assert.ok(text.includes("协议「protocol-lettuce-light」，第 1 版"), text); // an id a person typed is their name for it
   assert.ok(!text.includes(ROUND.round_id), text);
   assert.ok(visibleTextIncludingDetails(rounds).includes(ROUND.round_id));
   const options = elements(rounds, "option").map((option) => option.textContent);
-  assert.deepEqual(options, ["protocol-lettuce-light 第 1 版"]);
+  assert.deepEqual(options, ["协议「protocol-lettuce-light」，第 1 版"]);
+});
+
+// A protocol the protocol form saved: its id is "protocol-<number>-<the project id's last six characters>".
+const MADE_ID = "protocol-2-9abf5a";
+const MADE = { "project.json": { ...PROJECT, rounds: [{ ...ROUND, protocol_id: MADE_ID }], protocols: [{ ...PROJECT.protocols[0], protocol_id: MADE_ID }] } };
+
+test("a protocol the console saved is called by its number everywhere on the project page; its id is only in the details", async () => {
+  for (const [lang, name] of [["zh", "协议 2，第 1 版"], ["en", "Protocol 2, version 1"]]) {
+    const { element } = await renderPage("project", PARAMS, { lang, fixtures: MADE });
+    const text = visibleText(element);
+    assert.ok(!text.includes(MADE_ID), `${lang}: ${text}`);
+    assert.ok(text.includes(name), `${lang}: ${text}`);
+    const rounds = sectionTitled(element, (lang === "zh" ? zh : en)["project.rounds.title"]);
+    assert.deepEqual(elements(rounds, "option").map((option) => option.textContent), [name]);
+    assert.ok(visibleTextIncludingDetails(rounds).includes(MADE_ID), "the round row's details hold the protocol id");
+    const protocols = sectionTitled(element, (lang === "zh" ? zh : en)["project.protocols.title"]);
+    const table = elements(protocols, "table")[0];
+    assert.ok(!visibleText(table).includes(MADE_ID) && visibleTextIncludingDetails(table).includes(MADE_ID));
+  }
 });
 
 test("a round waiting for a choice says a stage stopped, with the stage id in the row's details", async () => {

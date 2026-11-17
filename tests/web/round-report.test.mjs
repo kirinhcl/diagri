@@ -192,10 +192,24 @@ test("the summary names the project and the protocol version, and lists no snaps
   const summary = sectionTitled(element, zh["round.summary"]);
   assert.equal(elements(summary, "a")[0].textContent, ROUND.project_name);
   const text = visibleTextIncludingDetails(summary);
-  assert.ok(text.includes("protocol-lettuce-light 第 1 版"), text);
+  assert.ok(text.includes("协议「protocol-lettuce-light」，第 1 版"), text); // an id a person typed is their name for it
   for (const id of [ROUND.snapshot_id, ROUND.report_artifact_id]) assert.ok(!text.includes(id), id);
   const enPage = await renderPage("round", { roundId: ROUND.round_id }, { lang: "en" });
-  assert.ok(visibleText(sectionTitled(enPage.element, en["round.summary"])).includes("protocol-lettuce-light version 1"));
+  assert.ok(visibleText(sectionTitled(enPage.element, en["round.summary"])).includes("Protocol “protocol-lettuce-light”, version 1"));
+});
+
+test("a protocol the console saved is called by its number in the summary and the analysis facts; its id is in the details", async () => {
+  const id = "protocol-2-9abf5a";
+  const fixtures = { "round.json": { ...ROUND, protocol_id: id }, "analysis.json": { ...ANALYSIS, protocol_id: id } };
+  for (const [lang, name] of [["zh", "协议 2，第 1 版"], ["en", "Protocol 2, version 1"]]) {
+    const { element } = await renderPage("round", { roundId: ROUND.round_id }, { lang, fixtures });
+    const text = visibleText(element);
+    assert.ok(!text.includes(id), `${lang}: ${text}`);
+    assert.equal(count(text, name), 2, `${lang}: the summary and the analysis facts: ${text}`);
+    assert.ok(visibleTextIncludingDetails(element).includes(id));
+    const analysis = elements(element, "details").find((node) => hasClass(node, "analysis-fold"));
+    assert.ok(techFolds(analysis).some((fold) => fold.textContent.includes(id)), "the analysis facts keep the protocol id in their details");
+  }
 });
 
 test("stages are linked by name, and the stopped stage is named in the choice", async () => {

@@ -8,7 +8,7 @@ import { hrefFor } from "../router.js";
 import { openChartFolds, readingsChart, restoreChartFolds } from "../ui/chart.js";
 import { clear, h } from "../ui/dom.js";
 import { errorDetail, errorLines } from "../ui/forms.js";
-import { deviceName, displayName, nameDetails } from "../ui/names.js";
+import { deviceName, displayName, nameDetails, protocolName } from "../ui/names.js";
 import { errorParts, keyValues, replaceParts, section, techDetails, timeText } from "../ui/section.js";
 import { statePill, statePillKeeper } from "../ui/status.js";
 import { loadCapabilities } from "../capabilities.js";
@@ -159,7 +159,7 @@ export function statusView(ctx, stage) {
 export function reviewView(ctx, review) {
   const sheet = review.run_sheet || {};
   const device = deviceName(ctx.t, sheet.device_id);
-  const protocol = sheet.protocol_id ? ctx.t("stage.review.protocolValue", { id: sheet.protocol_id, v: sheet.protocol_version }) : null;
+  const protocol = sheet.protocol_id ? protocolName(ctx.t, sheet.protocol_id, sheet.protocol_version) : null;
   const facts = keyValues([
     [ctx.t("stage.review.version"), ctx.t("stage.review.versionValue", { n: review.run_sheet_version })],
     [ctx.t("stage.review.fingerprint"), shortDigest(review.run_sheet_digest)],
@@ -171,7 +171,7 @@ export function reviewView(ctx, review) {
   const blocking = review.blocking ? problemBox([ctx.t("stage.review.blocking")]) : null;
   const findingsTitle = h("h3", { class: "action-title", text: ctx.t("stage.review.findings") });
   const sheetFold = techDetails(ctx.t, [[ctx.t("stage.review.json"), JSON.stringify(review.run_sheet, null, 2)]], { summary: ctx.t("stage.review.json") });
-  const tech = techDetails(ctx.t, [[ctx.t("stage.review.digest"), review.run_sheet_digest]]);
+  const tech = techDetails(ctx.t, [[ctx.t("stage.review.digest"), review.run_sheet_digest], ...nameDetails({ protocol_id: sheet.protocol_id }, ctx.t)]);
   return h("div", { class: "review" }, facts, sheetFold, blocking, findingsTitle, findingsList(ctx, review.findings), tech);
 }
 
