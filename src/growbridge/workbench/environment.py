@@ -119,8 +119,19 @@ def add_environment_routes(
     control: ControlPort,
     clock: Clock,
     alerts: AlertBook | None = None,
+    *,
+    max_pump_seconds: float,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
+
+    @router.get("/capabilities")
+    async def capabilities(actor: Operator):
+        caps = control.capabilities()
+        return {
+            "level_ranges": {c.value: list(r) for c, r in caps.level_ranges.items()},
+            "sensors": caps.sensors,
+            "max_pump_seconds": max_pump_seconds,
+        }
 
     @router.get("/environment")
     async def environment(

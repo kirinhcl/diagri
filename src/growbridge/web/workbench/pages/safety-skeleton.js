@@ -1,22 +1,6 @@
-// The editor's start text when no safety limits have been approved yet: every field, every value null.
-// Submitted unchanged the server refuses it (422), so it can never be approved by accident.
-// tests/web/config-pages.test.mjs checks the field names against SafetyConfig in archive/models.py.
+// The diff baseline for the approval dialog when no safety limits have been approved yet: nothing at all.
+// Nothing here is a safety value (the form and the JSON fold both start empty, never from a default).
+// tests/web/config-pages.test.mjs pins its shape.
 export function safetySkeleton() {
-  return {
-    version: null,
-    rules: [
-      {
-        id: null,
-        sensor: null,
-        unit: null,
-        validity_seconds: null,
-        trigger: { op: null, value: null },
-        duration_seconds: null,
-        action: { channel: null, level: null },
-      },
-    ],
-    frozen: { minutes: null, max_gap_seconds: null },
-    approved_by: null,
-    approved_at: null,
-  };
+  return { version: null, rules: [], frozen: { minutes: {}, max_gap_seconds: null } };
 }

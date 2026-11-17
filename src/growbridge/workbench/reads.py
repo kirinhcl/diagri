@@ -274,11 +274,21 @@ def add_read_routes(
     budget: ProjectBudget | None = None,
     alerts: AlertBook | None = None,
     compute: ComputeService | None = None,
+    max_pump_seconds: float,
 ) -> None:
     _inbox_routes(router, operator, workflow, tasks, alerts, compute, clock)
     _project_routes(router, operator, workflow, tasks, budget)
     _stage_read_routes(router, operator, workflow, archive, clock)
-    add_environment_routes(router, operator, workflow, archive, control, clock, alerts)
+    add_environment_routes(
+        router,
+        operator,
+        workflow,
+        archive,
+        control,
+        clock,
+        alerts,
+        max_pump_seconds=max_pump_seconds,
+    )
 
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 

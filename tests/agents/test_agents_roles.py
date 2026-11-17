@@ -72,3 +72,21 @@ def test_the_auditor_prompt_points_to_the_tools_that_hold_history_and_interventi
     assert "get_run_status for the stage's history" in lines
     assert "inspect_stage_data for the data's coverage, gaps and intervention counts" in lines
     assert "get_stage_records for the run sheet, the manual tasks and their records" in lines
+
+
+@pytest.mark.parametrize("role", [ORCHESTRATOR, PLANNER, RESEARCHER, AUDITOR])
+def test_every_role_carries_the_writing_rules(role):
+    for phrase in ("language", "epoch seconds", "what the operator should do", "in your own words"):
+        assert phrase in role.system
+
+
+def test_publish_and_finding_fields_describe_operator_text():
+    from growbridge.agents.handlers_auditor import FindingInput
+    from growbridge.agents.handlers_report import PublishInput
+
+    publish = PublishInput.model_json_schema()["properties"]
+    finding = FindingInput.model_json_schema()["properties"]
+    for name in ("limitations", "unresolved", "next_round"):
+        assert "operator" in publish[name].get("description", "")
+    for name in ("summary", "evidence"):
+        assert "operator" in finding[name].get("description", "")

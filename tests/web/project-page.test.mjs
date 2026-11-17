@@ -1,7 +1,7 @@
 // The projects list and the project page: names instead of ids, the page's order and folds, the
 // budget's numbers, and save notices that say what was saved.
 import assert from "node:assert/strict";
-import test from "node:test";
+import { afterEach, test } from "node:test";
 
 import { saveDraft } from "../../src/growbridge/web/workbench/drafts.js";
 import en from "../../src/growbridge/web/workbench/i18n/en.js";
@@ -9,8 +9,14 @@ import zh from "../../src/growbridge/web/workbench/i18n/zh.js";
 import { budgetView } from "../../src/growbridge/web/workbench/pages/project.js";
 import { analysisSection } from "../../src/growbridge/web/workbench/pages/round-analysis.js";
 import { bindFormContext, formControls } from "../../src/growbridge/web/workbench/ui/forms.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, resetDialogs } from "./support/dialogs.mjs";
 import { visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 import { FIXTURES, renderPage, testCtx } from "./support/render-page.mjs";
+
+afterEach(() => {
+  assertNoPendingDialogAnswers();
+  resetDialogs();
+});
 
 const PROJECT = FIXTURES["project.json"];
 const ROUND = PROJECT.rounds[0];
@@ -74,9 +80,9 @@ test("the project page puts the conversation and rounds first, then tasks, proto
   assert.equal(region.getAttribute("aria-label"), "目标与任务");
 });
 
-test("the four editors are closed folds titled Edit…", async () => {
+test("the three editors are closed folds titled Edit…", async () => {
   const { element } = await renderPage("project", PARAMS, { lang: "zh" });
-  for (const title of ["研究协议", "模型调用预算", "目标与任务", "留出批次"]) {
+  for (const title of ["研究协议", "模型调用预算", "留出批次"]) {
     const folds = elements(sectionTitled(element, title), "details").filter((node) => !hasClass(node, "tech-details"));
     const editor = folds.find((node) => elements(node, "form").length > 0);
     assert.ok(editor, title);
@@ -194,16 +200,37 @@ test("holdouts keep their id in the details and say how often they were read", a
   assert.ok(!elements(block, "th").some((th) => th.textContent === zh["col.id"]));
 });
 
+test("the project page has no goal JSON editor; the goals section still lists tasks", async () => {
+  const { element } = await renderPage("project", PARAMS, { lang: "zh" });
+  const tasks = sectionTitled(element, "目标与任务");
+  assert.equal(elements(tasks, "form").length, 0);
+  assert.equal(elements(tasks, "textarea").length, 0);
+  assert.ok(elements(tasks, "div").some((node) => hasClass(node, "table-wrap")));
+  for (const key of ["project.goals.json", "project.goals.submit", "project.goals.saved"]) assert.ok(!(key in zh) && !(key in en), key);
+  assert.ok(zh["project.goals.title"] && en["project.goals.title"]);
+});
+
+test("the protocol fold keeps the JSON editor under Advanced, and an old JSON draft still opens the fold", async () => {
+  saveDraft(`protocol:${PROJECT.project_id}`, { text: "{}" });
+  const { element } = await renderPage("project", PARAMS, { lang: "zh" });
+  const section = sectionTitled(element, "研究协议");
+  const fold = elements(section, "details").find((node) => hasClass(node, "edit-fold"));
+  assert.equal(fold.open, true);
+  const advanced = elements(fold, "details").find((node) => node !== fold && hasClass(node, "edit-fold"));
+  assert.equal(elements(advanced, "summary")[0].textContent, zh["forms.advanced"]);
+  assert.equal(advanced.open, true);
+  assert.equal(elements(advanced, "textarea").length, 1);
+});
+
 // --- save notices that say what was saved (P-08) -------------------------------------------------
 
-test("saving the budget, a goal or a holdout says what was saved", async () => {
+test("saving the budget or a holdout says what was saved", async () => {
   const { element, notices } = await withNotices("project", PARAMS, { lang: "zh" });
   await submit(formIn(element, "模型调用预算"), { max_calls: 50, max_cost: 20 });
-  await submit(formIn(element, "目标与任务"));
-  await submit(formIn(element, "留出批次"));
+  await submit(formIn(element, "留出批次"), { batch_ids: ["b-1"], development_batch_ids: ["d-1"], outcome_fields: ["fresh_mass"] });
   assert.deepEqual(
     notices.map((notice) => notice.message),
-    ["已设置预算：50 次调用，费用上限 20.00", "已提交目标", "已登记留出批次"],
+    ["已设置预算：50 次调用，费用上限 20.00", "已登记留出批次"],
   );
   const english = await withNotices("project", PARAMS, { lang: "en" });
   await submit(formIn(english.element, en["project.budget.title"]), { max_calls: 1500, max_cost: 2.5 });
@@ -229,6 +256,7 @@ test("compute, round and analysis writes say what was done", async () => {
   const stage = FIXTURES["round.json"].stages[0];
   const waiting = { ...FIXTURES["round.json"], state: "running", awaiting_choice: stage.stage_id };
   const round = await withNotices("round", { roundId: waiting.round_id }, { lang: "zh", fixtures: { "round.json": waiting } });
+  answerNextDialog(true);
   await submit(formIn(round.element, zh["round.choiceTitle"]), { choice: "redo" });
   assert.deepEqual(round.notices.map((n) => n.message), [`已选择：${zh["round.choice.redo"]}`]);
 
@@ -236,13 +264,15 @@ test("compute, round and analysis writes say what was done", async () => {
   const ctx = { ...testCtx({ lang: "zh" }), notify: (message) => notices.push(message) };
   bindFormContext(ctx);
   const [freeze, run] = elements(await analysisSection(ctx, FIXTURES["round.json"]), "form");
-  await submit(freeze);
-  await submit(run);
+  answerNextDialog(true);
+  await submit(freeze, { script: "print(1)" });
+  answerNextDialog(true);
+  await submit(run, { snapshot_id: FIXTURES["analysis.json"].snapshots[0].snapshot_id });
   assert.deepEqual(notices, ["已锁定分析脚本", "已运行确认性分析"]);
 });
 
 test("every new save notice exists in both languages", () => {
-  const keys = ["project.budget.saved", "project.goals.saved", "project.holdouts.saved", "compute.balance.saved", "compute.budget.saved", "analysis.frozen", "analysis.ran", "round.chosen", "round.aborted"];
+  const keys = ["project.budget.saved", "project.holdouts.saved", "compute.balance.saved", "compute.budget.saved", "analysis.frozen", "analysis.ran", "round.chosen", "round.aborted"];
   for (const key of keys) assert.ok(zh[key] && en[key], key);
   assert.equal(zh["analysis.frozen"], "已锁定分析脚本");
   assert.equal(zh["analysis.ran"], "已运行确认性分析");

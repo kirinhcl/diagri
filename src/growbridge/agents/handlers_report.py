@@ -74,9 +74,27 @@ class PublishInput(ToolInput):
     snapshots: tuple[SnapshotRound, ...] = Field(min_length=1)
     flags: Flags = Flags()
     evidence_chain: tuple[str, ...] = ()
-    limitations: tuple[str, ...] = ()
-    next_round: str = ""
-    unresolved: tuple[str, ...] = ()
+    limitations: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "One point per item, written for the operator under the "
+            "writing rules: plain words, local times, no ids or field names."
+        ),
+    )
+    next_round: str = Field(
+        default="",
+        description=(
+            "One sentence for the operator under the writing rules: what to do "
+            "in the next round, in plain words with no ids or field names."
+        ),
+    )
+    unresolved: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "One point per item, written for the operator under the "
+            "writing rules: plain words, local times, no ids or field names."
+        ),
+    )
     round_id: str | None = None  # deliver this round when the report is final
     holdout_id: str | None = None  # read this holdout with a registered model ...
     model_sha: str | None = None  # ... identified by this digest

@@ -9,7 +9,7 @@ refused with ``model_role``, reads included.
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Protocol
+from typing import Annotated, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
@@ -21,6 +21,7 @@ from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, no
 from growbridge.archive.store import Archive
 from growbridge.planning.validate import check_evidence
 from growbridge.ports import Actor, Denied
+from growbridge.research.notes import TEXT_LANGUAGE
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
@@ -84,6 +85,7 @@ class GoalIn(Body):
         default=(), max_length=MAX_CONSTRAINTS
     )
     request_id: str | None = Field(default=None, pattern=REQUEST_ID)
+    language: Literal["en", "zh"] | None = None
 
 
 class ChoiceIn(Body):
@@ -165,9 +167,15 @@ def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | Non
     if archive is not None:
         cards = {card.id: card for card in archive.evidence()}
         findings = (*findings, *check_evidence(sheet, cards))
+    approval = workflow.current_approval(stage_id)
     return {
         "stage_id": stage.stage_id,
         "state": stage.state.value,
+        "approval": (
+            {"approved_at": approval.approved_at, "run_sheet_version": approval.run_sheet_version}
+            if approval is not None
+            else None
+        ),
         "run_sheet_version": sheet.version,
         "run_sheet_digest": sheet.digest(),
         "run_sheet": sheet.model_dump(mode="json"),
@@ -233,6 +241,7 @@ def goal_task(body: GoalIn, actor: Actor, workflow: WorkflowService) -> Research
         correlation_id=new_id("goal"),
         constraints=body.constraints,
         input_refs=refs,
+        language=body.language or TEXT_LANGUAGE,
     )
 
 

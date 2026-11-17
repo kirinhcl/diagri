@@ -11,6 +11,7 @@ from growbridge.agents.handlers_common import (
     ToolInput,
     bound_task,
     clip,
+    local_time,
     require_bound,
     require_project,
     require_round_project,
@@ -144,13 +145,18 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             "state": stage.state.value,
             "experiment_id": stage.experiment_id,
             "started_at": stage.started_at,
+            "started_at_local": local_time(stage.started_at, deps.timezone),
             "paused_at": stage.paused_at,
+            "paused_at_local": local_time(stage.paused_at, deps.timezone),
             "end_pending": stage.end_pending,
-            "history": list(deps.workflow.history(data.stage_id))[-HISTORY_TAIL:],
+            "history": [
+                {**entry, "at_local": local_time(entry["at"], deps.timezone)}
+                for entry in list(deps.workflow.history(data.stage_id))[-HISTORY_TAIL:]
+            ],
         }
 
     def create_task(data: CreateTaskInput) -> dict:
-        require_project(deps, data.project_id)
+        running = require_project(deps, data.project_id)
         task = ResearchTask(
             id=new_id("task"),
             project_id=data.project_id,
@@ -162,6 +168,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             constraints=data.constraints,
             input_refs=data.input_refs,
             expected_artifacts=data.expected_artifacts,
+            language=running.language,
         )
         return _stored(deps, task)
 
@@ -183,6 +190,7 @@ def build_orchestrator_tools(deps: Deps) -> list[Tool]:
             # a handoff always hangs under the running task, named or not: only then does the
             # dispatcher hand its end back as the follow-up the tool result promises
             parent_task_id=running.id,
+            language=running.language,
         )
         return _stored(deps, task)
 

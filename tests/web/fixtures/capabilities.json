@@ -1,0 +1,29 @@
+{
+  "level_ranges": {
+    "light": [
+      0,
+      100
+    ],
+    "exhaust": [
+      0,
+      100
+    ],
+    "fan": [
+      0,
+      10
+    ],
+    "pump": [
+      0,
+      1
+    ]
+  },
+  "sensors": {
+    "temp": "C",
+    "humi": "%",
+    "vpd": "kPa",
+    "co2": "ppm",
+    "ppfd": "umol/m2/s",
+    "tempSoil": "C"
+  },
+  "max_pump_seconds": 5.0
+}

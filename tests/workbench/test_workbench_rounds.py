@@ -813,3 +813,40 @@ def test_a_report_whose_protocol_is_gone_has_no_primary_endpoint(bench, operator
     body = operator.get(f"/wb/rounds/{round_id}/report").json()
 
     assert body["primary_endpoint"] is None
+
+
+def _goal_language(bench, operator, project_id: str, **fields):
+    answer = bench.post(operator, "/wb/goals", {"project_id": project_id, "goal": GOAL, **fields})
+    return answer, bench.tasks.list(project_id)
+
+
+def test_a_goal_stores_the_console_language_and_defaults_to_chinese(bench, operator):
+    project_id, _round = funded(bench, operator)
+
+    _answer, (asked,) = _goal_language(bench, operator, project_id, language="en")
+    _answer, (_, plain) = _goal_language(bench, operator, project_id)
+
+    assert (asked.language, plain.language) == ("en", "zh")
+
+
+def test_a_resent_goal_in_another_language_returns_the_first_task(bench, operator):
+    project_id, _round = funded(bench, operator)
+    first, _tasks = _goal_language(
+        bench, operator, project_id, request_id="goal-0001", language="en"
+    )
+
+    again, tasks = _goal_language(
+        bench, operator, project_id, request_id="goal-0001", language="zh"
+    )
+
+    assert again.status_code == 200 and again.json()["reused"] is True
+    assert again.json()["task_id"] == first.json()["task_id"]
+    assert [t.language for t in tasks] == ["en"]
+
+
+def test_an_unknown_language_is_refused(bench, operator):
+    project_id, _round = funded(bench, operator)
+
+    refused, tasks = _goal_language(bench, operator, project_id, language="fr")
+
+    assert refused.status_code == 422 and tasks == ()

@@ -555,6 +555,8 @@ class ResearchTask(Model):
     expected_artifacts: tuple[str, ...] = ()
     parent_task_id: str | None = None
     deadline: float | None = None
+    # the console language the goal came in; None on a task made before it was recorded
+    language: Literal["en", "zh"] | None = None
     state: TaskState = TaskState.IN_PROGRESS
 
 

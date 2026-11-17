@@ -1,6 +1,7 @@
 {
   "stage_id": "stage-dev",
   "state": "pending_review",
+  "approval": null,
   "run_sheet_version": 1,
   "run_sheet_digest": "bce9db07506a2d71ce09b94d59cf42041f78d6b78c086651b37c12b23d112a52",
   "run_sheet": {

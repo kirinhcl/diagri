@@ -2,6 +2,7 @@ import json
 
 from dispatch_helpers import call, script_calls
 
+from growbridge.agents.dispatch import follow_up
 from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive.ids import file_digest
 from growbridge.archive.models import Artifact
@@ -212,3 +213,29 @@ async def test_read_artifact_refuses_a_file_changed_after_registration(env):
     outcome = await env.invoke("orchestrator", "read_artifact", artifact_id="art-4")
 
     assert outcome.is_error and "tampered" not in outcome.content
+
+
+async def test_delegated_created_and_follow_up_tasks_inherit_the_language(env):
+    parent = env.task("orchestrator", "ev-parent", language="en")
+    client = ScriptedClient(
+        script_calls(call("delegate_task", project_id=env.project_id, **HANDOFF))
+    )
+    await env.dispatcher(client).run_task(parent.id)
+    (child,) = [t for t in env.tasks.list(env.project_id) if t.parent_task_id == parent.id]
+    made = _payload(
+        await env.invoke_as(
+            parent.id,
+            "orchestrator",
+            "create_research_task",
+            project_id=env.project_id,
+            owner_role="researcher",
+            question="analyse round 1",
+            trigger_event_id="ev-new",
+            correlation_id="corr-1",
+        )
+    )
+
+    assert child.language == "en"
+    assert env.tasks.get(made["task_id"]).language == "en"
+    assert follow_up(child, TaskState.DONE, "fine").language == "en"
+    assert follow_up(env.task("planner", "ev-old"), TaskState.DONE, "fine").language is None

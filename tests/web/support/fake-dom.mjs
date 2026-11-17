@@ -258,6 +258,40 @@ class FakeElement extends FakeNode {
   blur() {
     if (this.ownerDocument.activeElement === this) this.ownerDocument.activeElement = this.ownerDocument.body;
   }
+
+  // <dialog>: showModal opens it (answering at once, in a microtask, if a test queued an answer);
+  // close() fires "close" like the browser does. Which button decides is dialog.js's business.
+  showModal() {
+    this.setAttribute("open", "");
+    queueMicrotask(() => this.ownerDocument.flushDialogs());
+  }
+
+  close(returnValue) {
+    if (!this.hasAttribute("open")) return;
+    this.removeAttribute("open");
+    if (returnValue !== undefined) this.returnValue = String(returnValue);
+    this.dispatchEvent(new Event("close"));
+  }
+}
+
+function descendants(node) {
+  return node.kidList().flatMap((child) => [child, ...descendants(child)]);
+}
+
+// A person's answer: a string is typed into the first text box, then the form is submitted (the
+// confirm button); false or null presses cancel, which just closes the dialog.
+function applyAnswer(dialog, answer) {
+  if (answer === false || answer === null) {
+    dialog.close();
+    return;
+  }
+  const all = descendants(dialog);
+  if (typeof answer === "string") {
+    const box = all.find((node) => node.localName === "textarea" || (node.localName === "input" && node.getAttribute("type") !== "hidden"));
+    if (box) box.value = answer;
+  }
+  const form = all.find((node) => node.localName === "form");
+  (form || dialog).dispatchEvent(new Event("submit", { cancelable: true }));
 }
 
 for (const [property, attribute] of Object.entries(STRING_PROPERTIES)) {
@@ -296,6 +330,19 @@ class FakeDocument extends FakeNode {
     this.appendChild(this.documentElement);
     this.activeElement = this.body;
     this.defaultView = null;
+    this.dialogAnswers = [];
+  }
+
+  openDialogElements() {
+    return descendants(this).filter((node) => node.localName === "dialog" && node.hasAttribute("open"));
+  }
+
+  // Gives each waiting dialog the next queued answer, oldest dialog first.
+  flushDialogs() {
+    for (const dialog of this.openDialogElements()) {
+      if (!this.dialogAnswers.length) return;
+      applyAnswer(dialog, this.dialogAnswers.shift());
+    }
   }
 
   createElement(tagName) {
