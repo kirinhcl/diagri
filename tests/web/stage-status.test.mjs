@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 
 import { actionsView, activityLog, differenceLines, logItem, manualGroup, manualHeading, outcomeLines, plainActionLines } from "../../src/growbridge/web/workbench/pages/stage-actions.js";
 import { statusView } from "../../src/growbridge/web/workbench/pages/stage.js";
 import { installFakeDom, FIXTURES, testCtx } from "./support/render-page.mjs";
+import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { assertNoLeaks, visibleText, visibleTextIncludingDetails } from "./support/leaks.mjs";
 
 installFakeDom();
+
+afterEach(() => {
+  assertNoPendingDialogAnswers();
+  resetDialogs();
+});
 
 const stage = { ...FIXTURES["stage.json"], paused_at: null, end_pending: false, right_number: 4, care_right: 2, manual_right: 1 };
 
@@ -75,10 +81,11 @@ test("the irrigation heading shows a formatted duration", async () => {
   ctx.me = { ...ctx.me, entry: "lan" };
   ctx.api = { post: async () => ({ request_id: "wb-2", created_at: 1000, state: "pending" }) };
   const tracked = [];
-  const env = { ctx, stage, log: { track: (heading) => tracked.push(heading) }, onChanged: async () => {} };
+  const env = { ctx, stage, log: { track: (heading) => tracked.push(heading) }, onChanged: async () => {}, capabilities: { max_pump_seconds: 120 } };
   const view = actionsView({ ...env, stage: { ...stage, state: "manual" } });
   const form = elements(view, "form").find((f) => elements(f, "input").some((i) => i.getAttribute("name") === "seconds"));
   elements(form, "input").find((i) => i.getAttribute("name") === "seconds").value = "90";
+  answerNextDialog(true);
   form.dispatchEvent(new Event("submit", { cancelable: true }));
   await settle();
   assert.match(tracked[0], /浇水 1 分钟 30 秒|浇水 2 分钟|浇水 90 秒/);
@@ -270,4 +277,137 @@ test("an unknown receipt without a code keeps the general note and its request i
   assert.ok(visibleText(item.element).includes(ctx.t("receipt.unknownNote")));
   assert.equal(foldCount(item.element), 1);
   assert.match(visibleTextIncludingDetails(item.element), /wb-9/);
+});
+
+// --- task 8: start, manual levels and irrigation ------------------------------------------------
+const findAction = (view, name) => elements(view, "div").find((node) => node.getAttribute("data-action") === name);
+const byName = (node, name) => elements(node, "input").find((i) => i.getAttribute("name") === name);
+const buttonsOf = (node) => elements(node, "button");
+const CAPS = FIXTURES["capabilities.json"];
+
+function startView(lang, approval) {
+  const ctx = testCtx({ lang });
+  ctx.me = { ...ctx.me, entry: "lan" };
+  const sent = [];
+  ctx.api = { post: async (path, body) => (sent.push([path, body]), {}) };
+  const pending = FIXTURES["stage-pending.json"];
+  const review = { run_sheet_digest: "a1".repeat(32), blocking: false, approval };
+  const view = actionsView({ ctx, stage: pending, review, log: { track() {} }, onChanged: async () => {} });
+  return { view, sent, group: findAction(view, "start"), pending };
+}
+
+test("start is disabled with the reason while the run sheet is not approved", () => {
+  const reasons = { zh: "运行单还没有批准，先在上面批准运行单。", en: "The run sheet is not approved yet; approve it above first." };
+  for (const lang of ["zh", "en"]) {
+    const { group } = startView(lang, null);
+    const [button] = buttonsOf(group);
+    assert.ok(button.hasAttribute("disabled"), `${lang}: disabled`);
+    const why = elements(group, "p").find((p) => p.getAttribute("id") === button.getAttribute("aria-describedby"));
+    assert.ok(why, `${lang}: described by the reason`);
+    assert.equal(visibleText(why), reasons[lang]);
+  }
+});
+
+test("start asks first once the run sheet is approved", async () => {
+  const approval = { approved_at: 1796594700, run_sheet_version: 3 };
+  const { group, sent, pending } = startView("zh", approval);
+  const [button] = buttonsOf(group);
+  assert.ok(!button.hasAttribute("disabled"));
+  button.dispatchEvent(new Event("click"));
+  await settle();
+  const [dialog] = openDialogs();
+  assert.match(visibleText(dialog), /启动这个阶段？/);
+  assert.match(visibleText(dialog), /设备会立即按已批准的运行单运行/);
+  answerNextDialog(false);
+  await settle();
+  assert.deepEqual(sent, []);
+  button.dispatchEvent(new Event("click"));
+  await settle();
+  answerNextDialog(true);
+  await settle();
+  assert.deepEqual(sent, [[`/stages/${encodeURIComponent(pending.stage_id)}/start`, {}]]);
+});
+
+function manualEnv(lang = "zh", capabilities = CAPS) {
+  const ctx = testCtx({ lang });
+  const sent = [];
+  ctx.api = { post: async (path, body) => (sent.push([path, body]), { request_id: "wb-1", created_at: 1000, state: "pending" }) };
+  const tracked = [];
+  return { env: { ctx, stage, log: { track: (heading) => tracked.push(heading) }, onChanged: async () => {}, capabilities }, sent, tracked };
+}
+
+test("the level field's range follows the chosen channel", async () => {
+  const { env, sent } = manualEnv();
+  const group = manualGroup(env);
+  const form = elements(group, "form")[0];
+  const select = elements(form, "select")[0];
+  const level = byName(form, "level");
+  assert.deepEqual([...select.children].map((o) => o.getAttribute("value")), ["light", "exhaust", "fan"]);
+  assert.equal(level.getAttribute("max"), "100");
+  select.value = "fan";
+  select.dispatchEvent(new Event("change"));
+  assert.equal(level.getAttribute("min"), "0");
+  assert.equal(level.getAttribute("max"), "10");
+  assert.match(visibleText(group), /0 到 10/);
+  level.value = "11";
+  form.dispatchEvent(new Event("submit", { cancelable: true }));
+  await settle();
+  assert.deepEqual(sent, []);
+  assert.match(visibleText(form), /10/);
+  const open = manualEnv("zh", null);
+  const bare = byName(manualGroup(open.env), "level");
+  assert.equal(bare.getAttribute("max"), null);
+});
+
+test("the pump is switched off by its own button, after a confirmation", async () => {
+  const { env, sent, tracked } = manualEnv();
+  const group = manualGroup(env);
+  const button = buttonsOf(group).find((b) => visibleText(b) === "关闭水泵");
+  assert.ok(button, "a switch-off button");
+  button.dispatchEvent(new Event("click"));
+  await settle();
+  assert.match(visibleText(openDialogs()[0]), /关闭水泵/);
+  answerNextDialog(false);
+  await settle();
+  assert.deepEqual(sent, []);
+  button.dispatchEvent(new Event("click"));
+  await settle();
+  answerNextDialog(true);
+  await settle();
+  await settle();
+  assert.deepEqual(sent.map(([path, body]) => [path, body.level]), [["/manual/pump", 0]]);
+  assert.equal(tracked.length, 1);
+});
+
+test("irrigation seconds are capped at the configured pump limit and asked first, like a task row", async () => {
+  const { env, sent } = manualEnv("zh", { ...CAPS, max_pump_seconds: 5 });
+  env.ctx.me = { ...env.ctx.me, entry: "lan" };
+  const view = actionsView({ ...env, stage: { ...stage, state: "manual" } });
+  const form = elements(findAction(view, "irrigation"), "form")[0];
+  const seconds = byName(form, "seconds");
+  assert.equal(seconds.getAttribute("max"), "5");
+  const submit = async (value) => {
+    seconds.value = value;
+    form.dispatchEvent(new Event("submit", { cancelable: true }));
+    await settle();
+  };
+  await submit("6");
+  await submit("0");
+  assert.deepEqual(sent, [], "out of range sends nothing and asks nothing");
+  assert.equal(openDialogs().length, 0);
+  await submit("3");
+  const text = visibleText(openDialogs()[0]);
+  assert.match(text, /3 秒/);
+  assert.match(text, /只能在现场入口操作/);
+  answerNextDialog(false);
+  await settle();
+  assert.deepEqual(sent, []);
+  await submit("3");
+  answerNextDialog(true);
+  await settle();
+  assert.deepEqual(sent.map(([path, body]) => [path, body.seconds]), [["/irrigation", 3]]);
+  const open = manualEnv("zh", null);
+  open.env.ctx.me = { ...open.env.ctx.me, entry: "lan" };
+  const bare = actionsView({ ...open.env, stage: { ...stage, state: "manual" } });
+  assert.equal(byName(findAction(bare, "irrigation"), "seconds").getAttribute("max"), "60");
 });

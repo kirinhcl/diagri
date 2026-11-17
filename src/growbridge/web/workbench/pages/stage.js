@@ -188,7 +188,7 @@ function draw(page, data) {
   head.pill.replaceChildren(head.statePill(stage.state));
   head.updated.textContent = ctx.t("stage.updated", { time: timeText(ctx, Date.now() / 1000), seconds: formatDuration(ctx.t, POLL_SECONDS) });
   parts.status.show(JSON.stringify(stage), () => statusView(ctx, stage));
-  const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review]);
+  const actionKey = JSON.stringify([stage.state, stage.prior_state, review && review.run_sheet_digest, review && review.blocking, !review, review && review.approval]);
   parts.actions.show(actionKey, () => actionsView({ ...page.env, stage, review, roundId: stage.round_id }));
   const sampleSeconds = review && review.run_sheet && review.run_sheet.sampling ? review.run_sheet.sampling.interval_seconds : null;
   const chart = (readings) => readingsChart(ctx.t, readings, { timeZone: zoneOf(ctx), lang: ctx.lang, sampleSeconds, now: ctx.now });

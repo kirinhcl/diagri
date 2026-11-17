@@ -8,16 +8,19 @@ import { approveBody, availableActions, heldByEntry, sheetCheck } from "../stage
 import { confirmAction } from "../ui/dialog.js";
 import { h } from "../ui/dom.js";
 import { advancedJson } from "../ui/field-forms.js";
-import { errorLines, simpleForm } from "../ui/forms.js";
+import { confirmOrCancel, errorLines, simpleForm } from "../ui/forms.js";
 import { messageParts, messageView } from "../messages.js";
 import { displayName } from "../ui/names.js";
 import { formatDuration, levelText, shortDigest } from "../format.js";
 import { differenceText } from "./stage-diff.js";
 import { runSheetForm } from "./run-sheet-form.js";
+import { irrigationPrompt } from "./stage-tasks.js";
 import { errorBox, errorFold, note, replaceParts, showErrors, techDetails, timeText } from "../ui/section.js";
 
-// A manual write may only switch the pump off; irrigation is what switches it on.
-const CHANNELS = ["light", "exhaust", "fan", "pump"];
+// A manual write sets these; the pump has its own switch-off button and irrigation switches it on.
+const CHANNELS = ["light", "exhaust", "fan"];
+// The control service's own pump limit, used when the capabilities could not be read.
+const DEFAULT_PUMP_SECONDS = 60;
 const RECEIPT_TONE = {
   pending: "pill",
   applied: "pill pill-active",
@@ -27,7 +30,7 @@ const RECEIPT_TONE = {
 };
 // Controls that are one request without a body: the route verb, the button tone, an optional ask.
 const PLAIN = {
-  start: { verb: "start", tone: "primary" },
+  start: { verb: "start", tone: "primary", ask: true },
   resume: { verb: "resume", tone: "primary" },
   takeover: { verb: "takeover", tone: "quiet", ask: true },
   stop: { verb: "stop", tone: "danger", ask: true },
@@ -87,10 +90,20 @@ export function plainActionLines(ctx, name, stage) {
   return [ctx.t(`stage.${name}.line`, { stage: displayName(ctx, "stage", stage) })];
 }
 
+// A button that stays visible but disabled, with the reason beside it.
+function shutButton(label, reason) {
+  const id = `action-why-${++counter}`;
+  const why = h("p", { class: "block-note", attrs: { id }, text: reason });
+  const attrs = { type: "button", disabled: true, "aria-describedby": id };
+  return [why, h("button", { class: "button button-primary", attrs, text: label })];
+}
+
 function plainAction(env, name) {
   const { ctx, stage } = env;
   const spec = PLAIN[name];
   const label = ctx.t(`stage.${name}`);
+  // Start waits for an approval of the current run sheet; an unread sheet is left to the server.
+  if (name === "start" && env.review && !env.review.approval) return group(name, label, ...shutButton(label, ctx.t("stage.start.notApproved")));
   const ask = spec.ask ? { title: ctx.t(`stage.${name}.title`), lines: plainActionLines(ctx, name, stage) } : null;
   const run = () => ctx.api.post(stagePath(stage, spec.verb), {}, { action: label });
   const control = actionButton(env, { label, tone: spec.tone, ask, run });
@@ -276,13 +289,50 @@ export function manualHeading(ctx, channel, level) {
   return ctx.t("receipt.manual", { channel: labelOr(ctx.t, "channel", channel), level: levelText(ctx.t, channel, level) });
 }
 
-export function manualGroup(env) {
+const levelRange = (capabilities, channel) => {
+  const range = capabilities && capabilities.level_ranges && capabilities.level_ranges[channel];
+  return Array.isArray(range) && range.length === 2 && range.every(Number.isFinite) ? range : null;
+};
+
+const inputNamed = (node, name) => {
+  if (node.getAttribute && node.getAttribute("name") === name) return node;
+  for (const child of node.children || []) {
+    const found = inputNamed(child, name);
+    if (found) return found;
+  }
+  return null;
+};
+
+// The level must lie in the chosen channel's range; without capabilities the server judges.
+function levelField(ctx, current) {
+  const parse = (text, t) => {
+    const level = Number(text);
+    if (!Number.isFinite(level)) return { error: t("form.badNumber") };
+    const [min, max] = current() || [];
+    if (min !== undefined && level < min) return { error: t("form.tooSmall", { min }) };
+    if (max !== undefined && level > max) return { error: t("form.tooBig", { max }) };
+    return { value: level };
+  };
+  return { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true, parse };
+}
+
+function pumpOffButton(env) {
   const { ctx, stage } = env;
+  const label = ctx.t("stage.manual.pumpOff");
+  const ask = { title: ctx.t("stage.manual.pumpOff.title"), lines: [ctx.t("stage.manual.pumpOff.line")] };
+  const run = () =>
+    deviceWrite(env, { action: "manual:pump", channel: "pump", path: "/manual/pump", body: { stage_id: stage.stage_id, level: 0, note: "" }, heading: manualHeading(ctx, "pump", 0), label });
+  return actionButton(env, { label, tone: "quiet", ask, run }).element;
+}
+
+export function manualGroup(env) {
+  const { ctx, stage, capabilities } = env;
   const title = ctx.t("stage.manual");
   const options = CHANNELS.map((value) => ({ value, label: labelOr(ctx.t, "channel", value) }));
+  let range = levelRange(capabilities, CHANNELS[0]);
   const fields = [
     { name: "channel", label: ctx.t("stage.manual.channel"), type: "select", options, required: true },
-    { name: "level", label: ctx.t("stage.manual.level"), type: "number", step: 1, required: true },
+    levelField(ctx, () => range),
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
   const onSubmit = async ({ channel, level, note: text }) => {
@@ -291,27 +341,46 @@ export function manualGroup(env) {
     await deviceWrite(env, { action: `manual:${channel}`, channel, path: `/manual/${encodeURIComponent(channel)}`, body, heading, label: title });
   };
   const form = simpleForm({ fields, submitLabel: ctx.t("stage.manual.submit"), onSubmit, ctx });
-  return group("manual", title, note(ctx.t("stage.manual.ranges")), form);
+  const hint = h("p", { class: "block-note" });
+  const levelInput = inputNamed(form, "level");
+  const follow = (channel) => {
+    range = levelRange(capabilities, channel);
+    for (const [name, value] of [["min", range && range[0]], ["max", range && range[1]]]) {
+      if (range) levelInput.setAttribute(name, String(value));
+      else levelInput.removeAttribute(name);
+    }
+    hint.textContent = range ? ctx.t("stage.manual.range", { channel: labelOr(ctx.t, "channel", channel), min: range[0], max: range[1] }) : "";
+    hint.hidden = !range;
+  };
+  const select = inputNamed(form, "channel");
+  select.addEventListener("change", () => follow(select.value));
+  follow(CHANNELS[0]);
+  return group("manual", title, note(ctx.t("stage.manual.ranges")), form, hint, pumpOffButton(env));
 }
 
 // Off the on-site entry the button stays visible but disabled, with the reason beside it.
 function irrigationGroup(env, allowed) {
-  const { ctx, stage } = env;
+  const { ctx, stage, capabilities } = env;
   const title = ctx.t("stage.irrigation");
   const submitLabel = ctx.t("stage.irrigation.submit");
-  if (!allowed) {
-    const id = `irrigation-why-${++counter}`;
-    const why = h("p", { class: "block-note", attrs: { id }, text: ctx.t("stage.irrigation.lanOnly") });
-    const attrs = { type: "button", disabled: true, "aria-describedby": id };
-    return group("irrigation", title, why, h("button", { class: "button button-primary", attrs, text: submitLabel }));
-  }
+  if (!allowed) return group("irrigation", title, ...shutButton(submitLabel, ctx.t("stage.irrigation.lanOnly")));
+  const configured = capabilities && capabilities.max_pump_seconds;
+  const max = Number.isFinite(configured) ? configured : DEFAULT_PUMP_SECONDS;
+  const parse = (text, t) => {
+    const seconds = Number(text);
+    if (!Number.isFinite(seconds)) return { error: t("form.badNumber") };
+    if (seconds <= 0) return { error: t("safety.form.positive") };
+    if (seconds > max) return { error: t("form.tooBig", { max }) };
+    return { value: seconds };
+  };
   const fields = [
-    { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true },
+    { name: "seconds", label: ctx.t("stage.irrigation.seconds"), type: "number", required: true, min: 0, max, hint: ctx.t("stage.irrigation.max", { max }), parse },
     { name: "note", label: ctx.t("stage.manual.note") },
   ];
   const onSubmit = async ({ seconds, note: text }) => {
+    await confirmOrCancel(ctx, irrigationPrompt(ctx, { seconds }));
     const body = { stage_id: stage.stage_id, seconds, note: text || "" };
-    const heading = ctx.t("receipt.irrigation", { seconds: formatDuration(ctx.t, Number(seconds)) });
+    const heading = ctx.t("receipt.irrigation", { seconds: formatDuration(ctx.t, seconds) });
     await deviceWrite(env, { action: "irrigation", channel: "pump", path: "/irrigation", body, heading, label: submitLabel });
   };
   return group("irrigation", title, simpleForm({ fields, submitLabel, onSubmit, ctx }));
