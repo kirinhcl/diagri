@@ -60,7 +60,7 @@ The wiki is also published as a website at <https://kirinhcl.github.io/diagri/>,
 1. **Both languages, same commit.** A page exists in `en/` and `zh-CN/` under the same file name. Change both in the same commit. The Chinese page is written as natural Chinese, not as a word-for-word translation.
 2. **One kind of content per page.** A tutorial walks a newcomer through one complete run. A how-to guide solves one task for someone who already knows the basics. A reference page is for lookup and states facts without argument. An explanation page says why the system is built the way it is. Do not mix them: put the reason on an explanation page and link to it.
 3. **Page header.** Line 1 is the title. Then a language switch line, then one sentence that says who the page is for and what it covers. Pages end with a "See also" list.
-4. **The code is the source of truth.** Every command, option, configuration field, route, state name and identifier on a page must exist in the code. Link to the source file so a reader can check. If a fact cannot be checked in the code or the tests, leave it out or mark it as not verified.
+4. **The code is the source of truth.** Every command, option, configuration field, route, state name and identifier on a page must exist in the code. Link to the source file so a reader can check. If a fact cannot be checked in the code or the tests, leave it out or mark it as not verified. The tests in `tests/docs/` hold the reference tables (denial codes, CLI, configuration fields, routes, MCP and model role tools) to the code.
 5. **Link, do not copy.** The READMEs and the [architecture document](../diagri-agent-architecture.zh-CN.md) stay where they are. Summarize in a few lines and link to them.
 6. **Say what is not verified.** The system has been tested on the simulated AC5 only. Any page that describes behavior on real hardware, a Raspberry Pi, real notification channels or CSC says so and links to `Status-and-Known-Limitations.md`.
 7. **Terms.** Use the terms in `Glossary.md`. The project is DiAGRI. GrowBridge names only the device bridge, and `growbridge` the package and the command. Write DiAGRI mode for `auto_research = true` and bridge-only mode for `auto_research = false`. Code identifiers, state values and command names stay in English in both languages.
@@ -74,7 +74,7 @@ The wiki is also published as a website at <https://kirinhcl.github.io/diagri/>,
 1. **两种语言，同一次提交。** 每个页面在 `en/` 和 `zh-CN/` 下各有一份，文件名相同，修改时两份一起改。中文页面按中文的习惯写，不逐词翻译。
 2. **一页只放一类内容。** 教程带新手完整走一遍。操作指南帮已经入门的人完成一个具体任务。参考页用来查，只陈述事实。解释页说明为什么这样设计。不要混写：理由放在解释页，其他页面链接过去。
 3. **页首格式。** 第一行是标题，接着是语言切换行，再用一句话说明这页写给谁、讲什么。页尾是"另见"列表。
-4. **以代码为准。** 页面上出现的每个命令、选项、配置项、路由、状态名和标识符，都必须能在代码里找到，并链接到源文件，方便读者核对。在代码或测试里查不到的说法，要么不写，要么标明"未验证"。
+4. **以代码为准。** 页面上出现的每个命令、选项、配置项、路由、状态名和标识符，都必须能在代码里找到，并链接到源文件，方便读者核对。在代码或测试里查不到的说法，要么不写，要么标明"未验证"。`tests/docs/` 里的测试会用代码核对参考页面的表格（拒绝码、CLI、配置项、路由、MCP 工具和模型角色的工具）。
 5. **链接，不复制。** README 和[架构设计文档](../diagri-agent-architecture.zh-CN.md)保持原样。Wiki 里用几行概括，然后链接过去。
 6. **写明哪些没有验证。** 系统目前只在模拟的 AC5 上测试过。凡是描述真机、树莓派、真实通知渠道或 CSC 上行为的页面，都要说明这一点，并链接到 `Status-and-Known-Limitations.md`。
 7. **术语。** 使用 `Glossary.md` 里的术语。项目叫 DiAGRI；GrowBridge 只指设备桥接部分，`growbridge` 是软件包和命令的名字。`auto_research = true` 称为 DiAGRI 模式，`auto_research = false` 称为仅桥接模式。代码标识符、状态值和命令名在两种语言里都保留英文。

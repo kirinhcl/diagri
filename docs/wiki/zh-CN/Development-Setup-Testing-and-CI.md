@@ -98,7 +98,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | `tests/transport/` | 两种 BLE 传输的 `halt`，以及原生传输对 pid 文件和目录权限的检查。 |
 | `tests/e2e/` | 装配好的运行时：完整的一轮研究、人工干预、模型角色、CLI 命令，以及经 HTTP 路由走完的一轮。 |
 | `tests/web/` | 操作员控制台的脚本，用 `node --test` 运行（见 CI 第 2 步）：路由、格式化、文案、拒绝提示、回执、阶段页的规则、曲线计算，以及对 `innerHTML` 的禁用。用 Node 自带的测试运行器，不需要 npm 包。 |
-| `tests/docs/` | 这个 Wiki 本身：每个页面在 `en/` 和 `zh-CN/` 下都有；[Wiki 的 README](../README.md) 里的页面表和实际存在的页面完全一致；相对链接指向的文件存在；每个页面都链接到另一种语言的版本。还有 [`test_build_wiki_site.py`](../../../tests/docs/test_build_wiki_site.py) 里的网站构建测试：链接怎样改写成网站上的链接，侧边栏列出了所有页面，以及装了 `docs` 时整个网站能构建出来、没有链接跑出站点。 |
+| `tests/docs/` | 这个 Wiki 本身：每个页面在 `en/` 和 `zh-CN/` 下都有；[Wiki 的 README](../README.md) 里的页面表和实际存在的页面完全一致；相对链接指向的文件存在；每个页面都链接到另一种语言的版本；参考页面的表格与代码一致：拒绝码、CLI、配置项、路由、MCP 工具和模型角色的工具。还有 [`test_build_wiki_site.py`](../../../tests/docs/test_build_wiki_site.py) 里的网站构建测试：链接怎样改写成网站上的链接，侧边栏列出了所有页面，以及装了 `docs` 时整个网站能构建出来、没有链接跑出站点。 |
 | `tests/test_*.py` | 最初的桥接层：协议分帧、设备控制、HTTP API 与 MCP、控制台。共 32 个测试。 |
 
 有两点对所有目录都适用：

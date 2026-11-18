@@ -141,6 +141,8 @@ export default {
   "runsheet.form.pumpHint": "Only for watering. More than 0 and at most {max}. Leave empty to water by hand.",
   "runsheet.form.pumpRange": "Enter more than 0 and at most {max}.",
   "runsheet.form.pumpOnlyWatering": "Only a watering task has a pump run. Clear the seconds, or change the kind to watering.",
+  "runsheet.form.nameTwice": "Another row in this list already has this name.",
+  "runsheet.form.channelTwice": "Another end action already sets this channel.",
   "runsheet.form.end": "At the end of the stage",
   "runsheet.form.versionNote": "If you change anything, it is saved as version {version} of this run sheet and needs a new approval. If you change nothing, the current version and its approval stay.",
   "runsheet.form.draftStale": "The run sheet changed after your draft was kept, so the draft was not restored. Enter your changes again.",
