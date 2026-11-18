@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from growbridge.archive.ids import content_digest
 from growbridge.archive.models import Model
+from growbridge.vocab.curie import curie_prefix
 
 QUANTITIES = frozenset(
     {
@@ -63,7 +64,15 @@ class Variable(Model):
 class Catalog:
     """An immutable, validated catalog. Build it with ``load_catalog``."""
 
-    __slots__ = ("_by_alias", "_by_id", "digest", "unit_aliases", "variables", "version")
+    __slots__ = (
+        "_by_alias",
+        "_by_id",
+        "digest",
+        "unit_aliases",
+        "unit_refs",
+        "variables",
+        "version",
+    )
 
     def __init__(
         self,
@@ -71,10 +80,13 @@ class Catalog:
         digest: str,
         unit_aliases: Mapping[str, str],
         variables: tuple[Variable, ...],
+        *,
+        unit_refs: Mapping[str, str] | None = None,
     ) -> None:
         object.__setattr__(self, "version", version)
         object.__setattr__(self, "digest", digest)
         object.__setattr__(self, "unit_aliases", MappingProxyType(dict(unit_aliases)))
+        object.__setattr__(self, "unit_refs", MappingProxyType(dict(unit_refs or {})))
         object.__setattr__(self, "variables", variables)
         object.__setattr__(self, "_by_id", {v.id: v for v in variables})
         object.__setattr__(self, "_by_alias", {a: v for v in variables for a in v.aliases})
@@ -159,6 +171,23 @@ def _check_variable(variable: Variable, ids: set[str]) -> None:
             raise CatalogError(f"{name}: replaced_by {variable.replaced_by} is not in the catalog")
     if variable.min is not None and variable.max is not None and variable.min > variable.max:
         raise CatalogError(f"{name}: min is above max")
+    for ref in variable.refs:
+        if curie_prefix(ref) is None:
+            raise CatalogError(f"{name}: ref {ref} is not a CURIE with a known prefix")
+
+
+def _check_unit_refs(unit_refs: Any, variables: list[Variable]) -> dict[str, str]:
+    if not isinstance(unit_refs, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in unit_refs.items()
+    ):
+        raise CatalogError("unit_refs must map text to text")
+    used = {v.unit for v in variables}
+    for key, value in unit_refs.items():
+        if key not in used:
+            raise CatalogError(f"unit_refs: {key} is not a unit any entry uses")
+        if curie_prefix(value) != "UO":
+            raise CatalogError(f"unit_refs: {key} must map to a UO term")
+    return unit_refs
 
 
 def load_catalog(text: str) -> Catalog:
@@ -179,8 +208,15 @@ def load_catalog(text: str) -> Catalog:
         raise CatalogError("variable must be an array of tables")
     variables = [_entry(raw, index) for index, raw in enumerate(entries, start=1)]
     _check_entries(variables)
+    unit_refs = _check_unit_refs(data.get("unit_refs", {}), variables)
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return Catalog(version, digest, units, tuple(sorted(variables, key=lambda v: v.id)))
+    return Catalog(
+        version,
+        digest,
+        units,
+        tuple(sorted(variables, key=lambda v: v.id)),
+        unit_refs=unit_refs,
+    )
 
 
 def packaged_text() -> str:
