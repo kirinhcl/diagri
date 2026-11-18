@@ -6,7 +6,7 @@
 
 > **当前状态。** DiAGRI 整体只在模拟的 AC5 控制器上运行过，其中包括由 Claude 担任模型角色、完整跑完的研究轮次。它的设备桥接部分 GrowBridge 已经通过蓝牙读取并控制过一台真实的 Spider Farmer AC5。见[状态与已知限制](docs/wiki/zh-CN/Status-and-Known-Limitations.md)。
 
-整个平台的说明见 [DiAGRI Wiki](docs/wiki/README.md)（[简体中文](docs/wiki/zh-CN/Home.md)、[English](docs/wiki/en/Home.md)）。
+整个平台的说明见 [DiAGRI Wiki](https://kirinhcl.github.io/diagri/)（[简体中文](https://kirinhcl.github.io/diagri/zh-CN/)、[English](https://kirinhcl.github.io/diagri/en/)）。
 
 ## 一轮研究，从提问到报告
 
@@ -212,7 +212,7 @@ args = ["mcp"]
 
 ## 文档
 
-[DiAGRI Wiki](docs/wiki/README.md)（[简体中文](docs/wiki/zh-CN/Home.md)、[English](docs/wiki/en/Home.md)）覆盖整个平台：架构、控制与安全模型、研究方法、参考页面，以及哪些已经验证、哪些还没有。
+[DiAGRI Wiki](docs/wiki/README.md)（[简体中文](docs/wiki/zh-CN/Home.md)、[English](docs/wiki/en/Home.md)）覆盖整个平台：架构、控制与安全模型、研究方法、参考页面，以及哪些已经验证、哪些还没有。这些页面也发布成了可以搜索的网站 <https://kirinhcl.github.io/diagri/>，Wiki 的改动合并到 `main` 后网站会重新构建。
 
 想参与贡献，请先读 [CONTRIBUTING.md](CONTRIBUTING.md#参与贡献)。报告安全漏洞请按 [SECURITY.md](SECURITY.md#安全策略) 处理，不要开公开 issue。引用 DiAGRI 请用 [CITATION.cff](CITATION.cff)（GitHub 上的“Cite this repository”）。
 
