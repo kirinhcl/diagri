@@ -26,6 +26,7 @@ This folder is the project wiki. It lives in the repository so that pages are ve
 | | `Workflow-and-State-Machines.md` | Workflow and state machines | 工作流与状态机 | explanation · 解释 |
 | | `Data-Archive-and-Traceability.md` | Data, archive and traceability | 数据、档案与可追溯性 | explanation · 解释 |
 | | `Variable-Catalog.md` | Variable catalog | 变量目录 | explanation · 解释 |
+| | `Training-Dataset-Export.md` | Training dataset export | 训练数据集导出 | reference · 参考 |
 | | `Research-Methodology.md` | Research methodology | 科研方法 | explanation · 解释 |
 | | `Design-Decisions.md` | Design decisions | 设计决策记录 | explanation · 解释 |
 | Reference · 参考 | `Configuration-Reference.md` | Configuration reference | 配置参考 | reference · 参考 |

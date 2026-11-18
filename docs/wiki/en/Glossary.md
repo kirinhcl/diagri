@@ -91,6 +91,7 @@ Where to look up an identifier: data models are in [`archive/models.py`](../../.
 | primary endpoint | 主要终点 | `AnalysisPlan.primary_endpoint` | The one outcome the confirmatory analysis is about, fixed before the experiment starts. |
 | locked variable | 锁定变量 | none | An environmental variable the protocol requires to stay the same across treatments. A concept of the architecture document; it has no field of its own. |
 | evidence card | 证据卡 | `EvidenceCard` | A recorded source for a setpoint: the citation, the claim it supports, value and unit, and whether it has been verified. A setpoint with neither an evidence card nor user input gets a `no_evidence` hint, which does not block the run sheet. |
+| training dataset | 训练数据集 | `growbridge export-dataset` | CSV tables and a Croissant description of one frozen snapshot, for model training. See [Training dataset export](Training-Dataset-Export.md). |
 | data snapshot | 数据快照 | `Snapshot`, `snapshot.freeze()` | A frozen, verifiable copy of the data an analysis uses. |
 | holdout data | 留出数据 | `HoldoutRegistry` | Data registered before model development and used only for formal evaluation. |
 | confirmatory, exploratory | 确认性、探索性 | `ConfirmatoryRunner`, `classify()` | A confirmatory analysis runs once, on a script and a snapshot frozen beforehand. Everything else is exploratory. |

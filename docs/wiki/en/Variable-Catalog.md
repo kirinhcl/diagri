@@ -31,6 +31,21 @@ After an addition, add the new version's digest and the new entries' digests to 
 
 Only sensor entries have aliases, and they are the device's own sensor keys: `temp`, `humi`, `vpd`, `co2`, `ppfd`, `tempSoil`. An alias lets the bridge's readings resolve to a standard ID. A protocol or a measurement must use the standard ID; an alias there is refused, and the message names the standard ID.
 
+## Ontology terms
+
+The training dataset export ([Training dataset export](Training-Dataset-Export.md)) can describe each variable and unit with ontology terms. They are optional fields of the catalog and are not part of a variable's definition, so adding them does not change the lock digest of an entry.
+
+- `refs` on an entry is a list of CURIEs, for example `PECO:...`. Each must have a known prefix, or the catalog does not load. The prefixes are `PECO`, `ENVO`, `AGRO`, `PATO`, `UO`, `NCBITaxon` and the Crop Ontology crop ontologies `CO_<number>` ([`vocab/curie.py`](../../../src/growbridge/vocab/curie.py)). The export writes each prefix's base address into the `@context` of `croissant.json`.
+- `[unit_refs]` is a table in the catalog file. A key is a UCUM unit code some entry uses; the value is the Units Ontology (`UO:`) term for it. Both are checked when the catalog loads ([`vocab/catalog.py`](../../../src/growbridge/vocab/catalog.py)). A unit with no confirmed term is left out.
+
+**Nothing guesses a term.** `refs` and `[unit_refs]` stay empty until the researcher confirms each term. The procedure:
+
+1. Look up candidates for each entry on OLS or AgroPortal and write down the CURIE, the term's label, the ontology and its version or the date of the lookup. Use Crop Ontology variables, traits, methods and scales for manual traits, PECO for treatment factors, and ENVO or AGRO for environmental quantities.
+2. The researcher confirms the terms one by one; only the researcher can judge whether a term's definition matches how the variable is measured. Leave an uncertain entry empty.
+3. Write the confirmed terms into `catalog.toml`, raise `version`, and add the new version's digest to `versions` in the lock file.
+
+Until then the export lists the variable with `mapped=false` and counts it in `unmapped_variables`, and the `unit_uo` column stays empty.
+
 ## Declare variables before the protocol is saved
 
 A research protocol must declare its `variables`, a list of catalog IDs. Saving is refused with 422 `param`, listing every problem, when:
@@ -46,6 +61,7 @@ So a new experiment's variables must be in the catalog before its protocol is sa
 
 - **Measurements.** A manual measurement may only name a variable the experiment's protocols declare, with that variable's unit and inside its range. See [Run a research round](Run-a-Research-Round.md#record-a-measurement).
 - **Holdouts.** Outcome names are resolved through the catalog; a name it cannot resolve counts as a held-out outcome. See [Research methodology](Research-Methodology.md#holdout-data-for-prediction-models).
+- **Training dataset.** The export writes the catalog's entries, terms and units into `variables.csv`, and the catalog `version` into `croissant.json`.
 - **Snapshots.** Each data snapshot contains `catalog.json` with the catalog `version`, its `digest`, the `variables` the data uses and the names that are `unresolved`.
 
 ## See also

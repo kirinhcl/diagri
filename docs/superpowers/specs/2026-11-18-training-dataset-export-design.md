@@ -238,7 +238,7 @@ growbridge export-dataset --snapshot <ID> --out <目录> --licence <许可证> -
 - `distribution`：每个 CSV 一个 `FileObject`，带 `contentUrl`（相对文件名）、`encodingFormat: text/csv` 和 `sha256`。
 - `recordSet`：
   - 每张表一个，每列一个 `Field`，带 `dataType`（`sc:Text`、`sc:Float`、`sc:Integer`、`sc:Boolean`、`sc:DateTime`）。
-  - `variable_id` 列用 `references` 指向 `variables.csv` 的 `variable_id`；`treatment_id`、`unit` 类同。
+  - `variable_id` 列用 `references` 指向 `variables.csv` 的 `variable_id`（它是该表的键）。`treatment_id` 和 `unit` 不用 `references`，只在字段描述里写明来源：`treatments.csv` 每个处理每个因子一行，`unit` 的键是 `round` 与 `unit` 合起来；按非键列做连接会让记录成倍增加。
   - 变量表的 `refs` 字段在描述里写明"以空格分隔的 CURIE，前缀见 `@context`"。
   - 设备状态表的 `key` 字段在描述里列出每个键的含义。
 - **溯源：**

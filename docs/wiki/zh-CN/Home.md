@@ -48,6 +48,7 @@ GrowBridge 是 DiAGRI 的设备桥接部分：通过蓝牙读取并控制 Spider
 - [工作流与状态机](Workflow-and-State-Machines.md)：轮次、阶段和研究任务。
 - [数据、档案与可追溯性](Data-Archive-and-Traceability.md)：记录了什么，一个数字如何追溯到来源。
 - [变量目录](Variable-Catalog.md)：共用的标准变量 ID，以及如何扩充。
+- [训练数据集导出](Training-Dataset-Export.md)：给模型训练用的 CSV 表和 Croissant 元数据，逐列说明。
 - [科研方法](Research-Methodology.md)：实验单位、区组、检验方法、确认性分析的门槛。
 - [设计决策记录](Design-Decisions.md)：主要决策及其理由。
 

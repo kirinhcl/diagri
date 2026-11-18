@@ -89,7 +89,7 @@
 
 覆盖率的例子（用 `coverage_of` 核对过）：时间窗一小时，每 60 秒一条样本，允许的缺口 120 秒，第 25 分钟到第 35 分钟之间没有样本。这段空白只记 60 秒，缺口是 540 秒，覆盖率是 3060 / 3600 = 0.85，快照标为不完整。
 
-`verify()` 只有在三件事都成立时才返回真：清单文件的摘要和档案里存的一致；清单里的文件列表和档案里存的一致；每个文件的摘要和清单里列的一致。`run_local_analysis` 和 `publish_research_report` 都先校验再使用。`ConfirmatoryRunner` 更严格：还要求快照是 `complete`，目录里多一个文件或少一个文件都拒绝。
+`verify()` 只有在三件事都成立时才返回真：清单文件的摘要和档案里存的一致；清单里的文件列表和档案里存的一致；每个文件的摘要和清单里列的一致。`run_local_analysis`、`publish_research_report` 和 `export-dataset` 都先校验再使用。`ConfirmatoryRunner` 更严格：还要求快照是 `complete`，目录里多一个文件或少一个文件都拒绝。
 
 登记了留出数据之后，留出批次的结局测量不会写进 `measurements.jsonl`，被排除的条数记在清单的 `measurements_excluded` 里。见[科研方法](Research-Methodology.md)。
 
@@ -102,7 +102,7 @@
 | 训练数据集 | CSV 文件和 `croissant.json` | `growbridge export-dataset`（[`dataset/command.py`](../../../src/growbridge/dataset/command.py)） |
 | 旧表里的读数 | CSV，最多 168 小时 | [`api.py`](../../../src/growbridge/api.py) 的 `GET /history/export.csv` |
 
-`growbridge export-dataset` 把冻结的快照导出为模型训练用的数据集：只读取快照自己的文件和数据库，除假名密钥外不向数据目录写任何东西；校验不通过的快照拒绝导出；数据目录的结构比已安装的 growbridge 旧时也拒绝导出，而不是替你升级：先用新版本启动一次守护进程，再导出。见 [`dataset/command.py`](../../../src/growbridge/dataset/command.py)。
+`growbridge export-dataset` 把一个冻结的快照导出为模型训练用的数据集：长格式的 CSV 表，加一份描述它们的 `croissant.json`。记录取自快照自己的文件；现行档案只用来统计冻结之后又被更正的测量。它先校验快照：文件和摘要不再一致的快照会被拒绝。输出里没有操作员的名字，只有假名。它按导出时的留出登记重新过滤，所以冻结之后才登记的留出，结局同样不会进入导出。命令除假名密钥外不向数据目录写任何东西；数据目录的结构比已安装的 growbridge 旧时也拒绝导出，而不是替你升级：先用新版本启动一次守护进程，再导出。表和列、假名以及自由文本的提醒见[训练数据集导出](Training-Dataset-Export.md)；选项和拒绝的情形见 [CLI 参考](CLI-Reference.md#export-dataset)；代码在 [`dataset/command.py`](../../../src/growbridge/dataset/command.py)。
 
 ## 追溯一个报告数字
 

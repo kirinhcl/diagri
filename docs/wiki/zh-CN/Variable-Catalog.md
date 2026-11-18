@@ -31,6 +31,21 @@
 
 只有 sensor 条目有别名，它们就是设备自己的传感器键：`temp`、`humi`、`vpd`、`co2`、`ppfd`、`tempSoil`。别名让桥接的读数能解析到标准 ID。协议或测量必须使用标准 ID；在那里写别名会被拒绝，提示里会给出标准 ID。
 
+## 本体术语
+
+训练数据集导出（[训练数据集导出](Training-Dataset-Export.md)）可以用本体术语描述每个变量和单位。它们是目录的可选字段，不属于变量的定义，所以加上它们不会改变条目在锁文件里的摘要。
+
+- 条目的 `refs` 是 CURIE 列表，例如 `PECO:...`。每一项的前缀必须是已知的，否则目录无法加载。已知前缀有 `PECO`、`ENVO`、`AGRO`、`PATO`、`UO`、`NCBITaxon`，以及 Crop Ontology 的各作物本体 `CO_<数字>`（[`vocab/curie.py`](../../../src/growbridge/vocab/curie.py)）。导出会把各前缀的基址写进 `croissant.json` 的 `@context`。
+- `[unit_refs]` 是目录文件里的一张表。键是某个条目用到的 UCUM 单位代码，值是它对应的 Units Ontology（`UO:`）术语。目录加载时会检查这两点（[`vocab/catalog.py`](../../../src/growbridge/vocab/catalog.py)）。没有确认过术语的单位就不写。
+
+**没有任何程序猜术语。** `refs` 和 `[unit_refs]` 在研究者逐条确认之前一直是空的。流程：
+
+1. 在 OLS 或 AgroPortal 上为每个条目查出候选，记下 CURIE、术语标签、本体名称，以及本体版本或查询日期。手工性状用 Crop Ontology 的 variable、trait、method 和 scale；处理因子用 PECO；环境量用 ENVO 或 AGRO。
+2. 研究者逐条确认；只有研究者能判断一个术语的定义和这个变量的测法是否一致。不确定的条目留空。
+3. 把确认过的术语写进 `catalog.toml`，提高 `version`，并把新版本的摘要加进锁文件的 `versions`。
+
+在此之前，导出照常列出这个变量，`mapped=false`，计入 `unmapped_variables`，`unit_uo` 列也保持为空。
+
 ## 保存协议之前先声明变量
 
 研究协议必须声明 `variables`，即目录 ID 的列表。出现以下情况时，保存会被 422 `param` 拒绝，并列出每一个问题：
@@ -46,6 +61,7 @@
 
 - **测量。** 人工测量只能使用该实验的协议所声明的变量，单位必须是该变量的单位，数值必须在范围内。见[运行一轮研究](Run-a-Research-Round.md#记录一次测量)。
 - **留出集。** 结局名称通过目录解析；目录无法解析的名称按留出的结局处理。见[科研方法](Research-Methodology.md#预测模型与留出数据)。
+- **训练数据集。** 导出把目录的条目、术语和单位写进 `variables.csv`，把目录的 `version` 写进 `croissant.json`。
 - **快照。** 每个数据快照包含 `catalog.json`，记录目录的 `version`、`digest`、数据用到的 `variables`，以及 `unresolved` 的名称。
 
 ## 另见

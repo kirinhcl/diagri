@@ -10,7 +10,7 @@
 
 ```text
 growbridge [-h] [--version] [--config CONFIG]
-           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,simulate} ...
+           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate} ...
 ```
 
 ## 全局选项
@@ -25,7 +25,7 @@ growbridge [-h] [--version] [--config CONFIG]
 
 ## 子命令
 
-共 10 个子命令。`operator`、`host` 和 `recovery` 各带一个必填的二级子命令。
+共 11 个子命令。`operator`、`host` 和 `recovery` 各带一个必填的二级子命令。
 
 | 命令 | 参数和选项 | 是否读取配置文件 | 是否需要守护进程在运行 | DiAGRI 模式 |
 | --- | --- | --- | --- | --- |
@@ -38,6 +38,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `operator add` | `name`（位置参数，必填）、`--admin`（设为管理员；多用户） | 是 | 否 | 为它准备；命令本身不检查 `auto_research` |
 | `host register` | 无 | 是 | 否 | 为它准备；命令本身不检查 `auto_research` |
 | `recovery bump` | `--reason REASON`（必填） | 是 | 否，而且必须先停掉 | 为它准备；命令本身不检查 `auto_research` |
+| `export-dataset` | `--snapshot SNAPSHOT`、`--out OUT`、`--licence LICENCE`、`--creator CREATOR`（都必填）、`--url URL` | 是 | 否，守护进程运行时也能执行 | 读取 DiAGRI 已记录的数据；命令本身不检查 `auto_research` |
 | `simulate` | 无 | 否 | 否 | 在临时目录里自建一个 DiAGRI 运行时 |
 
 没有任何命令可以创建项目、研究协议或研究轮次，也没有命令可以设置项目的调用预算或创建编排 Agent 的第一个任务。这些事由操作员通过工作台路由来做，见[运行一轮研究](Run-a-Research-Round.md)。命令里只有 `simulate` 会做这些调用，位置在 [`runtime.py`](../../../src/growbridge/runtime.py) 的 `_design_and_start`。
@@ -55,6 +56,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `operator add` | 两次提示输入密码且不回显（`Operator secret: `、`Repeat secret: `），然后把操作员存进 `data_dir` 下的 `workflow.sqlite3`。密码以加盐的 scrypt 哈希保存。名字长度 1 到 64 个字符，密码 12 到 256 个字符。 | `Operator added: <name>` |
 | `host register` | 读取或创建 `data_dir` 下的 `host_id`（权限 `0600`），并在 `control.sqlite3` 里把本机登记为 `device` 的写入主机。它不打开蓝牙连接。在已登记的主机上再次运行也会成功。 | `Write host registered: <host id>` |
 | `recovery bump` | 拿到守护进程锁，构建运行时但不启动，把恢复编号加一，撤销所有写入权，作废排队中的动作，把每个未结束的阶段转入 `recovery_check` 并作废它的审批。`REASON` 会随事件一起记录。 | `Recovery number is now <n>; confirm the safety config and review live stages` |
+| `export-dataset` | 把一个冻结快照的训练数据集写进新建的目录 `OUT`：11 张 CSV 表和 `croissant.json`。只读取数据库和快照，除假名密钥外不向 `data_dir` 写任何东西。`--licence` 和 `--creator` 记进元数据（创作者记为组织）；`--url` 是数据集发布的地址（如果有）。见[训练数据集导出](Training-Dataset-Export.md)。 | 一个 JSON 对象，包含 `out`、`rows`（每个文件的数据行数）和 `counts`（元数据里的十项计数） |
 | `simulate` | 在临时目录里，用模拟的 AC5 和模拟时钟跑一个很短的阶段：批准安全配置，创建项目、协议和轮次，提交并批准运行单，启动阶段，一直 tick 到阶段结束。不用无线电，也不联网。 | 一个 JSON 对象，包含 `stage`、`round`、`beats`、`samples` 和 `writes` |
 
 ### DiAGRI 模式下的 `serve`
@@ -70,6 +72,32 @@ growbridge [-h] [--version] [--config CONFIG]
 | 5 | 如果 `roles` 不为空并且模型客户端能创建，就启动模型角色：每 30 秒调用一次 `Runtime.run_agents()`（`AGENT_SECONDS`）。否则模型角色都不运行。 |
 | 6 | 在 `127.0.0.1:<port>` 上提供桥接路由和工作台路由；`lan_bind` 和 `lan_port` 都设置时，同时在 `<lan_bind>:<lan_port>` 上提供。 |
 
+### `export-dataset`
+
+步骤在 [`dataset/command.py`](../../../src/growbridge/dataset/command.py) 的 `export_dataset` 里。命令遇到第一个问题就停下，此时除假名密钥外什么都没有写（密钥已经创建后才出现的拒绝，不会把它删掉）。拒绝时在标准错误打印 `export refused: <message>`，退出码 1。每条消息都说明发现了什么：
+
+| 拒绝 | 什么时候 |
+| --- | --- |
+| `<OUT> already exists; name a directory that does not.` | `--out` 已经存在。 |
+| `The parent of <OUT> does not exist.` | `--out` 的上级目录不存在。 |
+| `<OUT> lies inside the data directory ...; write it elsewhere.` | `--out` 就是 `data_dir`，或在它里面。 |
+| `<name>.sqlite3 is missing from <data_dir>; this is not a daemon data directory ...` | `archive`、`workflow` 或 `agents` 缺少数据库文件。导出不会替你建一个空的。 |
+| `The schema of <name>.sqlite3 is older than this growbridge (...). Start the daemon once with this version, then export.` | 某个数据库还没有被已安装的版本升级；导出不会去升级它。 |
+| `The data directory is busy (...); try again.` | 某个数据库被写入方锁住。 |
+| `Snapshot <ID> does not exist.` | 快照不存在。 |
+| `Snapshot <ID> failed verification: ...` | 某个快照文件和记录的摘要不再一致。 |
+| `Snapshot <ID> has no catalog.json; ...` | 快照冻结时还没有记录目录。 |
+| `Snapshot file <name> cannot be read`、`... holds an invalid record` 或 `... is not an object` | 快照文件损坏。 |
+| `Experiment <ID> must run under exactly one project`、`protocol version` 或 `round`; found ... | 实验的各阶段跑在两个协议版本下或两个轮次里，或者没有项目。导出会说出它发现了什么，不替你挑一个。 |
+| `Protocol <ID> version <n> is not saved.` | 协议记录不存在。 |
+| `Protocol <ID> version <n> cannot describe the dataset: ...` | `crop_taxon` 为空或不是 `NCBITaxon:<数字>`，或 `cultivar` 超过 200 个字符。 |
+| `Name the licence ...` 或 `Name the creator ...` | `--licence` 或 `--creator` 为空。 |
+| `Measurement <ID> records '<name>', which the variable catalog does not define ...` | 人工测量的名称不是目录里的变量。 |
+| `Measurement <ID> is in '<unit>', but <variable> is measured in '<unit>'.` | 测量的单位和目录不一致。 |
+| `Variable <ID> is in neither the snapshot's catalog nor the current one.` | 数据行用到的变量不在任何一个目录里。 |
+
+成功时退出码 0，并打印 JSON 摘要。假名密钥不是 32 字节时，命令以回溯结束（退出码 1）。配置缺失或无效、用法错误的表现和下表一致。
+
 ## 退出行为
 
 | 情况 | 涉及的命令 | 提示信息 | 退出码 |
@@ -78,6 +106,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | 缺少子命令、未知选项、缺少必填参数 | 全部 | 用法说明和 `growbridge: error: ...` | 2 |
 | 配置文件不存在，或没有通过 `load` 的检查 | 所有读取配置的命令 | Python 回溯（`FileNotFoundError`、`ValidationError`、`ValueError` 等） | 1 |
 | 配置文件已经存在 | `init` | 以 `FileExistsError` 结尾的回溯 | 1 |
+| 导出无法进行 | `export-dataset` | `export refused: <message>`，见 [`export-dataset`](#export-dataset) | 1 |
 | 另一个守护进程持有 `data_dir` 上的锁 | `serve` | `A daemon already owns this data directory` | 2 |
 | 有模型角色令牌短于 32 个字符 | DiAGRI 模式下的 `serve` | `growbridge: the token of role '<role>' is shorter than 32 characters` | 1 |
 | 守护进程没有应答，或返回了错误 | `status`、`dashboard` | 回溯；返回错误时是带有守护进程 `detail` 的 `RuntimeError` | 1 |
@@ -93,6 +122,7 @@ growbridge [-h] [--version] [--config CONFIG]
 
 ## 另见
 
+- [训练数据集导出](Training-Dataset-Export.md)
 - [配置参考](Configuration-Reference.md)
 - [HTTP、工作台与 MCP 接口](API-Reference.md)
 - [安装与快速开始](Installation-and-Quick-Start.md)

@@ -23,6 +23,7 @@
 - [Workflow and state machines](Workflow-and-State-Machines.md)
 - [Data, archive and traceability](Data-Archive-and-Traceability.md)
 - [Variable catalog](Variable-Catalog.md)
+- [Training dataset export](Training-Dataset-Export.md)
 - [Research methodology](Research-Methodology.md)
 - [Design decisions](Design-Decisions.md)
 
