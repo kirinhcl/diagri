@@ -1,0 +1,5 @@
+round,block,unit,treatment_id
+1,1,tent-1,high
+1,1,tent-2,control
+2,1,tent-1,control
+2,1,tent-2,high

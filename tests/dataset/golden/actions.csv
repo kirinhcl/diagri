@@ -1,0 +1,5 @@
+request_id,channel,state,trigger,planned_level,confirmed_level,created_at,sent_at,confirmed_at,ran_seconds,error_code,ended_early_code,supersedes,operator
+req-manual,light,confirmed,manual,40,40,2027-01-15T08:03:20.000Z,2027-01-15T08:03:20.250Z,2027-01-15T08:03:21.000Z,,,,,op-f94aa1da26e1
+req-irrigation,pump,confirmed,planned irrigation task-water,1,1,2027-01-15T08:04:00.000Z,2027-01-15T08:04:00.250Z,2027-01-15T08:04:01.000Z,30.0,,,,op-29847a89dc67
+req-rule,light,confirmed,rule:light-day,70,70,2027-01-15T08:04:30.000Z,2027-01-15T08:04:30.250Z,2027-01-15T08:04:31.000Z,,,,,
+req-unknown,fan,failed,other,40,,2027-01-15T08:04:40.000Z,2027-01-15T08:04:40.250Z,,,device_offline,,,

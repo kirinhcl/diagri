@@ -1,0 +1,3 @@
+holdout_id,batch,variable_id
+holdout-after,batch-h2,canopy_area_growth
+holdout-before,batch-h1,canopy_area_growth

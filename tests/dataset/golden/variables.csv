@@ -1,0 +1,6 @@
+variable_id,kind,label_en,quantity,unit_ucum,unit_uo,method,min,max,refs,mapped
+air_relative_humidity,sensor,Air relative humidity,relative_humidity,%,,,0.0,100.0,,false
+air_temperature,sensor,Air temperature,temperature,Cel,UO:0000027,,,,ENVO:09200001,true
+canopy_area_growth,manual,Canopy area growth,area_growth_rate,cm2/d,,"Canopy area from top-view images, change per day",,,,false
+light,factor,Light level,level,%,,,0.0,100.0,,false
+plant_height,manual,Plant height,length,cm,,"ruler, soil to apex",,,,false

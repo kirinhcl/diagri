@@ -121,7 +121,7 @@ TABLES: tuple[Table, ...] = (
                 "Ontology terms for the variable as space-separated CURIEs; prefixes are "
                 "declared in the @context. Empty when no term has been confirmed.",
             ),
-            _b("mapped", "True when the variable is mapped to a sensor or measurement key."),
+            _b("mapped", "True when `refs` holds at least one confirmed ontology term."),
         ),
         ("variable_id",),
     ),
@@ -206,7 +206,7 @@ TABLES: tuple[Table, ...] = (
         "Actuation requests and their outcome, one row per request.",
         (
             _t("request_id", "Identifier of the request."),
-            _t("channel", "Actuator channel, for example light, exhaust, fan or outlet."),
+            _t("channel", "Actuator channel: light, exhaust, fan or pump."),
             _t("state", "Final state of the request."),
             _t("trigger", "Cleaned trigger category, with operators' notes removed."),
             _i("planned_level", "Level the request asked for. Empty when not a level."),
@@ -232,7 +232,10 @@ TABLES: tuple[Table, ...] = (
             _d("time", "Time of the intervention."),
             _t("stage_id", "Stage it was applied to."),
             _t("kind", "Kind of intervention."),
-            _t("detail", "Free-form detail of the intervention. Empty when none."),
+            _t(
+                "detail",
+                "Detail the system recorded, as JSON with sorted keys. Empty when none.",
+            ),
             _t("operator", _OPERATOR),
         ),
         ("time", "id"),

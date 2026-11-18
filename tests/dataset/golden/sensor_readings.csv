@@ -1,0 +1,16 @@
+time,time_source,clock_synced,sample_id,device_id,experiment_id,stage_id,round,variable_id,raw_key,value,quality,stuck
+2027-01-15T08:00:00.000Z,captured,true,s-000,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,61.5,ok,false
+2027-01-15T08:00:00.000Z,captured,true,s-000,ggs-1,exp-1,vegetative,1,air_temperature,temp,24.25,ok,false
+2027-01-15T08:01:00.000Z,captured,true,s-060,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,61.0,ok,false
+2027-01-15T08:01:00.000Z,captured,true,s-060,ggs-1,exp-1,vegetative,1,air_temperature,temp,24.0,ok,true
+2027-01-15T08:02:00.000Z,captured,true,s-120,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,60.5,ok,false
+2027-01-15T08:02:00.000Z,captured,true,s-120,ggs-1,exp-1,vegetative,1,air_temperature,temp,24.0,ok,true
+2027-01-15T08:02:00.000Z,captured,true,s-120,ggs-1,exp-1,vegetative,1,,tempLeaf,22.75,ok,false
+2027-01-15T08:03:00.000Z,captured,true,s-180,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,60.0,ok,false
+2027-01-15T08:03:00.000Z,captured,true,s-180,ggs-1,exp-1,vegetative,1,air_temperature,temp,24.0,ok,true
+2027-01-15T08:07:01.500Z,received,true,s-420,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,58.5,ok,false
+2027-01-15T08:07:01.500Z,received,true,s-420,ggs-1,exp-1,vegetative,1,air_temperature,temp,25.0,ok,false
+2027-01-15T08:08:00.000Z,captured,true,s-480,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,58.0,ok,false
+2027-01-15T08:08:00.000Z,captured,true,s-480,ggs-1,exp-1,vegetative,1,air_temperature,temp,25.25,ok,false
+2027-01-15T08:10:00.000Z,captured,true,s-600,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,57.5,ok,false
+2027-01-15T08:10:00.000Z,captured,true,s-600,ggs-1,exp-1,vegetative,1,air_temperature,temp,25.5,ok,false

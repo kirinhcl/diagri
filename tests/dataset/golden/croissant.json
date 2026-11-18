@@ -1,0 +1,1982 @@
+{
+  "@context": {
+    "@language": "en",
+    "@vocab": "https://schema.org/",
+    "ENVO": {
+      "@id": "http://purl.obolibrary.org/obo/ENVO_",
+      "@prefix": true
+    },
+    "NCBITaxon": {
+      "@id": "http://purl.obolibrary.org/obo/NCBITaxon_",
+      "@prefix": true
+    },
+    "UO": {
+      "@id": "http://purl.obolibrary.org/obo/UO_",
+      "@prefix": true
+    },
+    "arrayShape": "cr:arrayShape",
+    "citeAs": "cr:citeAs",
+    "column": "cr:column",
+    "conformsTo": "dct:conformsTo",
+    "containedIn": "cr:containedIn",
+    "cr": "http://mlcommons.org/croissant/",
+    "data": {
+      "@id": "cr:data",
+      "@type": "@json"
+    },
+    "dataType": {
+      "@id": "cr:dataType",
+      "@type": "@vocab"
+    },
+    "dct": "http://purl.org/dc/terms/",
+    "description": {
+      "@container": "@language"
+    },
+    "equivalentProperty": "cr:equivalentProperty",
+    "examples": {
+      "@id": "cr:examples",
+      "@type": "@json"
+    },
+    "extract": "cr:extract",
+    "field": "cr:field",
+    "fileObject": "cr:fileObject",
+    "fileProperty": "cr:fileProperty",
+    "fileSet": "cr:fileSet",
+    "format": "cr:format",
+    "includes": "cr:includes",
+    "isArray": "cr:isArray",
+    "isLiveDataset": "cr:isLiveDataset",
+    "jsonPath": "cr:jsonPath",
+    "key": "cr:key",
+    "md5": "cr:md5",
+    "name": {
+      "@container": "@language"
+    },
+    "parentField": "cr:parentField",
+    "path": "cr:path",
+    "prov": "http://www.w3.org/ns/prov#",
+    "rai": "http://mlcommons.org/croissant/RAI/",
+    "recordSet": "cr:recordSet",
+    "references": "cr:references",
+    "regex": "cr:regex",
+    "repeated": "cr:repeated",
+    "replace": "cr:replace",
+    "samplingRate": "cr:samplingRate",
+    "sc": "https://schema.org/",
+    "separator": "cr:separator",
+    "source": "cr:source",
+    "subField": "cr:subField",
+    "transform": "cr:transform"
+  },
+  "@type": "sc:Dataset",
+  "about": {
+    "@id": "NCBITaxon:4236"
+  },
+  "additionalProperty": [
+    {
+      "@type": "sc:PropertyValue",
+      "name": "cultivar",
+      "value": "Grand Rapids"
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "facility_type",
+      "value": "controlled-environment grow tent"
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "snapshot_catalog_version",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "current_catalog_version",
+      "value": 2
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "coverage",
+      "value": 0.5975
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "gaps",
+      "value": "[[\"2027-01-15T08:04:00.000Z\",\"2027-01-15T08:07:01.500Z\"],[\"2027-01-15T08:09:00.000Z\",\"2027-01-15T08:10:00.000Z\"]]"
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "unmapped_variables",
+      "value": 4
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "unresolved_sensor_keys",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "non_numeric_values",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "excluded_at_freeze",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "withheld_at_export",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "superseded_records",
+      "value": 2
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "corrected_after_freeze",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "notes_dropped",
+      "value": 2
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "other_triggers",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "unplaced_measurements",
+      "value": 1
+    },
+    {
+      "@type": "sc:PropertyValue",
+      "name": "corrected_after_freeze_ids",
+      "value": "m-tent-2"
+    }
+  ],
+  "conformsTo": "http://mlcommons.org/croissant/1.1",
+  "creator": {
+    "@type": "sc:Organization",
+    "name": "DiAGRI test lab"
+  },
+  "datePublished": "2027-01-15",
+  "description": "Question: With more light, does canopy area grow faster? 提高光照后，冠层增长是否加快？\nHypothesis: 70 % 光照下冠层面积日增长高于 40 %。",
+  "distribution": [
+    {
+      "@id": "variables.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "variables.csv",
+      "encodingFormat": "text/csv",
+      "name": "variables.csv",
+      "sha256": "3114becc16dbb0dc726d9056a2691fd8f514981ef15efe1c6c452cbce7325139"
+    },
+    {
+      "@id": "treatments.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "treatments.csv",
+      "encodingFormat": "text/csv",
+      "name": "treatments.csv",
+      "sha256": "be9c0afbe15cc780949a163d285c8a6bff961f5c0ed98ccf8068ff341ce2c95f"
+    },
+    {
+      "@id": "units.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "units.csv",
+      "encodingFormat": "text/csv",
+      "name": "units.csv",
+      "sha256": "e36c5a844d537b1f97dc7ba3c686ea201a6daefacd924b4f6eb9cb0934cde9d2"
+    },
+    {
+      "@id": "sensor_readings.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "sensor_readings.csv",
+      "encodingFormat": "text/csv",
+      "name": "sensor_readings.csv",
+      "sha256": "33293264a35fcc168858a7aa2907b1c2bff273c8c4d59b8fc9d47f2941c2baad"
+    },
+    {
+      "@id": "sensor_readings_untrusted.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "sensor_readings_untrusted.csv",
+      "encodingFormat": "text/csv",
+      "name": "sensor_readings_untrusted.csv",
+      "sha256": "e1a8deeb74f122b357b1c7c9b5681ee71b6c46932807bb4618b2349155f554a1"
+    },
+    {
+      "@id": "device_states.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "device_states.csv",
+      "encodingFormat": "text/csv",
+      "name": "device_states.csv",
+      "sha256": "2254243f12ec2fdbffc60448abb2900cc622fed2c4faea8616b2b1931f583f0a"
+    },
+    {
+      "@id": "device_states_untrusted.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "device_states_untrusted.csv",
+      "encodingFormat": "text/csv",
+      "name": "device_states_untrusted.csv",
+      "sha256": "0f5ebdb7255ebd3f0b34bdd889dfa7f22107a73422d1bdf58241925cab6fb5b4"
+    },
+    {
+      "@id": "measurements.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "measurements.csv",
+      "encodingFormat": "text/csv",
+      "name": "measurements.csv",
+      "sha256": "44f2c3fe4c95ccf07f22c655af73e38c4b3214e28484e43e7c5c4cc19470e85a"
+    },
+    {
+      "@id": "actions.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "actions.csv",
+      "encodingFormat": "text/csv",
+      "name": "actions.csv",
+      "sha256": "1c970048720cfb435fac511dbab7eb36386575f03e665303cbe45d12f8cee084"
+    },
+    {
+      "@id": "interventions.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "interventions.csv",
+      "encodingFormat": "text/csv",
+      "name": "interventions.csv",
+      "sha256": "ac11e1b936799f6173d20a8fa0b72a15b0676d43daeca966cfd88055c2a3719c"
+    },
+    {
+      "@id": "withheld.csv",
+      "@type": "cr:FileObject",
+      "contentUrl": "withheld.csv",
+      "encodingFormat": "text/csv",
+      "name": "withheld.csv",
+      "sha256": "27fe57ca80c0cfc70ea7ecc5a0ca4fbc8a13c623cee65867ce6b169a23dba5ec"
+    }
+  ],
+  "license": "CC-BY-4.0",
+  "name": "diagri-snap_0004",
+  "prov:wasDerivedFrom": {
+    "@id": "urn:diagri:snapshot:snap_0004",
+    "@type": "prov:Entity",
+    "description": "DiAGRI snapshot; sha256 is the digest of its manifest.json.",
+    "identifier": "snap_0004",
+    "sha256": "a28bb41acaca1545b9311ae1aa9b3f7b1890815a8ca8f15c08c93876f65c9d41"
+  },
+  "prov:wasGeneratedBy": {
+    "@type": "prov:Activity",
+    "prov:label": "export-dataset",
+    "prov:wasAssociatedWith": {
+      "@type": [
+        "prov:SoftwareAgent",
+        "sc:SoftwareApplication"
+      ],
+      "name": "growbridge",
+      "softwareVersion": "0.0.0-test"
+    }
+  },
+  "recordSet": [
+    {
+      "@id": "variables",
+      "@type": "cr:RecordSet",
+      "description": "Catalog of measured and controlled variables with units and ontology terms.",
+      "field": [
+        {
+          "@id": "variables/variable_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Stable identifier of the variable.",
+          "name": "variable_id",
+          "source": {
+            "extract": {
+              "column": "variable_id"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/kind",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Kind of variable.",
+          "name": "kind",
+          "source": {
+            "extract": {
+              "column": "kind"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/label_en",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "English label.",
+          "name": "label_en",
+          "source": {
+            "extract": {
+              "column": "label_en"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/quantity",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Physical or biological quantity measured. Empty when unspecified.",
+          "name": "quantity",
+          "source": {
+            "extract": {
+              "column": "quantity"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/unit_ucum",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Unit as a UCUM code. Empty when dimensionless or unknown.",
+          "name": "unit_ucum",
+          "source": {
+            "extract": {
+              "column": "unit_ucum"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/unit_uo",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Unit as a Units Ontology term. Empty when not confirmed.",
+          "name": "unit_uo",
+          "source": {
+            "extract": {
+              "column": "unit_uo"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/method",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "How the variable is measured. Empty when unspecified.",
+          "name": "method",
+          "source": {
+            "extract": {
+              "column": "method"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/min",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "Lowest plausible value, in `unit_ucum`. Empty when unbounded.",
+          "name": "min",
+          "source": {
+            "extract": {
+              "column": "min"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/max",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "Highest plausible value, in `unit_ucum`. Empty when unbounded.",
+          "name": "max",
+          "source": {
+            "extract": {
+              "column": "max"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/refs",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Ontology terms for the variable as space-separated CURIEs; prefixes are declared in the @context. Empty when no term has been confirmed.",
+          "name": "refs",
+          "source": {
+            "extract": {
+              "column": "refs"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        },
+        {
+          "@id": "variables/mapped",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when `refs` holds at least one confirmed ontology term.",
+          "name": "mapped",
+          "source": {
+            "extract": {
+              "column": "mapped"
+            },
+            "fileObject": {
+              "@id": "variables.csv"
+            }
+          }
+        }
+      ],
+      "name": "variables"
+    },
+    {
+      "@id": "treatments",
+      "@type": "cr:RecordSet",
+      "description": "Treatments of the experiment, one row per factor setting.",
+      "field": [
+        {
+          "@id": "treatments/treatment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the treatment.",
+          "name": "treatment_id",
+          "source": {
+            "extract": {
+              "column": "treatment_id"
+            },
+            "fileObject": {
+              "@id": "treatments.csv"
+            }
+          }
+        },
+        {
+          "@id": "treatments/name",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Treatment name.",
+          "name": "name",
+          "source": {
+            "extract": {
+              "column": "name"
+            },
+            "fileObject": {
+              "@id": "treatments.csv"
+            }
+          }
+        },
+        {
+          "@id": "treatments/is_control",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when this treatment is the control.",
+          "name": "is_control",
+          "source": {
+            "extract": {
+              "column": "is_control"
+            },
+            "fileObject": {
+              "@id": "treatments.csv"
+            }
+          }
+        },
+        {
+          "@id": "treatments/variable_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Factor variable this setting applies to.",
+          "name": "variable_id",
+          "references": {
+            "field": {
+              "@id": "variables/variable_id"
+            }
+          },
+          "source": {
+            "extract": {
+              "column": "variable_id"
+            },
+            "fileObject": {
+              "@id": "treatments.csv"
+            }
+          }
+        },
+        {
+          "@id": "treatments/value",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Factor value as text, since a factor may be a string; numbers are written with their shortest exact decimal form.",
+          "name": "value",
+          "source": {
+            "extract": {
+              "column": "value"
+            },
+            "fileObject": {
+              "@id": "treatments.csv"
+            }
+          }
+        }
+      ],
+      "name": "treatments"
+    },
+    {
+      "@id": "units",
+      "@type": "cr:RecordSet",
+      "description": "Experimental units: which treatment each unit received in each round.",
+      "field": [
+        {
+          "@id": "units/round",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Round of the experiment.",
+          "name": "round",
+          "source": {
+            "extract": {
+              "column": "round"
+            },
+            "fileObject": {
+              "@id": "units.csv"
+            }
+          }
+        },
+        {
+          "@id": "units/block",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Block the unit belongs to. Empty when the design has no blocks.",
+          "name": "block",
+          "source": {
+            "extract": {
+              "column": "block"
+            },
+            "fileObject": {
+              "@id": "units.csv"
+            }
+          }
+        },
+        {
+          "@id": "units/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the experimental unit.",
+          "name": "unit",
+          "source": {
+            "extract": {
+              "column": "unit"
+            },
+            "fileObject": {
+              "@id": "units.csv"
+            }
+          }
+        },
+        {
+          "@id": "units/treatment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Treatment applied to the unit. Takes its values from `treatment_id` in treatments.csv.",
+          "name": "treatment_id",
+          "source": {
+            "extract": {
+              "column": "treatment_id"
+            },
+            "fileObject": {
+              "@id": "units.csv"
+            }
+          }
+        }
+      ],
+      "name": "units"
+    },
+    {
+      "@id": "sensor_readings",
+      "@type": "cr:RecordSet",
+      "description": "Sensor readings in long format, one row per reading and variable.",
+      "field": [
+        {
+          "@id": "sensor_readings/time",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "Time of the reading. UTC time, millisecond precision.",
+          "name": "time",
+          "source": {
+            "extract": {
+              "column": "time"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/time_source",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "`captured` when the device gave a capture time on a synchronised clock, otherwise `received` (the time the bridge received the reading).",
+          "name": "time_source",
+          "source": {
+            "extract": {
+              "column": "time_source"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/clock_synced",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when the device clock was synchronised when it reported.",
+          "name": "clock_synced",
+          "source": {
+            "extract": {
+              "column": "clock_synced"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/sample_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the sample this reading came from; groups readings.",
+          "name": "sample_id",
+          "source": {
+            "extract": {
+              "column": "sample_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/device_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Device that produced the reading.",
+          "name": "device_id",
+          "source": {
+            "extract": {
+              "column": "device_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/experiment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Experiment running when the reading was taken. Empty when none.",
+          "name": "experiment_id",
+          "source": {
+            "extract": {
+              "column": "experiment_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/stage_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Stage of the experiment at that time. Empty when none.",
+          "name": "stage_id",
+          "source": {
+            "extract": {
+              "column": "stage_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/round",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Round of the experiment at that time. Empty when none.",
+          "name": "round",
+          "source": {
+            "extract": {
+              "column": "round"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/variable_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Variable the sensor key was mapped to.",
+          "name": "variable_id",
+          "references": {
+            "field": {
+              "@id": "variables/variable_id"
+            }
+          },
+          "source": {
+            "extract": {
+              "column": "variable_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/raw_key",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Sensor key exactly as the controller reports it.",
+          "name": "raw_key",
+          "source": {
+            "extract": {
+              "column": "raw_key"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/value",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "Reading in the variable's unit (`unit_ucum`). Empty when not finite.",
+          "name": "value",
+          "source": {
+            "extract": {
+              "column": "value"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/quality",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Quality flag of the reading as reported by the controller. Empty when none.",
+          "name": "quality",
+          "source": {
+            "extract": {
+              "column": "quality"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings/stuck",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when the reading falls inside a period in which the sensor kept reporting the same value (frozen sensor); such readings are unreliable.",
+          "name": "stuck",
+          "source": {
+            "extract": {
+              "column": "stuck"
+            },
+            "fileObject": {
+              "@id": "sensor_readings.csv"
+            }
+          }
+        }
+      ],
+      "name": "sensor_readings"
+    },
+    {
+      "@id": "sensor_readings_untrusted",
+      "@type": "cr:RecordSet",
+      "description": "Sensor readings kept apart as untrusted; same columns as sensor_readings.csv.",
+      "field": [
+        {
+          "@id": "sensor_readings_untrusted/time",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "Time of the reading. UTC time, millisecond precision.",
+          "name": "time",
+          "source": {
+            "extract": {
+              "column": "time"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/time_source",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "`captured` when the device gave a capture time on a synchronised clock, otherwise `received` (the time the bridge received the reading).",
+          "name": "time_source",
+          "source": {
+            "extract": {
+              "column": "time_source"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/clock_synced",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when the device clock was synchronised when it reported.",
+          "name": "clock_synced",
+          "source": {
+            "extract": {
+              "column": "clock_synced"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/sample_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the sample this reading came from; groups readings.",
+          "name": "sample_id",
+          "source": {
+            "extract": {
+              "column": "sample_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/device_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Device that produced the reading.",
+          "name": "device_id",
+          "source": {
+            "extract": {
+              "column": "device_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/experiment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Experiment running when the reading was taken. Empty when none.",
+          "name": "experiment_id",
+          "source": {
+            "extract": {
+              "column": "experiment_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/stage_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Stage of the experiment at that time. Empty when none.",
+          "name": "stage_id",
+          "source": {
+            "extract": {
+              "column": "stage_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/round",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Round of the experiment at that time. Empty when none.",
+          "name": "round",
+          "source": {
+            "extract": {
+              "column": "round"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/variable_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Variable the sensor key was mapped to.",
+          "name": "variable_id",
+          "references": {
+            "field": {
+              "@id": "variables/variable_id"
+            }
+          },
+          "source": {
+            "extract": {
+              "column": "variable_id"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/raw_key",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Sensor key exactly as the controller reports it.",
+          "name": "raw_key",
+          "source": {
+            "extract": {
+              "column": "raw_key"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/value",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "Reading in the variable's unit (`unit_ucum`). Empty when not finite.",
+          "name": "value",
+          "source": {
+            "extract": {
+              "column": "value"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/quality",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Quality flag of the reading as reported by the controller. Empty when none.",
+          "name": "quality",
+          "source": {
+            "extract": {
+              "column": "quality"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "sensor_readings_untrusted/stuck",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when the reading falls inside a period in which the sensor kept reporting the same value (frozen sensor); such readings are unreliable.",
+          "name": "stuck",
+          "source": {
+            "extract": {
+              "column": "stuck"
+            },
+            "fileObject": {
+              "@id": "sensor_readings_untrusted.csv"
+            }
+          }
+        }
+      ],
+      "name": "sensor_readings_untrusted"
+    },
+    {
+      "@id": "device_states",
+      "@type": "cr:RecordSet",
+      "description": "Actuator state readings (light, fan, blower, outlets) in long format.",
+      "field": [
+        {
+          "@id": "device_states/time",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "Time of the reading. UTC time, millisecond precision.",
+          "name": "time",
+          "source": {
+            "extract": {
+              "column": "time"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/time_source",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "`captured` when the device gave a capture time on a synchronised clock, otherwise `received` (the time the bridge received the reading).",
+          "name": "time_source",
+          "source": {
+            "extract": {
+              "column": "time_source"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/clock_synced",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when the device clock was synchronised when it reported.",
+          "name": "clock_synced",
+          "source": {
+            "extract": {
+              "column": "clock_synced"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/sample_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the sample this reading came from; groups readings.",
+          "name": "sample_id",
+          "source": {
+            "extract": {
+              "column": "sample_id"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/device_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Device that produced the reading.",
+          "name": "device_id",
+          "source": {
+            "extract": {
+              "column": "device_id"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/experiment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Experiment running when the reading was taken. Empty when none.",
+          "name": "experiment_id",
+          "source": {
+            "extract": {
+              "column": "experiment_id"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/stage_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Stage of the experiment at that time. Empty when none.",
+          "name": "stage_id",
+          "source": {
+            "extract": {
+              "column": "stage_id"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/round",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Round of the experiment at that time. Empty when none.",
+          "name": "round",
+          "source": {
+            "extract": {
+              "column": "round"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/key",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Device state key. Keys the controller reports. `light.level`: 0-100, on the scale of the level DiAGRI commands; scale not documented. `light.on`: 0 or 1. `fan.level`: 0-10, on the scale of the level DiAGRI commands; scale not documented. `fan.on`: 0 or 1. `blower.level`: 0-100 manual speed, on the scale of the level DiAGRI commands. `blower.on`: 0 or 1. `outlet.O1.on` to `outlet.O5.on`: 0 or 1.",
+          "name": "key",
+          "source": {
+            "extract": {
+              "column": "key"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/value",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "State value for the key; see `key` for the range. Empty when not finite.",
+          "name": "value",
+          "source": {
+            "extract": {
+              "column": "value"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states/quality",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Quality flag of the reading as reported by the controller. Empty when none.",
+          "name": "quality",
+          "source": {
+            "extract": {
+              "column": "quality"
+            },
+            "fileObject": {
+              "@id": "device_states.csv"
+            }
+          }
+        }
+      ],
+      "name": "device_states"
+    },
+    {
+      "@id": "device_states_untrusted",
+      "@type": "cr:RecordSet",
+      "description": "Actuator state readings kept apart as untrusted; same columns as device_states.csv.",
+      "field": [
+        {
+          "@id": "device_states_untrusted/time",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "Time of the reading. UTC time, millisecond precision.",
+          "name": "time",
+          "source": {
+            "extract": {
+              "column": "time"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/time_source",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "`captured` when the device gave a capture time on a synchronised clock, otherwise `received` (the time the bridge received the reading).",
+          "name": "time_source",
+          "source": {
+            "extract": {
+              "column": "time_source"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/clock_synced",
+          "@type": "cr:Field",
+          "dataType": "sc:Boolean",
+          "description": "True when the device clock was synchronised when it reported.",
+          "name": "clock_synced",
+          "source": {
+            "extract": {
+              "column": "clock_synced"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/sample_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the sample this reading came from; groups readings.",
+          "name": "sample_id",
+          "source": {
+            "extract": {
+              "column": "sample_id"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/device_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Device that produced the reading.",
+          "name": "device_id",
+          "source": {
+            "extract": {
+              "column": "device_id"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/experiment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Experiment running when the reading was taken. Empty when none.",
+          "name": "experiment_id",
+          "source": {
+            "extract": {
+              "column": "experiment_id"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/stage_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Stage of the experiment at that time. Empty when none.",
+          "name": "stage_id",
+          "source": {
+            "extract": {
+              "column": "stage_id"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/round",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Round of the experiment at that time. Empty when none.",
+          "name": "round",
+          "source": {
+            "extract": {
+              "column": "round"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/key",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Device state key. Keys the controller reports. `light.level`: 0-100, on the scale of the level DiAGRI commands; scale not documented. `light.on`: 0 or 1. `fan.level`: 0-10, on the scale of the level DiAGRI commands; scale not documented. `fan.on`: 0 or 1. `blower.level`: 0-100 manual speed, on the scale of the level DiAGRI commands. `blower.on`: 0 or 1. `outlet.O1.on` to `outlet.O5.on`: 0 or 1.",
+          "name": "key",
+          "source": {
+            "extract": {
+              "column": "key"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/value",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "State value for the key; see `key` for the range. Empty when not finite.",
+          "name": "value",
+          "source": {
+            "extract": {
+              "column": "value"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        },
+        {
+          "@id": "device_states_untrusted/quality",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Quality flag of the reading as reported by the controller. Empty when none.",
+          "name": "quality",
+          "source": {
+            "extract": {
+              "column": "quality"
+            },
+            "fileObject": {
+              "@id": "device_states_untrusted.csv"
+            }
+          }
+        }
+      ],
+      "name": "device_states_untrusted"
+    },
+    {
+      "@id": "measurements",
+      "@type": "cr:RecordSet",
+      "description": "Manual measurements recorded by people, including corrections to earlier records.",
+      "field": [
+        {
+          "@id": "measurements/time",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "Time of the measurement. UTC time, millisecond precision.",
+          "name": "time",
+          "source": {
+            "extract": {
+              "column": "time"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/record_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the record.",
+          "name": "record_id",
+          "source": {
+            "extract": {
+              "column": "record_id"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/corrects",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "record_id of the record this one corrects. Empty when not a correction.",
+          "name": "corrects",
+          "source": {
+            "extract": {
+              "column": "corrects"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/experiment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Experiment the measurement belongs to.",
+          "name": "experiment_id",
+          "source": {
+            "extract": {
+              "column": "experiment_id"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/round",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Round of the experiment.",
+          "name": "round",
+          "source": {
+            "extract": {
+              "column": "round"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/batch",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Batch label. Empty when none.",
+          "name": "batch",
+          "source": {
+            "extract": {
+              "column": "batch"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/unit",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Experimental unit. Empty when the position matched no unit.",
+          "name": "unit",
+          "source": {
+            "extract": {
+              "column": "unit"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/treatment_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Treatment of the unit. Empty when unplaced. Takes its values from `treatment_id` in treatments.csv.",
+          "name": "treatment_id",
+          "source": {
+            "extract": {
+              "column": "treatment_id"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/plant_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Plant identifier. Empty when not per plant.",
+          "name": "plant_id",
+          "source": {
+            "extract": {
+              "column": "plant_id"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/position",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Position as recorded. Empty when none.",
+          "name": "position",
+          "source": {
+            "extract": {
+              "column": "position"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/layout_version",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Layout version the position refers to. Empty when none.",
+          "name": "layout_version",
+          "source": {
+            "extract": {
+              "column": "layout_version"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/variable_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Variable measured.",
+          "name": "variable_id",
+          "references": {
+            "field": {
+              "@id": "variables/variable_id"
+            }
+          },
+          "source": {
+            "extract": {
+              "column": "variable_id"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/value",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "Measured value in the variable's unit. Empty when not finite.",
+          "name": "value",
+          "source": {
+            "extract": {
+              "column": "value"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/method",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Measurement method. Empty when unspecified.",
+          "name": "method",
+          "source": {
+            "extract": {
+              "column": "method"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        },
+        {
+          "@id": "measurements/operator",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Pseudonym of the person who recorded this (`op-` plus 12 hex characters), stable within one installation; the name itself is never exported.",
+          "name": "operator",
+          "source": {
+            "extract": {
+              "column": "operator"
+            },
+            "fileObject": {
+              "@id": "measurements.csv"
+            }
+          }
+        }
+      ],
+      "name": "measurements"
+    },
+    {
+      "@id": "actions",
+      "@type": "cr:RecordSet",
+      "description": "Actuation requests and their outcome, one row per request.",
+      "field": [
+        {
+          "@id": "actions/request_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the request.",
+          "name": "request_id",
+          "source": {
+            "extract": {
+              "column": "request_id"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/channel",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Actuator channel: light, exhaust, fan or pump.",
+          "name": "channel",
+          "source": {
+            "extract": {
+              "column": "channel"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/state",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Final state of the request.",
+          "name": "state",
+          "source": {
+            "extract": {
+              "column": "state"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/trigger",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Cleaned trigger category, with operators' notes removed.",
+          "name": "trigger",
+          "source": {
+            "extract": {
+              "column": "trigger"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/planned_level",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Level the request asked for. Empty when not a level.",
+          "name": "planned_level",
+          "source": {
+            "extract": {
+              "column": "planned_level"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/confirmed_level",
+          "@type": "cr:Field",
+          "dataType": "sc:Integer",
+          "description": "Level the controller confirmed. Empty when unconfirmed.",
+          "name": "confirmed_level",
+          "source": {
+            "extract": {
+              "column": "confirmed_level"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/created_at",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "When the request was created. UTC time, millisecond precision.",
+          "name": "created_at",
+          "source": {
+            "extract": {
+              "column": "created_at"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/sent_at",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "When it was sent. Empty when never sent. UTC time, millisecond precision.",
+          "name": "sent_at",
+          "source": {
+            "extract": {
+              "column": "sent_at"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/confirmed_at",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "When the controller confirmed it. Empty when unconfirmed. UTC time, millisecond precision.",
+          "name": "confirmed_at",
+          "source": {
+            "extract": {
+              "column": "confirmed_at"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/ran_seconds",
+          "@type": "cr:Field",
+          "dataType": "sc:Float",
+          "description": "Seconds the action ran. Empty when unknown.",
+          "name": "ran_seconds",
+          "source": {
+            "extract": {
+              "column": "ran_seconds"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/error_code",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Registered error code. Empty when none.",
+          "name": "error_code",
+          "source": {
+            "extract": {
+              "column": "error_code"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/ended_early_code",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Registered code for why it ended early. Empty when it did not.",
+          "name": "ended_early_code",
+          "source": {
+            "extract": {
+              "column": "ended_early_code"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/supersedes",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "request_id of the request this one replaced. Empty when none.",
+          "name": "supersedes",
+          "source": {
+            "extract": {
+              "column": "supersedes"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        },
+        {
+          "@id": "actions/operator",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Pseudonym of the person who recorded this (`op-` plus 12 hex characters), stable within one installation; the name itself is never exported.",
+          "name": "operator",
+          "source": {
+            "extract": {
+              "column": "operator"
+            },
+            "fileObject": {
+              "@id": "actions.csv"
+            }
+          }
+        }
+      ],
+      "name": "actions"
+    },
+    {
+      "@id": "interventions",
+      "@type": "cr:RecordSet",
+      "description": "Interventions applied to stages of the experiment, such as watering or pruning.",
+      "field": [
+        {
+          "@id": "interventions/id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the intervention.",
+          "name": "id",
+          "source": {
+            "extract": {
+              "column": "id"
+            },
+            "fileObject": {
+              "@id": "interventions.csv"
+            }
+          }
+        },
+        {
+          "@id": "interventions/time",
+          "@type": "cr:Field",
+          "dataType": "sc:DateTime",
+          "description": "Time of the intervention. UTC time, millisecond precision.",
+          "name": "time",
+          "source": {
+            "extract": {
+              "column": "time"
+            },
+            "fileObject": {
+              "@id": "interventions.csv"
+            }
+          }
+        },
+        {
+          "@id": "interventions/stage_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Stage it was applied to.",
+          "name": "stage_id",
+          "source": {
+            "extract": {
+              "column": "stage_id"
+            },
+            "fileObject": {
+              "@id": "interventions.csv"
+            }
+          }
+        },
+        {
+          "@id": "interventions/kind",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Kind of intervention.",
+          "name": "kind",
+          "source": {
+            "extract": {
+              "column": "kind"
+            },
+            "fileObject": {
+              "@id": "interventions.csv"
+            }
+          }
+        },
+        {
+          "@id": "interventions/detail",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Detail the system recorded, as JSON with sorted keys. Empty when none.",
+          "name": "detail",
+          "source": {
+            "extract": {
+              "column": "detail"
+            },
+            "fileObject": {
+              "@id": "interventions.csv"
+            }
+          }
+        },
+        {
+          "@id": "interventions/operator",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Pseudonym of the person who recorded this (`op-` plus 12 hex characters), stable within one installation; the name itself is never exported.",
+          "name": "operator",
+          "source": {
+            "extract": {
+              "column": "operator"
+            },
+            "fileObject": {
+              "@id": "interventions.csv"
+            }
+          }
+        }
+      ],
+      "name": "interventions"
+    },
+    {
+      "@id": "withheld",
+      "@type": "cr:RecordSet",
+      "description": "These batches' outcome variables are withheld by design (held-out test data), not missing at random.",
+      "field": [
+        {
+          "@id": "withheld/holdout_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Identifier of the holdout.",
+          "name": "holdout_id",
+          "source": {
+            "extract": {
+              "column": "holdout_id"
+            },
+            "fileObject": {
+              "@id": "withheld.csv"
+            }
+          }
+        },
+        {
+          "@id": "withheld/batch",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Batch whose outcome is withheld.",
+          "name": "batch",
+          "source": {
+            "extract": {
+              "column": "batch"
+            },
+            "fileObject": {
+              "@id": "withheld.csv"
+            }
+          }
+        },
+        {
+          "@id": "withheld/variable_id",
+          "@type": "cr:Field",
+          "dataType": "sc:Text",
+          "description": "Withheld variable, or `*` for all outcome variables.",
+          "name": "variable_id",
+          "source": {
+            "extract": {
+              "column": "variable_id"
+            },
+            "fileObject": {
+              "@id": "withheld.csv"
+            }
+          }
+        }
+      ],
+      "name": "withheld"
+    }
+  ],
+  "url": "urn:diagri:snapshot:snap_0004",
+  "version": "1"
+}
