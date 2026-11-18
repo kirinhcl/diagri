@@ -240,6 +240,19 @@ class CareRule(Model):
     channel: Channel
     schedule: tuple[TimedAction, ...]
 
+    @field_validator("schedule")
+    @classmethod
+    def _unique_steps(
+        cls, steps: tuple[TimedAction, ...], info: ValidationInfo
+    ) -> tuple[TimedAction, ...]:
+        """The executor writes a care step with cause ``care:<step id>``, which goes into the
+        write's request id with the channel, level and day: two steps of one id could get one
+        request id, and the second write would be filed as a retry of the first. Planning names a
+        step ``<care id>/<step id>`` in its findings."""
+        if is_input(info):  # input only: a stored run sheet still loads
+            refuse_repeats(steps, "id", "CareRule")
+        return steps
+
 
 class ProtectionRule(Model):
     id: str
@@ -432,11 +445,15 @@ class RunSheet(Model):
     manual_tasks: tuple[ManualTask, ...] = ()
     end_actions: tuple[RuleAction, ...] = ()
 
-    @field_validator("timed_actions", "manual_tasks", "end_actions")
+    @field_validator("timed_actions", "manual_tasks", "end_actions", "feedback_rules", "care_rules")
     @classmethod
     def _unique_rows(cls, rows: tuple[Model, ...], info: ValidationInfo) -> tuple[Model, ...]:
-        """A row's id names it in the action records and task records; an end action has no id,
-        and its channel names it (``end:<channel>``)."""
+        """One id names one row. A timed action's or manual task's id names it in the action
+        records and task records. The executor keeps one state per feedback rule id (trigger
+        timer, switch gap) and writes with cause ``rule:<id>``: two rules of one id would share a
+        state. The executor never reads a care rule's id, but planning names each care step
+        ``<care id>/<step id>`` in its findings, which needs both parts to name one step. An end
+        action has no id, and its channel names it (``end:<channel>``)."""
         if is_input(info):
             key = "channel" if info.field_name == "end_actions" else "id"
             refuse_repeats(rows, key, "RunSheet")

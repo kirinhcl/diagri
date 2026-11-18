@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from growbridge.archive.models import (
     LEVEL_RANGES,
     STORED,
+    CareRule,
     Channel,
     ChannelPlan,
     ManualTask,
@@ -19,7 +20,7 @@ from growbridge.archive.models import (
     SafetyConfig,
     TimedAction,
 )
-from growbridge.sim.fixtures import make_run_sheet, make_safety
+from growbridge.sim.fixtures import humidity_rule, make_run_sheet, make_safety
 
 
 def problems(model, data) -> list[dict]:
@@ -111,6 +112,22 @@ def _end(channel: Channel) -> dict:
     return RuleAction(channel=channel, level=0).model_dump(mode="json")
 
 
+def _feedback(id_: str) -> dict:
+    return humidity_rule(id=id_).model_dump(mode="json")
+
+
+def _step(id_: str, hour: int) -> TimedAction:
+    return TimedAction(id=id_, channel=Channel.FAN, at=f"{hour:02d}:00", level=1)
+
+
+def _care(id_: str, *steps: str) -> dict:
+    """A fan care rule as sent, a step per name in ``steps`` an hour apart. It is built as data,
+    not as a model, because some tests send a step name twice."""
+    names = steps or ("on",)
+    schedule = [_step(name, 8 + hour).model_dump(mode="json") for hour, name in enumerate(names)]
+    return {"id": id_, "channel": Channel.FAN.value, "schedule": schedule}
+
+
 ROWS = {
     "timed_actions": ([_timed("on"), _timed("off"), _timed("on")], "id", "on"),
     "manual_tasks": ([_task("photo"), _task("photo")], "id", "photo"),
@@ -120,6 +137,8 @@ ROWS = {
         "channel",
         "light",
     ),
+    "feedback_rules": ([_feedback("humid"), _feedback("dry"), _feedback("humid")], "id", "humid"),
+    "care_rules": ([_care("care-fan"), _care("care-fan")], "id", "care-fan"),
 }
 
 
@@ -148,6 +167,40 @@ def test_the_same_name_in_two_different_lists_is_accepted():
     }
 
     assert RunSheet.model_validate(data).manual_tasks[0].id == "morning"
+
+
+def test_a_step_id_repeated_inside_one_care_schedule_is_refused_at_the_repeat():
+    data = {
+        **make_run_sheet().model_dump(mode="json"),
+        "care_rules": [_care("care-fan", "on", "off", "on")],
+    }
+
+    assert problems(RunSheet, data) == [
+        {
+            "type": "duplicate",
+            "loc": ("care_rules", 0, "schedule", 2, "id"),
+            "input": "on",
+            "ctx": {"value": "on"},
+        }
+    ]
+
+
+def test_distinct_feedback_care_and_step_ids_are_accepted():
+    data = {
+        **make_run_sheet().model_dump(mode="json"),
+        "feedback_rules": [_feedback("humid"), _feedback("dry")],
+        "care_rules": [_care("care-fan", "on", "off"), _care("care-fan-2", "low")],
+    }
+
+    sheet = RunSheet.model_validate(data)
+
+    assert [rule.id for rule in sheet.feedback_rules] == ["humid", "dry"]
+    assert [step.id for step in sheet.care_rules[0].schedule] == ["on", "off"]
+
+
+def test_a_care_rule_built_directly_is_checked_too():
+    with pytest.raises(ValidationError):
+        CareRule(id="care-fan", channel=Channel.FAN, schedule=(_step("on", 8), _step("on", 9)))
 
 
 # --- run sheet: retained level -------------------------------------------------------------------
@@ -242,6 +295,19 @@ def test_a_stored_run_sheet_that_breaks_the_input_checks_still_loads_unchanged()
 
     assert loaded.model_dump_json() == stored
     with pytest.raises(ValidationError):
+        RunSheet.model_validate_json(stored)
+
+
+def test_a_stored_run_sheet_with_repeated_rule_and_step_ids_still_loads_unchanged():
+    data = make_run_sheet().model_dump(mode="json")
+    data["feedback_rules"] = [_feedback("humid"), _feedback("humid")]
+    data["care_rules"] = [_care("care-fan", "on", "on"), _care("care-fan")]
+    stored = RunSheet.model_validate(data, context=STORED).model_dump_json()
+
+    loaded = RunSheet.model_validate_json(stored, context=STORED)
+
+    assert loaded.model_dump_json() == stored
+    with pytest.raises(ValidationError):  # the same body coming in is refused
         RunSheet.model_validate_json(stored)
 
 
