@@ -34,7 +34,7 @@ from growbridge.archive.models import (
 )
 from growbridge.planning import manual_tasks
 from growbridge.planning.design import check_experimental_design
-from growbridge.planning.treatment import allocated, delivered, unread
+from growbridge.planning.treatment import allocated, delivered, unit_of, unread
 from growbridge.ports import Denied
 from growbridge.research.analysis import (
     AnalysisDecision,
@@ -207,10 +207,12 @@ def _missing_fraction(
             positions.setdefault(frozen.round_of[m.experiment_id], set()).add(m.position)
     ran = set(frozen.round_of.values()) | started
     planned = {(a.round, a.unit) for a in protocol.allocations if a.round in ran}
-    per_round = {r: sum(1 for a in protocol.allocations if a.round == r) for r, _ in planned}
     present = {
-        (r, u) for r, u in planned if r in positions and (per_round[r] == 1 or u in positions[r])
-    }
+        (a.round, a.unit)
+        for r, spots in positions.items()
+        for p in spots
+        if (a := unit_of(protocol, r, p)) is not None
+    } & planned
     return 1 - len(present) / len(planned) if planned else 1.0
 
 

@@ -14,7 +14,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from growbridge.archive.models import Channel, Ownership, ResearchProtocol, RunSheet, Treatment
+from growbridge.archive.models import (
+    Allocation,
+    Channel,
+    Ownership,
+    ResearchProtocol,
+    RunSheet,
+    Treatment,
+)
 from growbridge.planning.findings import block as _block
 from growbridge.planning.findings import treatment_name
 from growbridge.ports import Finding
@@ -41,6 +48,18 @@ def allocated(protocol: ResearchProtocol, round_number: int | None) -> Treatment
         return None
     (treatment_id,) = ids
     return next((t for t in protocol.treatments if t.id == treatment_id), None)
+
+
+def unit_of(protocol: ResearchProtocol, round_number: int, position: str) -> Allocation | None:
+    """The allocation a measured ``position`` belongs to in a round, or None.
+
+    A round with one allocation has one unit, so any position is it; otherwise the position
+    must name the unit.
+    """
+    in_round = [a for a in protocol.allocations if a.round == round_number]
+    if len(in_round) == 1:
+        return in_round[0]
+    return next((a for a in in_round if a.unit == position), None)
 
 
 Problem = dict[str, object]  # {kind, channel, level, other}: what the console words per kind
