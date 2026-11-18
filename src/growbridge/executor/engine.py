@@ -85,6 +85,20 @@ def due_action(
     return (due[-1], 0) if due else (ordered[-1], 1)
 
 
+def care_steps(sheet: RunSheet) -> list[TimedAction]:
+    """Every care step with its care rule's id in front of its own, ``<care id>/<step id>``.
+
+    A step id is unique only within its care rule, and the id goes into the write's cause and so
+    into its request id: two care rules with an ``on`` step on one channel at one level would
+    otherwise share a request id on a day, and the second write would be filed as a retry of the
+    first. Planning names a care step the same way in its findings."""
+    return [
+        step.model_copy(update={"id": f"{rule.id}/{step.id}"})
+        for rule in sheet.care_rules
+        for step in rule.schedule
+    ]
+
+
 log = logging.getLogger(__name__)
 
 
@@ -405,7 +419,7 @@ class ExecutorEngine:
         sheet = stage.run_sheet
         if care:
             levels, kind, right = sheet.care_levels(now), "care", stage.care_right
-            actions = [step for rule in sheet.care_rules for step in rule.schedule]
+            actions = care_steps(sheet)
         else:
             levels, kind = sheet.expected_levels(now), "experiment_action"
             right, actions = stage.right_number, list(sheet.timed_actions)

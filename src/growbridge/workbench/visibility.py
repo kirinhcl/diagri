@@ -27,7 +27,7 @@ READ_RULES: dict[str, str] = {
     "/wb/projects/{project_id}": "project",
     "/wb/projects/{project_id}/conversation": "project",
     "/wb/protocols/{protocol_id}/analysis": "project",
-    "/wb/receipts/{request_id}": "receipt",
+    "/wb/receipts/{request_id:path}": "receipt",
     "/wb/rounds/{round_id}": "round",
     "/wb/rounds/{round_id}/report": "round",
     "/wb/safety": "device",

@@ -92,7 +92,7 @@
 | `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered`、`state` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
 | `GET` | `/wb/experiments/{experiment_id}/variables` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`scope` |
-| `GET` | `/wb/receipts/{request_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
+| `GET` | `/wb/receipts/{request_id:path}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `GET` | `/wb/alerts` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `POST` | `/wb/alerts/{event_id}/read` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/devices/{device_id}/notes` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不是本机设备）、`not_lock_holder` |
@@ -133,7 +133,7 @@
 
 最后二十九个路由只给操作员用，其中的十七个读取路由也一样：角色令牌会以 `model_role` 被拒绝。
 
-下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。输入时它们还拒绝控制台表单拒绝的内容：`SafetyConfig` 里与前面某条规则重复的 `id`，以及负的 `validity_seconds` 或 `duration_seconds`（0 可以）；`RunSheet` 里在 `timed_actions`、`manual_tasks`、`feedback_rules` 或 `care_rules` 内重复的 `id`，同一条养护规则的 `schedule` 内重复的步骤 `id`（落在 `["body", "run_sheet", "care_rules", 0, "schedule", 1, "id"]`；执行器写入养护步骤时用的原因是 `care:<步骤 id>`），与前面某个结束动作同一通道的结束动作（结束动作没有 `id`，动作记录里用通道称呼它，即 `end:<channel>`），以及超出该通道范围的 `retained_level`（范围是 `archive/models.py` 里的 `LEVEL_RANGES`，也就是 `GET /wb/capabilities` 给出的范围）。每一种都是落在出错字段上的 `422` 校验错误，例如 `["body", "run_sheet", "timed_actions", 2, "id"]`，类型是 `duplicate`（`ctx.value` 是重复的值）或 `greater_than_equal` / `less_than_equal`（`ctx.ge` / `ctx.le` 是界限）；模型工具返回错误结果，什么都不保存，也不批准。这些检查之前存下的安全配置和运行单照常原样读出：存储读取时带校验上下文 `STORED`，它只免去这些输入检查。
+下表里的"阶段运行信息"指去掉运行单的 `StageRuntime`：`stage_id`、`experiment_id`、`project_id`、`state`、`prior_state`、`right_number`、`care_right`、`manual_right`、`started_at`、`paused_at`、`end_pending`。`RunSheet`、`ResearchProtocol`、`SafetyConfig`、`Approval` 和 `ActionRecord` 定义在 [`archive/models.py`](../../../src/growbridge/archive/models.py)。`RunSheet` 和 `SafetyConfig` 里的任何数都不能是 NaN 或无穷大（写成文本也不行），不管它们从哪里来：路由回答 `422`，模型工具返回错误结果，什么都不保存，也不批准。输入时它们还拒绝控制台表单拒绝的内容：`SafetyConfig` 里与前面某条规则重复的 `id`，以及负的 `validity_seconds` 或 `duration_seconds`（0 可以）；`RunSheet` 里在 `timed_actions`、`manual_tasks`、`feedback_rules` 或 `care_rules` 内重复的 `id`，同一条养护规则的 `schedule` 内重复的步骤 `id`（落在 `["body", "run_sheet", "care_rules", 0, "schedule", 1, "id"]`；执行器写入养护步骤时用的原因是 `care:<养护 id>/<步骤 id>`，所以两条养护规则可以用同一个步骤 `id`；在此之前写下的动作记录里是 `care:<步骤 id>`），与前面某个结束动作同一通道的结束动作（结束动作没有 `id`，动作记录里用通道称呼它，即 `end:<channel>`），以及超出该通道范围的 `retained_level`（范围是 `archive/models.py` 里的 `LEVEL_RANGES`，也就是 `GET /wb/capabilities` 给出的范围）。每一种都是落在出错字段上的 `422` 校验错误，例如 `["body", "run_sheet", "timed_actions", 2, "id"]`，类型是 `duplicate`（`ctx.value` 是重复的值）或 `greater_than_equal` / `less_than_equal`（`ctx.ge` / `ctx.le` 是界限）；模型工具返回错误结果，什么都不保存，也不批准。这些检查之前存下的安全配置和运行单照常原样读出：存储读取时带校验上下文 `STORED`，它只免去这些输入检查。
 
 | 方法 | 路径 | 请求体 | 返回 |
 | --- | --- | --- | --- |
@@ -157,7 +157,7 @@
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值）。`config.version` 必须高于这台设备以前批准过的每一个版本，不论是否仍然生效（即 `GET /wb/safety` 的 `highest_version`；第一次至少为 1），否则路由以 `state` 拒绝（409，原因 `safety_version_not_above`，参数 `version` 和 `current_version`），什么都不保存 | `protection_right` |
 | `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id`、`project_id` 和 `state_at`（角色令牌得到的运行信息和以前一样，没有 `round_id`）。操作员还得到 `project_name`、`round_number`、`stage_index` 和 `phase`，含义同轮次；找不到时各为 `null` |
-| `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
+| `GET` | `/wb/receipts/{request_id:path}` | 无 | 对应的 `ActionRecord`。ID 里可以有 `/`（原样或写成 `%2F` 都行）：执行器写入的请求 ID 里含有它的原因，而养护步骤的原因是 `care:<养护 id>/<步骤 id>`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警。每条在英文 `message` 之外还有 `code`（`alert` 族的消息码；有代码之前存下的告警为 `null`）和 `params`（对象，代码没有参数时为空）。 |
 | `POST` | `/wb/alerts/{event_id}/read` | 可选 `note`（最多 500 字）：原因或处理。每次已读带的非空原因都保留；模型把它当作背景，附在对应的读数卡住经历上 | `event_id` |
 | `GET` | `/wb/devices/{device_id}/notes` | 无 | `notes`：这台设备最新的 10 条日志（`id`、`device_id`、`at`、`actor`、`sensor`、`text`），最新在前。日志写的是设备本身，不属于某个实验，之后持有这个温室的人也能看到 |
@@ -213,7 +213,7 @@
 | 409 | 拒绝码 `state`；打开 `multi_user` 时还有 `lock_taken` 和 `greenhouse_busy` | 同样的结构 |
 | 429 | 拒绝码 `locked` | 同样的结构 |
 | 503 | 拒绝码 `unavailable`：构建工作台时没有传入设备日志存储（运行时总会传入） | 同样的结构 |
-| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
+| 404 | `GET /wb/receipts/{request_id:path}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数，以及安全配置或运行单里有重复的 id 或超出范围的值（见上面关于模型的一段） | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
 

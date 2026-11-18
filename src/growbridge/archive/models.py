@@ -245,10 +245,11 @@ class CareRule(Model):
     def _unique_steps(
         cls, steps: tuple[TimedAction, ...], info: ValidationInfo
     ) -> tuple[TimedAction, ...]:
-        """The executor writes a care step with cause ``care:<step id>``, which goes into the
-        write's request id with the channel, level and day: two steps of one id could get one
-        request id, and the second write would be filed as a retry of the first. Planning names a
-        step ``<care id>/<step id>`` in its findings."""
+        """The executor writes a care step with cause ``care:<care id>/<step id>``, which goes into
+        the write's request id with the channel, level and day: two steps of one id in one care
+        rule could get one request id, and the second write would be filed as a retry of the
+        first. Planning names a step ``<care id>/<step id>`` in its findings too. Another care
+        rule may use the same step id."""
         if is_input(info):  # input only: a stored run sheet still loads
             refuse_repeats(steps, "id", "CareRule")
         return steps
@@ -451,9 +452,9 @@ class RunSheet(Model):
         """One id names one row. A timed action's or manual task's id names it in the action
         records and task records. The executor keeps one state per feedback rule id (trigger
         timer, switch gap) and writes with cause ``rule:<id>``: two rules of one id would share a
-        state. The executor never reads a care rule's id, but planning names each care step
-        ``<care id>/<step id>`` in its findings, which needs both parts to name one step. An end
-        action has no id, and its channel names it (``end:<channel>``)."""
+        state. The executor writes a care step with cause ``care:<care id>/<step id>`` and planning
+        names it ``<care id>/<step id>`` in its findings, which needs both parts to name one step.
+        An end action has no id, and its channel names it (``end:<channel>``)."""
         if is_input(info):
             key = "channel" if info.field_name == "end_actions" else "id"
             refuse_repeats(rows, key, "RunSheet")
