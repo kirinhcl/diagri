@@ -32,14 +32,14 @@ _OPERATOR = (
 )
 _STAMP = "UTC time, millisecond precision."
 _LEVELS = (
-    "Keys the controller reports: `light.level` (0-100, percent brightness), "
-    "`light.on` (0 or 1, as reported by the controller), "
-    "`fan.level` (0-10, gear), `fan.on` (0 or 1, as reported by the controller), "
-    "`blower.level` (0-100, exhaust blower speed in percent), "
-    "`blower.on` (0 or 1, as reported by the controller), "
-    "`outlet.O1.on` to `outlet.O5.on` (0 or 1, power outlet off or on). "
-    "Where the code does not say what a level means: as reported by the controller; "
-    "scale not documented."
+    "Keys the controller reports. "
+    "`light.level`: 0-100, on the scale of the level DiAGRI commands; scale not documented. "
+    "`light.on`: 0 or 1. "
+    "`fan.level`: 0-10, on the scale of the level DiAGRI commands; scale not documented. "
+    "`fan.on`: 0 or 1. "
+    "`blower.level`: 0-100 manual speed, on the scale of the level DiAGRI commands. "
+    "`blower.on`: 0 or 1. "
+    "`outlet.O1.on` to `outlet.O5.on`: 0 or 1."
 )
 
 
