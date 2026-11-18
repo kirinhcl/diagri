@@ -20,6 +20,13 @@ ALL_OUTCOMES = "*"
 
 @dataclass(frozen=True)
 class MeasurementRows:
+    """The rows of measurements.csv and what was left out of them.
+
+    ``superseded`` counts records a later record corrects, decided over every record before the
+    holdout filter, so withholding a correction never brings back the version it replaced. A
+    held-out record that was corrected counts as superseded, not as ``withheld_at_export``.
+    """
+
     rows: tuple[dict, ...]
     superseded: int
     withheld_at_export: int

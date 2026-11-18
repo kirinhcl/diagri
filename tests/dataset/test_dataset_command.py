@@ -7,11 +7,14 @@ import pytest
 from dataset_support import (
     CURRENT_CATALOG,
     EXPERIMENT,
+    HELD_RECORD_IDS,
+    OPERATOR_NAMES,
     OUTCOME,
     PROTOCOL,
     STAGE,
     WINDOW,
     build_fixture,
+    read_rows,
 )
 
 from growbridge.archive import snapshot as snap
@@ -21,6 +24,7 @@ from growbridge.cli import main
 from growbridge.dataset import command
 from growbridge.dataset.build import COUNT_NAMES
 from growbridge.dataset.command import export_dataset
+from growbridge.dataset.pseudonym import Pseudonymizer
 from growbridge.dataset.schema import TABLES
 from growbridge.dataset.source import ExportRefused
 from growbridge.ports import Actor
@@ -109,6 +113,67 @@ def test_export_writes_the_dataset(world, tmp_path):
 def test_export_applies_the_registered_holdouts(world, tmp_path):
     summary = run(world, tmp_path / "out")
     assert summary.rows["withheld.csv"] >= 1
+
+
+def rows_of(out, name):
+    return read_rows((out / name).read_bytes())
+
+
+def test_export_withholds_outcomes_held_out_after_the_freeze(world, tmp_path):
+    """``m-held-after`` is in the snapshot: its holdout was registered in agents.sqlite3 after
+    the freeze, and only the export-time filter keeps it out (spec §9)."""
+    summary = run(world, tmp_path / "out")
+    ids = {row["record_id"] for row in rows_of(tmp_path / "out", "measurements.csv")}
+    assert ids and not ids & set(HELD_RECORD_IDS)
+    assert summary.counts["withheld_at_export"] == 1
+
+
+def test_export_reports_records_corrected_after_the_freeze(world, tmp_path):
+    summary = run(world, tmp_path / "out")
+    assert summary.counts["corrected_after_freeze"] == 1
+    metadata = json.loads((tmp_path / "out" / "croissant.json").read_text(encoding="utf-8"))
+    values = {p["name"]: p["value"] for p in metadata["additionalProperty"]}
+    assert values["corrected_after_freeze_ids"] == "m-tent-2"
+
+
+ROW_IDS = {"measurements.csv": "record_id", "actions.csv": "request_id", "interventions.csv": "id"}
+
+
+def operators(out):
+    """(file, row id) to the exported operator pseudonym, for every row that names one."""
+    return {
+        (name, row[id_column]): row["operator"]
+        for name, id_column in ROW_IDS.items()
+        for row in rows_of(out, name)
+        if row["operator"]
+    }
+
+
+def test_one_person_keeps_one_pseudonym_across_snapshots(world, tmp_path):
+    second = snap.freeze(
+        world.archive,
+        EXPERIMENT,
+        world.clock,
+        START,
+        START + WINDOW,
+        60,
+        90,
+        declared=PROTOCOL.variables,
+        catalog=CURRENT_CATALOG,
+    )
+    assert second.id != world.snapshot_id
+    run(world, tmp_path / "first")
+    export_dataset(world.data_dir, second.id, tmp_path / "second", *ARGS)
+    first, later = operators(tmp_path / "first"), operators(tmp_path / "second")
+    key = (world.data_dir / "export" / "pseudonym.key").read_bytes()
+    named = {Pseudonymizer(key)(name) for name in OPERATOR_NAMES}
+    assert set(first.values()) == set(later.values()) == named and len(named) == 3
+    shared = first.keys() & later.keys()
+    assert ("measurements.csv", "m-bench") in shared
+    assert all(first[row] == later[row] for row in shared)
+    # Bo Chen recorded m-tent-2 and, after the first freeze, its correction
+    tent = first[("measurements.csv", "m-tent-2")]
+    assert later[("measurements.csv", "m-tent-2-late-fix")] == tent
 
 
 def test_export_writes_nothing_but_the_key(world, tmp_path):

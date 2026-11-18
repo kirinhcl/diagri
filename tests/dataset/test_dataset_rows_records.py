@@ -88,6 +88,22 @@ def test_rows_the_filter_rejects_are_withheld():
     assert [r["record_id"] for r in rows.rows] == ["m1"] and rows.withheld_at_export == 1
 
 
+def test_a_held_out_correction_does_not_bring_back_what_it_corrects():
+    """Superseded is decided over every record before the filter: rejecting the correction must
+    not leave the original it replaced as the latest version."""
+    pair = [m("m1"), m("m2", corrects="m1")]
+    rows = measurement_rows(pair, lambda x: x.id != "m2", PROTOCOL, 1, CAT, P)
+    assert rows.rows == ()
+    assert (rows.superseded, rows.withheld_at_export) == (1, 1)
+
+
+def test_a_held_out_original_that_was_corrected_counts_as_superseded():
+    pair = [m("m1"), m("m2", corrects="m1")]
+    rows = measurement_rows(pair, lambda x: x.id != "m1", PROTOCOL, 1, CAT, P)
+    assert [(r["record_id"], r["corrects"]) for r in rows.rows] == [("m2", "m1")]
+    assert (rows.superseded, rows.withheld_at_export) == (1, 0)
+
+
 def test_operator_is_a_pseudonym():
     (row,) = measurement_rows([m("m1", operator="alice")], KEEP_ALL, PROTOCOL, 1, CAT, P).rows
     assert row["operator"] == P("alice") and "alice" not in map(str, row.values())
