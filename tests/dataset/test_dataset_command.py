@@ -30,6 +30,7 @@ from growbridge.sim.control import FakeControl
 from growbridge.sim.fixtures import make_run_sheet
 from growbridge.workflow.service import WorkflowService
 
+WAL_FILES = {".sqlite3-wal", ".sqlite3-shm"}
 ARGS = ("CC-BY-4.0", "Lab", None, "0.0.0-test")
 
 
@@ -78,12 +79,16 @@ def world(tmp_path, monkeypatch):
 
 
 def dumps(data_dir):
+    """Logical content of the databases and the hash of every other file (not -wal/-shm)."""
     state = {}
     for path in sorted(data_dir.rglob("*")):
         if path.suffix == ".sqlite3":
-            with sqlite3.connect(path) as connection:
+            connection = sqlite3.connect(path)
+            try:
                 state[path.name] = list(connection.iterdump())
-        elif path.is_file() and path.name != "pseudonym.key":
+            finally:
+                connection.close()
+        elif path.is_file() and path.name != "pseudonym.key" and path.suffix not in WAL_FILES:
             state[str(path.relative_to(data_dir))] = hashlib.sha256(path.read_bytes()).hexdigest()
     return state
 
@@ -161,6 +166,53 @@ def test_missing_database_is_refused_and_not_created(world, tmp_path, name):
     with pytest.raises(ExportRefused, match=f"{name}.sqlite3"):
         run(world, tmp_path / "out")
     assert not (world.data_dir / f"{name}.sqlite3").exists()
+
+
+NAMESPACE_OF = {"archive": "archive", "workflow": "workflow", "agents": "research_holdout"}
+
+
+def lag(data_dir, name):
+    """Make one database one schema step older than the code, in the namespace the export reads."""
+    connection = sqlite3.connect(data_dir / f"{name}.sqlite3")
+    try:
+        connection.execute(
+            "DELETE FROM schema_steps WHERE namespace = ? AND step = "
+            "(SELECT MAX(step) FROM schema_steps WHERE namespace = ?)",
+            (NAMESPACE_OF[name], NAMESPACE_OF[name]),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("name", ["archive", "workflow", "agents"])
+def test_database_older_than_the_code_is_refused_unchanged(world, tmp_path, name):
+    lag(world.data_dir, name)
+    before = dumps(world.data_dir)
+    with pytest.raises(ExportRefused, match=f"{name}.sqlite3 is older"):
+        run(world, tmp_path / "out")
+    assert dumps(world.data_dir) == before
+    assert not (world.data_dir / "export").exists()
+    assert not (tmp_path / "out").exists()
+
+
+def test_unmigrated_database_is_refused_unchanged(world, tmp_path):
+    path = world.data_dir / "agents.sqlite3"
+    path.rename(tmp_path / "moved.sqlite3")
+    sqlite3.connect(path).close()
+    before = dumps(world.data_dir)
+    with pytest.raises(ExportRefused, match="older"):
+        run(world, tmp_path / "out")
+    assert dumps(world.data_dir) == before
+
+
+def test_busy_database_is_refused(world, tmp_path, monkeypatch):
+    def busy(*args, **kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(command, "_lag", busy)
+    with pytest.raises(ExportRefused, match="busy"):
+        run(world, tmp_path / "out")
 
 
 def test_unknown_snapshot_is_refused(world, tmp_path):

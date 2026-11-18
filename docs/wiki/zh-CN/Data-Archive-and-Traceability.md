@@ -102,7 +102,7 @@
 | 训练数据集 | CSV 文件和 `croissant.json` | `growbridge export-dataset`（[`dataset/command.py`](../../../src/growbridge/dataset/command.py)） |
 | 旧表里的读数 | CSV，最多 168 小时 | [`api.py`](../../../src/growbridge/api.py) 的 `GET /history/export.csv` |
 
-`growbridge export-dataset` 把冻结的快照导出为模型训练用的数据集：只读取快照自己的文件和数据库，不修改它们；校验不通过的快照拒绝导出。见 [`dataset/command.py`](../../../src/growbridge/dataset/command.py)。
+`growbridge export-dataset` 把冻结的快照导出为模型训练用的数据集：只读取快照自己的文件和数据库，除假名密钥外不向数据目录写任何东西；校验不通过的快照拒绝导出；数据目录的结构比已安装的 growbridge 旧时也拒绝导出，而不是替你升级：先用新版本启动一次守护进程，再导出。见 [`dataset/command.py`](../../../src/growbridge/dataset/command.py)。
 
 ## 追溯一个报告数字
 

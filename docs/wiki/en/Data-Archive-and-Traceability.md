@@ -102,7 +102,7 @@ When a holdout is registered, its outcome measurements are left out of `measurem
 | Training dataset | CSV files and `croissant.json` | `growbridge export-dataset` ([`dataset/command.py`](../../../src/growbridge/dataset/command.py)) |
 | Legacy readings | CSV, at most 168 hours | `GET /history/export.csv` in [`api.py`](../../../src/growbridge/api.py) |
 
-`growbridge export-dataset` exports a frozen snapshot for model training. It reads the snapshot's own files and the databases without changing them, and refuses a snapshot that fails verification. See [`dataset/command.py`](../../../src/growbridge/dataset/command.py).
+`growbridge export-dataset` exports a frozen snapshot for model training. It reads the snapshot's own files and the databases and writes nothing to the data directory except the pseudonym key. It refuses a snapshot that fails verification, and a data directory whose schema is older than the installed growbridge instead of upgrading it: start the daemon once with the new version, then export. See [`dataset/command.py`](../../../src/growbridge/dataset/command.py).
 
 ## Tracing one reported number
 
