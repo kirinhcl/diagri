@@ -195,7 +195,9 @@ def _export_dataset(settings, args) -> None:
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    """The command line: global options and every subcommand (the wiki's CLI reference is
+    checked against it)."""
     parser = argparse.ArgumentParser(description="Local Spider Farmer BLE service and MCP tools")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--config", type=Path, default=default_config())
@@ -242,6 +244,11 @@ def main():
     export.add_argument("--creator", required=True, help="Creator named in the metadata")
     export.add_argument("--url", help="Where the dataset is published, if anywhere")
     sub.add_parser("simulate", help="Run a short simulated stage (no radio, no network)")
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     os.umask(0o077)
     if args.command == "init":

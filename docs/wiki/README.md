@@ -40,32 +40,46 @@ This folder is the project wiki. It lives in the repository so that pages are ve
 | Project · 项目 | `Status-and-Known-Limitations.md` | Status and known limitations | 状态与已知限制 | reference · 参考 |
 | | `FAQ.md` | FAQ | 常见问题 | reference · 参考 |
 
-Each language folder also has `_Sidebar.md` (the full table of contents) and `_Footer.md` (when the pages were last checked against the code). The names follow the GitHub Wiki convention, so one language folder can be published to a GitHub Wiki later.
+Each language folder also has `_Sidebar.md` (the full table of contents) and `_Footer.md` (when the pages were last checked against the code). The names follow the GitHub Wiki convention.
 
-每个语言目录里还有 `_Sidebar.md`（完整目录）和 `_Footer.md`（页面最近一次对照代码核对的时间）。文件名沿用 GitHub Wiki 的约定，以后可以把某一种语言的目录发布到 GitHub Wiki。
+每个语言目录里还有 `_Sidebar.md`（完整目录）和 `_Footer.md`（页面最近一次对照代码核对的时间）。文件名沿用 GitHub Wiki 的约定。
+
+## Website · 网站
+
+The wiki is also published as a website at <https://kirinhcl.github.io/diagri/>, one site per language with a language switch. [`scripts/build_wiki_site.py`](../../scripts/build_wiki_site.py) builds it with Zensical from the files in this folder, which stay the only source: `_Sidebar.md` becomes the navigation, `_Footer.md` is added to every page, links to source files point at GitHub and images are copied into the site. A link to a missing file, or to a missing heading on a page of the same language, fails the build. [`.github/workflows/wiki-site.yml`](../../.github/workflows/wiki-site.yml) builds the site on every pull request that touches the wiki and deploys it from `main`. To preview it on your machine:
+
+本 Wiki 同时发布为网站 <https://kirinhcl.github.io/diagri/>，每种语言一个站点，可以互相切换。[`scripts/build_wiki_site.py`](../../scripts/build_wiki_site.py) 用 Zensical 从本目录的文件构建网站，这些文件仍是唯一的源：`_Sidebar.md` 变成导航栏，`_Footer.md` 加到每页末尾，指向源文件的链接改为指向 GitHub，图片复制进站点。链接指向不存在的文件，或者指向同一语言页面上不存在的标题时，构建会失败。[`.github/workflows/wiki-site.yml`](../../.github/workflows/wiki-site.yml) 在每个改动 Wiki 的 PR 上构建网站，合并到 `main` 后发布。在本机预览：
+
+```sh
+.venv/bin/python -m pip install -e '.[docs]'
+.venv/bin/python scripts/build_wiki_site.py
+.venv/bin/python -m http.server -d build/wiki-site/public 8000
+```
 
 ## Conventions for editing
 
 1. **Both languages, same commit.** A page exists in `en/` and `zh-CN/` under the same file name. Change both in the same commit. The Chinese page is written as natural Chinese, not as a word-for-word translation.
 2. **One kind of content per page.** A tutorial walks a newcomer through one complete run. A how-to guide solves one task for someone who already knows the basics. A reference page is for lookup and states facts without argument. An explanation page says why the system is built the way it is. Do not mix them: put the reason on an explanation page and link to it.
 3. **Page header.** Line 1 is the title. Then a language switch line, then one sentence that says who the page is for and what it covers. Pages end with a "See also" list.
-4. **The code is the source of truth.** Every command, option, configuration field, route, state name and identifier on a page must exist in the code. Link to the source file so a reader can check. If a fact cannot be checked in the code or the tests, leave it out or mark it as not verified.
+4. **The code is the source of truth.** Every command, option, configuration field, route, state name and identifier on a page must exist in the code. Link to the source file so a reader can check. If a fact cannot be checked in the code or the tests, leave it out or mark it as not verified. The tests in `tests/docs/` hold the reference tables (denial codes, CLI, configuration fields, routes, MCP and model role tools) to the code.
 5. **Link, do not copy.** The READMEs and the [architecture document](../diagri-agent-architecture.zh-CN.md) stay where they are. Summarize in a few lines and link to them.
 6. **Say what is not verified.** The system has been tested on the simulated AC5 only. Any page that describes behavior on real hardware, a Raspberry Pi, real notification channels or CSC says so and links to `Status-and-Known-Limitations.md`.
 7. **Terms.** Use the terms in `Glossary.md`. The project is DiAGRI. GrowBridge names only the device bridge, and `growbridge` the package and the command. Write DiAGRI mode for `auto_research = true` and bridge-only mode for `auto_research = false`. Code identifiers, state values and command names stay in English in both languages.
 8. **Nothing private.** No tokens, passwords, personal data or machine-specific paths. Use placeholders such as `YOUR_PI_HOST` and `/absolute/path/to/...`.
 9. **Links.** Links between wiki pages are relative and keep the `.md` extension, for example `[Glossary](Glossary.md)`. Links to source files are relative to the page, for example `../../../src/growbridge/ports.py`.
 10. **Keep pages short.** One topic per page. Split a page that grows past about 300 lines.
+11. **Sidebar.** A new page goes into `_Sidebar.md` of both languages. The website takes its navigation from the sidebar, and its build fails on a page that the sidebar does not list.
 
 ## 编写约定
 
 1. **两种语言，同一次提交。** 每个页面在 `en/` 和 `zh-CN/` 下各有一份，文件名相同，修改时两份一起改。中文页面按中文的习惯写，不逐词翻译。
 2. **一页只放一类内容。** 教程带新手完整走一遍。操作指南帮已经入门的人完成一个具体任务。参考页用来查，只陈述事实。解释页说明为什么这样设计。不要混写：理由放在解释页，其他页面链接过去。
 3. **页首格式。** 第一行是标题，接着是语言切换行，再用一句话说明这页写给谁、讲什么。页尾是"另见"列表。
-4. **以代码为准。** 页面上出现的每个命令、选项、配置项、路由、状态名和标识符，都必须能在代码里找到，并链接到源文件，方便读者核对。在代码或测试里查不到的说法，要么不写，要么标明"未验证"。
+4. **以代码为准。** 页面上出现的每个命令、选项、配置项、路由、状态名和标识符，都必须能在代码里找到，并链接到源文件，方便读者核对。在代码或测试里查不到的说法，要么不写，要么标明"未验证"。`tests/docs/` 里的测试会用代码核对参考页面的表格（拒绝码、CLI、配置项、路由、MCP 工具和模型角色的工具）。
 5. **链接，不复制。** README 和[架构设计文档](../diagri-agent-architecture.zh-CN.md)保持原样。Wiki 里用几行概括，然后链接过去。
 6. **写明哪些没有验证。** 系统目前只在模拟的 AC5 上测试过。凡是描述真机、树莓派、真实通知渠道或 CSC 上行为的页面，都要说明这一点，并链接到 `Status-and-Known-Limitations.md`。
 7. **术语。** 使用 `Glossary.md` 里的术语。项目叫 DiAGRI；GrowBridge 只指设备桥接部分，`growbridge` 是软件包和命令的名字。`auto_research = true` 称为 DiAGRI 模式，`auto_research = false` 称为仅桥接模式。代码标识符、状态值和命令名在两种语言里都保留英文。
 8. **不写私密信息。** 不出现令牌、密码、个人信息和本机路径。用 `YOUR_PI_HOST`、`/absolute/path/to/...` 这样的占位符。
 9. **链接写法。** Wiki 页面之间用相对链接并保留 `.md` 后缀，例如 `[术语表](Glossary.md)`。指向源文件的链接相对于页面所在位置，例如 `../../../src/growbridge/ports.py`。
 10. **页面要短。** 一页一个主题。超过 300 行左右就拆分。
+11. **侧边栏。** 新页面要加进两种语言的 `_Sidebar.md`。网站的导航来自侧边栏，侧边栏没列出的页面会让网站构建失败。

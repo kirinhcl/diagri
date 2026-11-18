@@ -110,6 +110,24 @@ def test_receipt_can_be_read_by_operators_and_models(bench, operator):
     assert operator.get("/wb/receipts/never-sent").status_code == 404
 
 
+@pytest.mark.parametrize("slash", ["/", "%2F"])
+def test_receipt_of_a_care_write_is_found_although_its_id_has_a_slash(bench, operator, slash):
+    """The executor writes a care step with cause ``care:<care id>/<step id>``, and the cause is
+    part of the request id."""
+    manual_stage(bench, operator)
+    bench.post(operator, "/wb/manual/light", manual_body())
+    request_id = "stage-1.v1:care:care-light/care-on:light:40:2027-01-15.g0"
+    named = {"request_id": request_id, "trigger": "care:care-light/care-on"}
+    bench.control.receipts[request_id] = bench.control.receipts["manual-0001"].model_copy(
+        update=named
+    )
+
+    response = operator.get(f"/wb/receipts/{request_id.replace('/', slash)}")
+
+    assert response.status_code == 200
+    assert response.json()["request_id"] == request_id
+
+
 # --- irrigation --------------------------------------------------------------------------------
 
 

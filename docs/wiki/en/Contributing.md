@@ -4,7 +4,7 @@
 
 This page is for anyone about to send a change. It describes how changes are made in this repository today, step by step, and ends with the checklist reviewers use.
 
-What follows is current practice, not a formal policy. The repository has no `CONTRIBUTING.md`, no pull-request template and no git hooks of its own. Where the history does not yet show a habit, the page says so.
+What follows is current practice, not a formal policy. The root [`CONTRIBUTING.md`](../../../CONTRIBUTING.md) is a short entry point to this page; there is no pull-request template and no git hooks of its own. Where the history does not yet show a habit, the page says so.
 
 ## Before you start
 
@@ -56,7 +56,7 @@ Write the subject line as `<type>: <description>`.
 | `perf` | a performance change |
 | `ci` | the CI workflow |
 
-What `git log --oneline` shows today: ten commits. The three newest use this format, `feat:` once and `docs:` twice. The seven before them are plain sentences that start with a verb, such as "Add local dashboard with live controls, history charts and CSV export". The other six types belong to the same convention and have not appeared yet.
+In the history of `main`, the first seven commits are plain sentences that start with a verb, such as "Add local dashboard with live controls, history charts and CSV export". Every later commit uses this format, apart from two that use `style:`, a type outside the table.
 
 ### 5. Push and wait for CI
 
@@ -88,7 +88,9 @@ Every page exists in `en/` and `zh-CN/` under the same file name. Change both in
 - every relative link points at an existing file;
 - every page links to its translation.
 
-It does not check that the two versions say the same thing. That is for the reviewer.
+Two more tests hold the reference pages to the code, in both languages. [`test_docs_reference.py`](../../../tests/docs/test_docs_reference.py) compares the denial codes, the CLI commands and options, the `Settings` and `RoleModel` fields, the MCP tools (in the READMEs too) and the model role tools, with the counts the pages state, and checks that [`CITATION.cff`](../../../CITATION.cff) names the package version. [`test_docs_routes.py`](../../../tests/docs/test_docs_routes.py) compares the bridge and workbench routes. A failure names what the page misses and what it lists that the code does not have: change the page in both languages.
+
+Beyond those tables, no test checks that the two versions say the same thing. That is for the reviewer.
 
 ### Do not bypass git hooks
 

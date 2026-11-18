@@ -6,7 +6,7 @@ English | [简体中文](README.zh-CN.md)
 
 > **Status.** DiAGRI as a whole has run only on a simulated AC5 controller, including complete research rounds with Claude in the model roles. Its device bridge, GrowBridge, has read and controlled a real Spider Farmer AC5 over Bluetooth. See [Status and known limitations](docs/wiki/en/Status-and-Known-Limitations.md).
 
-The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) describes the whole platform.
+The [DiAGRI wiki](https://kirinhcl.github.io/diagri/) ([English](https://kirinhcl.github.io/diagri/en/), [简体中文](https://kirinhcl.github.io/diagri/zh-CN/)) describes the whole platform.
 
 ## A research round, start to finish
 
@@ -212,7 +212,9 @@ See [Installation and quick start](docs/wiki/en/Installation-and-Quick-Start.md)
 
 ## Documentation
 
-The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) covers the whole platform: its architecture, the control and safety model, the research methods, reference pages, and what has and has not been verified.
+The [DiAGRI wiki](docs/wiki/README.md) ([English](docs/wiki/en/Home.md), [简体中文](docs/wiki/zh-CN/Home.md)) covers the whole platform: its architecture, the control and safety model, the research methods, reference pages, and what has and has not been verified. The same pages are published as a website with search at <https://kirinhcl.github.io/diagri/>, which is rebuilt when wiki changes reach `main`.
+
+To contribute, start with [CONTRIBUTING.md](CONTRIBUTING.md). To report a vulnerability, follow [SECURITY.md](SECURITY.md) and do not open a public issue. To cite DiAGRI, use [CITATION.cff](CITATION.cff) ("Cite this repository" on GitHub).
 
 ## Development and validation
 

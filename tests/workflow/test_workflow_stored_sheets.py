@@ -1,8 +1,9 @@
 """A run sheet an earlier version stored keeps loading after the input checks of the batch 3
-follow-up (repeated row ids, a retained level outside its range): raw records are never
-rewritten, so the stage it governs can still be read, approved and run."""
+follow-up (repeated row, rule and care step ids, a retained level outside its range): raw records
+are never rewritten, so the stage it governs can still be read, approved and run."""
 
-from growbridge.archive.models import STORED, RunSheet
+from growbridge.archive.models import STORED, CareRule, Channel, RunSheet, TimedAction
+from growbridge.sim.fixtures import humidity_rule
 
 
 def stored_before_the_checks(world) -> RunSheet:
@@ -10,6 +11,11 @@ def stored_before_the_checks(world) -> RunSheet:
     data["timed_actions"] = [data["timed_actions"][0], data["timed_actions"][0]]
     fan = next(plan for plan in data["channels"] if plan["channel"] == "fan")
     fan["retained_level"] = 40  # the fan stops at 10
+    feedback = humidity_rule().model_dump(mode="json")
+    data["feedback_rules"] = [feedback, feedback]
+    step = TimedAction(id="on", channel=Channel.FAN, at="08:00", level=1)
+    care = CareRule.model_construct(id="care-fan", channel=Channel.FAN, schedule=(step, step))
+    data["care_rules"] = [care.model_dump(mode="json")] * 2
     return RunSheet.model_validate(data, context=STORED)
 
 
