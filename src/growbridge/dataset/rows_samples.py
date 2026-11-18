@@ -24,6 +24,12 @@ def time_of(sample: SampleRecord) -> tuple[float, str]:
     return sample.received_at, "received"
 
 
+def _archive_time(sample: SampleRecord) -> float:
+    """The time the archive files a sample under (``archive.store._sample_time``): the capture
+    time whenever there is one, synchronised or not. Frozen periods are stamped with it."""
+    return sample.captured_at if sample.captured_at is not None else sample.received_at
+
+
 def _is_number(value: Any) -> bool:
     return isinstance(value, int | float) and not isinstance(value, bool)
 
@@ -76,14 +82,18 @@ def sample_rows(
     non_numeric = 0
     for sample in samples:
         common = _common(sample, round_number)
-        readings = sample.data.get("sensor")
-        for key, value in readings.items() if isinstance(readings, dict) else ():
+        readings = sample.data.get("sensor", {})
+        if not isinstance(readings, dict):
+            non_numeric += 1  # present but not an object: no reading can be read from it
+            readings = {}
+        archived_at = _archive_time(sample)
+        for key, value in readings.items():
             if not _is_number(value):
                 non_numeric += 1
                 continue
             variable = catalog.canonical(key)
             unresolved += variable is None
-            stuck = _is_stuck(key, common["time"], catalog, frozen)
+            stuck = _is_stuck(key, archived_at, catalog, frozen)
             sensor.append(
                 {**common, "variable_id": variable, "raw_key": key, "value": value, "stuck": stuck}
             )

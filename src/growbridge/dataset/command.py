@@ -9,6 +9,7 @@ import secrets
 import shutil
 import sqlite3
 from collections.abc import Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +35,10 @@ NAMESPACES: dict[str, dict[str, int]] = {
     "agents": {"research_holdout": len(holdout_module.STEPS)},
 }
 BUSY = "The data directory is busy ({error}); try again."
+UNREADABLE = "SQLite could not read the data directory: {error}."
+# SQLITE_BUSY and SQLITE_LOCKED; an extended code keeps its primary code in the low byte
+LOCK_CODES = frozenset({sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED})
+LOCK_TEXTS = ("database is locked", "database table is locked", "database schema is locked")
 OLD_SCHEMA = (
     "The schema of {name}.sqlite3 is older than this growbridge ({what}). "
     "Start the daemon once with this version, then export."
@@ -67,17 +72,32 @@ def _check_databases(data_dir: Path) -> None:
             )
 
 
+def _is_lock(error: sqlite3.Error) -> bool:
+    code = getattr(error, "sqlite_errorcode", None)
+    if code is not None and code & 0xFF in LOCK_CODES:
+        return True
+    return str(error).startswith(LOCK_TEXTS)
+
+
+def _refusal(error: sqlite3.DatabaseError) -> ExportRefused:
+    """Only a lock is worth trying again; anything else names what SQLite found."""
+    return ExportRefused((BUSY if _is_lock(error) else UNREADABLE).format(error=error))
+
+
 def _lag(name: str) -> str | None:
     """What is behind in one database, read without writing; None when it is current."""
     path = Path(name)
-    connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    # as_uri escapes '#', '?' and '%', which would otherwise cut or decode the URI and lose mode=ro
+    connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
     try:
         mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
         if str(mode).lower() != "wal":
             return f"journal mode {mode}"
         try:
             rows = connection.execute("SELECT namespace, step FROM schema_steps").fetchall()
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as error:
+            if not str(error).startswith("no such table"):
+                raise
             return "no schema recorded"
     finally:
         connection.close()
@@ -95,8 +115,10 @@ def _check_schema(data_dir: Path) -> None:
             lag = _lag(str(data_dir / f"{name}.sqlite3"))
             if lag:
                 raise ExportRefused(OLD_SCHEMA.format(name=name, what=lag))
-    except sqlite3.OperationalError as error:
-        raise ExportRefused(BUSY.format(error=error)) from error
+    except sqlite3.ProgrammingError:
+        raise  # a fault in growbridge, not in the data directory
+    except sqlite3.DatabaseError as error:
+        raise _refusal(error) from error
 
 
 def _only(found: Sequence[object], what: str, experiment_id: str) -> object:
@@ -145,6 +167,12 @@ def _write(files: Mapping[str, bytes], out: Path) -> None:
         raise
 
 
+def _opened(stack: ExitStack, path: Path) -> Database:
+    db = Database(path)
+    stack.callback(db.close)
+    return db
+
+
 def _inputs(
     data_dir: Path, snapshot_id: str, dbs: Mapping[str, Database], extra: Mapping[str, object]
 ) -> ExportInputs:
@@ -188,20 +216,19 @@ def export_dataset(
     _check_out(data_dir, out)
     _check_databases(data_dir)
     _check_schema(data_dir)
-    dbs = {name: Database(data_dir / f"{name}.sqlite3") for name in DATABASES}
+    extra = {
+        "licence": licence,
+        "creator": creator,
+        "url": url,
+        "software_version": software_version,
+    }
     try:
-        extra = {
-            "licence": licence,
-            "creator": creator,
-            "url": url,
-            "software_version": software_version,
-        }
-        inputs = _inputs(data_dir, snapshot_id, dbs, extra)
-        files = build_dataset(inputs)
-    except sqlite3.OperationalError as error:
-        raise ExportRefused(BUSY.format(error=error)) from error
-    finally:
-        for db in dbs.values():
-            db.close()
+        with ExitStack() as stack:
+            dbs = {name: _opened(stack, data_dir / f"{name}.sqlite3") for name in DATABASES}
+            files = build_dataset(_inputs(data_dir, snapshot_id, dbs, extra))
+    except sqlite3.ProgrammingError:
+        raise  # a fault in growbridge, not in the data directory
+    except sqlite3.DatabaseError as error:
+        raise _refusal(error) from error
     _write(files, out)
     return ExportSummary(out=out, rows=_row_counts(files), counts=_counts(files))

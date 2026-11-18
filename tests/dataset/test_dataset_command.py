@@ -48,10 +48,12 @@ class World:
 
 
 @pytest.fixture
-def world(tmp_path, monkeypatch):
-    """A daemon-shaped data directory: archive, workflow and agents databases, one frozen round."""
+def world(tmp_path, monkeypatch, request):
+    """A daemon-shaped data directory: archive, workflow and agents databases, one frozen round.
+
+    Its name is ``data`` unless a test parametrizes ``world`` indirectly with another name."""
     monkeypatch.setattr(command, "packaged_catalog", lambda: CURRENT_CATALOG)
-    data_dir = tmp_path / "data"
+    data_dir = tmp_path / getattr(request, "param", "data")
     data_dir.mkdir()
     clock = FakeClock()
     archive_db = Database(data_dir / "archive.sqlite3")
@@ -271,6 +273,20 @@ def test_unmigrated_database_is_refused_unchanged(world, tmp_path):
     assert dumps(world.data_dir) == before
 
 
+def test_a_wal_database_without_schema_steps_is_refused_as_old(world, tmp_path):
+    path = world.data_dir / "agents.sqlite3"
+    for suffix in WAL_FILES:
+        path.with_suffix(suffix).replace(tmp_path / f"moved{suffix}")
+    path.replace(tmp_path / "moved.sqlite3")
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("PRAGMA journal_mode=WAL")
+    finally:
+        connection.close()
+    with pytest.raises(ExportRefused, match="no schema recorded"):
+        run(world, tmp_path / "out")
+
+
 def test_busy_database_is_refused(world, tmp_path, monkeypatch):
     def busy(*args, **kwargs):
         raise sqlite3.OperationalError("database is locked")
@@ -278,6 +294,78 @@ def test_busy_database_is_refused(world, tmp_path, monkeypatch):
     monkeypatch.setattr(command, "_lag", busy)
     with pytest.raises(ExportRefused, match="busy"):
         run(world, tmp_path / "out")
+
+
+@pytest.mark.parametrize("world", ["a#b", "c%41d", "e?f#g%2"], indirect=True)
+def test_a_data_directory_name_is_not_read_as_uri_syntax(world, tmp_path):
+    """``#``, ``?`` and ``%`` in the path must not cut or decode the read-only URI: a cut URI
+    loses ``mode=ro`` and opens (creating) another file read-write."""
+    before = dumps(world.data_dir)
+    summary = run(world, tmp_path / "out")
+    assert summary.rows["measurements.csv"] >= 1
+    assert sorted(p.name for p in tmp_path.iterdir()) == sorted([world.data_dir.name, "out"])
+    assert dumps(world.data_dir) == before
+
+
+def raising(error):
+    def fail(*args, **kwargs):
+        raise error
+
+    return fail
+
+
+def busy_snapshot_error():
+    """A lock error as SQLite raises it: the extended code SQLITE_BUSY_SNAPSHOT, its own text."""
+    error = sqlite3.OperationalError("cannot start a read transaction")
+    error.sqlite_errorcode = 517
+    return error
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        sqlite3.OperationalError("database is locked"),
+        sqlite3.OperationalError("database table is locked"),
+        busy_snapshot_error(),
+    ],
+    ids=["locked", "table_locked", "busy_code"],
+)
+def test_a_lock_while_reading_is_refused_as_busy(world, tmp_path, monkeypatch, error):
+    monkeypatch.setattr(command, "read_snapshot", raising(error))
+    with pytest.raises(ExportRefused, match="busy"):
+        run(world, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("where", ["_lag", "read_snapshot", "build_dataset"])
+@pytest.mark.parametrize(
+    "error",
+    [
+        sqlite3.OperationalError("no such column: added_later"),
+        sqlite3.DatabaseError("database disk image is malformed"),
+    ],
+    ids=["no_such_column", "malformed"],
+)
+def test_other_sqlite_errors_are_refused_with_sqlite_text(
+    world, tmp_path, monkeypatch, where, error
+):
+    monkeypatch.setattr(command, where, raising(error))
+    with pytest.raises(ExportRefused, match=str(error)) as refused:
+        run(world, tmp_path / "out")
+    assert "busy" not in str(refused.value)
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_file_that_is_not_a_database_is_refused(world, tmp_path):
+    path = world.data_dir / "workflow.sqlite3"
+    for suffix in WAL_FILES:  # a WAL left beside it would still supply the old pages
+        path.with_suffix(suffix).replace(tmp_path / f"moved{suffix}")
+    garbage = tmp_path / "garbage"
+    garbage.write_bytes(b"not a database, just text " * 200)
+    garbage.replace(path)
+    with pytest.raises(ExportRefused, match="file is not a database") as refused:
+        run(world, tmp_path / "out")
+    assert "busy" not in str(refused.value)
 
 
 def test_unknown_snapshot_is_refused(world, tmp_path):

@@ -113,3 +113,39 @@ def test_a_closed_period_ends_at_last_at():
     ]
     rows = sample_rows(s, 1, packaged_catalog(), [period])
     assert {r["sample_id"]: r["stuck"] for r in rows.sensor} == {"a": True, "b": False}
+
+
+def test_a_sensor_value_that_is_not_an_object_is_counted_once_per_sample():
+    s = [
+        sample(id="a", data={"sensor": [24.0, 60.0]}),
+        sample(id="b", data={"sensor": "offline"}),
+        sample(id="c", data={"sensor": None}),
+        sample(id="d", data={"light": {"on": 1}}),
+    ]
+    rows = sample_rows(s, 1, packaged_catalog(), [])
+    assert rows.sensor == () and rows.non_numeric == 3
+    assert [r["sample_id"] for r in rows.device] == ["d"]
+
+
+def test_stuck_uses_the_archive_sample_time_even_when_the_clock_is_unsynced():
+    """Frozen periods are stamped with the capture time whenever there is one, synchronised or
+    not (``archive.store._sample_time``); ``time`` still shows the received time."""
+    period = {
+        "period_id": "f1",
+        "sensor": "temp",
+        "value": 20.0,
+        "first_at": 100.0,
+        "last_at": 120.0,
+        "opened_at": 160.0,
+        "closed_at": 200.0,
+        "close_reason": "value_changed",
+    }
+    s = [
+        sample(id="in", captured_at=110.0, received_at=300.0, clock_synced=False),
+        sample(id="out", captured_at=90.0, received_at=115.0, clock_synced=False),
+        sample(id="none", captured_at=None, received_at=115.0, clock_synced=False),
+    ]
+    rows = sample_rows(s, 1, packaged_catalog(), [period])
+    by_id = {r["sample_id"]: r for r in rows.sensor}
+    assert {i: r["stuck"] for i, r in by_id.items()} == {"in": True, "out": False, "none": True}
+    assert (by_id["in"]["time"], by_id["in"]["time_source"]) == (300.0, "received")
