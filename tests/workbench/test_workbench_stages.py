@@ -292,10 +292,26 @@ def test_draft_with_a_number_that_is_not_finite_is_rejected(bench, operator, cal
     assert bench.workflow.store.find_stage("stage-1") is None
 
 
+FEEDBACK_RULE = {
+    "id": "humid",
+    "sensor": "humi",
+    "position": "canopy",
+    "unit": "%",
+    "validity_seconds": 20,
+    "trigger": {"op": ">", "value": 70},
+    "recover": {"op": "<", "value": 60},
+    "duration_seconds": 60,
+    "action": {"channel": "exhaust", "level": 80},
+}
+CARE_STEP = {"id": "on", "channel": "fan", "at": "08:00", "level": 1}
+CARE_RULE = {"id": "care-fan", "channel": "fan", "schedule": [CARE_STEP]}
+
 REPEATED_ROWS = {  # list -> (its rows, the field that names a row)
     "timed_actions": ([{"id": "on", "channel": "light", "at": "06:00", "level": 60}], "id"),
     "manual_tasks": ([{"id": "photo", "kind": "photo", "at": "09:00"}], "id"),
     "end_actions": ([{"channel": "light", "level": 0}], "channel"),
+    "feedback_rules": ([FEEDBACK_RULE], "id"),
+    "care_rules": ([CARE_RULE], "id"),
 }
 
 
@@ -316,6 +332,21 @@ def test_a_draft_that_repeats_a_row_is_422_beside_the_repeat_and_nothing_is_stor
     [problem] = response.json()["detail"]
     assert problem["type"] == "duplicate"
     assert problem["loc"] == ["body", "run_sheet", name, len(rows), key]
+    assert bench.workflow.store.find_stage("stage-1") is None
+
+
+def test_a_draft_that_repeats_a_step_of_one_care_schedule_is_422_beside_the_repeat(bench, operator):
+    round_id = bench.seed_round()
+    care = {**CARE_RULE, "schedule": [CARE_STEP, {**CARE_STEP, "at": "20:00", "level": 0}]}
+    sheet = {**bench.sheet().model_dump(mode="json"), "care_rules": [care]}
+    body = {"round_id": round_id, "run_sheet": sheet}
+
+    response = bench.post(operator, "/wb/drafts/run-sheet", body)
+
+    assert response.status_code == 422
+    [problem] = response.json()["detail"]
+    assert problem["type"] == "duplicate"
+    assert problem["loc"] == ["body", "run_sheet", "care_rules", 0, "schedule", 1, "id"]
     assert bench.workflow.store.find_stage("stage-1") is None
 
 

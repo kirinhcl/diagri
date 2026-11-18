@@ -225,6 +225,40 @@ test("rows can be added, and removing one keeps the others exactly as stored", a
   assert.equal(JSON.stringify(sent[0].run_sheet), JSON.stringify(expected));
 });
 
+const REPEATS = [
+  // the row, its list's heading, the row made to repeat an earlier one, the field and the text beside it
+  ["timed action", "runsheet.form.timed", 1, "id", "light-on", "Another row in this list already has this name."],
+  ["manual task", "runsheet.form.tasks", 2, "id", "irrigate-daily", "Another row in this list already has this name."],
+  ["end action", "runsheet.form.end", 1, "channel", "light", "Another end action already sets this channel."],
+];
+
+for (const [row, heading, at, name, value, text] of REPEATS) {
+  test(`a ${row} that repeats an earlier row's ${name} is refused beside the repeat, and nothing is sent`, async () => {
+    const { ctx, form, sent } = open({ review: FULL });
+    const rows = rowsOf(section(ctx, form, heading));
+    change(field(rows[at], name), value);
+    await submit(form);
+    assert.equal(sent.length, 0);
+    assert.deepEqual(errorsIn(rows[0]), []);
+    assert.deepEqual(errorsIn(rows[at]), [text]);
+  });
+}
+
+test("a repeated name is judged with the trimmed text, and the same name in another list is no repeat", async () => {
+  const { ctx, form, sent } = open({ review: FULL });
+  const timed = rowsOf(section(ctx, form, "runsheet.form.timed"));
+  const tasks = rowsOf(section(ctx, form, "runsheet.form.tasks"));
+  change(field(timed[1], "id"), "  light-on ");
+  await submit(form);
+  assert.equal(sent.length, 0);
+  assert.equal(errorsIn(timed[1]).length, 1);
+  change(field(timed[1], "id"), "light-off");
+  change(field(tasks[0], "id"), "light-on"); // a task may share a timed action's name
+  await submit(form);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].run_sheet.manual_tasks[0].id, "light-on");
+});
+
 test("end action rows follow their channel's range, and a row's 422 lands on that row", async () => {
   const fail = new ApiError(422, "validation", "invalid", [{ loc: ["body", "run_sheet", "end_actions", 1], msg: "bad level", type: "value_error", limits: {} }]);
   const { ctx, form, sent } = open({ review: FULL, fail });

@@ -231,6 +231,26 @@ function seconds(ctx) {
   return (rows) => rows.flatMap((row, index) => (row.kind !== "irrigation" && row.seconds !== undefined ? [{ row: index, field: "seconds", error: ctx.t("runsheet.form.pumpOnlyWatering") }] : []));
 }
 
+// A value of `field` an earlier row of the same list already has. The server refuses it (422, duplicate): a row's
+// name names it in the action and task records, and an end action is named by its channel (end:<channel>).
+function repeats(ctx, field) {
+  const text = ctx.t(field === "channel" ? "runsheet.form.channelTwice" : "runsheet.form.nameTwice");
+  return (rows) => {
+    const seen = new Set();
+    return rows.flatMap((row, index) => {
+      const value = row[field];
+      if (value === undefined || value === "") return [];
+      if (!seen.has(value)) {
+        seen.add(value);
+        return [];
+      }
+      return [{ row: index, field, error: text }];
+    });
+  };
+}
+
+const both = (...checks) => (rows) => checks.flatMap((check) => check(rows));
+
 function rowsPart({ ctx, name, label, fields, stored, addLabel, removeLabel, capabilities, ranged = false, check, mainField = "level" }) {
   const rows = array(stored).map((row, index) => ({ ...row, origin: index }));
   const group = rowGroup({ ctx, name, label, fields: [originField, ...fields], rows, addLabel, removeLabel, onRow: ranged ? linkLevel(capabilities) : undefined, crossCheck: check });
@@ -251,9 +271,9 @@ function rowParts(env) {
   const common = { ctx, capabilities, addLabel: t("forms.addRow"), removeLabel: t("forms.removeRow") };
   const kinds = TASK_KINDS.map((value) => ({ value, label: labelOr(t, "tasks.kind", value) }));
   return [
-    rowsPart({ ...common, name: "timed_actions", ranged: true, label: t("runsheet.form.timed"), stored: sheet.timed_actions, fields: [{ name: "id", label: t("runsheet.form.name"), required: true, parse: trimmed }, channelChoice(ctx, channels), timeField(ctx, sheet.timezone, t("runsheet.form.at")), levelField(ctx)] }),
+    rowsPart({ ...common, name: "timed_actions", ranged: true, label: t("runsheet.form.timed"), stored: sheet.timed_actions, check: repeats(ctx, "id"), fields: [{ name: "id", label: t("runsheet.form.name"), required: true, parse: trimmed }, channelChoice(ctx, channels), timeField(ctx, sheet.timezone, t("runsheet.form.at")), levelField(ctx)] }),
     rowsPart({
-      ...common, name: "manual_tasks", mainField: "seconds", label: t("runsheet.form.tasks"), stored: sheet.manual_tasks, check: seconds(ctx),
+      ...common, name: "manual_tasks", mainField: "seconds", label: t("runsheet.form.tasks"), stored: sheet.manual_tasks, check: both(seconds(ctx), repeats(ctx, "id")),
       fields: [
         { name: "id", label: t("runsheet.form.name"), required: true, parse: trimmed },
         { name: "kind", label: t("runsheet.form.kind"), type: "select", required: true, options: [{ value: "", label: t("form.choose") }, ...kinds] },
@@ -262,7 +282,7 @@ function rowParts(env) {
         { name: "seconds", label: t("runsheet.form.pump"), hint: t("runsheet.form.pumpHint", { max: MAX_IRRIGATION_SECONDS }), type: "number", min: 0, max: MAX_IRRIGATION_SECONDS, unit: t("runsheet.form.seconds"), parse: pumpSeconds },
       ],
     }),
-    rowsPart({ ...common, name: "end_actions", ranged: true, label: t("runsheet.form.end"), stored: sheet.end_actions, fields: [channelChoice(ctx, channels), levelField(ctx)] }),
+    rowsPart({ ...common, name: "end_actions", ranged: true, label: t("runsheet.form.end"), stored: sheet.end_actions, check: repeats(ctx, "channel"), fields: [channelChoice(ctx, channels), levelField(ctx)] }),
   ];
 }
 
