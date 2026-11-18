@@ -1468,7 +1468,7 @@
           "@id": "measurements/unit",
           "@type": "cr:Field",
           "dataType": "sc:Text",
-          "description": "Experimental unit. Empty when the position matched no unit.",
+          "description": "Experimental unit; with `round`, matches (`round`, `unit`) in units.csv. Empty when the position matched no unit.",
           "name": "unit",
           "source": {
             "extract": {

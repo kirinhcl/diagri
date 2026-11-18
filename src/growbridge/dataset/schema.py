@@ -189,7 +189,11 @@ TABLES: tuple[Table, ...] = (
             _t("experiment_id", "Experiment the measurement belongs to."),
             _i("round", "Round of the experiment."),
             _t("batch", "Batch label. Empty when none."),
-            _t("unit", "Experimental unit. Empty when the position matched no unit."),
+            _t(
+                "unit",
+                "Experimental unit; with `round`, matches (`round`, `unit`) in units.csv. "
+                "Empty when the position matched no unit.",
+            ),
             _t("treatment_id", "Treatment of the unit. Empty when unplaced.", _TREATMENT),
             _t("plant_id", "Plant identifier. Empty when not per plant."),
             _t("position", "Position as recorded. Empty when none."),

@@ -3,12 +3,22 @@ import hashlib
 import json
 
 import pytest
-from dataset_support import GOLDEN, HELD_RECORD_IDS, OPERATOR_NAMES, build_fixture, read_rows
+from dataset_support import (
+    CURRENT_CATALOG,
+    GOLDEN,
+    HELD_RECORD_IDS,
+    OPERATOR_NAMES,
+    PROJECT,
+    build_fixture,
+    read_rows,
+)
+from vocab_support import TEST_CATALOG
 
 from growbridge.dataset.build import COUNT_NAMES, build_dataset
 from growbridge.dataset.croissant import context_entry
 from growbridge.dataset.schema import TABLES
 from growbridge.dataset.source import ExportRefused
+from growbridge.research.holdout import HoldoutRegistry
 from growbridge.vocab.curie import PREFIXES, crop_ontology_base
 
 
@@ -52,6 +62,31 @@ def test_croissant_references_only_a_key(archive, clock, monkeypatch):
     }
     assert "references" not in fields["units/treatment_id"]
     assert "treatment_id` in treatments.csv" in fields["units/treatment_id"]["description"]
+    assert "(`round`, `unit`) in units.csv" in fields["measurements/unit"]["description"]
+
+
+def test_holdout_with_an_unresolved_outcome_hides_its_whole_batch(archive, clock, monkeypatch):
+    inputs = build_fixture(archive, clock, monkeypatch)
+    before = read_rows(build_dataset(inputs)["measurements.csv"])
+    assert any(r["batch"] == "batch-2" for r in before)
+    # "yield_g" resolved when registered (TEST_CATALOG); the export's catalog lacks it, as a
+    # holdout registered before outcome fields had to resolve may hold such a name.
+    legacy = HoldoutRegistry(archive.db, clock, outcomes=None, catalog=TEST_CATALOG)
+    legacy.register(PROJECT, "holdout-legacy", ["batch-2"], ["yield_g"], ["batch-1", "batch-3"])
+    current = HoldoutRegistry(archive.db, clock, outcomes=None, catalog=CURRENT_CATALOG)
+
+    files = build_dataset(
+        dataclasses.replace(
+            inputs,
+            holdouts=current.holdouts(PROJECT),
+            keep=current.development_filter(PROJECT),
+        )
+    )
+
+    withheld = read_rows(files["withheld.csv"])
+    assert {"holdout_id": "holdout-legacy", "batch": "batch-2", "variable_id": "*"} in withheld
+    assert "*" not in {r["variable_id"] for r in read_rows(files["variables.csv"])}
+    assert all(r["batch"] != "batch-2" for r in read_rows(files["measurements.csv"]))
 
 
 def test_no_names_or_notes_leave(archive, clock, monkeypatch):
