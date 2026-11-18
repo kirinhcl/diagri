@@ -9,7 +9,8 @@ _ID = r"[A-Za-z0-9_.-]+"
 _KINDS = "rule|protect|end|experiment_action|care|protection"
 _BARE = re.compile(r"(manual|interlock|watchdog)")
 _WITH_NOTE = re.compile(rf"(manual|planned irrigation {_ID}): .*", re.DOTALL)
-_PLAIN = re.compile(rf"planned irrigation {_ID}|(?:{_KINDS}):{_ID}")
+# Since #24 a care write's cause is `care:<care id>/<step id>`; older records keep `care:<step id>`.
+_PLAIN = re.compile(rf"planned irrigation {_ID}|(?:{_KINDS}):{_ID}|care:{_ID}/{_ID}")
 
 
 class CleanedTrigger(NamedTuple):
