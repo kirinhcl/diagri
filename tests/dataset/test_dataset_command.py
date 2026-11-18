@@ -1,0 +1,238 @@
+import hashlib
+import json
+import sqlite3
+import sys
+
+import pytest
+from dataset_support import (
+    CURRENT_CATALOG,
+    EXPERIMENT,
+    OUTCOME,
+    PROTOCOL,
+    STAGE,
+    WINDOW,
+    build_fixture,
+)
+
+from growbridge.archive import snapshot as snap
+from growbridge.archive.db import Database
+from growbridge.archive.store import Archive
+from growbridge.cli import main
+from growbridge.dataset import command
+from growbridge.dataset.build import COUNT_NAMES
+from growbridge.dataset.command import export_dataset
+from growbridge.dataset.schema import TABLES
+from growbridge.dataset.source import ExportRefused
+from growbridge.ports import Actor
+from growbridge.research.holdout import HoldoutRegistry
+from growbridge.sim.clock import START, FakeClock
+from growbridge.sim.control import FakeControl
+from growbridge.sim.fixtures import make_run_sheet
+from growbridge.workflow.service import WorkflowService
+
+ARGS = ("CC-BY-4.0", "Lab", None, "0.0.0-test")
+
+
+class World:
+    def __init__(self, data_dir, snapshot_id, service, operator):
+        self.data_dir = data_dir
+        self.snapshot_id = snapshot_id
+        self.service = service
+        self.operator = operator
+        self.project_id = service.store.projects_of_experiment(EXPERIMENT)[0]
+
+
+@pytest.fixture
+def world(tmp_path, monkeypatch):
+    """A daemon-shaped data directory: archive, workflow and agents databases, one frozen round."""
+    monkeypatch.setattr(command, "packaged_catalog", lambda: CURRENT_CATALOG)
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    clock = FakeClock()
+    archive_db = Database(data_dir / "archive.sqlite3")
+    workflow_db = Database(data_dir / "workflow.sqlite3")
+    agents_db = Database(data_dir / "agents.sqlite3")
+    archive = Archive(archive_db, data_dir / "archive", clock)
+    inputs = build_fixture(archive, clock, monkeypatch)
+    service = WorkflowService(
+        workflow_db, clock, FakeControl(clock), check_treatments=False, catalog=CURRENT_CATALOG
+    )
+    operator = Actor(kind="operator", id="op-1", reauth_at=clock.now())
+    project_id = service.create_project("lettuce light series", operator)
+    protocol = PROTOCOL.model_copy(update={"project_id": project_id})
+    service.save_protocol(protocol, operator)
+    round_id = service.create_round(project_id, protocol.id, operator)
+    sheet = make_run_sheet(
+        id="sheet-1", project_id=project_id, experiment_id=EXPERIMENT, stage_id=STAGE
+    )
+    service.submit_run_sheet(round_id, sheet, operator)
+    registry = HoldoutRegistry(agents_db, clock, None, CURRENT_CATALOG)
+    development = ["batch-1", "batch-2"]
+    registry.register(project_id, "holdout-before", ["batch-h1"], [OUTCOME], development)
+    registry.register(project_id, "holdout-after", ["batch-h2"], [OUTCOME], development)
+    found = World(data_dir, inputs.data.snapshot.id, service, operator)
+    found.archive, found.clock = archive, clock
+    yield found
+    for db in (archive_db, workflow_db, agents_db):
+        db.close()
+
+
+def dumps(data_dir):
+    state = {}
+    for path in sorted(data_dir.rglob("*")):
+        if path.suffix == ".sqlite3":
+            with sqlite3.connect(path) as connection:
+                state[path.name] = list(connection.iterdump())
+        elif path.is_file() and path.name != "pseudonym.key":
+            state[str(path.relative_to(data_dir))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return state
+
+
+def run(world, out, *args):
+    return export_dataset(world.data_dir, world.snapshot_id, out, *(args or ARGS))
+
+
+def test_export_writes_the_dataset(world, tmp_path):
+    summary = run(world, tmp_path / "out")
+    names = sorted(p.name for p in (tmp_path / "out").iterdir())
+    assert names == sorted([t.file for t in TABLES] + ["croissant.json"])
+    assert summary.rows["measurements.csv"] >= 1
+    assert set(summary.counts) == set(COUNT_NAMES)
+    assert summary.out == tmp_path / "out"
+
+
+def test_export_applies_the_registered_holdouts(world, tmp_path):
+    summary = run(world, tmp_path / "out")
+    assert summary.rows["withheld.csv"] >= 1
+
+
+def test_export_writes_nothing_but_the_key(world, tmp_path):
+    before = dumps(world.data_dir)
+    run(world, tmp_path / "out")
+    assert dumps(world.data_dir) == before
+    assert (world.data_dir / "export" / "pseudonym.key").exists()
+
+
+@pytest.mark.parametrize("where", ["exists", "inside_data_dir", "missing_parent"])
+def test_bad_out_is_refused(world, tmp_path, where):
+    inside = world.data_dir / "out"
+    out = {"exists": tmp_path, "inside_data_dir": inside, "missing_parent": tmp_path / "no" / "out"}
+    with pytest.raises(ExportRefused):
+        run(world, out[where])
+    assert not inside.exists() and not (tmp_path / "no").exists()
+
+
+def test_experiment_in_two_rounds_is_refused(world, tmp_path):
+    service, operator = world.service, world.operator
+    second = service.create_round(world.project_id, PROTOCOL.id, operator)
+    sheet = make_run_sheet(
+        id="sheet-2",
+        project_id=world.project_id,
+        experiment_id=EXPERIMENT,
+        stage_id="stage-2",
+    )
+    service.submit_run_sheet(second, sheet, operator)
+    with pytest.raises(ExportRefused, match="round"):
+        run(world, tmp_path / "out")
+    assert not (tmp_path / "out").exists()
+
+
+def test_failed_write_leaves_nothing_behind(world, tmp_path, monkeypatch):
+    calls = []
+    original = command.Path.write_bytes
+
+    def failing(self, content):
+        calls.append(self.name)
+        if len(calls) == 2:
+            raise OSError("disk full")
+        return original(self, content)
+
+    monkeypatch.setattr(command.Path, "write_bytes", failing)
+    with pytest.raises(OSError, match="disk full"):
+        run(world, tmp_path / "out")
+    assert len(calls) == 2
+    assert not (tmp_path / "out").exists()
+    assert not any(p.name.startswith(".out.partial") for p in tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("name", ["archive", "workflow", "agents"])
+def test_missing_database_is_refused_and_not_created(world, tmp_path, name):
+    (world.data_dir / f"{name}.sqlite3").unlink()
+    with pytest.raises(ExportRefused, match=f"{name}.sqlite3"):
+        run(world, tmp_path / "out")
+    assert not (world.data_dir / f"{name}.sqlite3").exists()
+
+
+def test_unknown_snapshot_is_refused(world, tmp_path):
+    with pytest.raises(ExportRefused, match="does not exist"):
+        export_dataset(world.data_dir, "snap-missing", tmp_path / "out", *ARGS)
+
+
+def test_measurement_unit_mismatch_is_refused(world, tmp_path):
+    from dataset_support import _measurement
+
+    world.archive.add_measurement(_measurement("m-bad-unit", batch="batch-1", unit="mm"))
+    frozen = snap.freeze(
+        world.archive,
+        EXPERIMENT,
+        world.clock,
+        START,
+        START + WINDOW,
+        60,
+        90,
+        declared=PROTOCOL.variables,
+        catalog=CURRENT_CATALOG,
+    )
+    with pytest.raises(ExportRefused, match="m-bad-unit"):
+        export_dataset(world.data_dir, frozen.id, tmp_path / "out", *ARGS)
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.fixture
+def main_with(world, tmp_path, monkeypatch):
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f'device = "SIMULATED"\ntoken = "{"t" * 32}"\ndata_dir = "{world.data_dir}"\n'
+    )
+
+    def invoke(*args):
+        monkeypatch.setattr(sys, "argv", ["growbridge", "--config", str(config), *args])
+        main()
+
+    return invoke
+
+
+def test_cli_reports_a_refusal(main_with, tmp_path, capsys):
+    argv = ["--out", str(tmp_path / "out"), "--licence", "CC-BY-4.0", "--creator", "Lab"]
+    with pytest.raises(SystemExit) as exit_info:
+        main_with("export-dataset", "--snapshot", "snap-missing", *argv)
+    assert exit_info.value.code == 1
+    assert "export refused" in capsys.readouterr().err
+
+
+def test_cli_prints_the_summary(main_with, world, tmp_path, capsys):
+    main_with(
+        "export-dataset",
+        "--snapshot",
+        world.snapshot_id,
+        "--out",
+        str(tmp_path / "out"),
+        "--licence",
+        " CC-BY-4.0 ",
+        "--creator",
+        "Lab",
+        "--url",
+        "  ",
+    )
+    report = json.loads(capsys.readouterr().out)
+    assert report["out"] == str(tmp_path / "out")
+    assert report["rows"]["measurements.csv"] >= 1
+    assert set(report["counts"]) == set(COUNT_NAMES)
+    metadata = json.loads((tmp_path / "out" / "croissant.json").read_text(encoding="utf-8"))
+    assert metadata["license"] == "CC-BY-4.0"
+
+
+def test_blank_licence_is_refused(world, tmp_path):
+    with pytest.raises(ExportRefused, match="licence"):
+        run(world, tmp_path / "out", "  ", "Lab", None, "0.0.0-test")
+    assert not (tmp_path / "out").exists()

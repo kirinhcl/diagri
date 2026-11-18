@@ -512,6 +512,15 @@ class WorkflowStore:
         )
         return tuple(row["project_id"] for row in rows)
 
+    def round_ids_of_experiment(self, experiment_id: str) -> tuple[str, ...]:
+        """The distinct rounds that have a stage for this experiment, in stage creation order."""
+        rows = self.db.query(
+            "SELECT round_id FROM wf_stages WHERE experiment_id = ? GROUP BY round_id"
+            " ORDER BY MIN(rowid)",
+            (experiment_id,),
+        )
+        return tuple(row["round_id"] for row in rows)
+
     def protocol_versions_of(self, experiment_id: str) -> tuple[tuple[str, int], ...]:
         """The (protocol id, version) of every round that has a stage for this experiment."""
         rows = self.db.query(
