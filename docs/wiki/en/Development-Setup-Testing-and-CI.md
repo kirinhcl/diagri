@@ -40,6 +40,7 @@ The environment lives in `.venv/`, which [`.gitignore`](../../../.gitignore) exc
 | --- | --- | --- | --- |
 | `agents` | `anthropic` | `AnthropicClient` in [`agents/llm.py`](../../../src/growbridge/agents/llm.py), the client the model roles call. | The package still imports and runs. In DiAGRI mode with `roles` configured, `growbridge serve` raises an alert and leaves the model roles off. Two tests are skipped. |
 | `csc` | `pyfirecrest` | Constructing `FirecrestBackend` in [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py). | `FirecrestBackend()` without an injected client raises `BackendUnavailable`. No test needs the package: they pass a fake client. |
+| `docs` | `zensical` | Building this wiki into the website with [`scripts/build_wiki_site.py`](../../../scripts/build_wiki_site.py). | The website cannot be built. The one test that builds the whole site is skipped. |
 
 The `csc` extra installs only the client library. The adapter follows its documentation and has only been tested against a fake client; it has never talked to CSC. See [Status and known limitations](Status-and-Known-Limitations.md).
 
@@ -57,7 +58,7 @@ CI runs these steps in this order. Run them the same way before you push. CI cal
 | --- | --- | --- |
 | 1 | `for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done` | The dashboard script and every console script parse. |
 | 2 | `node --test tests/web/*.test.mjs` | The console's unit tests (148 on 2026-11-14): the pure parts of the console, such as routing, formatting, denial messages and the chart maths, and a guard that no console script writes HTML with `innerHTML`. They run in Node without a browser, a server or a network. |
-| 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | The package installs with the pinned versions. |
+| 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev,docs]'` | The package installs with the pinned versions, with `zensical` for the website test. |
 | 4 | `.venv/bin/ruff check src tests scripts` | Lint. Rule sets `E`, `F`, `I`, `B` and `UP`, line length 100, set in `pyproject.toml`. |
 | 5 | `.venv/bin/ruff format --check src tests scripts` | Formatting. |
 | 6 | `.venv/bin/pytest -q` | The whole test suite. |
@@ -69,6 +70,8 @@ Notes on single steps:
 - **Steps 4 and 5.** `.venv/bin/ruff check --fix src tests scripts` and `.venv/bin/ruff format src tests scripts` repair most findings.
 - **Step 6.** The suite collects the code tests plus the wiki tests in `tests/docs/`. On 2026-11-14 it collected 2385 tests, 2274 code tests and 111 wiki tests, and gave `2385 passed` in about 65 seconds on macOS with Python 3.14 and the `agents` extra installed. The wiki tests come to about two per wiki page, so the total grows with the wiki.
 - **Step 7.** `build` creates an isolated environment and downloads the build backend (`setuptools`), so this step needs the network. Git ignores `dist/`.
+
+A second workflow, [`.github/workflows/wiki-site.yml`](../../../.github/workflows/wiki-site.yml), builds this wiki into the website. It runs only when `docs/wiki/`, `docs/images/`, [`scripts/build_wiki_site.py`](../../../scripts/build_wiki_site.py), `pyproject.toml` or the workflow itself change. It installs the `docs` extra and runs `python scripts/build_wiki_site.py`, which stops on a link to a missing file, a link to a missing heading on a page of the same language, or a page missing from `_Sidebar.md`. Anchors in links to the other language are not checked. On a pull request it only builds; on `main` it also deploys the site to GitHub Pages. Before you push a wiki change, run the same build: `.venv/bin/python -m pip install -e '.[docs]'` once, then `.venv/bin/python scripts/build_wiki_site.py`.
 
 One more check is useful although CI does not run it: `.venv/bin/growbridge simulate` runs one short stage on the simulated AC5 through the assembled runtime and prints a summary. [Tutorial: a simulated research round](Tutorial-Simulated-Round.md) walks through it.
 
@@ -95,7 +98,7 @@ Tests live in [`tests/`](../../../tests), one folder per area. The folders are n
 | `tests/transport/` | `halt` on both BLE transports, and the pid file and folder checks of the native transport. |
 | `tests/e2e/` | The assembled runtime: a full research round, interventions, model roles, the CLI commands, and a round driven through the HTTP routes. |
 | `tests/web/` | The operator console's scripts, run with `node --test` (see CI step 2): routing, formatting, texts, denials, receipts, the stage page's rules, the chart maths, and the ban on `innerHTML`. Node's own test runner, no npm packages. |
-| `tests/docs/` | This wiki: every page exists in `en/` and `zh-CN/`, the page table in [the wiki README](../README.md) lists exactly the pages that exist, relative links point at existing files, and every page links to its translation. The reference tables list what the code has: denial codes, CLI, configuration fields, routes, MCP and model role tools. |
+| `tests/docs/` | This wiki: every page exists in `en/` and `zh-CN/`, the page table in [the wiki README](../README.md) lists exactly the pages that exist, relative links point at existing files, and every page links to its translation. The reference tables list what the code has: denial codes, CLI, configuration fields, routes, MCP and model role tools. Also the website build in [`test_build_wiki_site.py`](../../../tests/docs/test_build_wiki_site.py): how links are rewritten for the site, that the sidebar lists every page, and, with the `docs` extra, that the whole site builds and no link leaves it. |
 | `tests/test_*.py` | The original bridge: protocol framing, device controls, the HTTP API with MCP, the dashboard. 32 tests. |
 
 Two things apply everywhere:
@@ -155,8 +158,9 @@ The `dev` extra also installs `pytest-cov`. CI does not measure coverage. If you
 | --- | --- | --- |
 | 14 tests in [`tests/research/test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py), 1 in [`tests/e2e/test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py) and 1 in [`tests/e2e/test_e2e_sandbox_roots.py`](../../../tests/e2e/test_e2e_sandbox_roots.py) | The platform is not macOS, or `/usr/bin/sandbox-exec` is missing. | They run real scripts inside the macOS sandbox (`SeatbeltSandbox`), or check which directories it denies. On other platforms the code uses `RefusingSandbox`, which the other tests in the first file cover. |
 | 2 tests in [`tests/agents/test_agents_llm.py`](../../../tests/agents/test_agents_llm.py) | The `anthropic` package is not installed. | They build `AnthropicClient` with a stubbed `messages.create`. No request is sent. |
+| 1 test in [`tests/docs/test_build_wiki_site.py`](../../../tests/docs/test_build_wiki_site.py) | The `zensical` package is not installed (the `docs` extra). | It builds the whole website and checks that no link leaves it. CI installs `docs`, so it runs there. |
 
-CI installs only the `dev` extra, so the two `anthropic` tests are skipped in every CI job and the 16 sandbox tests in the Linux jobs. The CI log of 2026-11-13 agrees: 2 skipped in the macOS jobs and 18 in the Linux jobs.
+CI installs the `dev` and `docs` extras but not `agents`, so the two `anthropic` tests are skipped in every CI job and the 16 sandbox tests in the Linux jobs. The CI log of 2026-11-13 agrees: 2 skipped in the macOS jobs and 18 in the Linux jobs.
 
 ## Rule: no network, no radio, no real credentials
 

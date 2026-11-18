@@ -40,6 +40,7 @@ python3 -m venv .venv
 | --- | --- | --- | --- |
 | `agents` | `anthropic` | [`agents/llm.py`](../../../src/growbridge/agents/llm.py) 里的 `AnthropicClient`，模型角色通过它调用模型。 | 包照常导入和运行。开启 DiAGRI 并配置了 `roles` 时，`growbridge serve` 会产生一条告警，模型角色保持关闭。有两个测试被跳过。 |
 | `csc` | `pyfirecrest` | 构造 [`compute/firecrest.py`](../../../src/growbridge/compute/firecrest.py) 里的 `FirecrestBackend`。 | 不注入客户端时，`FirecrestBackend()` 抛出 `BackendUnavailable`。没有测试依赖这个包：测试传入的是假客户端。 |
+| `docs` | `zensical` | 用 [`scripts/build_wiki_site.py`](../../../scripts/build_wiki_site.py) 把本 Wiki 构建成网站。 | 无法构建网站。构建整个网站的那一个测试会被跳过。 |
 
 `csc` 只安装客户端库。适配器依据它的文档实现，只对假客户端测试过，从未连接过 CSC。见[状态与已知限制](Status-and-Known-Limitations.md)。
 
@@ -57,7 +58,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | --- | --- | --- |
 | 1 | `for f in src/growbridge/web/app.js $(find src/growbridge/web/workbench -name '*.js'); do node --check "$f"; done` | 桥接控制台脚本和操作员控制台的每个脚本都没有语法错误。 |
 | 2 | `node --test tests/web/*.test.mjs` | 操作员控制台的单元测试（2026-11-14 共 148 个）：路由、格式化、拒绝提示和曲线计算等纯逻辑，以及一个守卫测试，保证控制台脚本不用 `innerHTML` 写入 HTML。它们在 Node 里运行，不需要浏览器、服务器或网络。
-| 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev]'` | 包能按固定的版本装上。 |
+| 3 | `.venv/bin/python -m pip install -c constraints-tested.txt -e '.[dev,docs]'` | 包能按固定的版本装上，同时装上网站测试要用的 `zensical`。 |
 | 4 | `.venv/bin/ruff check src tests scripts` | 代码检查。规则集 `E`、`F`、`I`、`B`、`UP`，行宽 100，都在 `pyproject.toml` 里配置。 |
 | 5 | `.venv/bin/ruff format --check src tests scripts` | 代码格式。 |
 | 6 | `.venv/bin/pytest -q` | 全部测试。 |
@@ -69,6 +70,8 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 - **第 4、5 步。** 大多数问题可以用 `.venv/bin/ruff check --fix src tests scripts` 和 `.venv/bin/ruff format src tests scripts` 自动修好。
 - **第 6 步。** 整套测试由代码测试加上 `tests/docs/` 里的 Wiki 测试组成。2026-11-14 共收集到 2385 个测试，其中代码测试 2274 个、Wiki 测试 111 个；在 macOS 上用 Python 3.14（装了 `agents`）运行，结果是 `2385 passed`，用时约 65 秒。Wiki 测试每页大约两个，所以总数会随 Wiki 页面增加。
 - **第 7 步。** `build` 会新建一个隔离环境并下载构建后端（`setuptools`），所以这一步需要联网。`dist/` 已被 Git 忽略。
+
+另一个 workflow [`.github/workflows/wiki-site.yml`](../../../.github/workflows/wiki-site.yml) 负责把本 Wiki 构建成网站。只有 `docs/wiki/`、`docs/images/`、[`scripts/build_wiki_site.py`](../../../scripts/build_wiki_site.py)、`pyproject.toml` 或它自己有改动时才运行。它安装 `docs`，运行 `python scripts/build_wiki_site.py`；链接指向不存在的文件、链接指向同一语言页面上不存在的标题，或者有页面没列在 `_Sidebar.md` 里，构建就会停止。指向另一种语言的链接里的锚点不做检查。在 PR 上只构建；合并到 `main` 后还会发布到 GitHub Pages。推送 Wiki 改动之前，先在本地跑一遍同样的构建：第一次运行 `.venv/bin/python -m pip install -e '.[docs]'`，之后运行 `.venv/bin/python scripts/build_wiki_site.py`。
 
 还有一项 CI 不跑、但很有用的检查：`.venv/bin/growbridge simulate` 会用装配好的运行时在模拟的 AC5 上跑完一个很短的阶段，并打印结果摘要。[教程：在模拟器上跑通一轮研究](Tutorial-Simulated-Round.md)里有完整的讲解。
 
@@ -95,7 +98,7 @@ CI 按下面的顺序执行。推送之前，请按同样的顺序在本地跑�
 | `tests/transport/` | 两种 BLE 传输的 `halt`，以及原生传输对 pid 文件和目录权限的检查。 |
 | `tests/e2e/` | 装配好的运行时：完整的一轮研究、人工干预、模型角色、CLI 命令，以及经 HTTP 路由走完的一轮。 |
 | `tests/web/` | 操作员控制台的脚本，用 `node --test` 运行（见 CI 第 2 步）：路由、格式化、文案、拒绝提示、回执、阶段页的规则、曲线计算，以及对 `innerHTML` 的禁用。用 Node 自带的测试运行器，不需要 npm 包。 |
-| `tests/docs/` | 这个 Wiki 本身：每个页面在 `en/` 和 `zh-CN/` 下都有；[Wiki 的 README](../README.md) 里的页面表和实际存在的页面完全一致；相对链接指向的文件存在；每个页面都链接到另一种语言的版本；参考页面的表格与代码一致：拒绝码、CLI、配置项、路由、MCP 工具和模型角色的工具。 |
+| `tests/docs/` | 这个 Wiki 本身：每个页面在 `en/` 和 `zh-CN/` 下都有；[Wiki 的 README](../README.md) 里的页面表和实际存在的页面完全一致；相对链接指向的文件存在；每个页面都链接到另一种语言的版本；参考页面的表格与代码一致：拒绝码、CLI、配置项、路由、MCP 工具和模型角色的工具。还有 [`test_build_wiki_site.py`](../../../tests/docs/test_build_wiki_site.py) 里的网站构建测试：链接怎样改写成网站上的链接，侧边栏列出了所有页面，以及装了 `docs` 时整个网站能构建出来、没有链接跑出站点。 |
 | `tests/test_*.py` | 最初的桥接层：协议分帧、设备控制、HTTP API 与 MCP、控制台。共 32 个测试。 |
 
 有两点对所有目录都适用：
@@ -155,8 +158,9 @@ GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.p
 | --- | --- | --- |
 | [`tests/research/test_research_sandbox.py`](../../../tests/research/test_research_sandbox.py) 里的 14 个，[`tests/e2e/test_e2e_assembly.py`](../../../tests/e2e/test_e2e_assembly.py) 里的 1 个，[`tests/e2e/test_e2e_sandbox_roots.py`](../../../tests/e2e/test_e2e_sandbox_roots.py) 里的 1 个 | 不是 macOS，或者没有 `/usr/bin/sandbox-exec`。 | 它们在 macOS 的沙箱（`SeatbeltSandbox`）里真正运行脚本，或者检查沙箱禁止读取哪些目录。其他平台上代码使用 `RefusingSandbox`，第一个文件里的其他测试覆盖了它。 |
 | [`tests/agents/test_agents_llm.py`](../../../tests/agents/test_agents_llm.py) 里的 2 个 | 没有安装 `anthropic`。 | 它们构造 `AnthropicClient`，并把 `messages.create` 换成桩。不会发出任何请求。 |
+| [`tests/docs/test_build_wiki_site.py`](../../../tests/docs/test_build_wiki_site.py) 里的 1 个 | 没有安装 `zensical`（即 `docs`）。 | 它构建整个网站，并检查没有链接跑出站点。CI 装了 `docs`，所以在 CI 里会运行。 |
 
-CI 只安装 `dev`，所以这两个 `anthropic` 测试在所有 CI 作业里都会被跳过，16 个沙箱测试在 Linux 作业里也会被跳过。2026-11-13 的 CI 日志与此一致：macOS 作业跳过 2 个，Linux 作业跳过 18 个。
+CI 安装 `dev` 和 `docs`，不装 `agents`，所以这两个 `anthropic` 测试在所有 CI 作业里都会被跳过，16 个沙箱测试在 Linux 作业里也会被跳过。2026-11-13 的 CI 日志与此一致：macOS 作业跳过 2 个，Linux 作业跳过 18 个。
 
 ## 规则：不联网、不碰蓝牙、不用真实凭据
 

@@ -39,9 +39,21 @@ This folder is the project wiki. It lives in the repository so that pages are ve
 | Project · 项目 | `Status-and-Known-Limitations.md` | Status and known limitations | 状态与已知限制 | reference · 参考 |
 | | `FAQ.md` | FAQ | 常见问题 | reference · 参考 |
 
-Each language folder also has `_Sidebar.md` (the full table of contents) and `_Footer.md` (when the pages were last checked against the code). The names follow the GitHub Wiki convention, so one language folder can be published to a GitHub Wiki later.
+Each language folder also has `_Sidebar.md` (the full table of contents) and `_Footer.md` (when the pages were last checked against the code). The names follow the GitHub Wiki convention.
 
-每个语言目录里还有 `_Sidebar.md`（完整目录）和 `_Footer.md`（页面最近一次对照代码核对的时间）。文件名沿用 GitHub Wiki 的约定，以后可以把某一种语言的目录发布到 GitHub Wiki。
+每个语言目录里还有 `_Sidebar.md`（完整目录）和 `_Footer.md`（页面最近一次对照代码核对的时间）。文件名沿用 GitHub Wiki 的约定。
+
+## Website · 网站
+
+The wiki is also published as a website at <https://kirinhcl.github.io/diagri/>, one site per language with a language switch. [`scripts/build_wiki_site.py`](../../scripts/build_wiki_site.py) builds it with Zensical from the files in this folder, which stay the only source: `_Sidebar.md` becomes the navigation, `_Footer.md` is added to every page, links to source files point at GitHub and images are copied into the site. A link to a missing file, or to a missing heading on a page of the same language, fails the build. [`.github/workflows/wiki-site.yml`](../../.github/workflows/wiki-site.yml) builds the site on every pull request that touches the wiki and deploys it from `main`. To preview it on your machine:
+
+本 Wiki 同时发布为网站 <https://kirinhcl.github.io/diagri/>，每种语言一个站点，可以互相切换。[`scripts/build_wiki_site.py`](../../scripts/build_wiki_site.py) 用 Zensical 从本目录的文件构建网站，这些文件仍是唯一的源：`_Sidebar.md` 变成导航栏，`_Footer.md` 加到每页末尾，指向源文件的链接改为指向 GitHub，图片复制进站点。链接指向不存在的文件，或者指向同一语言页面上不存在的标题时，构建会失败。[`.github/workflows/wiki-site.yml`](../../.github/workflows/wiki-site.yml) 在每个改动 Wiki 的 PR 上构建网站，合并到 `main` 后发布。在本机预览：
+
+```sh
+.venv/bin/python -m pip install -e '.[docs]'
+.venv/bin/python scripts/build_wiki_site.py
+.venv/bin/python -m http.server -d build/wiki-site/public 8000
+```
 
 ## Conventions for editing
 
@@ -55,6 +67,7 @@ Each language folder also has `_Sidebar.md` (the full table of contents) and `_F
 8. **Nothing private.** No tokens, passwords, personal data or machine-specific paths. Use placeholders such as `YOUR_PI_HOST` and `/absolute/path/to/...`.
 9. **Links.** Links between wiki pages are relative and keep the `.md` extension, for example `[Glossary](Glossary.md)`. Links to source files are relative to the page, for example `../../../src/growbridge/ports.py`.
 10. **Keep pages short.** One topic per page. Split a page that grows past about 300 lines.
+11. **Sidebar.** A new page goes into `_Sidebar.md` of both languages. The website takes its navigation from the sidebar, and its build fails on a page that the sidebar does not list.
 
 ## 编写约定
 
@@ -68,3 +81,4 @@ Each language folder also has `_Sidebar.md` (the full table of contents) and `_F
 8. **不写私密信息。** 不出现令牌、密码、个人信息和本机路径。用 `YOUR_PI_HOST`、`/absolute/path/to/...` 这样的占位符。
 9. **链接写法。** Wiki 页面之间用相对链接并保留 `.md` 后缀，例如 `[术语表](Glossary.md)`。指向源文件的链接相对于页面所在位置，例如 `../../../src/growbridge/ports.py`。
 10. **页面要短。** 一页一个主题。超过 300 行左右就拆分。
+11. **侧边栏。** 新页面要加进两种语言的 `_Sidebar.md`。网站的导航来自侧边栏，侧边栏没列出的页面会让网站构建失败。
