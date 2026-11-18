@@ -92,7 +92,7 @@
 | `POST` | `/wb/safety/approve` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`host_unregistered`、`state` |
 | `GET` | `/wb/stages/{stage_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`state` |
 | `GET` | `/wb/experiments/{experiment_id}/variables` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry`、`scope` |
-| `GET` | `/wb/receipts/{request_id}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
+| `GET` | `/wb/receipts/{request_id:path}` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `GET` | `/wb/alerts` | 操作员、角色令牌 | 局域网、覆盖网络 | 否 | 只有 `session`、`entry` |
 | `POST` | `/wb/alerts/{event_id}/read` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/devices/{device_id}/notes` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不是本机设备）、`not_lock_holder` |
@@ -157,7 +157,7 @@
 | `POST` | `/wb/measurements` | `experiment_id`、`batch`、`plant_id`、`layout_version`、`measured_at`、`position`、`method`、`metric`、`value`、`unit`；可选 `id`、`corrects`；`experiment_id` 必须属于某个已存在的阶段，否则路由以 `scope` 拒绝 | `id` |
 | `POST` | `/wb/safety/approve` | `config`（一个 `SafetyConfig`，含 `frozen` 门槛；不写则用默认值）。`config.version` 必须高于这台设备以前批准过的每一个版本，不论是否仍然生效（即 `GET /wb/safety` 的 `highest_version`；第一次至少为 1），否则路由以 `state` 拒绝（409，原因 `safety_version_not_above`，参数 `version` 和 `current_version`），什么都不保存 | `protection_right` |
 | `GET` | `/wb/stages/{stage_id}` | 无 | 阶段运行信息；操作员另外得到已存阶段的 `round_id`、`project_id` 和 `state_at`（角色令牌得到的运行信息和以前一样，没有 `round_id`）。操作员还得到 `project_name`、`round_number`、`stage_index` 和 `phase`，含义同轮次；找不到时各为 `null` |
-| `GET` | `/wb/receipts/{request_id}` | 无 | 对应的 `ActionRecord`。ID 里可以有 `/`（原样或写成 `%2F` 都行）：执行器写入的请求 ID 里含有它的原因，而养护步骤的原因是 `care:<养护 id>/<步骤 id>`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
+| `GET` | `/wb/receipts/{request_id:path}` | 无 | 对应的 `ActionRecord`。ID 里可以有 `/`（原样或写成 `%2F` 都行）：执行器写入的请求 ID 里含有它的原因，而养护步骤的原因是 `care:<养护 id>/<步骤 id>`。失败、作废或结果不明的写入在英文 `error` 之外还有 `error_code` 和 `error_params`（`receipt` 族的代码）；提前结束的浇水在 `ended_early` 之外还有 `ended_early_code` 和 `ended_early_params`（`task_end` 族）。有代码之前写下的记录两者都没有。 |
 | `GET` | `/wb/alerts` | 无 | `alerts`：未解决的告警。每条在英文 `message` 之外还有 `code`（`alert` 族的消息码；有代码之前存下的告警为 `null`）和 `params`（对象，代码没有参数时为空）。 |
 | `POST` | `/wb/alerts/{event_id}/read` | 可选 `note`（最多 500 字）：原因或处理。每次已读带的非空原因都保留；模型把它当作背景，附在对应的读数卡住经历上 | `event_id` |
 | `GET` | `/wb/devices/{device_id}/notes` | 无 | `notes`：这台设备最新的 10 条日志（`id`、`device_id`、`at`、`actor`、`sensor`、`text`），最新在前。日志写的是设备本身，不属于某个实验，之后持有这个温室的人也能看到 |
@@ -213,7 +213,7 @@
 | 409 | 拒绝码 `state`；打开 `multi_user` 时还有 `lock_taken` 和 `greenhouse_busy` | 同样的结构 |
 | 429 | 拒绝码 `locked` | 同样的结构 |
 | 503 | 拒绝码 `unavailable`：构建工作台时没有传入设备日志存储（运行时总会传入） | 同样的结构 |
-| 404 | `GET /wb/receipts/{request_id}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
+| 404 | `GET /wb/receipts/{request_id:path}` 的 ID 不存在 | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` 超出该通道的范围，测量记录没有被接受，或者协议的 ID 或版本超出范围、含有非有限的数 | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | 请求体没有通过校验，包括运行单里有非有限的数，以及安全配置或运行单里有重复的 id 或超出范围的值（见上面关于模型的一段） | 校验错误列表；请求里的 NaN 或无穷大以文本形式回显 |
 

@@ -92,7 +92,7 @@ Every route that needs an operator can return `session`, `entry` and `model_role
 | `POST` | `/wb/safety/approve` | operator | LAN, overlay | yes | `reauth_required`, `host_unregistered`, `state` |
 | `GET` | `/wb/stages/{stage_id}` | operator, role token | LAN, overlay | no | only `session`, `entry`, `state` |
 | `GET` | `/wb/experiments/{experiment_id}/variables` | operator, role token | LAN, overlay | no | only `session`, `entry`, `scope` |
-| `GET` | `/wb/receipts/{request_id}` | operator, role token | LAN, overlay | no | only `session`, `entry` |
+| `GET` | `/wb/receipts/{request_id:path}` | operator, role token | LAN, overlay | no | only `session`, `entry` |
 | `GET` | `/wb/alerts` | operator, role token | LAN, overlay | no | only `session`, `entry` |
 | `POST` | `/wb/alerts/{event_id}/read` | operator | LAN, overlay | no | `state` |
 | `GET` | `/wb/devices/{device_id}/notes` | operator | LAN, overlay | no | `state` (not the local device), `not_lock_holder` |
@@ -157,7 +157,7 @@ A "stage runtime" below is a `StageRuntime` without its run sheet: `stage_id`, `
 | `POST` | `/wb/measurements` | `experiment_id`, `batch`, `plant_id`, `layout_version`, `measured_at`, `position`, `method`, `metric`, `value`, `unit`; optional `id`, `corrects`; the `experiment_id` must belong to an existing stage, or the route refuses with `scope` | `id` |
 | `POST` | `/wb/safety/approve` | `config` (a `SafetyConfig`, including its `frozen` thresholds; left out, they default). `config.version` must be above every version approved before on the device, in force or not (`highest_version` of `GET /wb/safety`; at least 1 for the first), or the route refuses with `state` (409, reason `safety_version_not_above`, params `version` and `current_version`) and stores nothing | `protection_right` |
 | `GET` | `/wb/stages/{stage_id}` | none | stage runtime; for an operator also `round_id`, `project_id` and `state_at` of the stored stage (a role token gets the runtime as before, without `round_id`). An operator also gets `project_name`, `round_number`, `stage_index` and `phase`, as on the round; each is `null` when it cannot be found |
-| `GET` | `/wb/receipts/{request_id}` | none | the `ActionRecord`. The id may hold a `/`, raw or as `%2F`: an executor write's request id holds its cause, and a care step's cause is `care:<care id>/<step id>`. A failed, voided or unknown write carries `error_code` and `error_params` beside the English `error` (codes of the `receipt` family); an irrigation that ended early carries `ended_early_code` and `ended_early_params` beside `ended_early` (the `task_end` family). Records written before codes have neither. |
+| `GET` | `/wb/receipts/{request_id:path}` | none | the `ActionRecord`. The id may hold a `/`, raw or as `%2F`: an executor write's request id holds its cause, and a care step's cause is `care:<care id>/<step id>`. A failed, voided or unknown write carries `error_code` and `error_params` beside the English `error` (codes of the `receipt` family); an irrigation that ended early carries `ended_early_code` and `ended_early_params` beside `ended_early` (the `task_end` family). Records written before codes have neither. |
 | `GET` | `/wb/alerts` | none | `alerts`: the open alerts. Each carries `code` (a message code of the `alert` family, `null` for an alert stored before codes) and `params` (an object, empty when the code takes none) beside the English `message`. |
 | `POST` | `/wb/alerts/{event_id}/read` | optional `note` (at most 500): why it happened or what was done. Every non-blank note is kept, one per read; models read them as background beside the frozen period they belong to | `event_id` |
 | `GET` | `/wb/devices/{device_id}/notes` | none | `notes`: the ten newest notes about the device (`id`, `device_id`, `at`, `actor`, `sensor`, `text`), newest first. They are about the device, not an experiment, and stay readable for whoever holds the greenhouse later |
@@ -213,7 +213,7 @@ Names that people gave are shown and ids stay in the technical details. The trea
 | 409 | denial code `state`; with `multi_user` also `lock_taken` and `greenhouse_busy` | same shape |
 | 429 | denial code `locked` | same shape |
 | 503 | denial code `unavailable`: a workbench built without the device-note store (the runtime always passes it) | same shape |
-| 404 | `GET /wb/receipts/{request_id}` with an unknown id | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
+| 404 | `GET /wb/receipts/{request_id:path}` with an unknown id | `{"detail": {"code": "state", "message": "Unknown request id", "reason": "unknown_request", "params": {"request_id": "<id>"}}}` |
 | 422 | `level` outside the range of the channel, a measurement that was not accepted, or a protocol with an id or a version out of range or a number that is not finite | `{"detail": {"code": "param", "message": "<text>"}}` |
 | 422 | a body that does not pass validation, a run sheet with a number that is not finite among them, and a safety configuration or run sheet with a repeated id or a value outside its range (see the models paragraph above) | the validation errors; a NaN or an infinity the request carried is echoed as text |
 
