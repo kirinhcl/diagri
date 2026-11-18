@@ -56,7 +56,7 @@ No command creates a project, a research protocol or a research round, sets a pr
 | `operator add` | Asks twice for the secret without echo (`Operator secret: `, `Repeat secret: `) and stores the operator in `workflow.sqlite3` in `data_dir`. The secret is stored as a salted scrypt hash. The name is 1 to 64 characters, the secret 12 to 256. | `Operator added: <name>` |
 | `host register` | Reads or creates `host_id` in `data_dir` (mode `0600`) and registers this machine as the write host of `device` in `control.sqlite3`. It opens no Bluetooth connection. Running it again on the registered host succeeds. | `Write host registered: <host id>` |
 | `recovery bump` | Takes the daemon lock, builds the runtime without starting it, raises the recovery number by one, revokes every write right, voids queued actions, moves every stage that is not finished to `recovery_check` and voids its approvals. `REASON` is stored with the event. | `Recovery number is now <n>; confirm the safety config and review live stages` |
-| `export-dataset` | Writes the training dataset of one frozen snapshot into the new directory `OUT`: eleven CSV tables and `croissant.json`. It only reads the databases and the snapshot, and writes only the pseudonym key into `data_dir`. `--licence` and `--creator` are recorded in the metadata (the creator as an organization); `--url` is where the dataset is published, if anywhere. See [Training dataset export](Training-Dataset-Export.md). | A JSON object with `out`, `rows` (the data rows of each file) and `counts` (the ten counts of the metadata) |
+| `export-dataset` | Writes the training dataset of one frozen snapshot into the new directory `OUT`: eleven CSV tables and `croissant.json`. It only reads the databases and the snapshot, and writes only the pseudonym key into `data_dir`. `--licence` and `--creator` are recorded in the metadata (the creator as an organization); `--url` is where the dataset is published, if anywhere. Spaces around `--licence`, `--creator` and `--url` are stripped; a blank `--url` counts as none. See [Training dataset export](Training-Dataset-Export.md). | A JSON object with `out`, `rows` (the data rows of each file) and `counts` (the ten counts of the metadata) |
 | `simulate` | Runs one short stage on the simulated AC5 with a simulated clock, in a temporary directory: approve the safety configuration, create project, protocol and round, submit and approve a run sheet, start the stage, tick until it ends. No radio and no network. | A JSON object with `stage`, `round`, `beats`, `samples` and `writes` |
 
 ### `serve` in DiAGRI mode
@@ -84,6 +84,7 @@ The steps are in `export_dataset` in [`dataset/command.py`](../../../src/growbri
 | `<name>.sqlite3 is missing from <data_dir>; this is not a daemon data directory ...` | `archive`, `workflow` or `agents` has no database file. The export does not create an empty one. |
 | `The schema of <name>.sqlite3 is older than this growbridge (...). Start the daemon once with this version, then export.` | A database has not been migrated by the installed version; the export does not migrate it. |
 | `The data directory is busy (...); try again.` | A database is locked by a writer. |
+| `SQLite could not read the data directory: <error>.` | Any other SQLite error while reading the databases, for example a file that is not a database, a damaged one, or a schema this growbridge cannot read. `<error>` is SQLite's message. |
 | `Snapshot <ID> does not exist.` | Unknown snapshot. |
 | `Snapshot <ID> failed verification: ...` | A snapshot file no longer matches its recorded digest. |
 | `Snapshot <ID> has no catalog.json; ...` | The snapshot was frozen before the catalog was recorded. |
@@ -96,7 +97,7 @@ The steps are in `export_dataset` in [`dataset/command.py`](../../../src/growbri
 | `Measurement <ID> is in '<unit>', but <variable> is measured in '<unit>'.` | A measurement's unit differs from the catalog's. |
 | `Variable <ID> is in neither the snapshot's catalog nor the current one.` | A variable the rows use is in no catalog. |
 
-On success it exits 0 and prints the JSON summary. A pseudonym key that is not 32 bytes stops the command with a traceback (exit 1) instead. Missing or invalid configuration and usage errors behave as in the table below.
+On success it exits 0 and prints the JSON summary. Any failure that is not one of the refusals above ends in a Python traceback (exit 1) instead, for example a pseudonym key that is not 32 bytes or a disk that fills while the files are written. Missing or invalid configuration and usage errors behave as in the table below.
 
 ## Exit behavior
 

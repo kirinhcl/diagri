@@ -56,7 +56,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `operator add` | 两次提示输入密码且不回显（`Operator secret: `、`Repeat secret: `），然后把操作员存进 `data_dir` 下的 `workflow.sqlite3`。密码以加盐的 scrypt 哈希保存。名字长度 1 到 64 个字符，密码 12 到 256 个字符。 | `Operator added: <name>` |
 | `host register` | 读取或创建 `data_dir` 下的 `host_id`（权限 `0600`），并在 `control.sqlite3` 里把本机登记为 `device` 的写入主机。它不打开蓝牙连接。在已登记的主机上再次运行也会成功。 | `Write host registered: <host id>` |
 | `recovery bump` | 拿到守护进程锁，构建运行时但不启动，把恢复编号加一，撤销所有写入权，作废排队中的动作，把每个未结束的阶段转入 `recovery_check` 并作废它的审批。`REASON` 会随事件一起记录。 | `Recovery number is now <n>; confirm the safety config and review live stages` |
-| `export-dataset` | 把一个冻结快照的训练数据集写进新建的目录 `OUT`：11 张 CSV 表和 `croissant.json`。只读取数据库和快照，除假名密钥外不向 `data_dir` 写任何东西。`--licence` 和 `--creator` 记进元数据（创作者记为组织）；`--url` 是数据集发布的地址（如果有）。见[训练数据集导出](Training-Dataset-Export.md)。 | 一个 JSON 对象，包含 `out`、`rows`（每个文件的数据行数）和 `counts`（元数据里的十项计数） |
+| `export-dataset` | 把一个冻结快照的训练数据集写进新建的目录 `OUT`：11 张 CSV 表和 `croissant.json`。只读取数据库和快照，除假名密钥外不向 `data_dir` 写任何东西。`--licence` 和 `--creator` 记进元数据（创作者记为组织）；`--url` 是数据集发布的地址（如果有）。`--licence`、`--creator` 和 `--url` 两端的空白会被去掉；只有空白的 `--url` 视为没有。见[训练数据集导出](Training-Dataset-Export.md)。 | 一个 JSON 对象，包含 `out`、`rows`（每个文件的数据行数）和 `counts`（元数据里的十项计数） |
 | `simulate` | 在临时目录里，用模拟的 AC5 和模拟时钟跑一个很短的阶段：批准安全配置，创建项目、协议和轮次，提交并批准运行单，启动阶段，一直 tick 到阶段结束。不用无线电，也不联网。 | 一个 JSON 对象，包含 `stage`、`round`、`beats`、`samples` 和 `writes` |
 
 ### DiAGRI 模式下的 `serve`
@@ -84,6 +84,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `<name>.sqlite3 is missing from <data_dir>; this is not a daemon data directory ...` | `archive`、`workflow` 或 `agents` 缺少数据库文件。导出不会替你建一个空的。 |
 | `The schema of <name>.sqlite3 is older than this growbridge (...). Start the daemon once with this version, then export.` | 某个数据库还没有被已安装的版本升级；导出不会去升级它。 |
 | `The data directory is busy (...); try again.` | 某个数据库被写入方锁住。 |
+| `SQLite could not read the data directory: <error>.` | 读取数据库时出现其他 SQLite 错误，例如文件不是数据库、文件损坏，或这个 growbridge 读不了的数据库结构。`<error>` 是 SQLite 的报错。 |
 | `Snapshot <ID> does not exist.` | 快照不存在。 |
 | `Snapshot <ID> failed verification: ...` | 某个快照文件和记录的摘要不再一致。 |
 | `Snapshot <ID> has no catalog.json; ...` | 快照冻结时还没有记录目录。 |
@@ -96,7 +97,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `Measurement <ID> is in '<unit>', but <variable> is measured in '<unit>'.` | 测量的单位和目录不一致。 |
 | `Variable <ID> is in neither the snapshot's catalog nor the current one.` | 数据行用到的变量不在任何一个目录里。 |
 
-成功时退出码 0，并打印 JSON 摘要。假名密钥不是 32 字节时，命令以回溯结束（退出码 1）。配置缺失或无效、用法错误的表现和下表一致。
+成功时退出码 0，并打印 JSON 摘要。不属于上面这些拒绝的失败都以 Python 回溯结束（退出码 1），例如假名密钥不是 32 字节，或写文件时磁盘满了。配置缺失或无效、用法错误的表现和下表一致。
 
 ## 退出行为
 

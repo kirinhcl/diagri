@@ -1152,7 +1152,7 @@
           "@id": "device_states/key",
           "@type": "cr:Field",
           "dataType": "sc:Text",
-          "description": "Device state key. Keys the controller reports. `light.level`: 0-100, on the scale of the level DiAGRI commands; scale not documented. `light.on`: 0 or 1. `fan.level`: 0-10, on the scale of the level DiAGRI commands; scale not documented. `fan.on`: 0 or 1. `blower.level`: 0-100 manual speed, on the scale of the level DiAGRI commands. `blower.on`: 0 or 1. `outlet.O1.on` to `outlet.O5.on`: 0 or 1.",
+          "description": "Device state key. Keys the controller reports. `light.level`: 0-100, manual light brightness on the scale of the level DiAGRI commands; 0 is off. `light.on`: 0 or 1. `fan.level`: 0-10, circulation fan manual gear on the scale of the level DiAGRI commands; 0 is off. `fan.on`: 0 or 1. `blower.level`: 0-100, manual speed of the exhaust blower; 0 is off. `blower.on`: 0 or 1. `outlet.O1.on` to `outlet.O5.on`: 0 or 1.",
           "name": "key",
           "source": {
             "extract": {
@@ -1325,7 +1325,7 @@
           "@id": "device_states_untrusted/key",
           "@type": "cr:Field",
           "dataType": "sc:Text",
-          "description": "Device state key. Keys the controller reports. `light.level`: 0-100, on the scale of the level DiAGRI commands; scale not documented. `light.on`: 0 or 1. `fan.level`: 0-10, on the scale of the level DiAGRI commands; scale not documented. `fan.on`: 0 or 1. `blower.level`: 0-100 manual speed, on the scale of the level DiAGRI commands. `blower.on`: 0 or 1. `outlet.O1.on` to `outlet.O5.on`: 0 or 1.",
+          "description": "Device state key. Keys the controller reports. `light.level`: 0-100, manual light brightness on the scale of the level DiAGRI commands; 0 is off. `light.on`: 0 or 1. `fan.level`: 0-10, circulation fan manual gear on the scale of the level DiAGRI commands; 0 is off. `fan.on`: 0 or 1. `blower.level`: 0-100, manual speed of the exhaust blower; 0 is off. `blower.on`: 0 or 1. `outlet.O1.on` to `outlet.O5.on`: 0 or 1.",
           "name": "key",
           "source": {
             "extract": {

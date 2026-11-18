@@ -27,7 +27,7 @@ Into the new directory `--out`:
 | `withheld.csv` | held-out batch and outcome variable |
 | `croissant.json` | the description of all of the above |
 
-The files are written to a temporary directory next to `--out` and renamed when all are complete, so a failed export leaves no half-written directory. The format is the same every time: UTF-8, LF line endings, a header row, times as UTC ISO 8601 with milliseconds and a trailing `Z`, an empty field for "none", rows sorted by each table's key ([`dataset/csvfmt.py`](../../../src/growbridge/dataset/csvfmt.py)). The same snapshot, catalog, holdout registry and arguments give byte-identical files.
+The files are written to a temporary directory next to `--out` and renamed when all are complete, so a failed export leaves no half-written directory. The format is the same every time: UTF-8, LF line endings, a header row, times as UTC ISO 8601 with milliseconds and a trailing `Z`, an empty field for "none", rows sorted by each table's key ([`dataset/csvfmt.py`](../../../src/growbridge/dataset/csvfmt.py)). The same snapshot, catalog, holdout registry, pseudonym key and arguments give byte-identical files, as long as no new correction of a snapshot record is recorded in between: `corrected_after_freeze` is read from the live archive, not from the snapshot, so such a correction changes `croissant.json`.
 
 ### Do not open the CSV files in a spreadsheet
 
@@ -56,11 +56,11 @@ Both pairs of tables start with the same columns:
 
 **`time_source`.** Do not mix the two clocks without looking at this column: a received time includes the delay between the device and the bridge, and a device clock that was not synchronised is not a reliable time. Filter or model on `time_source` and `clock_synced` rather than assuming one.
 
-**`stuck`.** True when the reading falls inside a period in which that sensor kept reporting exactly the same value (a frozen sensor), taken from the snapshot's `frozen_periods.jsonl`; a period that has not closed yet runs to the end. Such a reading looks normal and is unreliable.
+**`stuck`.** True when the reading falls inside a period in which that sensor kept reporting exactly the same value (a frozen sensor), taken from the snapshot's `frozen_periods.jsonl`; a period that has not closed yet runs to the end. The periods are compared with the sample's capture time whenever the device gave one, which is the time the frozen-reading check records them on, even when the clock was not synchronised and `time` is the received time. Such a reading looks normal and is unreliable.
 
 **Trusted and untrusted.** A sample is trusted when its clock is synchronised, its quality is `ok` and its source is `planned`. Trusted samples go to the plain tables. The others go to the `_untrusted` tables, which have the same columns; they are kept for inspection and are not training data. See [Data, archive and traceability](Data-Archive-and-Traceability.md#how-a-data-snapshot-is-frozen-and-verified).
 
-**Values that are not numbers.** A sensor or device value that is not a number (text, a boolean, none) is not a row; it is counted as `non_numeric_values`. A number that is not finite (`nan`, `inf`) is a row with an empty `value`.
+**Values that are not numbers.** A sensor or device value that is not a number (text, a boolean, none) is not a row; it is counted as `non_numeric_values`. A sample whose `sensor` value is there but is not an object gives no sensor rows and counts once. A number that is not finite (`nan`, `inf`) is a row with an empty `value`.
 
 ### Device-state keys
 
@@ -126,18 +126,19 @@ Every `operator` value is `op-` followed by 12 hexadecimal characters: an HMAC-S
 - One installation gives one person one pseudonym in every export, so the same person can be followed across exports.
 - The names cannot be looked up from the output. Without the key they cannot be recomputed either.
 - Deleting the key breaks that link: the next export creates a new key and gives every person a new pseudonym, and the old and new exports cannot be joined on `operator`. Keep the key if you will export again. The key is not part of the dataset: do not share it.
+- The daemon's backups copy the databases only ([Backup](Data-Archive-and-Traceability.md#backup)), not `export/pseudonym.key`. A data directory restored without the key gives every person a new pseudonym in the next export. Back the key up separately, and keep that copy as private as the key itself.
 
 ## Free text and names
 
 Operator notes are not exported. A note can hide in an action's `trigger`, so the trigger is cleaned: the notes of `manual` and `planned irrigation <id>` triggers are cut off (counted as `notes_dropped`), and a trigger of a form the cleaner does not know becomes `other` (counted as `other_triggers`), so a new format cannot leak a note ([`dataset/triggers.py`](../../../src/growbridge/dataset/triggers.py)).
 
-Some free text is data and is exported as typed: `batch`, `plant_id`, `position` and `layout_version` in `measurements.csv`, and the protocol's question and hypothesis, which form the dataset description in `croissant.json`. Nothing cleans these. **Tell data-entry users not to put people's names in these fields.**
+Some free text is data and is exported as typed: `batch`, `plant_id`, `position`, `layout_version` and `method` in `measurements.csv`, the treatment `name` in `treatments.csv`, and the protocol's question and hypothesis, which form the dataset description in `croissant.json`. Nothing cleans these. **Tell data-entry users not to put people's names in these fields.**
 
 ## `croissant.json`
 
 The metadata follows Croissant 1.1 and conforms to `http://mlcommons.org/croissant/1.1`. [`dataset/croissant.py`](../../../src/growbridge/dataset/croissant.py) builds it.
 
-- **Dataset fields.** `name` is `diagri-<snapshot id>`; `description` is the protocol's question and hypothesis; `license` and `creator` are the command's `--licence` and `--creator` (the creator is recorded as an `sc:Organization`, which Croissant requires); `url` is `--url` or `urn:diagri:snapshot:<id>`; `datePublished` is the UTC date the snapshot was created; `about` is the crop species `crop_taxon`.
+- **Dataset fields.** `name` is `diagri-<snapshot id>`; `description` is the protocol's question and hypothesis; `license` and `creator` are the command's `--licence` and `--creator` (the creator is recorded as an `sc:Organization`, a creator shape mlcroissant accepts; the other is `sc:Person`); `url` is `--url` or `urn:diagri:snapshot:<id>`; `datePublished` is the UTC date the snapshot was created; `about` is the crop species `crop_taxon`.
 - **Files.** One `FileObject` per CSV, with its SHA-256, and one `RecordSet` per table with a `Field` per column, its type and its description.
 - **References.** Only `variable_id` columns carry a Croissant `references`, to `variables.csv`, whose key it is. `treatment_id` and `unit` name their source in the field description instead: `treatments.csv` has one row per treatment and factor, and `units.csv` is keyed by `round` and `unit` together, so a join on either would multiply records.
 - **Provenance.** `prov:wasDerivedFrom` names the snapshot and the SHA-256 of its manifest; `prov:wasGeneratedBy` names `growbridge`, its version and the command.
@@ -162,7 +163,7 @@ The metadata follows Croissant 1.1 and conforms to `http://mlcommons.org/croissa
 
 ## Read-only, and when it refuses
 
-The export only reads the archive, workflow and agents databases and the snapshot directory, and writes nothing in the data directory except the pseudonym key (which may already exist when a later check refuses the export). It does not take the daemon lock, so it can run while the daemon runs. It refuses, with a message, when the schema of the data directory is older than the installed growbridge (start the daemon once with the new version, then export), when a database file is missing, and when a database is busy (try again). The full list is in the [CLI reference](CLI-Reference.md#export-dataset).
+The export only reads the archive, workflow and agents databases and the snapshot directory, and writes nothing in the data directory except the pseudonym key (which may already exist when a later check refuses the export). It does not take the daemon lock, so it can run while the daemon runs. It refuses, with a message, when the schema of the data directory is older than the installed growbridge (start the daemon once with the new version, then export), when a database file is missing, when a database is busy (try again), and when SQLite cannot read a database (the message gives SQLite's error). The full list is in the [CLI reference](CLI-Reference.md#export-dataset).
 
 ## See also
 

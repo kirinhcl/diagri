@@ -31,13 +31,16 @@ _OPERATOR = (
     "stable within one installation; the name itself is never exported."
 )
 _STAMP = "UTC time, millisecond precision."
+# the labels of the commands in mcp_server.py, as the wiki's device-state table gives them
 _LEVELS = (
     "Keys the controller reports. "
-    "`light.level`: 0-100, on the scale of the level DiAGRI commands; scale not documented. "
+    "`light.level`: 0-100, manual light brightness on the scale of the level DiAGRI commands; "
+    "0 is off. "
     "`light.on`: 0 or 1. "
-    "`fan.level`: 0-10, on the scale of the level DiAGRI commands; scale not documented. "
+    "`fan.level`: 0-10, circulation fan manual gear on the scale of the level DiAGRI commands; "
+    "0 is off. "
     "`fan.on`: 0 or 1. "
-    "`blower.level`: 0-100 manual speed, on the scale of the level DiAGRI commands. "
+    "`blower.level`: 0-100, manual speed of the exhaust blower; 0 is off. "
     "`blower.on`: 0 or 1. "
     "`outlet.O1.on` to `outlet.O5.on`: 0 or 1."
 )

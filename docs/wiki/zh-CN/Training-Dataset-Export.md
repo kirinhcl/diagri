@@ -27,7 +27,7 @@
 | `withheld.csv` | 一个被留出的批次和结局变量 |
 | `croissant.json` | 以上所有文件的描述 |
 
-文件先写到 `--out` 旁边的临时目录，全部写完再改名，所以失败的导出不会留下写了一半的目录。格式每次都一样：UTF-8，LF 换行，第一行是表头，时间是带毫秒和结尾 `Z` 的 UTC ISO 8601，空字段表示"无"，行按各表的键排序（[`dataset/csvfmt.py`](../../../src/growbridge/dataset/csvfmt.py)）。同一个快照、目录、留出登记和参数，得到逐字节相同的文件。
+文件先写到 `--out` 旁边的临时目录，全部写完再改名，所以失败的导出不会留下写了一半的目录。格式每次都一样：UTF-8，LF 换行，第一行是表头，时间是带毫秒和结尾 `Z` 的 UTC ISO 8601，空字段表示"无"，行按各表的键排序（[`dataset/csvfmt.py`](../../../src/growbridge/dataset/csvfmt.py)）。同一个快照、目录、留出登记、假名密钥和参数，得到逐字节相同的文件，前提是这期间没有为快照里的记录登记新的更正：`corrected_after_freeze` 读的是当前的档案而不是快照，这样的更正会改变 `croissant.json`。
 
 ### 不要用表格软件直接打开 CSV
 
@@ -56,11 +56,11 @@ CSV 文件是给机器读的训练数据，原样写出，不做任何转义。�
 
 **`time_source`。** 不看这一列就不要把两种时钟混用：接收时间含有设备到桥接之间的延迟，没有同步的设备时钟也不是可靠的时间。请按 `time_source` 和 `clock_synced` 过滤或建模，不要假定只有一种。
 
-**`stuck`。** 读数落在该传感器一直报告完全相同数值的时段内（传感器卡住）时为真，依据是快照里的 `frozen_periods.jsonl`；尚未结束的时段一直算到最后。这样的读数看起来正常，其实不可靠。
+**`stuck`。** 读数落在该传感器一直报告完全相同数值的时段内（传感器卡住）时为真，依据是快照里的 `frozen_periods.jsonl`；尚未结束的时段一直算到最后。比较用的是样本的采集时间（设备给了采集时间就用它），冻结读数检查记录时段用的也是这个时间；即使时钟未同步、`time` 是接收时间，也是如此。这样的读数看起来正常，其实不可靠。
 
 **可信与不可信。** 样本的时钟已同步、质量为 `ok`、来源为 `planned`，才算可信。可信样本进普通表，其余进 `_untrusted` 表，列相同；它们留作检查，不是训练数据。见[数据、档案与可追溯性](Data-Archive-and-Traceability.md#数据快照怎样冻结和校验)。
 
-**不是数字的值。** 传感器或设备的值不是数字（文本、布尔值、空）时不成行，计入 `non_numeric_values`。不是有限数的数字（`nan`、`inf`）成行，但 `value` 为空。
+**不是数字的值。** 传感器或设备的值不是数字（文本、布尔值、空）时不成行，计入 `non_numeric_values`。样本的 `sensor` 值存在但不是对象时，不产生传感器行，计一次。不是有限数的数字（`nan`、`inf`）成行，但 `value` 为空。
 
 ### 设备状态的键
 
@@ -126,18 +126,19 @@ CSV 文件是给机器读的训练数据，原样写出，不做任何转义。�
 - 同一个安装里，一个人在每次导出中都是同一个假名，所以可以跨导出跟踪同一个人。
 - 无法从输出反查名字；没有密钥也无法重新算出假名。
 - 删除密钥会切断这种关联：下一次导出会生成新密钥，每个人都得到新的假名，新旧导出无法再按 `operator` 连接。以后还要导出就保留密钥。密钥不属于数据集，不要分享。
+- 守护进程的备份只复制数据库（[备份](Data-Archive-and-Traceability.md#备份)），不包括 `export/pseudonym.key`。从备份恢复的数据目录如果没有这个密钥，下一次导出里每个人都会得到新的假名。请另外备份密钥，并像密钥本身一样保管这份副本。
 
 ## 自由文本和人名
 
 操作员的备注不导出。备注可能藏在动作的 `trigger` 里，所以对 trigger 做了清理：`manual` 和 `planned irrigation <id>` 两种触发后面的备注被去掉（计入 `notes_dropped`），清理器不认识的触发格式一律变成 `other`（计入 `other_triggers`），所以新的格式不会泄漏备注（[`dataset/triggers.py`](../../../src/growbridge/dataset/triggers.py)）。
 
-有些自由文本本身就是数据，原样导出：`measurements.csv` 里的 `batch`、`plant_id`、`position` 和 `layout_version`，以及协议的研究问题和假设（它们构成 `croissant.json` 里的数据集描述）。没有任何程序清洗这些内容。**请提醒录入数据的人，不要在这些字段里写人名。**
+有些自由文本本身就是数据，原样导出：`measurements.csv` 里的 `batch`、`plant_id`、`position`、`layout_version` 和 `method`，`treatments.csv` 里的处理名称 `name`，以及协议的研究问题和假设（它们构成 `croissant.json` 里的数据集描述）。没有任何程序清洗这些内容。**请提醒录入数据的人，不要在这些字段里写人名。**
 
 ## `croissant.json`
 
 元数据遵循 Croissant 1.1，`conformsTo` 为 `http://mlcommons.org/croissant/1.1`，由 [`dataset/croissant.py`](../../../src/growbridge/dataset/croissant.py) 生成。
 
-- **数据集字段。** `name` 是 `diagri-<快照 ID>`；`description` 是协议的研究问题和假设；`license` 和 `creator` 来自命令的 `--licence` 和 `--creator`（创作者记为 `sc:Organization`，这是 Croissant 要求的带类型的写法）；`url` 是 `--url`，缺省为 `urn:diagri:snapshot:<ID>`；`datePublished` 是快照创建时的 UTC 日期；`about` 是作物物种 `crop_taxon`。
+- **数据集字段。** `name` 是 `diagri-<快照 ID>`；`description` 是协议的研究问题和假设；`license` 和 `creator` 来自命令的 `--licence` 和 `--creator`（创作者记为 `sc:Organization`，这是 mlcroissant 接受的创作者写法之一，另一种是 `sc:Person`）；`url` 是 `--url`，缺省为 `urn:diagri:snapshot:<ID>`；`datePublished` 是快照创建时的 UTC 日期；`about` 是作物物种 `crop_taxon`。
 - **文件。** 每个 CSV 一个 `FileObject`，带它的 SHA-256；每张表一个 `RecordSet`，每列一个 `Field`，带类型和描述。
 - **引用。** 只有 `variable_id` 列带 Croissant 的 `references`，指向 `variables.csv`（`variable_id` 是它的键）。`treatment_id` 和 `unit` 改在字段描述里写明来源：`treatments.csv` 每个处理每个因子一行，`units.csv` 的键是 `round` 和 `unit` 合起来，按其中任何一个连接都会让记录成倍增加。
 - **溯源。** `prov:wasDerivedFrom` 指向快照和它清单的 SHA-256；`prov:wasGeneratedBy` 写明 `growbridge`、它的版本和命令名。
@@ -162,7 +163,7 @@ CSV 文件是给机器读的训练数据，原样写出，不做任何转义。�
 
 ## 只读，以及什么时候拒绝
 
-导出只读取 archive、workflow 和 agents 三个数据库和快照目录，除假名密钥外不向数据目录写任何东西（后面的检查拒绝导出时，密钥可能已经存在）。它不拿守护进程锁，所以守护进程运行时也能导出。数据目录的结构比已安装的 growbridge 旧时、缺少数据库文件时、数据库正忙时，它会拒绝并给出原因：旧结构的做法是先用新版本启动一次守护进程再导出，正忙的就稍后再试。完整的清单在 [CLI 参考](CLI-Reference.md#export-dataset)。
+导出只读取 archive、workflow 和 agents 三个数据库和快照目录，除假名密钥外不向数据目录写任何东西（后面的检查拒绝导出时，密钥可能已经存在）。它不拿守护进程锁，所以守护进程运行时也能导出。数据目录的结构比已安装的 growbridge 旧时、缺少数据库文件时、数据库正忙时、SQLite 读不了某个数据库时，它会拒绝并给出原因：旧结构的做法是先用新版本启动一次守护进程再导出，正忙的就稍后再试，读不了的会附上 SQLite 的报错。完整的清单在 [CLI 参考](CLI-Reference.md#export-dataset)。
 
 ## 另见
 
