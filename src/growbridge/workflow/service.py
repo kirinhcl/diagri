@@ -32,6 +32,7 @@ from growbridge.ports import (
 )
 from growbridge.vocab import Catalog, packaged_catalog
 from growbridge.vocab.checks import check_protocol
+from growbridge.vocab.curie import taxon_problems
 from growbridge.workflow import denials
 from growbridge.workflow.access import Access, guard_project, guard_round, guard_sheet, guard_stage
 from growbridge.workflow.permissions import require_kind, require_operator
@@ -128,6 +129,8 @@ class WorkflowService(StageRecovery):
             problems = check_protocol(protocol, self.catalog, before)
             if problems:
                 raise denials.protocol_variables_invalid(protocol.id, protocol.version, problems)
+            if problems := taxon_problems(protocol.crop_taxon, protocol.cultivar):
+                raise denials.protocol_crop_taxon_invalid(protocol.id, protocol.version, problems)
             self.store.put_protocol(protocol, self.clock.now())
             return protocol
         if saved.digest() != protocol.digest():

@@ -11,6 +11,8 @@ export default {
   "msg.denial.protocol_version_exists.action": "请把版本号提高一档再保存。",
   "msg.denial.protocol_variables_invalid": "方案的版本 {version} 与变量目录不符。",
   "msg.denial.protocol_variables_invalid.action": "请用变量目录里的 ID 声明变量，把主要终点列在其中（它必须是人工测量的变量），处理因子也要用目录里的名字；每个问题都列在技术详情里。",
+  "msg.denial.protocol_crop_taxon_invalid": "方案的版本 {version} 没有正确写明作物物种。",
+  "msg.denial.protocol_crop_taxon_invalid.action": "请用 NCBI Taxonomy 的编号写作物物种，格式为 NCBITaxon:<数字>（到 NCBI Taxonomy 查询），品种名不超过 200 个字符；每个问题都列在技术详情里。",
   "msg.denial.round_not_accepting_run_sheets": "这一轮现在是“{state}”，不再接收运行单。",
   "msg.denial.round_not_accepting_run_sheets.action": "请在仍可修改的轮次里提交运行单。",
   "msg.denial.run_sheet_mismatch": "运行单写的{record_kind}和提交的目标不符。",

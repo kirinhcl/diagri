@@ -826,6 +826,18 @@ def test_protocol_without_variables_is_refused_by_name(bench, operator):
     assert "variables" in detail(refused)["message"]
 
 
+def test_save_protocol_refuses_a_protocol_without_crop_taxon(bench, operator):
+    project_id = bench.post(operator, "/wb/projects", {"name": "lettuce"}).json()["project_id"]
+    refused = bench.post(
+        operator, "/wb/protocols", {"protocol": protocol_json(project_id, crop_taxon="")}
+    )
+
+    assert detail(refused)["code"] == "param"
+    assert detail(refused)["reason"] == "protocol_crop_taxon_invalid"
+    assert detail(refused)["params"] == {"protocol_id": "protocol-1", "version": 1}
+    assert "crop_taxon" in detail(refused)["message"]
+
+
 def _goal_language(bench, operator, project_id: str, **fields):
     answer = bench.post(operator, "/wb/goals", {"project_id": project_id, "goal": GOAL, **fields})
     return answer, bench.tasks.list(project_id)

@@ -108,6 +108,7 @@ def make_protocol(**overrides) -> ResearchProtocol:
         "question": "提高光照后，冠层增长是否加快？",
         "hypothesis": "70 % 光照下冠层面积日增长高于 40 %。",
         "crop": "lettuce",
+        "crop_taxon": "NCBITaxon:4236",  # Lactuca sativa, NCBI Taxonomy
         "batch": "batch-1",
         "treatments": (
             Treatment(id="control", name="light 40 %", factors={"light": 40}),

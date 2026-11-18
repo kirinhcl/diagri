@@ -52,7 +52,7 @@ const submit = async (form) => {
 
 // A complete protocol: two treatments, two allocations. Everything typed here, nothing offered by the form.
 function fill(form, { question = "Does more light speed up growth?" } = {}) {
-  formControls(form).set({ question, crop: "lettuce", batch: "batch-1", randomization_seed: "20261118", stages: ["vegetative"], rounds: 2, blocks: 1 });
+  formControls(form).set({ question, crop: "lettuce", crop_taxon: "NCBITaxon:4236", cultivar: "Grand Rapids", batch: "batch-1", randomization_seed: "20261118", stages: ["vegetative"], rounds: 2, blocks: 1 });
   const [treatments, allocations] = groups(form);
   const [first, second] = rowsOf(treatments);
   change(named(first, "id")[0], "control");
@@ -89,6 +89,8 @@ test("the protocol form builds a protocol the server accepts, with version 1 for
       question: "Does more light speed up growth?",
       hypothesis: "",
       crop: "lettuce",
+      crop_taxon: "NCBITaxon:4236",
+      cultivar: "Grand Rapids",
       batch: "batch-1",
       treatments: [
         { id: "control", name: "light 40 %", description: "", factors: { light: 40 } },
@@ -129,6 +131,19 @@ test("the version is worked out when the form is sent, from the newest read of t
   assert.ok(reads.some((path) => path.includes(PROJECT.project_id)), reads.join(","));
   await submit(form);
   assert.equal(sent[1].protocol.version, 4, "a second send reads again, it does not reuse the first number");
+});
+
+test("the crop species is required, the cultivar is not", async () => {
+  const { form, sent } = await open();
+  fill(form);
+  formControls(form).set({ crop_taxon: "", cultivar: "" });
+  await submit(form);
+  assert.equal(sent.length, 0);
+  assert.deepEqual(errorsIn(form), [en["form.required"]]);
+  formControls(form).set({ crop_taxon: "NCBITaxon:4236" });
+  await submit(form);
+  assert.equal(sent.length, 1);
+  assert.deepEqual([sent[0].protocol.crop_taxon, sent[0].protocol.cultivar], ["NCBITaxon:4236", ""]);
 });
 
 test("the question is required, the hypothesis is not", async () => {
@@ -348,7 +363,7 @@ test("the JSON fold starts from an empty skeleton and invents nothing", async ()
   assert.deepEqual(value.allocations, []);
   assert.deepEqual(value.treatments, []);
   assert.deepEqual(value.stages, []);
-  for (const key of ["crop", "batch", "question", "hypothesis"]) assert.equal(value[key], "", key);
+  for (const key of ["crop", "crop_taxon", "cultivar", "batch", "question", "hypothesis"]) assert.equal(value[key], "", key);
   for (const key of ["randomization_seed", "rounds", "blocks"]) assert.equal(value[key], null, key);
   assert.equal(value.analysis.target_effect, null);
   assert.equal(value.version, 1);

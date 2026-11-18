@@ -64,12 +64,14 @@ function setOptions(select, choices, t, wanted) {
 // --- the sections ------------------------------------------------------------------------------
 
 function basicFields(t) {
-  // The server asks nothing of the crop, batch and unit text, so neither does the form.
+  // The server asks nothing of the crop, batch and unit text, so neither does the form; the species is the exception (an NCBI Taxonomy ID).
   const text = (name, label, extra = {}) => ({ name, label, ...extra });
   return [
     { name: "question", label: t("protocol.form.question"), hint: t("protocol.form.questionHint"), type: "textarea", required: true, parse: trimmed },
     { name: "hypothesis", label: t("protocol.form.hypothesis"), type: "textarea" },
     text("crop", t("protocol.form.crop")),
+    text("crop_taxon", t("protocol.form.cropTaxon"), { hint: t("protocol.form.cropTaxonHint"), required: true, parse: trimmed }),
+    text("cultivar", t("protocol.form.cultivar")),
     text("batch", t("protocol.form.batch")),
     text("experimental_unit", t("protocol.form.unit"), { value: "tent" }),
     { name: "randomization_seed", label: t("protocol.form.seed"), hint: t("protocol.form.seedHint"), type: "number", step: 1, required: true, parse: whole(-Number.MAX_SAFE_INTEGER) },
@@ -142,6 +144,8 @@ export function buildProtocol(projectId, values, id, version) {
     question: values.question,
     hypothesis: values.hypothesis ?? "",
     crop: values.crop ?? "",
+    crop_taxon: values.crop_taxon ?? "",
+    cultivar: values.cultivar ?? "",
     batch: values.batch ?? "",
     treatments: values.treatments.map((row) => ({ id: row.id, name: row.name, description: row.description ?? "", factors: row.factors ?? {} })),
     control_treatment_id: values.control_treatment_id,
@@ -221,7 +225,7 @@ function saveAsField(ctx, rows, protocolId) {
 // The skeleton the JSON fold starts from: only what is not the operator's to decide is filled (the id, version 1, the server's own defaults).
 export function protocolSkeleton(projectId, rows) {
   return {
-    id: newProtocolId(projectId, rows), project_id: projectId, version: 1, question: "", hypothesis: "", crop: "", batch: "",
+    id: newProtocolId(projectId, rows), project_id: projectId, version: 1, question: "", hypothesis: "", crop: "", crop_taxon: "", cultivar: "", batch: "",
     treatments: [], control_treatment_id: "", allocations: [], randomization_seed: null, variables: [],
     analysis: { primary_endpoint: "", target_effect: null, method: "", exclusion_rules: [], max_missing_fraction: DEFAULT_MISSING, max_deviation_fraction: DEFAULT_DEVIATION },
     stages: [], rounds: null, blocks: null, experimental_unit: "tent",

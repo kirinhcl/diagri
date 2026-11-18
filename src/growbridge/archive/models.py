@@ -531,14 +531,18 @@ class ResearchProtocol(Model):
     blocks: int
     experimental_unit: str = "tent"
     variables: tuple[str, ...] = ()  # catalog IDs of every variable this protocol measures
+    crop_taxon: str = ""  # NCBI Taxonomy CURIE of the crop species, NCBITaxon:<number>
+    cultivar: str = ""
 
     @model_serializer(mode="wrap")
-    def _without_empty_variables(self, handler):
-        # A protocol without variables dumps as it did before the field existed, so the digest
+    def _without_empty_fields(self, handler):
+        # A protocol without these fields dumps as it did before they existed, so the digest
         # of a protocol saved earlier stays the same.
         data = handler(self)
-        if isinstance(data, dict) and not data.get("variables"):
-            data.pop("variables", None)
+        if isinstance(data, dict):
+            for name in ("variables", "crop_taxon", "cultivar"):
+                if not data.get(name):
+                    data.pop(name, None)
         return data
 
 

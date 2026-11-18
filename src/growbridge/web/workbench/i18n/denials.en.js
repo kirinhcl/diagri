@@ -11,6 +11,8 @@ export default {
   "msg.denial.protocol_version_exists.action": "Raise the version number and save it again.",
   "msg.denial.protocol_variables_invalid": "Version {version} of this protocol does not fit the variable catalog.",
   "msg.denial.protocol_variables_invalid.action": "Declare the variables by their catalog IDs, list the primary endpoint among them (it must be a manual variable) and name treatment factors as the catalog does; the technical details list every problem.",
+  "msg.denial.protocol_crop_taxon_invalid": "Version {version} of this protocol does not name its crop species correctly.",
+  "msg.denial.protocol_crop_taxon_invalid.action": "Give the crop species as an NCBI Taxonomy ID in the form NCBITaxon:<number> (look it up at NCBI Taxonomy) and keep the cultivar under 200 characters; the technical details list every problem.",
   "msg.denial.round_not_accepting_run_sheets": "This round no longer accepts run sheets (state: {state}).",
   "msg.denial.round_not_accepting_run_sheets.action": "Submit the run sheet in a round that can still be changed.",
   "msg.denial.run_sheet_mismatch": "The {record_kind} named in the run sheet does not match where it was submitted.",

@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from growbridge.vocab import (
@@ -18,10 +20,12 @@ def test_known_prefixes_load():
     assert cat.get("air_temperature").refs == ("ENVO:09200001", "CO_331:0000192", "PATO:0000146")
 
 
-@pytest.mark.parametrize("ref", ["FOO:1", "air temperature", "ENVO:", ":123", "CO_:1", "CO_x1:1"])
+@pytest.mark.parametrize(
+    "ref", ["FOO:1", "air temperature", "ENVO:", ":123", "CO_:1", "CO_x1:1", "ENVO:1\n"]
+)
 def test_bad_ref_is_refused(ref):
     with pytest.raises(CatalogError, match="air_temperature"):
-        load_catalog(with_first_refs(f'["{ref}"]'))
+        load_catalog(with_first_refs(f"[{json.dumps(ref)}]"))
 
 
 def test_unit_refs_load():
@@ -30,7 +34,7 @@ def test_unit_refs_load():
 
 
 def test_unit_ref_for_an_unused_unit_is_refused():
-    with pytest.raises(CatalogError, match="K"):
+    with pytest.raises(CatalogError, match="unit_refs: K"):
         load_catalog(packaged_text() + '\n[unit_refs]\n"K" = "UO:0000012"\n')
 
 

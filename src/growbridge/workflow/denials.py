@@ -73,6 +73,16 @@ def protocol_variables_invalid(protocol_id: str, version: int, problems: list[st
     )
 
 
+def protocol_crop_taxon_invalid(protocol_id: str, version: int, problems: list[str]) -> Denied:
+    """The protocol's crop species is not an NCBI Taxonomy ID, or its cultivar is too long."""
+    return Denied(
+        "param",
+        "; ".join(problems),
+        reason="protocol_crop_taxon_invalid",
+        params={"protocol_id": protocol_id, "version": version},
+    )
+
+
 def protocol_not_found(protocol_id: str, project_id: str) -> Denied:
     return Denied(
         "state",
