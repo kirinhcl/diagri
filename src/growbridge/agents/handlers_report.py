@@ -211,7 +211,7 @@ def _missing_fraction(
         (a.round, a.unit)
         for r, spots in positions.items()
         for p in spots
-        if (a := unit_of(protocol, r, p)) is not None
+        if (a := unit_of(protocol.allocations, r, p)) is not None
     } & planned
     return 1 - len(present) / len(planned) if planned else 1.0
 

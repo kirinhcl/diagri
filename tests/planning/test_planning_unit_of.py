@@ -11,15 +11,15 @@ TWO_UNITS = make_protocol(
 
 
 def test_single_allocation_round_takes_any_position():
-    allocation = unit_of(make_protocol(), 1, "anywhere")
+    allocation = unit_of(make_protocol().allocations, 1, "anywhere")
     assert allocation is not None and allocation.unit == "tent-1"
 
 
 def test_multi_unit_round_matches_the_unit():
-    allocation = unit_of(TWO_UNITS, 1, "tent-2")
+    allocation = unit_of(TWO_UNITS.allocations, 1, "tent-2")
     assert allocation is not None and allocation.treatment_id == "control"
 
 
 def test_no_match_is_none():
-    assert unit_of(TWO_UNITS, 1, "nowhere") is None
-    assert unit_of(TWO_UNITS, 9, "tent-1") is None
+    assert unit_of(TWO_UNITS.allocations, 1, "nowhere") is None
+    assert unit_of(TWO_UNITS.allocations, 9, "tent-1") is None

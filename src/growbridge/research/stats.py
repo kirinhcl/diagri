@@ -17,6 +17,7 @@ from pydantic import Field
 
 from growbridge.archive.models import Allocation, ManualMeasurement, Model
 from growbridge.codes import checked
+from growbridge.planning.treatment import unit_of
 from growbridge.vocab import Catalog, packaged_catalog
 
 MIN_BLOCKS = 2
@@ -34,16 +35,6 @@ class BlockEstimate(Model):
     note: str = ""
     note_code: str = ""  # the code of ``note`` in the "estimate" family; "" for an exact estimate
     note_params: dict[str, Any] = Field(default_factory=dict)
-
-
-def _allocation_for(
-    measurement: ManualMeasurement, round_: int, allocations: Sequence[Allocation]
-) -> Allocation | None:
-    candidates = [item for item in allocations if item.round == round_]
-    if len(candidates) == 1:
-        return candidates[0]
-    matching = [item for item in candidates if item.unit == measurement.position]
-    return matching[0] if matching else None
 
 
 @dataclass(frozen=True)
@@ -76,7 +67,7 @@ def unit_table(
     excluded: list[str] = []
     for item in relevant:
         round_ = round_of.get(item.experiment_id)
-        home = None if round_ is None else _allocation_for(item, round_, allocations)
+        home = None if round_ is None else unit_of(allocations, round_, item.position)
         if home is None:
             dropped.append(item.id)
         elif home.round in failed_rounds:

@@ -12,7 +12,7 @@ device never received.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from growbridge.archive.models import (
     Allocation,
@@ -50,13 +50,15 @@ def allocated(protocol: ResearchProtocol, round_number: int | None) -> Treatment
     return next((t for t in protocol.treatments if t.id == treatment_id), None)
 
 
-def unit_of(protocol: ResearchProtocol, round_number: int, position: str) -> Allocation | None:
+def unit_of(
+    allocations: Sequence[Allocation], round_number: int, position: str
+) -> Allocation | None:
     """The allocation a measured ``position`` belongs to in a round, or None.
 
     A round with one allocation has one unit, so any position is it; otherwise the position
     must name the unit.
     """
-    in_round = [a for a in protocol.allocations if a.round == round_number]
+    in_round = [a for a in allocations if a.round == round_number]
     if len(in_round) == 1:
         return in_round[0]
     return next((a for a in in_round if a.unit == position), None)

@@ -71,7 +71,7 @@ def measurement_rows(
         if not keep(record):
             withheld += 1
             continue
-        placed = unit_of(protocol, round_number, record.position)
+        placed = unit_of(protocol.allocations, round_number, record.position)
         unplaced += placed is None
         rows.append(
             {
