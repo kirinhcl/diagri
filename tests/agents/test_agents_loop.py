@@ -27,6 +27,34 @@ def orchestrator(*tools):
     return build_toolset("orchestrator", tools or [make_tool("get_project_state")])
 
 
+MILLION = 1_000_000
+
+
+def cached_turns() -> ScriptedClient:
+    """A tool turn that writes a million cached tokens, then an answer that reads them back."""
+    first = tool_reply(call("t1"), input_tokens=0, output_tokens=0)
+    answer = text_reply("done", input_tokens=0, output_tokens=0)
+    return ScriptedClient(
+        [
+            first.model_copy(update={"cache_write_tokens": MILLION}),
+            answer.model_copy(update={"cache_read_tokens": MILLION}),
+        ]
+    )
+
+
+async def test_cached_tokens_are_charged_to_the_budget():
+    budget = FakeBudget()
+    result = await run(cached_turns(), orchestrator(), budget)
+    # claude-opus-5-5: $5.00 per million tokens written to the cache, $0.20 per million read.
+    assert [spent for _, spent in budget.charges] == [pytest.approx(5.0), pytest.approx(0.2)]
+    assert result.cost == pytest.approx(5.2)
+
+
+async def test_the_run_reports_its_cached_tokens():
+    result = await run(cached_turns(), orchestrator(), FakeBudget())
+    assert (result.cache_write_tokens, result.cache_read_tokens) == (MILLION, MILLION)
+
+
 async def test_plain_answer_ends_the_run_and_charges_budget():
     budget = FakeBudget()
     result = await run(ScriptedClient([text_reply("done", 100, 50)]), orchestrator(), budget)
