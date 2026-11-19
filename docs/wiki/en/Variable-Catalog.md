@@ -46,6 +46,8 @@ The training dataset export ([Training dataset export](Training-Dataset-Export.m
 
 Until then the export lists the variable with `mapped=false` and counts it in `unmapped_variables`, and the `unit_uo` column stays empty.
 
+Catalog version 2 (2026-11-19) carries the first confirmed terms: `air_temperature`, `air_relative_humidity`, `co2_concentration`, `photosynthetic_photon_flux_density`, `soil_temperature` and `light` have `refs`, and `Cel`, `%`, `[ppm]` and `umol/m2/s` have a UO term. `vapour_pressure_deficit`, `canopy_area_growth`, `kPa` and `cm2/d` have none, because no term within the known prefixes fits. The term of `light`, `PECO:0007224` light intensity exposure, names the kind of treatment only: its levels are a percent of the lamp's maximum and cannot be compared with another source's light levels. The candidates, the sources and the reasons for each choice are in [`docs/superpowers/notes/2026-11-18-ontology-candidates.md`](../../superpowers/notes/2026-11-18-ontology-candidates.md).
+
 ## Declare variables before the protocol is saved
 
 A research protocol must declare its `variables`, a list of catalog IDs. Saving is refused with 422 `param`, listing every problem, when:

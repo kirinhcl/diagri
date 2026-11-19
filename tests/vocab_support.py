@@ -1,6 +1,19 @@
 """A catalog for tests: the packaged one plus the manual names older tests already use."""
 
+import re
+
 from growbridge.vocab import load_catalog, packaged_text
+
+_REFS = re.compile(r"^refs = \[.*\]$", re.MULTILINE)
+_UNIT_REFS = re.compile(r"^\[unit_refs\]\n(?:[^\[\n].*\n|\n)*", re.MULTILINE)
+
+
+def bare_packaged_text() -> str:
+    """The packaged catalog with its confirmed ontology terms taken out: every ``refs`` empty and
+    no ``[unit_refs]`` table. For tests that exercise the term format with their own values, so
+    they do not depend on which terms the researcher has confirmed."""
+    return _REFS.sub("refs = []", _UNIT_REFS.sub("", packaged_text()))
+
 
 TEST_ENTRIES = """
 [[variable]]

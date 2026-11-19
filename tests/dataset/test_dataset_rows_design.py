@@ -1,15 +1,16 @@
 import pytest
+from vocab_support import bare_packaged_text
 
 from growbridge.archive.models import Allocation, Treatment
 from growbridge.dataset.rows_design import treatment_rows, unit_rows, variable_rows
 from growbridge.dataset.schema import table
 from growbridge.dataset.source import ExportRefused
 from growbridge.sim.fixtures import make_protocol
-from growbridge.vocab import load_catalog, packaged_catalog, packaged_text
+from growbridge.vocab import load_catalog
 
-PLAIN = packaged_catalog()
+PLAIN = load_catalog(bare_packaged_text())
 WITH_REFS = load_catalog(
-    packaged_text().replace("refs = []", 'refs = ["ENVO:09200001"]', 1)
+    bare_packaged_text().replace("refs = []", 'refs = ["ENVO:09200001"]', 1)
     + '\n[unit_refs]\n"Cel" = "UO:0000027"\n'
 )
 

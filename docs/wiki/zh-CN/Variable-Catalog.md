@@ -46,6 +46,8 @@
 
 在此之前，导出照常列出这个变量，`mapped=false`，计入 `unmapped_variables`，`unit_uo` 列也保持为空。
 
+目录第 2 版（2026-11-19）带上了第一批确认过的术语：`air_temperature`、`air_relative_humidity`、`co2_concentration`、`photosynthetic_photon_flux_density`、`soil_temperature` 和 `light` 有 `refs`，`Cel`、`%`、`[ppm]` 和 `umol/m2/s` 有 UO 术语。`vapour_pressure_deficit`、`canopy_area_growth`、`kPa` 和 `cm2/d` 没有，因为已知前缀里没有合适的术语。`light` 的术语 `PECO:0007224` light intensity exposure 只说明处理的类型：它的层级是灯具最大输出的百分比，不能和其他来源的光照层级相比。候选术语、出处和每条的取舍理由见 [`docs/superpowers/notes/2026-11-18-ontology-candidates.md`](../../superpowers/notes/2026-11-18-ontology-candidates.md)。
+
 ## 保存协议之前先声明变量
 
 研究协议必须声明 `variables`，即目录 ID 的列表。出现以下情况时，保存会被 422 `param` 拒绝，并列出每一个问题：

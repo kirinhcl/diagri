@@ -1,6 +1,24 @@
 # Ontology term candidates for the variable catalog
 
-Lookup date: 2026-11-18. Nothing here is in `src/growbridge/vocab/catalog.toml` yet.
+Lookup date: 2026-11-18. The rows the researcher confirmed are in `src/growbridge/vocab/catalog.toml`
+version 2; see [Decisions](#decisions-2026-11-19).
+
+## Decisions (2026-11-19)
+
+The researcher answered row by row on 2026-11-19:
+
+- `soil_temperature`: the `tempSoil` probe sits in soil or a soil-based mix, so row 10 (ENVO:09200012), not row 11.
+- Yes: rows 1, 3, 6, 8, 10, 13, 14 and 15.
+- Row 12 (PECO:0007224): yes, as the factor's type only. Its levels are a dimming percent and are not
+  comparable across sources.
+- Row 16 (UO:0000160 for `umol/m2/s`): yes, while PPFD is the only entry with that unit. Look at it again
+  before another entry uses `umol/m2/s`.
+- No: rows 2, 4, 5, 7, 9 and 11. `vapour_pressure_deficit`, `canopy_area_growth`, `kPa` and `cm2/d` stay
+  empty.
+
+Before the answers, every confirmed CURIE was looked up again on OLS4 (2026-11-19): each exists, has the
+label given below and is not obsolete. `tests/vocab/test_vocab_refs.py` pins these terms, so a change must
+go through the same confirmation.
 
 ## Purpose
 

@@ -4,6 +4,7 @@ from growbridge.archive import snapshot as snap
 from growbridge.archive.models import ManualMeasurement, SampleRecord
 from growbridge.dataset.source import ExportRefused, SnapshotData, read_snapshot
 from growbridge.sim.clock import START
+from growbridge.vocab import packaged_catalog
 
 
 @pytest.fixture
@@ -47,7 +48,7 @@ def test_reads_a_frozen_snapshot(archive, frozen):
     assert data.snapshot.id == frozen.id
     assert len(data.samples) == 10 and data.samples_untrusted == ()
     assert [m.id for m in data.measurements] == ["m1"]
-    assert data.catalog_record["version"] == 1
+    assert data.catalog_record["version"] == packaged_catalog().version  # what freeze recorded
     assert data.manifest["files"] == frozen.files
     assert data.frozen_periods == () and data.interventions == ()
 
