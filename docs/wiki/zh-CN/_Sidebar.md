@@ -23,6 +23,7 @@
 - [工作流与状态机](Workflow-and-State-Machines.md)
 - [数据、档案与可追溯性](Data-Archive-and-Traceability.md)
 - [变量目录](Variable-Catalog.md)
+- [训练数据集导出](Training-Dataset-Export.md)
 - [科研方法](Research-Methodology.md)
 - [设计决策记录](Design-Decisions.md)
 

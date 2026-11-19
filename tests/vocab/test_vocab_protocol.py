@@ -33,7 +33,19 @@ def test_protocol_without_variables_dumps_as_before():
 
 
 def test_protocol_without_variables_keeps_its_pre_change_digest():
-    assert make_protocol(variables=()).digest() == PRE_CHANGE_DIGEST
+    assert make_protocol(variables=(), crop_taxon="").digest() == PRE_CHANGE_DIGEST
+
+
+def test_protocol_without_crop_fields_dumps_as_before():
+    raw = make_protocol(variables=(), crop_taxon="", cultivar="").model_dump(mode="json")
+    assert "crop_taxon" not in raw and "cultivar" not in raw
+
+
+def test_crop_fields_are_dumped_when_set():
+    raw = make_protocol(crop_taxon="NCBITaxon:4236", cultivar="Grand Rapids").model_dump(
+        mode="json"
+    )
+    assert raw["crop_taxon"] == "NCBITaxon:4236" and raw["cultivar"] == "Grand Rapids"
 
 
 def test_declared_variables_are_dumped():

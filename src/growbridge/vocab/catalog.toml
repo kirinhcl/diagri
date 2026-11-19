@@ -1,8 +1,14 @@
-version = 1
+version = 2
 
 [unit_aliases]
 C = "Cel"
 ppm = "[ppm]"
+
+[unit_refs]
+"Cel" = "UO:0000027"
+"%" = "UO:0000187"
+"[ppm]" = "UO:0000169"
+"umol/m2/s" = "UO:0000160"
 
 [[variable]]
 id = "air_temperature"
@@ -12,7 +18,7 @@ label_zh = "空气温度"
 quantity = "temperature"
 unit = "Cel"
 aliases = ["temp"]
-refs = []
+refs = ["ENVO:09200001"]
 
 [[variable]]
 id = "air_relative_humidity"
@@ -24,7 +30,7 @@ unit = "%"
 aliases = ["humi"]
 min = 0
 max = 100
-refs = []
+refs = ["AGRO:00000637"]
 
 [[variable]]
 id = "vapour_pressure_deficit"
@@ -46,7 +52,7 @@ quantity = "concentration"
 unit = "[ppm]"
 aliases = ["co2"]
 min = 0
-refs = []
+refs = ["ENVO:04000004"]
 
 [[variable]]
 id = "photosynthetic_photon_flux_density"
@@ -57,7 +63,7 @@ quantity = "photon_flux_density"
 unit = "umol/m2/s"
 aliases = ["ppfd"]
 min = 0
-refs = []
+refs = ["ENVO:06105204"]
 
 [[variable]]
 id = "soil_temperature"
@@ -67,7 +73,7 @@ label_zh = "土壤温度"
 quantity = "temperature"
 unit = "Cel"
 aliases = ["tempSoil"]
-refs = []
+refs = ["ENVO:09200012"]
 
 [[variable]]
 id = "canopy_area_growth"
@@ -88,4 +94,4 @@ quantity = "level"
 unit = "%"
 min = 0
 max = 100
-refs = []
+refs = ["PECO:0007224"]

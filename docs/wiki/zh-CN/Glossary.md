@@ -91,6 +91,7 @@
 | 主要终点 | primary endpoint | `AnalysisPlan.primary_endpoint` | 确认性分析针对的那一个结果指标，实验开始前就固定下来。 |
 | 锁定变量 | locked variable | 无 | 协议规定在各处理之间保持一致的环境变量。这是架构文档里的概念，代码里没有单独的字段。 |
 | 证据卡 | evidence card | `EvidenceCard` | 一个设定值的来源记录：引用出处、它支持的论断、数值与单位，以及是否经过复核。既没有证据卡、也没有用户输入的设定值会得到 `no_evidence` 提示，但运行单不会因此被拦下。 |
+| 训练数据集 | training dataset | `growbridge export-dataset` | 由一个冻结快照导出的 CSV 表和 Croissant 描述，用于模型训练。见[训练数据集导出](Training-Dataset-Export.md)。 |
 | 数据快照 | data snapshot | `Snapshot`、`snapshot.freeze()` | 一次分析所用数据的冻结副本，可以校验。 |
 | 留出数据 | holdout data | `HoldoutRegistry` | 模型开发前登记、只用于正式评估的数据。 |
 | 确认性、探索性 | confirmatory, exploratory | `ConfirmatoryRunner`、`classify()` | 确认性分析只跑一次，脚本和快照都事先冻结。其余分析都是探索性的。 |

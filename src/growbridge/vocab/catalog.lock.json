@@ -1,6 +1,7 @@
 {
   "versions": {
-    "1": "e61ec20502a9e7a0d9b86a34974df0eaf63a4cf7f81cfbd74cf6be1d60f1fa68"
+    "1": "e61ec20502a9e7a0d9b86a34974df0eaf63a4cf7f81cfbd74cf6be1d60f1fa68",
+    "2": "4c829478e0b8fdf718d788f2eae7f1f7b35e8a8efd3f3badfcbb21b5b289769e"
   },
   "entries": {
     "air_relative_humidity": "e3adad4a38a69cb2bd0573fa7e8fc2cfc7050dc6140a4c854b27619bd37c42f8",

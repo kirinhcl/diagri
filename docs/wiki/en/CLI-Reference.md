@@ -10,7 +10,7 @@ The parser is `main()` in [`cli.py`](../../../src/growbridge/cli.py). The tables
 
 ```text
 growbridge [-h] [--version] [--config CONFIG]
-           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,simulate} ...
+           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate} ...
 ```
 
 ## Global options
@@ -25,7 +25,7 @@ Global options go before the subcommand, for example `growbridge --config /absol
 
 ## Subcommands
 
-There are 10 subcommands. `operator`, `host` and `recovery` each take one nested subcommand, which is required.
+There are 11 subcommands. `operator`, `host` and `recovery` each take one nested subcommand, which is required.
 
 | Command | Arguments and options | Reads the configuration file | Needs a running daemon | DiAGRI mode |
 | --- | --- | --- | --- | --- |
@@ -38,6 +38,7 @@ There are 10 subcommands. `operator`, `host` and `recovery` each take one nested
 | `operator add` | `name` (positional, required), `--admin` (make the operator an administrator; multi-user) | yes | no | meant for it; the command does not check `auto_research` |
 | `host register` | none | yes | no | meant for it; the command does not check `auto_research` |
 | `recovery bump` | `--reason REASON` (required) | yes | no, it must be stopped | meant for it; the command does not check `auto_research` |
+| `export-dataset` | `--snapshot SNAPSHOT`, `--out OUT`, `--licence LICENCE`, `--creator CREATOR` (all required), `--url URL` | yes | no, it can run while the daemon runs | reads what DiAGRI recorded; the command does not check `auto_research` |
 | `simulate` | none | no | no | builds its own DiAGRI runtime in a temporary directory |
 
 No command creates a project, a research protocol or a research round, sets a project's call budget, or creates the first task of the orchestrator. An operator does these through the workbench routes; see [Run a research round](Run-a-Research-Round.md). Among the commands only `simulate` makes those calls, inside `_design_and_start` in [`runtime.py`](../../../src/growbridge/runtime.py).
@@ -55,6 +56,7 @@ No command creates a project, a research protocol or a research round, sets a pr
 | `operator add` | Asks twice for the secret without echo (`Operator secret: `, `Repeat secret: `) and stores the operator in `workflow.sqlite3` in `data_dir`. The secret is stored as a salted scrypt hash. The name is 1 to 64 characters, the secret 12 to 256. | `Operator added: <name>` |
 | `host register` | Reads or creates `host_id` in `data_dir` (mode `0600`) and registers this machine as the write host of `device` in `control.sqlite3`. It opens no Bluetooth connection. Running it again on the registered host succeeds. | `Write host registered: <host id>` |
 | `recovery bump` | Takes the daemon lock, builds the runtime without starting it, raises the recovery number by one, revokes every write right, voids queued actions, moves every stage that is not finished to `recovery_check` and voids its approvals. `REASON` is stored with the event. | `Recovery number is now <n>; confirm the safety config and review live stages` |
+| `export-dataset` | Writes the training dataset of one frozen snapshot into the new directory `OUT`: eleven CSV tables and `croissant.json`. It only reads the databases and the snapshot, and writes only the pseudonym key into `data_dir`. `--licence` and `--creator` are recorded in the metadata (the creator as an organization); `--url` is where the dataset is published, if anywhere. Spaces around `--licence`, `--creator` and `--url` are stripped; a blank `--url` counts as none. See [Training dataset export](Training-Dataset-Export.md). | A JSON object with `out`, `rows` (the data rows of each file) and `counts` (the ten counts of the metadata) |
 | `simulate` | Runs one short stage on the simulated AC5 with a simulated clock, in a temporary directory: approve the safety configuration, create project, protocol and round, submit and approve a run sheet, start the stage, tick until it ends. No radio and no network. | A JSON object with `stage`, `round`, `beats`, `samples` and `writes` |
 
 ### `serve` in DiAGRI mode
@@ -70,6 +72,33 @@ The steps are in `_serve_auto_research` and `_serve_listeners`.
 | 5 | If `roles` is not empty and the model client can be built, starts the model roles: `Runtime.run_agents()` every 30 seconds (`AGENT_SECONDS`). Otherwise no model role runs. |
 | 6 | Serves the bridge routes and the workbench routes on `127.0.0.1:<port>`, and also on `<lan_bind>:<lan_port>` when `lan_bind` and `lan_port` are both set. |
 
+### `export-dataset`
+
+The steps are in `export_dataset` in [`dataset/command.py`](../../../src/growbridge/dataset/command.py). The command stops at the first problem and then writes nothing, apart from the pseudonym key, which a refusal after the key was created leaves in place. A refusal prints `export refused: <message>` on standard error and exits 1. Every message says what was found:
+
+| Refusal | When |
+| --- | --- |
+| `<OUT> already exists; name a directory that does not.` | `--out` exists. |
+| `The parent of <OUT> does not exist.` | The directory above `--out` is missing. |
+| `<OUT> lies inside the data directory ...; write it elsewhere.` | `--out` is `data_dir` or below it. |
+| `<name>.sqlite3 is missing from <data_dir>; this is not a daemon data directory ...` | `archive`, `workflow` or `agents` has no database file. The export does not create an empty one. |
+| `The schema of <name>.sqlite3 is older than this growbridge (...). Start the daemon once with this version, then export.` | A database has not been migrated by the installed version; the export does not migrate it. |
+| `The data directory is busy (...); try again.` | A database is locked by a writer. |
+| `SQLite could not read the data directory: <error>.` | Any other SQLite error while reading the databases, for example a file that is not a database, a damaged one, or a schema this growbridge cannot read. `<error>` is SQLite's message. |
+| `Snapshot <ID> does not exist.` | Unknown snapshot. |
+| `Snapshot <ID> failed verification: ...` | A snapshot file no longer matches its recorded digest. |
+| `Snapshot <ID> has no catalog.json; ...` | The snapshot was frozen before the catalog was recorded. |
+| `Snapshot file <name> cannot be read` or `... holds an invalid record` or `... is not an object` | A snapshot file is damaged. |
+| `Experiment <ID> must run under exactly one project`, `protocol version` or `round`; found ... | The experiment's stages ran under two protocol versions or in two rounds, or it has no project. The export names what it found instead of choosing. |
+| `Protocol <ID> version <n> is not saved.` | The protocol row is missing. |
+| `Protocol <ID> version <n> cannot describe the dataset: ...` | `crop_taxon` is empty or not `NCBITaxon:<number>`, or `cultivar` is over 200 characters. |
+| `Name the licence ...` or `Name the creator ...` | `--licence` or `--creator` is empty. |
+| `Measurement <ID> records '<name>', which the variable catalog does not define ...` | A manual measurement names no catalog variable. |
+| `Measurement <ID> is in '<unit>', but <variable> is measured in '<unit>'.` | A measurement's unit differs from the catalog's. |
+| `Variable <ID> is in neither the snapshot's catalog nor the current one.` | A variable the rows use is in no catalog. |
+
+On success it exits 0 and prints the JSON summary. Any failure that is not one of the refusals above ends in a Python traceback (exit 1) instead, for example a pseudonym key that is not 32 bytes or a disk that fills while the files are written. Missing or invalid configuration and usage errors behave as in the table below.
+
 ## Exit behavior
 
 | Situation | Commands | Message | Exit code |
@@ -78,6 +107,7 @@ The steps are in `_serve_auto_research` and `_serve_listeners`.
 | Missing subcommand, unknown option, missing required argument | all | usage text and `growbridge: error: ...` | 2 |
 | The configuration file is missing or does not pass `load` | all that read it | Python traceback (`FileNotFoundError`, `ValidationError`, `ValueError`, ...) | 1 |
 | The configuration file already exists | `init` | traceback ending in `FileExistsError` | 1 |
+| The export cannot proceed | `export-dataset` | `export refused: <message>`, see [`export-dataset`](#export-dataset) | 1 |
 | Another daemon holds the lock on `data_dir` | `serve` | `A daemon already owns this data directory` | 2 |
 | A model-role token is shorter than 32 characters | `serve` in DiAGRI mode | `growbridge: the token of role '<role>' is shorter than 32 characters` | 1 |
 | The daemon does not answer, or answers with an error | `status`, `dashboard` | traceback; for an error reply, `RuntimeError` with the daemon's `detail` | 1 |
@@ -93,6 +123,7 @@ Every command sets the process umask to `0o077` after parsing its arguments, so 
 
 ## See also
 
+- [Training dataset export](Training-Dataset-Export.md)
 - [Configuration reference](Configuration-Reference.md)
 - [HTTP, workbench and MCP interfaces](API-Reference.md)
 - [Installation and quick start](Installation-and-Quick-Start.md)

@@ -1,0 +1,11 @@
+time,time_source,clock_synced,sample_id,device_id,experiment_id,stage_id,round,key,value,quality
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,fan.level,3.0,ok
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,fan.on,1.0,ok
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,light.level,70.0,ok
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,light.on,1.0,ok
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,outlet.O1.on,1.0,ok
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,fan.level,3.0,suspect
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,fan.on,1.0,suspect
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,light.level,70.0,suspect
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,light.on,1.0,suspect
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,outlet.O1.on,1.0,suspect

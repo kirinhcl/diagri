@@ -89,7 +89,7 @@ Freezing again never changes an existing snapshot. It writes a new folder with t
 
 Coverage example, checked with `coverage_of`: a one-hour window, a sample every 60 seconds, an allowed gap of 120 seconds, and no samples between minute 25 and minute 35. The silence is credited 60 seconds, the gap is 540 seconds, coverage is 3060 / 3600 = 0.85, and the snapshot is marked incomplete.
 
-`verify()` returns true only when three things hold: the manifest file still has the digest stored in the archive, the file list in the manifest equals the stored list, and every file still has its listed digest. `run_local_analysis`, `publish_research_report` and `export_miappe` all verify first. `ConfirmatoryRunner` is stricter: it also requires `complete` and refuses a folder with a missing or an extra file.
+`verify()` returns true only when three things hold: the manifest file still has the digest stored in the archive, the file list in the manifest equals the stored list, and every file still has its listed digest. `run_local_analysis`, `publish_research_report` and `export-dataset` verify first. `ConfirmatoryRunner` is stricter: it also requires `complete` and refuses a folder with a missing or an extra file.
 
 When a holdout is registered, its outcome measurements are left out of `measurements.jsonl`, and the manifest counts them in `measurements_excluded`. See [Research methodology](Research-Methodology.md).
 
@@ -99,10 +99,10 @@ When a holdout is registered, its outcome measurements are left out of `measurem
 | --- | --- | --- |
 | Data snapshot | A folder of JSON Lines files and `manifest.json` | `freeze()` |
 | Research report | `research_report_<artifact_id>.json` | `publish_research_report` |
-| MIAPPE-compatible metadata | `miappe.json` | `export_miappe` in [`archive/export.py`](../../../src/growbridge/archive/export.py) |
+| Training dataset | CSV files and `croissant.json` | `growbridge export-dataset` ([`dataset/command.py`](../../../src/growbridge/dataset/command.py)) |
 | Legacy readings | CSV, at most 168 hours | `GET /history/export.csv` in [`api.py`](../../../src/growbridge/api.py) |
 
-`export_miappe` builds its metadata from the snapshot's own files, not from the live database, so it describes exactly the data an analysis used. It needs a licence and a persistent identifier, and it refuses a snapshot that fails verification. The file lists the study (protocol id and version, question, hypothesis, seed, primary endpoint), the experimental units with their treatments, the observed variables, the coverage and gaps, and the data files with their digests. Sensor variables are exported without a unit. No command or route calls `export_miappe` yet; it is a library function covered by [tests](../../../tests/archive/test_archive_export.py).
+`growbridge export-dataset` exports one frozen snapshot for model training, as long-format CSV tables and a `croissant.json` that describes them. Its records come from the snapshot's own files; the live archive is consulted only to count measurements corrected after the freeze. It verifies the snapshot first: a snapshot whose files no longer match their digests is refused. Operator names do not appear in the output, only pseudonyms. It re-applies the holdout registry as it is at export time, so a holdout registered after the freeze still keeps its outcomes out. The command writes nothing to the data directory except the pseudonym key, and it refuses a data directory whose schema is older than the installed growbridge instead of upgrading it: start the daemon once with the new version, then export. The tables and columns, the pseudonyms and the free-text warning are on [Training dataset export](Training-Dataset-Export.md); the options and refusals are in the [CLI reference](CLI-Reference.md#export-dataset); the code is in [`dataset/command.py`](../../../src/growbridge/dataset/command.py).
 
 ## Tracing one reported number
 

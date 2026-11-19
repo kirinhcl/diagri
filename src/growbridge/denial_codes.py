@@ -55,6 +55,7 @@ _register(
 )
 _register("state", ("unknown_choice", ("choice",)), action=False)
 _register("param", ("protocol_variables_invalid", ("protocol_id", "version")))
+_register("param", ("protocol_crop_taxon_invalid", ("protocol_id", "version")))
 
 _register(
     "approval_invalid",

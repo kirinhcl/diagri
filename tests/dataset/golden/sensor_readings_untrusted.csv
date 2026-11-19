@@ -1,0 +1,5 @@
+time,time_source,clock_synced,sample_id,device_id,experiment_id,stage_id,round,variable_id,raw_key,value,quality,stuck
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,59.5,ok,false
+2027-01-15T08:05:01.500Z,received,false,s-300,ggs-1,exp-1,vegetative,1,air_temperature,temp,24.5,ok,false
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,air_relative_humidity,humi,59.0,suspect,false
+2027-01-15T08:06:00.000Z,captured,true,s-360,ggs-1,exp-1,vegetative,1,air_temperature,temp,24.75,suspect,false

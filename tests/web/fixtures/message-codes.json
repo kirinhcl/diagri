@@ -906,6 +906,14 @@
       "action": true,
       "of": "param"
     },
+    "protocol_crop_taxon_invalid": {
+      "params": [
+        "protocol_id",
+        "version"
+      ],
+      "action": true,
+      "of": "param"
+    },
     "approval_blocking_findings": {
       "params": [
         "stage_id",

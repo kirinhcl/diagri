@@ -1,0 +1,3 @@
+id,time,stage_id,kind,detail,operator
+intv_0002,2027-01-15T08:04:10.000Z,vegetative,unexpected_watering,"{""off_confirmed"":true,""request_id"":""req-irrigation"",""status_at"":1800000245.0}",
+intv_0003,2027-01-15T08:04:10.000Z,vegetative,pruning,"{""plants"":2}",op-8bd7c316f050

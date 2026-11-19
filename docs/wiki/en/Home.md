@@ -48,6 +48,7 @@ GrowBridge is DiAGRI's device bridge: the part that reads and controls a Spider 
 - [Workflow and state machines](Workflow-and-State-Machines.md): rounds, stages and research tasks.
 - [Data, archive and traceability](Data-Archive-and-Traceability.md): what is recorded and how a number is traced back.
 - [Variable catalog](Variable-Catalog.md): the shared standard variable IDs, and how to extend them.
+- [Training dataset export](Training-Dataset-Export.md): the CSV tables and Croissant metadata for model training, column by column.
 - [Research methodology](Research-Methodology.md): experimental unit, blocks, the test, the confirmatory gate.
 - [Design decisions](Design-Decisions.md): the main decisions and their reasons.
 

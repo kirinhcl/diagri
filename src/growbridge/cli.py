@@ -6,6 +6,7 @@ import getpass
 import json
 import logging
 import os
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -173,6 +174,27 @@ async def _serve_auto_research(settings) -> None:
         await runtime.stop()
 
 
+def _export_dataset(settings, args) -> None:
+    from .dataset.command import export_dataset
+    from .dataset.source import ExportRefused
+
+    try:
+        summary = export_dataset(
+            settings.data_dir,
+            args.snapshot,
+            args.out,
+            args.licence.strip(),
+            args.creator.strip(),
+            (args.url or "").strip() or None,
+            __version__,
+        )
+    except ExportRefused as refused:
+        print(f"export refused: {refused}", file=sys.stderr)
+        raise SystemExit(1) from None
+    report = {"out": str(summary.out), "rows": dict(summary.rows), "counts": dict(summary.counts)}
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     """The command line: global options and every subcommand (the wiki's CLI reference is
     checked against it)."""
@@ -213,6 +235,14 @@ def build_parser() -> argparse.ArgumentParser:
     recovery_sub = recovery.add_subparsers(dest="recovery_command", required=True)
     bump = recovery_sub.add_parser("bump", help="Raise the recovery number (daemon stopped)")
     bump.add_argument("--reason", required=True, help="Why: restore, host change, ...")
+    export = sub.add_parser(
+        "export-dataset", help="Write the training dataset of a frozen snapshot (read-only)"
+    )
+    export.add_argument("--snapshot", required=True, help="Snapshot id")
+    export.add_argument("--out", required=True, type=Path, help="New directory to write")
+    export.add_argument("--licence", required=True, help="Licence the dataset is released under")
+    export.add_argument("--creator", required=True, help="Creator named in the metadata")
+    export.add_argument("--url", help="Where the dataset is published, if anywhere")
     sub.add_parser("simulate", help="Run a short simulated stage (no radio, no network)")
     return parser
 
@@ -238,7 +268,9 @@ def main():
         print(json.dumps(asyncio.run(simulate_stage()), ensure_ascii=False, indent=2))
         return
     settings = load(args.config)
-    if args.command == "operator":
+    if args.command == "export-dataset":
+        _export_dataset(settings, args)
+    elif args.command == "operator":
         _add_operator(parser, settings, args.name, args.admin)
     elif args.command == "host":
         _register_host(parser, settings)
