@@ -109,17 +109,15 @@ def to_reply(answer: dict, usage: dict) -> ModelReply:
     )
     content: list[dict] = [{"type": "text", "text": text}] if text else []
     content += [{"type": "tool_use", "id": c.id, "name": c.name, "input": c.input} for c in calls]
-    tokens_in = sum(
-        int(usage.get(key) or 0)
-        for key in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
-    )
     return ModelReply(
         stop_reason="tool_use" if calls else "end_turn",
         text=text,
         tool_calls=calls,
         content=content,
-        input_tokens=tokens_in,
+        input_tokens=int(usage.get("input_tokens") or 0),
         output_tokens=int(usage.get("output_tokens") or 0),
+        cache_write_tokens=int(usage.get("cache_creation_input_tokens") or 0),
+        cache_read_tokens=int(usage.get("cache_read_input_tokens") or 0),
     )
 
 

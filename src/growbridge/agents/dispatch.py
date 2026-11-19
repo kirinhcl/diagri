@@ -77,7 +77,7 @@ def role_price(config: RoleModel) -> TokenPrice:
     """What the cost budget is charged per token: the role's own price when it states one."""
     if config.input_per_mtok is None or config.output_per_mtok is None:
         return DEFAULT_PRICE  # only the default model may leave the price out (config.py)
-    return TokenPrice(input_per_mtok=config.input_per_mtok, output_per_mtok=config.output_per_mtok)
+    return TokenPrice.from_stated(config.input_per_mtok, config.output_per_mtok)
 
 
 def _watching(handler: Any, reviews: list[bool]) -> Any:
