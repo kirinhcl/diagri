@@ -19,6 +19,7 @@ from test_e2e_agents import call, task
 from growbridge.api import create_app
 from growbridge.archive.ids import file_digest
 from growbridge.archive.models import Artifact, Budget, EvidenceCard, Snapshot
+from growbridge.planning.evidence_validity import GATE_CODES
 from growbridge.ports import Actor
 from growbridge.sim.fixtures import humidity_rule, make_protocol, make_safety
 from growbridge.sim.llm import ScriptedClient, text_reply, tool_reply
@@ -28,7 +29,6 @@ from growbridge.workflow.store import StageRow
 BASE = "http://lan.test:9443"
 PAGE = {"Origin": BASE, "x-growbridge-ui": "1"}
 OPERATOR, SECRET = "alice", "correct horse battery staple"  # obviously fake
-BLOCKING = {"superseded_source", "retracted_source", "dependency_invalid_source"}
 DAY, HOUR = 86400.0, 3600.0
 
 
@@ -77,13 +77,12 @@ def sheet_citing(world, project: str, protocol, card_id: str, round_no: int, **f
 
 
 def blocking(findings) -> list:
-    return [f for f in findings if f.blocking and f.code in BLOCKING]
+    return [f for f in findings if f.blocking and f.code in GATE_CODES]
 
 
-def deliver(world, runtime, project: str, round_id: str) -> None:
-    """Round 1 of ``project`` ended and was delivered with a report resting on snapshot snap-1,
-    which is built from measurement m-1."""
-    store, archive, now = runtime.workflow.store, runtime.archive, world.clock.now()
+def _ended_stage(world, runtime, project: str, round_id: str) -> None:
+    """Round ``round_id`` of ``project`` ran one stage, which has ended."""
+    store, now = runtime.workflow.store, world.clock.now()
     sheet = world.sheet(project, id="sheet-done", stage_id="stage-done", experiment_id="exp-done")
     store.put_run_sheet(sheet, round_id, now)
     row = StageRow(
@@ -100,16 +99,24 @@ def deliver(world, runtime, project: str, round_id: str) -> None:
         recovery_number=0,
     )
     store.add_stage(row)
+
+
+def _snapshot(world, runtime) -> None:
+    """Snapshot snap-1 of the ended stage's experiment, built from measurement m-1."""
     snap = Snapshot(
         id="snap-1",
         experiment_id="exp-done",
         version=1,
-        created_at=now,
+        created_at=world.clock.now(),
         manifest_sha256="0" * 64,
         complete=True,
         coverage=1.0,
     )
-    archive.save_snapshot(snap, ["m-1"])
+    runtime.archive.save_snapshot(snap, ["m-1"])
+
+
+def _report(world, runtime) -> Artifact:
+    """A confirmatory report with a conclusion, resting on snapshot snap-1."""
     path = world.settings.data_dir / "report-done.json"
     body = {"label": "confirmatory", "conclusion": "more light speeds up canopy growth"}
     path.write_text(json.dumps({**body, "evidence_chain": ["snapshot:snap-1"], "holdout_id": None}))
@@ -122,28 +129,35 @@ def deliver(world, runtime, project: str, round_id: str) -> None:
         label="confirmatory",
         snapshot_id="snap-1",
     )
-    archive.add_artifact(report)
+    runtime.archive.add_artifact(report)
+    return report
+
+
+def deliver(world, runtime, project: str, round_id: str) -> None:
+    """Round 1 of ``project`` ended and was delivered with a report resting on snapshot snap-1,
+    which is built from measurement m-1."""
+    _ended_stage(world, runtime, project, round_id)
+    _snapshot(world, runtime)
+    report = _report(world, runtime)
+    store = runtime.workflow.store
     store.update_round(round_id, state=RoundState.DELIVERED, report_artifact_id=report.id)
 
 
-async def test_a_superseded_card_blocks_new_sheets_and_a_corrected_round_card_does_too(world, site):
-    runtime, client = site
-    flow, model = runtime.workflow, Actor(kind="model", id="planner")
-    await post(client, "/wb/login", {"name": OPERATOR, "secret": SECRET})
-    runtime.control.approve_safety(make_safety(), DEVICE_OPERATOR)
-    add_card(runtime, "handbook-h", "handbook", "light above 300 umol is enough")
-    add_card(runtime, "paper-p", "paper", "light above 500 umol is needed")
-
-    # 1. a stage runs on a rule that cites the handbook card
-    running, running_protocol = project_with_protocol(runtime, world, "running", "proto-run")
-    first = flow.create_round(running, running_protocol.id, world.operator)
-    cited = sheet_citing(world, running, running_protocol, "handbook-h", 1, stage_id=STAGE)
+async def _a_stage_runs_citing_the_handbook(world, runtime, model) -> str:
+    """Step 1: a stage of project "running" runs on a rule that cites the handbook card."""
+    flow = runtime.workflow
+    running, protocol = project_with_protocol(runtime, world, "running", "proto-run")
+    first = flow.create_round(running, protocol.id, world.operator)
+    cited = sheet_citing(world, running, protocol, "handbook-h", 1, stage_id=STAGE)
     findings = flow.submit_run_sheet(first, cited, model)
     assert not [f for f in findings if f.blocking], findings
     flow.approve(STAGE, world.operator)
     await flow.start_stage(STAGE, world.operator)
+    return running
 
-    # 2. a planner proposes that the paper supersedes it; nothing changes until the operator acts
+
+async def _the_planner_proposes(runtime, client, running: str) -> dict:
+    """Step 2a: the planner proposes that the paper supersedes the handbook card; it waits."""
     runtime.tasks.create(task(running, "planner", "ev-rel"))
     proposal = call(
         "propose_evidence_relation",
@@ -159,28 +173,41 @@ async def test_a_superseded_card_blocks_new_sheets_and_a_corrected_round_card_do
     path = f"/wb/evidence/relations?project_id={running}"
     (pending,) = (await client.get(path)).json()["relations"]
     assert pending["state"] == "pending"
-    other, other_protocol = project_with_protocol(runtime, world, "other", "proto-other")
-    second = flow.create_round(other, other_protocol.id, world.operator)
+    return pending
+
+
+async def _nothing_changes_until_the_operator_confirms(world, runtime, client, pending, model):
+    """Step 2b: until the operator confirms, another project's sheet citing the card passes."""
+    flow = runtime.workflow
+    other, protocol = project_with_protocol(runtime, world, "other", "proto-other")
+    second = flow.create_round(other, protocol.id, world.operator)
     open_sheet = sheet_citing(
-        world, other, other_protocol, "handbook-h", 1, id="sheet-open", stage_id="stage-open"
+        world, other, protocol, "handbook-h", 1, id="sheet-open", stage_id="stage-open"
     )
     assert not blocking(flow.submit_run_sheet(second, open_sheet, model))
     review = f"/wb/evidence/relations/{pending['relation']['id']}/review"
-    assert (await post(client, review, {"decision": "confirmed", "note": "checked the paper"}))[
-        "state"
-    ] == "confirmed"
+    confirmed = await post(client, review, {"decision": "confirmed", "note": "checked the paper"})
+    assert confirmed["state"] == "confirmed"
+    return other, protocol, second
 
-    # 3. the next submission that cites the handbook card is blocked and names the paper
+
+def _the_next_submission_is_blocked(world, runtime, other_round, model) -> None:
+    """Step 3: the next submission that cites the handbook card is blocked and names the paper."""
+    other, protocol, second = other_round
     retry = sheet_citing(
-        world, other, other_protocol, "handbook-h", 1, id="sheet-retry", stage_id="stage-retry"
+        world, other, protocol, "handbook-h", 1, id="sheet-retry", stage_id="stage-retry"
     )
-    (finding,) = blocking(flow.submit_run_sheet(second, retry, model))
+    (finding,) = blocking(runtime.workflow.submit_run_sheet(second, retry, model))
     assert finding.code == "superseded_source"
     assert finding.params["card_id"] == "handbook-h"
     assert finding.params["replacement_id"] == "paper-p"
-    assert flow.store.find_stage("stage-retry") is None
+    assert runtime.workflow.store.find_stage("stage-retry") is None
 
-    # 4. the stage that already runs on it goes on, and the daily report says what is stale
+
+def _the_running_stage_goes_on_and_the_report_says_so(world, runtime) -> None:
+    """Step 4: the stage that already runs on it goes on, and the daily report says what is
+    stale."""
+    flow = runtime.workflow
     assert flow.stage(STAGE).state is StageState.RUNNING
     zone = ZoneInfo(runtime.settings.report_timezone)
     today = datetime.fromtimestamp(world.clock.now(), zone).date()
@@ -188,22 +215,43 @@ async def test_a_superseded_card_blocks_new_sheets_and_a_corrected_round_card_do
     assert "Evidence no longer valid:" in text
     assert "card handbook-h is superseded; use paper-p" in text
 
-    # 5. a delivered round becomes a card; correcting its data invalidates the card
-    finished, finished_protocol = project_with_protocol(runtime, world, "finished", "proto-done")
-    done = flow.create_round(finished, finished_protocol.id, world.operator)
+
+async def _a_corrected_round_card_blocks(world, runtime, client, model) -> None:
+    """Step 5: a delivered round becomes a card; correcting its data invalidates the card."""
+    flow = runtime.workflow
+    finished, protocol = project_with_protocol(runtime, world, "finished", "proto-done")
+    done = flow.create_round(finished, protocol.id, world.operator)
     deliver(world, runtime, finished, done)
     converted = await post(client, f"/wb/rounds/{done}/evidence", {})
     assert converted["verified"] is True and converted["label"] == "confirmatory"
     card_id = converted["card_id"]
-    next_round = flow.create_round(finished, finished_protocol.id, world.operator)
+    next_round = flow.create_round(finished, protocol.id, world.operator)
     based = sheet_citing(
-        world, finished, finished_protocol, card_id, 2, id="sheet-next", stage_id="stage-next"
+        world, finished, protocol, card_id, 2, id="sheet-next", stage_id="stage-next"
     )
     assert not blocking(flow.submit_run_sheet(next_round, based, model))
     runtime.archive.mark_dependents_invalid("m-1")
     again = sheet_citing(
-        world, finished, finished_protocol, card_id, 2, id="sheet-again", stage_id="stage-again"
+        world, finished, protocol, card_id, 2, id="sheet-again", stage_id="stage-again"
     )
     (stale,) = blocking(flow.submit_run_sheet(next_round, again, model))
     assert stale.code == "dependency_invalid_source"
     assert stale.params["card_id"] == card_id
+
+
+async def test_a_superseded_card_blocks_new_sheets_and_a_corrected_round_card_does_too(world, site):
+    runtime, client = site
+    model = Actor(kind="model", id="planner")
+    await post(client, "/wb/login", {"name": OPERATOR, "secret": SECRET})
+    runtime.control.approve_safety(make_safety(), DEVICE_OPERATOR)
+    add_card(runtime, "handbook-h", "handbook", "light above 300 umol is enough")
+    add_card(runtime, "paper-p", "paper", "light above 500 umol is needed")
+
+    running = await _a_stage_runs_citing_the_handbook(world, runtime, model)  # 1
+    pending = await _the_planner_proposes(runtime, client, running)  # 2
+    other_round = await _nothing_changes_until_the_operator_confirms(
+        world, runtime, client, pending, model
+    )
+    _the_next_submission_is_blocked(world, runtime, other_round, model)  # 3
+    _the_running_stage_goes_on_and_the_report_says_so(world, runtime)  # 4
+    await _a_corrected_round_card_blocks(world, runtime, client, model)  # 5

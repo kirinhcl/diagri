@@ -15,6 +15,7 @@ from growbridge.archive.evidence_ledger import (
     EvidenceRelation,
     RelationKind,
     RelationRecord,
+    foreign_proposal,
 )
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Model
@@ -152,7 +153,7 @@ def _check_duplicate(
     for record in archive.ledger.records(viewer):
         relation = record.relation
         live = record.state == "confirmed" or (
-            record.state == "pending" and relation.proposed_in in (None, viewer)
+            record.state == "pending" and not foreign_proposal(relation, viewer)
         )
         same = _key(relation.kind, relation.subject_id, relation.object_id) == wanted
         if live and same and relation.id != exclude:
@@ -244,7 +245,7 @@ def _visible_record(archive: Archive, relation_id: str, viewer: str | None) -> R
         raise relation_not_found(relation_id)
     relation = record.relation
     # A proposal not confirmed (pending or rejected) is seen only where it was made.
-    hidden = record.state in ("pending", "rejected") and relation.proposed_in not in (None, viewer)
+    hidden = record.state in ("pending", "rejected") and foreign_proposal(relation, viewer)
     named = (relation.subject_id, relation.object_id)
     visible = visible_cards(archive, viewer)
     if (

@@ -31,19 +31,21 @@ def rec(
         proposed_in=proposed_in,
         at=at,
     )
-    review = (
-        None
-        if confirmed_at is None
-        else RelationReview(
-            relation_id=rel_id, decision="confirmed", reviewer="op", note=note, at=confirmed_at
-        )
-    )
-    withdrawal = (
-        None
-        if withdrawn_at is None
-        else RelationWithdrawal(relation_id=rel_id, actor="op", reason="x", at=withdrawn_at)
-    )
+    review = _review(rel_id, confirmed_at, note)
+    withdrawal = _withdrawal(rel_id, withdrawn_at)
     return RelationRecord(relation=relation, review=review, withdrawal=withdrawal)
+
+
+def _review(rel_id: str, at: float | None, note: str) -> RelationReview | None:
+    if at is None:
+        return None
+    return RelationReview(relation_id=rel_id, decision="confirmed", reviewer="op", note=note, at=at)
+
+
+def _withdrawal(rel_id: str, at: float | None) -> RelationWithdrawal | None:
+    if at is None:
+        return None
+    return RelationWithdrawal(relation_id=rel_id, actor="op", reason="x", at=at)
 
 
 def statuses(records, ids=("A", "B", "C"), invalid_at=None, as_of=1000.0, viewer=None):

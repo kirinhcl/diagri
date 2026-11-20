@@ -50,6 +50,12 @@ class EvidenceRelation(Model):
     at: float
 
 
+def foreign_proposal(relation: EvidenceRelation, viewer: str | None) -> bool:
+    """A model's proposal made in another project than the viewer's (None: the global view).
+    Its reason stays in that project, and while it is not confirmed the viewer does not see it."""
+    return relation.proposed_in not in (None, viewer)
+
+
 class RelationReview(Model):
     relation_id: str
     decision: Decision

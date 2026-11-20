@@ -27,6 +27,10 @@ log = logging.getLogger(__name__)
 
 Point = tuple[str, str, str]  # source kind, source name, cited card id
 
+# The codes ``check_evidence_validity`` blocks with: the one list every caller uses, so a stage
+# past review shows each of them as information (workbench/rounds.py), a new one included.
+GATE_CODES = frozenset({"superseded_source", "retracted_source", "dependency_invalid_source"})
+
 
 def _points(sheet: RunSheet) -> Iterator[Point]:
     """Each place that cites a card (user input and empty references are not cards)."""

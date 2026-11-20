@@ -7,14 +7,13 @@ from growbridge.archive.evidence_ledger import EvidenceOrigin, EvidenceRelation
 from growbridge.archive.models import Channel, EvidenceCard, TimedAction
 from growbridge.archive.store import Archive
 from growbridge.config import Settings
+from growbridge.planning.evidence_validity import GATE_CODES as BLOCKING
 from growbridge.planning.evidence_validity import evidence_gate
 from growbridge.ports import Denied
 from growbridge.runtime import build_runtime
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
 from growbridge.sim.fixtures import make_run_sheet
-
-BLOCKING = {"superseded_source", "retracted_source", "dependency_invalid_source"}
 
 
 @pytest.fixture

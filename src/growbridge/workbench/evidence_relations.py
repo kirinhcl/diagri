@@ -17,7 +17,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends
 
 from growbridge.archive.evidence_book import card_project
-from growbridge.archive.evidence_ledger import RelationKind, RelationRecord
+from growbridge.archive.evidence_ledger import RelationKind, RelationRecord, foreign_proposal
 from growbridge.archive.evidence_relations import (
     Note,
     Reason,
@@ -62,8 +62,7 @@ class WithdrawIn(Body):
 def relation_json(record: RelationRecord, viewer: str | None) -> dict:
     """The record as shown to ``viewer``'s project (None: the global view)."""
     data = record.model_dump(mode="json")
-    home = record.relation.proposed_in
-    if home is not None and home != viewer:
+    if foreign_proposal(record.relation, viewer):
         note = record.review.note if record.review is not None else ""
         data["relation"] = {
             **data["relation"],
@@ -154,10 +153,7 @@ class RelationRoutes:
 
 def _foreign_proposal(record: RelationRecord, viewer: str | None) -> bool:
     """A pending or rejected proposal of another project is not the viewer's to see."""
-    return record.state in ("pending", "rejected") and record.relation.proposed_in not in (
-        None,
-        viewer,
-    )
+    return record.state in ("pending", "rejected") and foreign_proposal(record.relation, viewer)
 
 
 def add_evidence_relation_routes(

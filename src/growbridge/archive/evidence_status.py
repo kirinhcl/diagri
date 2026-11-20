@@ -7,7 +7,7 @@ Pure: the same records and ``as_of`` always give the same statuses. Precedence i
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Literal
 
-from growbridge.archive.evidence_ledger import EvidenceRelation, RelationRecord
+from growbridge.archive.evidence_ledger import EvidenceRelation, RelationRecord, foreign_proposal
 from growbridge.archive.models import Model
 
 Validity = Literal["active", "superseded", "retracted", "dependency_invalid"]
@@ -45,7 +45,7 @@ def _is_pending(record: RelationRecord, as_of: float, viewer_project: str | None
     relation = record.relation
     if relation.at > as_of:
         return False
-    if relation.proposed_in not in (None, viewer_project):
+    if foreign_proposal(relation, viewer_project):
         return False
     if record.review is not None and record.review.at <= as_of:
         return False
@@ -55,7 +55,7 @@ def _is_pending(record: RelationRecord, as_of: float, viewer_project: str | None
 def _retraction_reason(record: RelationRecord, viewer_project: str | None) -> str:
     """A model's own reason stays in the project it was proposed in."""
     relation = record.relation
-    if relation.proposed_in in (None, viewer_project):
+    if not foreign_proposal(relation, viewer_project):
         return relation.reason
     return record.review.note if record.review is not None else ""
 
