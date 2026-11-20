@@ -56,7 +56,7 @@ from growbridge.observer.report import (
     reports_due,
 )
 from growbridge.observer.service import Observer, build_observer
-from growbridge.planning.evidence_validity import evidence_gate
+from growbridge.planning.evidence_validity import evidence_gate, report_stale_evidence
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -512,6 +512,7 @@ class Runtime:
             manual_interventions=interventions,
             frozen_readings=frozen,
             recurring=report_recurring(self, stage, end, zone),
+            stale_evidence=report_stale_evidence(self, stage),
         )
         return render_daily_report(metrics, context)
 

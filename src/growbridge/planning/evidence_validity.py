@@ -7,7 +7,9 @@ wrappers (``evidence_gate``, ``evidence_hints``, ``stale_evidence_lines``) fetch
 statuses and origins the viewing project may see, then call them.
 """
 
+import logging
 from collections.abc import Iterator, Mapping
+from typing import Any
 
 from growbridge.archive.evidence_book import card_statuses, visible_cards
 from growbridge.archive.evidence_ledger import EvidenceOrigin
@@ -20,6 +22,8 @@ from growbridge.planning.findings import source_text
 from growbridge.planning.validate import USER_INPUT_PREFIX, _evidence_refs, check_evidence
 from growbridge.ports import Finding
 from growbridge.vocab import Catalog
+
+log = logging.getLogger(__name__)
 
 Point = tuple[str, str, str]  # source kind, source name, cited card id
 
@@ -258,3 +262,16 @@ def stale_evidence_lines(sheet: RunSheet, archive: Archive, limit: int = 5) -> t
         if ref in statuses and statuses[ref].blocks
     )
     return tuple(line for _, line in zip(range(limit), lines, strict=False))
+
+
+def report_stale_evidence(runtime: Any, stage: Any) -> tuple[str, ...]:
+    """``stale_evidence_lines`` for the running ``stage``'s run sheet; a failure here is logged
+    and leaves the section out, never the report."""
+    if stage is None:
+        return ()
+    try:
+        sheet = runtime.workflow.stage(stage.stage_id).run_sheet
+        return stale_evidence_lines(sheet, runtime.archive)
+    except Exception:
+        log.exception("the stale-evidence section of the daily report could not be built")
+        return ()
