@@ -111,3 +111,32 @@ def test_invalidated_at_is_the_earliest_invalidation(archive, clock):
     assert archive.invalidated_at(["snap-2"]) == (clock.now(), "snap-2")
     assert archive.invalidated_at(["snap-3"]) is None
     assert archive.invalidated_at([]) is None
+
+
+def test_an_invalid_decision_raises_and_leaves_the_relation_pending(archive):
+    archive.ledger.add_relation(relation(source="model:planner"))
+    with pytest.raises(ValueError):
+        archive.ledger.review("rel-1", "approved", "op")
+    assert archive.ledger.record("rel-1").state == "pending"
+
+
+@pytest.mark.parametrize("reviewer", [None, ""])
+def test_a_missing_reviewer_raises(archive, reviewer):
+    archive.ledger.add_relation(relation(source="model:planner"))
+    with pytest.raises(ValueError):
+        archive.ledger.review("rel-1", "confirmed", reviewer)
+    assert archive.ledger.record("rel-1").state == "pending"
+
+
+def test_an_empty_confirmer_refuses_the_whole_relation(archive):
+    with pytest.raises(ValueError):
+        archive.ledger.add_relation(relation(), confirmed_by="")
+    assert archive.ledger.record("rel-1") is None
+
+
+@pytest.mark.parametrize("actor", [None, ""])
+def test_a_withdrawal_without_an_actor_raises(archive, actor):
+    archive.ledger.add_relation(relation())
+    with pytest.raises(ValueError):
+        archive.ledger.withdraw("rel-1", actor, "why")
+    assert archive.ledger.record("rel-1").state == "pending"

@@ -8,6 +8,8 @@ withdrawal stay (``INSERT OR IGNORE``). Times are epoch seconds.
 import json
 from typing import Literal
 
+from pydantic import Field
+
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
 from growbridge.archive.models import Label, Model
@@ -51,14 +53,14 @@ class EvidenceRelation(Model):
 class RelationReview(Model):
     relation_id: str
     decision: Decision
-    reviewer: str
+    reviewer: str = Field(min_length=1)
     note: str = ""
     at: float
 
 
 class RelationWithdrawal(Model):
     relation_id: str
-    actor: str
+    actor: str = Field(min_length=1)
     reason: str
     at: float
 
@@ -114,7 +116,7 @@ class EvidenceLedger:
         return self._required(relation.id)
 
     def review(
-        self, relation_id: str, decision: str, reviewer: str, note: str = ""
+        self, relation_id: str, decision: Decision, reviewer: str, note: str = ""
     ) -> RelationRecord:
         """Append the review of a relation; repeating it keeps the first one."""
         with self.db.transaction():
@@ -126,9 +128,12 @@ class EvidenceLedger:
         """Append the withdrawal of a relation; repeating it keeps the first one."""
         with self.db.transaction():
             self._required(relation_id)
+            withdrawal = RelationWithdrawal(
+                relation_id=relation_id, actor=actor, reason=reason, at=self.clock.now()
+            )
             self.db.execute(
                 "INSERT OR IGNORE INTO evidence_relation_withdrawals VALUES (?, ?, ?, ?)",
-                (relation_id, actor, reason, self.clock.now()),
+                (withdrawal.relation_id, withdrawal.actor, withdrawal.reason, withdrawal.at),
             )
         return self._required(relation_id)
 
@@ -187,11 +192,15 @@ class EvidenceLedger:
     # --- internal ------------------------------------------------------------------------------
 
     def _insert_review(
-        self, relation_id: str, decision: str, reviewer: str, note: str, at: float
+        self, relation_id: str, decision: Decision, reviewer: str, note: str, at: float
     ) -> None:
+        # The model validates first: OR IGNORE would also swallow CHECK and NOT NULL violations.
+        review = RelationReview(
+            relation_id=relation_id, decision=decision, reviewer=reviewer, note=note, at=at
+        )
         self.db.execute(
             "INSERT OR IGNORE INTO evidence_relation_reviews VALUES (?, ?, ?, ?, ?)",
-            (relation_id, decision, reviewer, note, at),
+            (review.relation_id, review.decision, review.reviewer, review.note, review.at),
         )
 
     def _required(self, relation_id: str) -> RelationRecord:
