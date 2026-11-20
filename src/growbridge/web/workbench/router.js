@@ -14,8 +14,9 @@ function decode(part) {
   }
 }
 
-// The evidence page's selection (project, validity, variable) and the card to bring into view.
-const EVIDENCE_PARAMS = ["projectId", "status", "variable", "focus"];
+// The evidence page's selection (project, validity, variable, the time as of which, in epoch seconds)
+// and the card to bring into view.
+const EVIDENCE_PARAMS = ["projectId", "status", "variable", "asOf", "focus"];
 
 function evidenceParams(query) {
   const found = new URLSearchParams(query);

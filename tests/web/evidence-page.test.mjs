@@ -51,6 +51,57 @@ test("the evidence page reads its filters from the address and the links write t
   assert.equal(hrefFor("evidence"), "#/evidence");
 });
 
+const datePicker = (element) => walk(element).find((el) => el.localName === "input" && el.getAttribute("type") === "datetime-local");
+const projectSelect = (element) => walk(element).find((el) => el.getAttribute && el.getAttribute("id") === "evidence-filter-projectId");
+
+test("the as-of time comes from the address, is sent as as_of, and a picked time goes back into it", async () => {
+  const { element, ctx } = await renderPage("evidence", { asOf: "1796594000" }, { lang: "en", fixtures: evidence([OLD, NEWER]) });
+  assert.ok(ctx.api.calls.some((call) => call.path === "/evidence?as_of=1796594000"), JSON.stringify(ctx.api.calls));
+  const picker = datePicker(element);
+  assert.equal(picker.getAttribute("value"), "2026-12-06T23:53"); // the instant in Europe/Helsinki
+  const went = [];
+  ctx.navigate = (href) => went.push(href);
+  picker.value = "2026-12-01T12:00";
+  picker.dispatchEvent(new Event("change"));
+  picker.value = "";
+  picker.dispatchEvent(new Event("change"));
+  const picked = String(Date.UTC(2026, 11, 1, 10) / 1000);
+  assert.deepEqual(went, [`#/evidence?asOf=${picked}`, "#/evidence"]);
+  assert.deepEqual(parseHash(went[0]), { page: "evidence", params: { asOf: picked } });
+});
+
+test("a time the site's zone skips is refused, and the address is kept", async () => {
+  const { element, ctx } = await renderPage("evidence", {}, { lang: "en", fixtures: evidence([]) });
+  const [went, said] = [[], []];
+  ctx.navigate = (href) => went.push(href);
+  ctx.notify = (text, kind) => said.push([text, kind]);
+  const picker = datePicker(element);
+  picker.value = "2026-03-29T03:30";
+  picker.dispatchEvent(new Event("change"));
+  assert.deepEqual(went, []);
+  assert.equal(said.length, 1);
+  assert.equal(said[0][1], "error");
+  assert.match(said[0][0], /does not exist in Europe\/Helsinki/);
+});
+
+test("a selected project the project list does not name stays selected, never shown as global", async () => {
+  const { element } = await renderPage("evidence", { projectId: "project_gone" }, { lang: "en", fixtures: evidence([]) });
+  assert.equal(projectSelect(element).value, "project_gone");
+  const listed = "project_189c5bff02eb40099b5399d16d55fbcb";
+  const own = await renderPage("evidence", { projectId: listed }, { lang: "en", fixtures: evidence([]) });
+  const values = [...projectSelect(own.element).children].map((option) => option.getAttribute("value"));
+  assert.deepEqual(values.filter((value) => value === listed), [listed]);
+});
+
+test("the filters say when the project list could not be read, and keep the selected project", async () => {
+  const fixtures = { ...evidence([]), "projects.json": null };
+  const { element } = await renderPage("evidence", { projectId: "project_a" }, { lang: "en", fixtures });
+  assert.match(visibleText(element), /list of projects could not be read/);
+  assert.equal(projectSelect(element).value, "project_a");
+  const fine = await renderPage("evidence", {}, { lang: "en", fixtures: evidence([]) });
+  assert.doesNotMatch(visibleText(fine.element), /list of projects could not be read/);
+});
+
 test("a retracted card shows its reason and a contested card names the cards that contradict it", async () => {
   const retracted = { ...OLD, status: { ...ACTIVE, validity: "retracted", retracted_reason: "sensor was broken" } };
   const contested = { ...NEWER, status: { ...ACTIVE, card_id: "card_new", contested_with: ["card_old"] } };

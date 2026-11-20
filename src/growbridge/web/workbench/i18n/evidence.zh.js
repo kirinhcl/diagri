@@ -5,6 +5,8 @@ export default {
   "evidence.filter.status": "状态",
   "evidence.filter.variable": "变量",
   "evidence.filter.all": "全部",
+  "evidence.filter.asOf": "查看时间点（留空为现在）",
+  "evidence.filter.projectsFailed": "无法读取项目列表；显示的仍是地址里的那个项目。",
   "evidence.filters": "筛选证据卡",
   "evidence.validity.active": "有效",
   "evidence.validity.superseded": "已被取代",

@@ -5,6 +5,8 @@ export default {
   "evidence.filter.status": "Status",
   "evidence.filter.variable": "Variable",
   "evidence.filter.all": "All",
+  "evidence.filter.asOf": "As of (empty: now)",
+  "evidence.filter.projectsFailed": "The list of projects could not be read; the project in the address is still the one shown.",
   "evidence.filters": "Show cards",
   "evidence.validity.active": "In force",
   "evidence.validity.superseded": "Replaced",
