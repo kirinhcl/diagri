@@ -16,7 +16,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends
 from pydantic import StringConstraints
 
-from growbridge.archive.evidence_book import card_statuses, visible_cards
+from growbridge.archive.evidence_book import card_project, card_statuses, visible_cards
 from growbridge.archive.evidence_status import Validity
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import ApplicabilityRange, EvidenceCard
@@ -121,16 +121,30 @@ class EvidenceRoutes:
         self.archive.add_evidence(card, source=source, verified_by=actor.id)
         return {"id": card.id, "verified": True, "source": source}
 
+    @staticmethod
+    def _not_found(card_id: str) -> Denied:
+        return Denied(
+            "state",
+            f"unknown evidence card {card_id}",
+            reason="record_not_found",
+            params={"record_kind": "evidence_card", "record_id": card_id},
+        )
+
+    def _check_seen(self, actor: Actor, card_id: str) -> None:
+        """A round card of a project the caller cannot see answers as a card that does not
+        exist, so neither the card nor who converted it is revealed (design §6)."""
+        if self.access is None:
+            return
+        project = card_project(self.archive, card_id)
+        if project is not None and not self.access.sees_project(actor, project):
+            raise self._not_found(card_id)
+
     def verify(self, card_id: str, body: VerifyIn, actor: Actor) -> dict:
+        self._check_seen(actor, card_id)
         try:
             record = self.archive.verify_evidence(card_id, actor.id, body.note, body.calibrated)
         except ValueError:
-            raise Denied(
-                "state",
-                f"unknown evidence card {card_id}",
-                reason="record_not_found",
-                params={"record_kind": "evidence_card", "record_id": card_id},
-            ) from None
+            raise self._not_found(card_id) from None
         return {
             "card_id": record.card_id,
             "verified": True,

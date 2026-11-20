@@ -157,3 +157,20 @@ def test_only_the_projects_owner_converts_and_others_see_no_such_round(tmp_path)
     assert (refused.status_code, refused.json()) == (absent.status_code, absent.json())
     assert bench.archive.evidence_entries() == ()
     assert convert(bench, bench.user("alice"), round_id).status_code == 200
+
+
+def test_verifying_another_projects_round_card_answers_as_for_no_such_card(tmp_path):
+    bench = Bench.full(tmp_path)
+    for name in ("alice", "bob"):
+        bench.user(name)
+    bench.seed_round_as("alice")
+    card_id = convert(bench, bench.user("alice"), deliver(bench)).json()["card_id"]
+    path = f"/wb/evidence/{card_id}/verify"
+
+    hidden = bench.post(bench.user("bob"), path)
+    twin = bench.absent_twin()
+    absent = twin.post(twin.user("bob"), path)
+
+    assert (hidden.status_code, hidden.json()) == (absent.status_code, absent.json())
+    assert detail(hidden)["reason"] == "record_not_found"
+    assert bench.post(bench.user("alice"), path).status_code == 200
