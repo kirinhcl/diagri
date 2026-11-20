@@ -72,3 +72,29 @@ replaced_by = "canopy_area_growth"
 refs = []
 """
 WITH_OLD = load_catalog(packaged_text() + OLD_ENTRY)
+
+LOOP_ENTRIES = """
+[[variable]]
+id = "loop_a"
+kind = "manual"
+label_en = "Loop A"
+label_zh = "环甲"
+quantity = "count"
+unit = "1"
+method = "test"
+deprecated = true
+replaced_by = "loop_b"
+refs = []
+
+[[variable]]
+id = "loop_b"
+kind = "manual"
+label_en = "Loop B"
+label_zh = "环乙"
+quantity = "count"
+unit = "1"
+method = "test"
+deprecated = true
+replaced_by = "loop_a"
+refs = []
+"""
