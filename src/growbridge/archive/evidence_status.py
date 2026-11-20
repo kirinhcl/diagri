@@ -4,10 +4,10 @@ Pure: the same records and ``as_of`` always give the same statuses. Precedence i
 ``retracted`` > ``dependency_invalid`` > ``superseded`` > ``active``.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Literal
 
-from growbridge.archive.evidence_ledger import RelationRecord
+from growbridge.archive.evidence_ledger import EvidenceRelation, RelationRecord
 from growbridge.archive.models import Model
 
 Validity = Literal["active", "superseded", "retracted", "dependency_invalid"]
@@ -60,12 +60,20 @@ def _retraction_reason(record: RelationRecord, viewer_project: str | None) -> st
     return record.review.note if record.review is not None else ""
 
 
-def _first_by_card(records: Iterable[RelationRecord], kind: str, as_of: float, key: str) -> dict:
+def _earliest_by_card(
+    records: Iterable[RelationRecord],
+    kind: str,
+    as_of: float,
+    card_of: Callable[[EvidenceRelation], str | None],
+) -> dict[str, RelationRecord]:
+    """Per card, the in-force record confirmed first (ties: written first)."""
     found: dict[str, RelationRecord] = {}
     for record in records:
-        relation = record.relation
-        if relation.kind == kind and _in_force(record, as_of):
-            found.setdefault(getattr(relation, key), record)
+        card = card_of(record.relation)
+        if record.relation.kind != kind or card is None or not _in_force(record, as_of):
+            continue
+        if card not in found or record.review.at < found[card].review.at:
+            found[card] = record
     return found
 
 
@@ -114,6 +122,10 @@ def _contested(card: str, records, validity, as_of: float) -> tuple[str, ...]:
     return tuple(others)
 
 
+def _invalid_id(card: str, validity: Mapping[str, Validity], invalid_at) -> str | None:
+    return invalid_at[card][1] if validity[card] == "dependency_invalid" else None
+
+
 def _all_cards(card_ids: Iterable[str], records: Sequence[RelationRecord]) -> list[str]:
     cards = list(dict.fromkeys(card_ids))
     for record in records:
@@ -129,17 +141,12 @@ def derive_statuses(
     as_of: float,
     viewer_project: str | None,
 ) -> dict[str, CardStatus]:
-    """Every card in ``card_ids`` or named by a record, with its status at ``as_of``.
-
-    ``invalid_at`` maps a card to (when its dependency became invalid, that dependency's id).
-    """
+    """Every named card's status at ``as_of``; ``invalid_at``: card -> (time, dependency id)."""
     cards = _all_cards(card_ids, records)
-    retracted = _first_by_card(records, "retracts", as_of, "subject_id")
-    supersedes = _first_by_card(records, "supersedes", as_of, "object_id")
+    retracted = _earliest_by_card(records, "retracts", as_of, lambda r: r.subject_id)
+    supersedes = _earliest_by_card(records, "supersedes", as_of, lambda r: r.object_id)
     superseded_by = {card: rec.relation.subject_id for card, rec in supersedes.items()}
-    validity = {
-        card: _base_validity(card, retracted, invalid_at, superseded_by, as_of) for card in cards
-    }
+    validity = {c: _base_validity(c, retracted, invalid_at, superseded_by, as_of) for c in cards}
     pending = _pending_by_card(records, as_of, viewer_project)
     reasons = {c: _retraction_reason(r, viewer_project) for c, r in retracted.items()}
     return {
@@ -149,9 +156,7 @@ def derive_statuses(
             superseded_by=superseded_by.get(card),
             current_replacement=_replacement(card, superseded_by, validity),
             retracted_reason=reasons.get(card),
-            invalid_dependency=(
-                invalid_at[card][1] if validity[card] == "dependency_invalid" else None
-            ),
+            invalid_dependency=_invalid_id(card, validity, invalid_at),
             contested_with=_contested(card, records, validity, as_of),
             pending=pending.get(card, ()),
         )

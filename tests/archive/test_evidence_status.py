@@ -140,3 +140,31 @@ def test_a_retraction_reason_from_another_project_is_the_operators_note():
     assert statuses(records, viewer="p2")["A"].retracted_reason == "operator's own words"
     assert statuses(records, viewer=None)["A"].retracted_reason == "operator's own words"
     assert statuses(records, viewer="p1")["A"].retracted_reason == "model says so"
+
+
+def test_the_earlier_confirmed_supersede_wins_whatever_the_write_order():
+    records = [
+        rec("r1", subject="B", object_="A", confirmed_at=300),
+        rec("r2", subject="C", object_="A", confirmed_at=100, withdrawn_at=350),
+    ]
+    by_time = {
+        t: statuses(records, as_of=t)["A"].superseded_by for t in (99, 100, 299, 300, 349, 350)
+    }
+    assert by_time == {99: None, 100: "C", 299: "C", 300: "C", 349: "C", 350: "B"}
+
+
+def test_the_earlier_confirmed_retraction_wins_whatever_the_write_order():
+    records = [
+        rec("r1", kind="retracts", subject="A", object_=None, confirmed_at=300, reason="late"),
+        rec(
+            "r2",
+            kind="retracts",
+            subject="A",
+            object_=None,
+            confirmed_at=100,
+            withdrawn_at=350,
+            reason="early",
+        ),
+    ]
+    got = {t: statuses(records, as_of=t)["A"].retracted_reason for t in (99, 100, 300, 349, 350)}
+    assert got == {99: None, 100: "early", 300: "early", 349: "early", 350: "late"}
