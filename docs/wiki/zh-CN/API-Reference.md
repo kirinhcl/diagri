@@ -114,13 +114,13 @@
 | `POST` | `/wb/analysis/runs` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、`scope`、`snapshot_incomplete`、`already_run`、`sandbox_unavailable` |
 | `POST` | `/wb/holdouts` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope`、`state`、`batches`、`param` |
 | `GET` | `/wb/holdouts` | 操作员 | 局域网、覆盖网络 | 否 | `scope` |
-| `POST` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `POST` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | `param`（卡片没有通过目录检查） |
 | `POST` | `/wb/evidence/{card_id}/verify` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
-| `GET` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
-| `POST` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | `state`（关系规则）、`param` |
-| `POST` | `/wb/evidence/relations/{relation_id}/review` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不在待确认、需要说明、规则复核）、`param` |
-| `POST` | `/wb/evidence/relations/{relation_id}/withdraw` | 操作员 | 局域网、覆盖网络 | 否 | `state`（未确认）、`param` |
-| `GET` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | `state`（看不到这个项目） |
+| `POST` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | `param`（形状不对、卡片与自己建立关系）、`state`（其余关系规则） |
+| `POST` | `/wb/evidence/relations/{relation_id}/review` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不在待确认、需要说明、规则复核、关系不存在） |
+| `POST` | `/wb/evidence/relations/{relation_id}/withdraw` | 操作员 | 局域网、覆盖网络 | 否 | `state`（未确认、关系不存在） |
+| `GET` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | `state`（看不到这个项目） |
 | `POST` | `/wb/compute/balance` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required` |
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope` |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
@@ -183,9 +183,13 @@
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 查询参数 `project_id`（1 到 100） | `protocol_id`、`version`、`started`、`frozen`（`null`，或 `script_sha256`、`frozen_at`、`frozen_by`、`script`）、`snapshots`（一组 `snapshot_id`、`experiment_id`、`complete`、`run_status`、`created_at`） |
 | `POST` | `/wb/analysis/runs` | `project_id`、`protocol_id`、`snapshot_id`（各 1 到 100） | `run_id`、`status`、`exit_code`、`timed_out`、`stdout`、`stderr`（后两个截到 4000 个字符） |
 | `POST` | `/wb/holdouts` | `project_id`、`batch_ids`、`development_batch_ids`、`outcome_fields`（各 1 到 50 个名字，每个 1 到 100 个字符，不重复；两个批次列表不重叠，开发批次至少 2 个） | `holdout_id`（由服务端生成）、`project_id`、`batch_ids`、`outcome_fields`、`development_batch_ids`、`registered_at`、`registered_by`（会话中的操作员） |
-| `POST` | `/wb/evidence` | `source_class`（`handbook`、`paper` 或 `local`）、`citation`（去掉首尾空白后 1 到 500 个字符）、`claim`（1 到 1000）；可选 `value`（有限数）、`unit`（最多 40）、`calibrated`（默认为真） | `id`（由服务器生成）、`verified`（恒为真：录入的操作员当场核实）、`source`（`operator:<姓名>`） |
+| `POST` | `/wb/evidence` | `source_class`（`handbook`、`paper` 或 `local`）、`citation`（去掉首尾空白后 1 到 500 个字符）、`claim`（1 到 1000）；可选 `value`（有限数）、`unit`（最多 40）、`calibrated`（默认为真），以及可选的适用范围字段：`variable`（目录里的标准变量，用 ID 或别名）、`conditions`（至多 8 个范围，每个是一个目录 `variable` 加 `min`、`max` 或两者）、`crop_taxon`（`NCBITaxon:<数字>`，给了品种就必须填）、`cultivar`（至多 200）、`growth_stage`（至多 100）、`conditions_note`（至多 500） | `id`（由服务器生成）、`verified`（恒为真：录入的操作员当场核实）、`source`（`operator:<姓名>`）。卡片先按目录检查：变量未知、已弃用或是因子，有数值却没有单位或单位与变量的不同，范围超出变量的界限，分类单元格式不对，都以 `param` 拒绝，并列出每个问题。没有这些字段的卡片照旧保存 |
 | `POST` | `/wb/evidence/{card_id}/verify` | 可选 `note`（最多 500 个字符），可选 `calibrated`（默认为假：操作员证明这个数值已用本地测量校准过） | `card_id`、`verified`、`verified_by`、`verified_at`、`note`、`calibrated`。重复核实返回第一条记录（含证明），不再写入；对已核实的卡再传 `calibrated: true` 不会改变任何东西。卡不存在以 `state` 拒绝 |
-| `GET` | `/wb/evidence` | 无 | `cards`：每张卡，另有 `source`（`operator:<姓名>` 或 `model:planner`）、`task_id`、`added_at`、`verified`、`verified_by`、`verified_at`、`note` |
+| `GET` | `/wb/evidence` | 可选查询参数 `project_id`、`as_of`（epoch 秒，默认现在）、`status`（`active`、`superseded`、`retracted` 或 `dependency_invalid`）、`variable`（目录变量，用 ID 或别名） | `cards`：这个范围内可见的卡，每张带 `source`（`operator:<姓名>` 或 `model:planner`）、`task_id`、`added_at`、`verified`、`verified_by`、`verified_at`、`note`、`status`（`card_id`、`validity`、`superseded_by`、`current_replacement`、`retracted_reason`、`invalid_dependency`、`contested_with`、`pending`，都按 `as_of` 计算），轮次卡另带 `origin`（`round_id`、`report_artifact_id`、`label`）；`variables`：卡片可以使用的目录变量（`id`、`kind`、`unit`、`label_en`、`label_zh`）。不带 `project_id` 时不列出某个项目的轮次卡；带上时，列出公开卡和该项目自己的卡 |
+| `POST` | `/wb/evidence/relations` | `kind`（`supersedes`、`contradicts` 或 `retracts`）、`card_id`、`other_card_id`（`supersedes` 和 `contradicts` 必填，`retracts` 不能填）、`reason`（去掉首尾空白后 1 到 500 个字符） | 关系记录：`relation`（`id`、`kind`、`subject_id`、`object_id`、`reason`、`source`，形如 `operator:<姓名>`、`project_id`、`at`）、`review` 和 `withdrawal`（有才出现）、`state`（`confirmed`：操作员记下的关系立即生效）。`supersedes` 里新卡是 `card_id`，旧卡是 `other_card_id`；`retracts` 里 `card_id` 是被收回的卡。会被拒绝的情况：卡不存在或调用者看不到；要取代别的卡的那张卡自己不是有效状态（已撤回、已取代或依赖失效）；已撤回的卡再次撤回；旧卡已被另一张卡取代；`supersedes` 的两张卡不在同一范围（项目卡与公开卡，或两个项目）；同一条关系重复。有一张卡属于某个项目时，需要该项目的所有者 |
+| `POST` | `/wb/evidence/relations/{relation_id}/review` | `decision`（`confirmed` 或 `rejected`）、`note`（最多 500 个字符；确认时必填） | 带新 `state` 的关系记录。只有待确认的关系能审核；第一次审核为准，再审核以 `relation_not_pending` 拒绝。确认时按卡片现在的样子重新检查规则，所以旧卡在此期间已被取代的提议会被拒绝（`relation_already_superseded`），但仍然可以驳回。需要提议所在项目的所有者 |
+| `POST` | `/wb/evidence/relations/{relation_id}/withdraw` | `reason`（去掉首尾空白后 1 到 500 个字符） | 关系记录，`state` 为 `withdrawn`。只有已确认的关系能撤销；第一次撤销为准。关系从那一刻起不再算数，用更早的 `as_of` 读状态仍然看得到它 |
+| `GET` | `/wb/evidence/relations` | 可选查询参数 `project_id` | `relations`：这个范围可见的关系记录，格式同上。模型的提议只在提出它的项目里可见；确认之后在别的项目里可见，但不带任务，并以操作员的审核说明代替模型的理由 |
 | `GET` | `/wb/holdouts` | 查询参数 `project_id` | `holdouts`：每个登记如上，另有 `reads`，一组 `reader`、`at`、`label`、`model_sha` |
 | `POST` | `/wb/compute/balance` | `cpu_hours`（有限的数，0 或更大；字符串和布尔值会被拒绝），可选 `note`（最多 500 个字符） | 这条录入：`cpu_hours`、`entered_by`（会话里的操作员；请求体里的姓名会被丢弃）、`note`、`recorded_at` |
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | `cpu_hours`、`storage_gb`（有限的数，0 或更大） | 该任务的一行：`task_id`、`cpu_hours_budget`、`storage_gb_budget`、`cpu_hours_used`、`storage_gb_used`、`cpu_hours_reserved`、`storage_gb_reserved`。任务不存在时以 `scope` 拒绝。 |
@@ -279,9 +283,9 @@
 | planner | `check_experimental_design` | read | `project_id`、`protocol_id` | 检查一份已保存的研究协议的设计。 |
 | planner | `estimate_sample_size` | read | `effect`、`sd` | 估算需要多少个区组或实验单位。 |
 | planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。带 `round_id` 时，还会像 `save_plan_draft` 一样检查运行单是否执行了本轮分配的处理。 |
-| planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
-| planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
-| planner | `propose_evidence_relation` | write | `task_id`、`kind`、`card_id`、`other_card_id`、`reason` | 提议一张卡取代或与另一张卡矛盾，或撤回自己。提议保持待定，操作员确认之前不改变任何卡。 |
+| planner | `query_evidence` | read | 无 | 按 `ids`、`text` 或 `variable` 搜索任务所在项目看得到的证据卡；每张卡标明操作员是否已核实以及它的状态。已被取代、已撤回或依赖失效的卡不出现在搜索结果里，只计入 `hidden_inactive`；按 ID 点名要时，只返回它的状态和替代它的卡。 |
+| planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。还可以给出 `variable`、`conditions`、`crop_taxon`、`cultivar`、`growth_stage` 和 `conditions_note`；卡片和操作员录入的卡一样按目录检查。它不能核实证据卡。 |
+| planner | `propose_evidence_relation` | write | `task_id`、`kind`、`card_id`、`reason` | 提议一张卡取代或与另一张卡矛盾，或撤回自己。`other_card_id` 指另一张卡，`retracts` 不填。提议保持待定，操作员确认之前不改变任何卡。 |
 | planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。没有执行本轮分配处理的运行单（`treatment_not_applied`）不会保存。 |
 | planner | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
 | researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、人工任务是否按时完成、已有快照），不写入任何东西。留出批次的测量只给条数。 |
@@ -300,7 +304,9 @@
 | auditor | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
 | auditor | `raise_audit_finding` | write | `task_id`、`stage_id`、`severity`、`summary` | 发出一条建议性的 `audit_finding` 告警（`info` 或 `warning`），可附若干行 `evidence`。它不暂停任何东西，也不改动别的东西。 |
 
-证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
+证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。提议的卡可以带和操作员录入的卡相同的适用范围字段（`variable`、`conditions`、`crop_taxon`、`cultivar`、`growth_stage`、`conditions_note`），按目录做同样的检查；检查不通过以 `param` 拒绝。
+
+证据关系。`propose_evidence_relation` 同样需要调度器正在运行的计划任务（其他任务以 `wrong_task_kind` 拒绝）。它把提议存成待定，记下 `model:planner`、任务 ID 和提出它的项目，返回 `relation_id`；一个任务最多提议 10 条关系（`quota`）。提议时适用和操作员一样的规则（项目看不到的卡视为不存在），操作员确认时再检查一遍。待定的提议不改变任何卡：它只会让引用这张卡的运行单在审阅里出现 `pending_relation` 提示。只有操作员能确认、驳回或撤销关系，经上面三条路由；模型没有这样的工具，它写的理由也不会离开它自己的项目。
 
 研究 Agent 的工具只要涉及快照、阶段、轮次或计算提交，就必须带 `task_id`。这个编号要和调度器正在运行的任务比对，而不是照单全收：任何其他编号、别的角色的任务、以及在调度运行之外发起的调用，都会以 `scope` 被拒绝；其他项目的阶段、轮次或快照同样以 `scope` 被拒绝。
 
