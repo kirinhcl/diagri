@@ -137,6 +137,7 @@ def test_a_confirmed_model_proposal_shows_the_note_to_other_projects(bench, oper
         relation = row["relation"]
         assert relation["reason"] == ("model reason" if shows_model else "checked it")
         assert (relation["task_id"] == "t1") is shows_model
+        assert relation["proposed_in"] == ("P" if shows_model else None)
 
 
 def test_the_review_response_is_shown_as_the_proposing_project_sees_it(bench, operator, cards):

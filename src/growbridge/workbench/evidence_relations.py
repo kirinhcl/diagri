@@ -62,7 +62,7 @@ def relation_json(record: RelationRecord, viewer: str | None) -> dict:
     home = record.relation.proposed_in
     if home is not None and home != viewer:
         note = record.review.note if record.review is not None else ""
-        data["relation"] = {**data["relation"], "task_id": None, "reason": note}
+        data["relation"] = {**data["relation"], "task_id": None, "reason": note, "proposed_in": None}
     return {**data, "state": record.state}
 
 
