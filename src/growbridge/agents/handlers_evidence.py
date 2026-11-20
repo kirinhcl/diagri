@@ -14,7 +14,11 @@ from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints
 
-from growbridge.agents.evidence_query import EvidenceInput, query_cards
+from growbridge.agents.evidence_query import (
+    QUERY_EVIDENCE_DESCRIPTION,
+    EvidenceInput,
+    query_cards,
+)
 from growbridge.agents.handlers_common import Deps, ToolInput, require_bound
 from growbridge.agents.tools import Tool
 from growbridge.archive.evidence_relations import (
@@ -72,8 +76,19 @@ class ProposeCardInput(ToolInput):
 class ProposeRelationInput(ToolInput):
     task_id: str  # compared with the task the dispatcher is running
     kind: Literal["supersedes", "contradicts", "retracts"]
-    card_id: str
-    other_card_id: str | None = None
+    card_id: str = Field(
+        description=(
+            "supersedes: the newer card, the one that replaces the other. retracts: the card "
+            "to take back. contradicts: one of the two cards."
+        )
+    )
+    other_card_id: str | None = Field(
+        default=None,
+        description=(
+            "supersedes: the older card, the one replaced. contradicts: the other card. "
+            "Leave it out for retracts."
+        ),
+    )
     reason: Reason  # stripped, 1-500 characters, the limit of the operator's own entry
 
 
@@ -164,7 +179,7 @@ def build_evidence_tools(deps: Deps) -> list[Tool]:
     return [
         Tool(
             "query_evidence",
-            "Search the evidence cards in the archive; each card says whether it is verified.",
+            QUERY_EVIDENCE_DESCRIPTION,
             EvidenceInput,
             lambda d: query_cards(deps, d),
         ),
@@ -180,9 +195,10 @@ def build_evidence_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "propose_evidence_relation",
-            "Propose that a card supersedes or contradicts another, or retracts itself, with a "
-            "reason grounded in what you read, never a guess. It stays pending until an operator "
-            "confirms it; nothing changes before. Pass the planner task_id you are working on.",
+            "Propose that card_id supersedes other_card_id (card_id is the newer card), that "
+            "the two contradict each other, or that card_id be retracted, with a reason grounded "
+            "in what you read, never a guess. It stays pending until an operator confirms it; "
+            "nothing changes before. Pass the planner task_id you are working on.",
             ProposeRelationInput,
             lambda d: propose_evidence_relation(deps, d),
             writes=True,

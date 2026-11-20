@@ -22,6 +22,14 @@ from growbridge.archive.evidence_status import CardStatus
 from growbridge.archive.models import EvidenceCard
 from growbridge.vocab import Catalog
 
+QUERY_EVIDENCE_DESCRIPTION = (
+    "Search the evidence cards your task's project can see, by ids, text or catalog "
+    "variable. Each card says whether it is verified and gives its status (active, "
+    "superseded, retracted or dependency_invalid). A search lists active cards only and "
+    "counts the others in hidden_inactive; asked for by id, an inactive card comes back "
+    "without its claim or value and names its replacement: cite that, not this one."
+)
+
 
 class EvidenceInput(ToolInput):
     ids: tuple[str, ...] = ()

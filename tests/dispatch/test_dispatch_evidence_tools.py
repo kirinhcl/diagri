@@ -6,7 +6,7 @@ import json
 import pytest
 from dispatch_helpers import call, script_calls
 
-from growbridge.agents.tools import ROLE_TOOLS
+from growbridge.agents.tools import ROLE_TOOLS, input_schema
 from growbridge.archive.evidence_ledger import EvidenceOrigin
 from growbridge.archive.evidence_relations import RelationRequest, record_relation
 from growbridge.archive.models import EvidenceCard
@@ -194,3 +194,15 @@ def test_the_relation_tool_is_a_planner_write_tool(env):
     assert "propose_evidence_relation" not in ROLE_TOOLS["researcher"]
     by_name = {tool.name: tool for tool in env.tools()["planner"]}
     assert by_name["propose_evidence_relation"].writes
+
+
+def test_the_relation_tool_tells_the_model_which_card_is_which(env):
+    by_name = {tool.name: tool for tool in env.tools()["planner"]}
+    relation = by_name["propose_evidence_relation"]
+    properties = input_schema(relation.input_model)["properties"]
+
+    assert "newer" in properties["card_id"]["description"]
+    assert "older" in properties["other_card_id"]["description"]
+    assert "itself" not in relation.description
+    query = by_name["query_evidence"].description
+    assert all(word in query for word in ("variable", "status", "hidden_inactive"))

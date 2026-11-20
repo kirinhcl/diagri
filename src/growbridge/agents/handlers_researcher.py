@@ -12,7 +12,11 @@ import asyncio
 
 from pydantic import Field
 
-from growbridge.agents.evidence_query import EvidenceInput, query_cards
+from growbridge.agents.evidence_query import (
+    QUERY_EVIDENCE_DESCRIPTION,
+    EvidenceInput,
+    query_cards,
+)
 from growbridge.agents.handlers_common import (
     Deps,
     ToolInput,
@@ -337,7 +341,7 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "query_evidence",
-            "Search evidence cards already in the archive.",
+            QUERY_EVIDENCE_DESCRIPTION,
             EvidenceInput,
             lambda d: query_cards(deps, d),
         ),

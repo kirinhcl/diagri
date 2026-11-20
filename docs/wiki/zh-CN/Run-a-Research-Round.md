@@ -199,15 +199,15 @@ POST /wb/evidence/relations
 {"kind": "supersedes", "card_id": "NEW_CARD_ID", "other_card_id": "OLD_CARD_ID", "reason": "the 2025 trial repeats it at higher light"}
 ```
 
-`kind` 是 `supersedes`（`card_id` 取代 `other_card_id`；两张卡必须都是公开卡，或都在同一个项目里）、`contradicts`（两者互相矛盾，都保留）或 `retracts`（收回 `card_id`；不填 `other_card_id`）。你记下的关系立即生效。计划 Agent 提议的关系要等你处理：用 `GET /wb/evidence/relations?project_id=PROJECT_ID` 列出，再用 `POST /wb/evidence/relations/RELATION_ID/review` 回答，body 为 `{"decision": "confirmed", "note": "..."}`（确认时必须写说明）或 `{"decision": "rejected"}`。确认时会再检查一遍规则，所以旧卡在此期间已被取代的提议会以 `relation_already_superseded` 拒绝；你仍然可以驳回它。要结束一条已确认的关系，用 `POST /wb/evidence/relations/RELATION_ID/withdraw`，带上 `reason`。第一次审核和第一次撤销为准。
+`kind` 是 `supersedes`（`card_id` 取代 `other_card_id`；两张卡必须都是公开卡，或都在同一个项目里）、`contradicts`（两者互相矛盾，都保留；公开卡与项目卡之间可以记，两个不同项目的卡之间不行）或 `retracts`（收回 `card_id`；不填 `other_card_id`）。你记下的关系立即生效。计划 Agent 提议的关系要等你处理：用 `GET /wb/evidence/relations?project_id=PROJECT_ID` 列出，再用 `POST /wb/evidence/relations/RELATION_ID/review` 回答，body 为 `{"decision": "confirmed", "note": "..."}`（只有确认计划 Agent 在公开卡之间的提议时才必须写说明：这样的提议会在所有项目里生效，其他项目看到的是你的说明，而不是计划 Agent 的理由）或 `{"decision": "rejected"}`。确认时会再检查一遍规则，所以旧卡在此期间已被取代的提议会以 `relation_already_superseded` 拒绝；你仍然可以驳回它。要结束一条已确认的关系，用 `POST /wb/evidence/relations/RELATION_ID/withdraw`，带上 `reason`。第一次审核和第一次撤销为准。
 
-之后 `GET /wb/evidence` 会给每张卡显示 `status`：`retracted`、`dependency_invalid`、`superseded` 或 `active`（同时符合几种的，显示其中排在前面的）。加上 `as_of`（epoch 秒）可以看更早时刻的状态，加 `status` 或 `variable` 可以缩小列表。
+之后 `GET /wb/evidence` 会给每张卡显示 `status`：`retracted`、`dependency_invalid`、`superseded` 或 `active`（同时符合几种的，显示其中排在前面的）。加上 `as_of`（epoch 秒）可以看更早时刻的卡和状态（之后才录入的卡不列出），加 `status` 或 `variable` 可以缩小列表。工作台的证据页有同样的筛选，`as_of` 用日期时间框来选。
 
 这对运行单的影响：
 
 - **阻断。** 只要某个设定值引用了不再有效的卡，提交运行单、替换运行单和批准阶段都会被拒绝。对应的问题是 `superseded_source`（会指出取代它的卡）、`retracted_source` 和 `dependency_invalid_source`（卡所依据的报告或快照已失效）。
 - **已经在运行的阶段不会被停掉。** 阶段过了审阅之后，同样的问题只作提示。运行中阶段的日报，会在“Evidence no longer valid”下列出最多五条这样的引用，有替代卡时一并写出。
-- **提示。** `contested_source`（有一张有效的卡与它矛盾）、`pending_relation`（有关于这张卡的提议在等审核）、`variable_mismatch`、`evidence_unit_mismatch`（卡的变量或单位与规则的不同；没有填目录变量的卡，或目录里没有的传感器名，不做比对）、`crop_mismatch`、`uncataloged_card` 和 `exploratory_finding`（卡来自报告不是确证性的轮次）。
+- **提示。** `contested_source`（有一张有效的卡与它矛盾）、`pending_relation`（有关于这张卡的提议在等审核）、`variable_mismatch`、`evidence_unit_mismatch`（卡的变量或单位与规则的不同；规则的传感器名不在目录里时，只是不比对变量，单位仍然比对；没有填目录变量的卡不做比对，它若带数值，则给出 `uncataloged_card`）、`crop_mismatch`、`uncataloged_card` 和 `exploratory_finding`（卡来自报告不是确证性的轮次）。
 
 要把一个结果留给以后用，把已交付轮次的结论转成卡：
 
