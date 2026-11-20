@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
+from growbridge.archive.evidence_ledger import EvidenceLedger
 from growbridge.archive.ids import canonical_json, new_id
 from growbridge.archive.models import (
     ActionRecord,
@@ -127,6 +128,7 @@ class Archive:
         self.root = Path(root)
         self.clock = clock
         db.migrate(NAMESPACE, STEPS)
+        self.ledger = EvidenceLedger(db, clock)
 
     # --- internal ------------------------------------------------------------------------------
 
@@ -625,6 +627,19 @@ class Archive:
     def is_invalid(self, record_id: str) -> bool:
         row = self.db.one("SELECT 1 FROM invalidations WHERE dependent_id = ?", (record_id,))
         return row is not None
+
+    def invalidated_at(self, record_ids: Iterable[str]) -> tuple[float, str] | None:
+        """The earliest invalidation among ``record_ids``, with the id it hit; None if none."""
+        ids = tuple(record_ids)
+        if not ids:
+            return None
+        marks = ", ".join("?" * len(ids))
+        row = self.db.one(
+            f"SELECT at, dependent_id FROM invalidations WHERE dependent_id IN ({marks})"
+            " ORDER BY at, dependent_id LIMIT 1",
+            ids,
+        )
+        return (float(row["at"]), row["dependent_id"]) if row else None
 
     def last_write_at(self) -> float | None:
         row = self.db.one("SELECT value FROM archive_meta WHERE key = 'last_write_at'")
