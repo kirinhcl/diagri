@@ -171,10 +171,41 @@ def test_a_relation_with_another_users_project_card_is_hidden(world):
     allowed = bench.post(alice, RELATIONS, body)
 
     assert allowed.status_code == 200
-    assert refused.json()["detail"]["reason"] == "record_not_found"
+    assert refused.json()["detail"]["reason"] == "relation_unknown_card"
     rid = allowed.json()["relation"]["id"]
     for action, payload in (("review", {"decision": "rejected"}), ("withdraw", {"reason": "r"})):
         response = bench.post(bob, f"{RELATIONS}/{rid}/{action}", payload)
         assert response.json()["detail"]["reason"] == "record_not_found"
     listing = bob.get(RELATIONS, params={"project_id": bench.project_id})
     assert listing.json()["detail"]["reason"] == "record_not_found"
+
+
+def unknown_detail(bench, client, card_id: str) -> dict:
+    body = {"kind": "contradicts", "card_id": card_id, "other_card_id": "pub", "reason": "r"}
+    detail = bench.post(client, RELATIONS, body).json()["detail"]
+    return {**detail, "message": detail["message"].replace(card_id, "<id>")} | {
+        "params": {k: "<id>" for k in detail["params"]}
+    }
+
+
+def test_a_hidden_card_is_refused_exactly_like_a_missing_one(world):
+    bench, alice, bob = world
+    card(bench, "pub")
+    card(bench, "mine", bench.project_id)
+
+    hidden = unknown_detail(bench, bob, "mine")
+    missing = unknown_detail(bench, bob, "nothing")
+
+    assert hidden == missing and hidden["reason"] == "relation_unknown_card"
+    assert bench.project_id not in str(hidden)
+
+
+def test_two_hidden_cards_of_two_projects_are_not_reported_as_cross_scope(world):
+    bench, alice, bob = world
+    card(bench, "mine", bench.project_id)
+    card(bench, "other", "project-of-someone-else")
+    body = {"kind": "contradicts", "card_id": "mine", "other_card_id": "other", "reason": "r"}
+
+    response = bench.post(bob, RELATIONS, body)
+
+    assert response.json()["detail"]["reason"] == "relation_unknown_card"

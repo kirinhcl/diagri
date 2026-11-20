@@ -16,6 +16,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends
 
+from growbridge.archive.evidence_book import card_project
 from growbridge.archive.evidence_ledger import RelationKind, RelationRecord
 from growbridge.archive.evidence_relations import (
     Note,
@@ -27,6 +28,7 @@ from growbridge.archive.evidence_relations import (
     relation_not_found,
     relation_scope,
     review_relation,
+    unknown_card,
     withdraw_relation,
 )
 from growbridge.archive.store import Archive
@@ -95,9 +97,20 @@ class RelationRoutes:
             raise as_denied(relation_not_found(relation_id))
         return record
 
+    def _check_cards_seen(self, actor: Actor, request: RelationRequest) -> None:
+        """A card of a project the caller cannot see is refused as a card that does not exist,
+        before the cards' scope is looked at, so neither the card nor its project is revealed."""
+        if self.access is None:
+            return
+        for card_id in (request.card_id, request.other_card_id):
+            project = None if card_id is None else card_project(self.archive, card_id)
+            if project is not None and not self.access.sees_project(actor, project):
+                raise unknown_card(card_id or "")
+
     def record(self, body: RelationIn, actor: Actor) -> dict:
         request = RelationRequest(**body.model_dump())
         try:
+            self._check_cards_seen(actor, request)
             project = relation_scope(self.archive, request)
             self._write_guard(actor, project)
             made = record_relation(self.archive, request, actor.id, project)

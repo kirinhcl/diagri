@@ -72,13 +72,18 @@ def _check_shape(request: RelationRequest) -> None:
         raise RelationRefused("relation_self", "A card cannot be related to itself.")
 
 
+def unknown_card(card_id: str) -> RelationRefused:
+    """The refusal for a card that does not exist or is not visible to the viewer."""
+    return RelationRefused(
+        "relation_unknown_card", f"Unknown evidence card {card_id}.", {"card_id": card_id}
+    )
+
+
 def _check_visible(archive: Archive, request: RelationRequest, viewer: str | None) -> None:
     visible = visible_cards(archive, viewer)
     for card_id in _cards(request):
         if card_id not in visible:
-            raise RelationRefused(
-                "relation_unknown_card", f"Unknown evidence card {card_id}.", {"card_id": card_id}
-            )
+            raise unknown_card(card_id)
 
 
 def relation_scope(archive: Archive, request: RelationRequest) -> str | None:
