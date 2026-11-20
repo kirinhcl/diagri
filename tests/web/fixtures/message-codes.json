@@ -363,6 +363,99 @@
       ],
       "action": true
     },
+    "superseded_source": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "replacement_id",
+        "replacement_validity"
+      ],
+      "action": true
+    },
+    "retracted_source": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "reason"
+      ],
+      "action": true
+    },
+    "dependency_invalid_source": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "dependency_id"
+      ],
+      "action": true
+    },
+    "contested_source": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "others"
+      ],
+      "action": true
+    },
+    "pending_relation": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "relations"
+      ],
+      "action": true
+    },
+    "variable_mismatch": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "rule_variable",
+        "card_variable"
+      ],
+      "action": true
+    },
+    "evidence_unit_mismatch": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "rule_unit",
+        "card_unit"
+      ],
+      "action": true
+    },
+    "crop_mismatch": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "card_taxon",
+        "protocol_taxon"
+      ],
+      "action": true
+    },
+    "uncataloged_card": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id"
+      ],
+      "action": true
+    },
+    "exploratory_finding": {
+      "params": [
+        "source_kind",
+        "source",
+        "card_id",
+        "label"
+      ],
+      "action": true
+    },
     "unknown_treatment": {
       "params": [
         "treatments"

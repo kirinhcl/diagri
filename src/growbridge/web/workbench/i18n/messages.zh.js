@@ -164,6 +164,46 @@ export default {
     "{source_kind}{source}依据的证据卡，其测量没有校准。",
   "msg.finding.uncalibrated.action":
     "先校准这张证据卡依据的测量。",
+  "msg.finding.superseded_source":
+    "{source_kind}{source}引用的证据卡已被新卡取代。",
+  "msg.finding.superseded_source.action":
+    "改引用现行的证据卡。",
+  "msg.finding.retracted_source":
+    "{source_kind}{source}引用的证据卡已被撤销：{reason}",
+  "msg.finding.retracted_source.action":
+    "改引用其他证据卡，或去掉这条引用。",
+  "msg.finding.dependency_invalid_source":
+    "{source_kind}{source}引用的证据卡所依据的数据已经失效。",
+  "msg.finding.dependency_invalid_source.action":
+    "改引用其他证据卡，或在有效数据上重做这一轮。",
+  "msg.finding.contested_source":
+    "{source_kind}{source}引用的证据卡与其他卡相矛盾：{others}。",
+  "msg.finding.contested_source.action":
+    "先核对相互矛盾的证据卡再采用。",
+  "msg.finding.pending_relation":
+    "{source_kind}{source}引用的证据卡还有待审核的关系：{relations}。",
+  "msg.finding.pending_relation.action":
+    "先审核这些关系。",
+  "msg.finding.variable_mismatch":
+    "{source_kind}{source}读取的是{rule_variable}，而它的证据卡讲的是{card_variable}。",
+  "msg.finding.variable_mismatch.action":
+    "改引用讲同一变量的证据卡。",
+  "msg.finding.evidence_unit_mismatch":
+    "{source_kind}{source}用的单位是{rule_unit}，而它的证据卡用{card_unit}。",
+  "msg.finding.evidence_unit_mismatch.action":
+    "换算其中一个，或改引用同单位的证据卡。",
+  "msg.finding.crop_mismatch":
+    "{source_kind}{source}引用的证据卡针对作物{card_taxon}，而协议种的是{protocol_taxon}。",
+  "msg.finding.crop_mismatch.action":
+    "改引用针对协议作物的证据卡。",
+  "msg.finding.uncataloged_card":
+    "{source_kind}{source}引用的证据卡有数值但没有目录变量，无法核对单位。",
+  "msg.finding.uncataloged_card.action":
+    "为这张证据卡补上目录变量。",
+  "msg.finding.exploratory_finding":
+    "{source_kind}{source}引用的证据卡来自{label}轮次，不是确证性的。",
+  "msg.finding.exploratory_finding.action":
+    "只把它当作线索，不当作已确认的结果。",
   "msg.finding.unknown_treatment":
     "分配里用了协议没有定义的处理：{treatments}。",
   "msg.finding.unknown_treatment.action":

@@ -192,6 +192,46 @@ export default {
     "{source_kind} {source} rests on an evidence card whose measurement is not calibrated.",
   "msg.finding.uncalibrated.action":
     "Calibrate the measurement the card relies on first.",
+  "msg.finding.superseded_source":
+    "{source_kind} {source} cites an evidence card that a newer card has replaced.",
+  "msg.finding.superseded_source.action":
+    "Cite the current card instead.",
+  "msg.finding.retracted_source":
+    "{source_kind} {source} cites an evidence card that has been retracted: {reason}",
+  "msg.finding.retracted_source.action":
+    "Cite another card or remove the citation.",
+  "msg.finding.dependency_invalid_source":
+    "{source_kind} {source} cites an evidence card built on data that has since been invalidated.",
+  "msg.finding.dependency_invalid_source.action":
+    "Cite another card, or redo the round on valid data.",
+  "msg.finding.contested_source":
+    "{source_kind} {source} cites an evidence card that other cards contradict: {others}.",
+  "msg.finding.contested_source.action":
+    "Check the conflicting cards before relying on it.",
+  "msg.finding.pending_relation":
+    "{source_kind} {source} cites an evidence card with relations still awaiting review: {relations}.",
+  "msg.finding.pending_relation.action":
+    "Review those relations first.",
+  "msg.finding.variable_mismatch":
+    "{source_kind} {source} reads {rule_variable}, but its evidence card is about {card_variable}.",
+  "msg.finding.variable_mismatch.action":
+    "Cite a card about the variable the rule reads.",
+  "msg.finding.evidence_unit_mismatch":
+    "{source_kind} {source} uses unit {rule_unit}, but its evidence card is in {card_unit}.",
+  "msg.finding.evidence_unit_mismatch.action":
+    "Convert one of them, or cite a card in the same unit.",
+  "msg.finding.crop_mismatch":
+    "{source_kind} {source} cites an evidence card for crop {card_taxon}, but the protocol grows {protocol_taxon}.",
+  "msg.finding.crop_mismatch.action":
+    "Cite a card for the protocol's crop.",
+  "msg.finding.uncataloged_card":
+    "{source_kind} {source} cites an evidence card with a value but no catalog variable, so its unit cannot be checked.",
+  "msg.finding.uncataloged_card.action":
+    "Add the catalog variable to the card.",
+  "msg.finding.exploratory_finding":
+    "{source_kind} {source} cites an evidence card from an {label} round, not a confirmatory one.",
+  "msg.finding.exploratory_finding.action":
+    "Treat it as a lead, not a confirmed result.",
   "msg.finding.unknown_treatment":
     "The allocations use treatments the protocol does not define: {treatments}.",
   "msg.finding.unknown_treatment.action":

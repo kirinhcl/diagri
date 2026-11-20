@@ -32,6 +32,8 @@
     "device_owned_write", "pump_action", "level_range", "pump_device_owned", "unknown_sensor", "unit_mismatch",
     "humidity_exhaust_only", "rule_conflict", "safety_conflict", "sampling", "duration", "wait",
     "missing_tolerance", "manual_task", "no_evidence", "unverified_source", "uncalibrated",
+    "superseded_source", "retracted_source", "dependency_invalid_source", "contested_source", "pending_relation",
+    "variable_mismatch", "evidence_unit_mismatch", "crop_mismatch", "uncataloged_card", "exploratory_finding",
     "treatment_not_applied", "unknown_treatment", "missing_control", "no_replication", "unbalanced_block",
     "confounded_with_time", "seed_mismatch"
   ],

@@ -99,7 +99,8 @@ const EXACT = {
   rule_unit: guarded(isText, (ctx, v) => unitText(v)),
 };
 const LEVEL_NAMES = ["level", "min", "max", "expected", "protection_level"];
-const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name"];
+const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name",
+  "reason", "others", "relations", "rule_variable", "card_variable", "card_unit", "card_taxon", "protocol_taxon", "label"];
 // counts: these names, every name ending in "_count" (e.g. file_count, limit_count), and max_*/min_*
 const COUNT_NAMES = ["version", "current_version", "attempts", "depth", "count", "blocks", "min_blocks", "flips", "failed", "priority", "round", "mode", "top_rowid", "cursor"];
 const BYTE_NAMES = ["bytes", "limit"];
