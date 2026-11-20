@@ -370,3 +370,18 @@ def test_a_refusal_becomes_a_denial_with_its_registered_code(reason, code, param
 
     assert (denied.code, denied.reason, denied.params) == (code, reason, params)
     assert str(denied) == "why"
+
+
+def test_another_projects_rejected_proposal_is_not_found(archive, cards):
+    rejected = propose(archive, "contradicts", "a", "b", project="P")
+    review_relation(archive, rejected.relation.id, "rejected", "op", "", "P")
+    for viewer in ("Q", None):
+        for call in (
+            lambda v=viewer: review_relation(
+                archive, rejected.relation.id, "rejected", "op", "", v
+            ),
+            lambda v=viewer: withdraw_relation(archive, rejected.relation.id, "op", "w", v),
+        ):
+            assert refused(call).reason == "record_not_found"
+    exc = refused(lambda: withdraw_relation(archive, rejected.relation.id, "op", "w", "P"))
+    assert exc.reason == "relation_not_confirmed"

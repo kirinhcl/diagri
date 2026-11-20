@@ -223,7 +223,7 @@ def record_relation(
         return archive.ledger.add_relation(relation, confirmed_by=actor_id)
 
 
-def _not_found(relation_id: str) -> RelationRefused:
+def relation_not_found(relation_id: str) -> RelationRefused:
     return RelationRefused(
         "record_not_found",
         f"No evidence relation {relation_id}.",
@@ -235,10 +235,10 @@ def _visible_record(archive: Archive, relation_id: str, viewer: str | None) -> R
     """The record, or "not found" when its cards are not visible to the viewer."""
     record = archive.ledger.record(relation_id)
     if record is None:
-        raise _not_found(relation_id)
+        raise relation_not_found(relation_id)
     relation = record.relation
-    # A pending proposal is seen only where it was made (as evidence_status does).
-    hidden = record.state == "pending" and relation.proposed_in not in (None, viewer)
+    # A proposal not confirmed (pending or rejected) is seen only where it was made.
+    hidden = record.state in ("pending", "rejected") and relation.proposed_in not in (None, viewer)
     named = (relation.subject_id, relation.object_id)
     visible = visible_cards(archive, viewer)
     if (
@@ -246,7 +246,7 @@ def _visible_record(archive: Archive, relation_id: str, viewer: str | None) -> R
         or relation.project_id not in (None, viewer)
         or any(card_id is not None and card_id not in visible for card_id in named)
     ):
-        raise _not_found(relation_id)
+        raise relation_not_found(relation_id)
     return record
 
 

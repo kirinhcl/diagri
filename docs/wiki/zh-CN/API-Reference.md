@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 59 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 63 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -116,6 +116,10 @@
 | `POST` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 | `POST` | `/wb/evidence/{card_id}/verify` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `POST` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | `state`（关系规则）、`param` |
+| `POST` | `/wb/evidence/relations/{relation_id}/review` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不在待确认、需要说明、规则复核）、`param` |
+| `POST` | `/wb/evidence/relations/{relation_id}/withdraw` | 操作员 | 局域网、覆盖网络 | 否 | `state`（未确认）、`param` |
+| `GET` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
 | `POST` | `/wb/compute/balance` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required` |
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope` |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |

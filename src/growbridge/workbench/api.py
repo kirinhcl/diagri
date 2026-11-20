@@ -49,6 +49,7 @@ from growbridge.workbench.auth import (
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
+from growbridge.workbench.evidence_relations import add_evidence_relation_routes
 from growbridge.workbench.greenhouses import add_greenhouse_routes
 from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
@@ -286,6 +287,7 @@ class Workbench:
             access=access,
         )
         add_evidence_routes(self.router, self.operator, archive, workflow, access)
+        add_evidence_relation_routes(self.router, self.operator, archive, access)
         add_manual_task_routes(
             self.router, self.operator, self.on_site, workflow, archive, control, self.clock, access
         )
