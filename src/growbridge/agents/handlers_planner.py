@@ -20,6 +20,7 @@ from growbridge.agents.handlers_common import (
     require_project,
     require_round_project,
     resolve,
+    sheet_protocol,
     submit_draft,
     unavailable,
 )
@@ -130,9 +131,7 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
             require_round_project(deps, data.round_id)
         sheet = data.run_sheet
         require_project(deps, sheet.project_id)  # evidence is scoped by the sheet's project
-        protocol = deps.workflow.store.protocol(sheet.protocol_id, sheet.protocol_version)
-        if protocol is not None and protocol.project_id != sheet.project_id:
-            protocol = None  # another project's protocol gives no crop comparison
+        protocol = sheet_protocol(deps, sheet)
         findings = (
             *check_sheet(deps, sheet, data.round_id),
             *evidence_gate(sheet, deps.archive),

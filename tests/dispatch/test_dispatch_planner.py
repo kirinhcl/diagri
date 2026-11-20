@@ -3,6 +3,7 @@ import json
 import pytest
 from dispatch_helpers import call, result_blocks, script_calls
 
+from growbridge.agents.handlers_common import sheet_protocol
 from growbridge.archive.evidence_ledger import EvidenceOrigin, EvidenceRelation
 from growbridge.archive.models import EvidenceCard
 from growbridge.sim.llm import ScriptedClient
@@ -335,3 +336,33 @@ async def test_validate_run_sheet_refuses_a_sheet_of_another_project(env):
     denied = await env.refusal("planner", "validate_run_sheet", run_sheet=foreign)
 
     assert denied.reason == "not_this_project"
+
+
+async def test_validate_run_sheet_does_not_read_another_projects_protocol(env):
+    env.other_project()  # protocol-b belongs to the other project
+    low = [{"id": "on", "channel": "light", "at": "06:00", "level": 40}]
+    own = env.sheet_json(timed_actions=low)
+    foreign = env.sheet_json(timed_actions=low, protocol_id="protocol-b")
+    assert foreign["project_id"] == env.project_id
+
+    rnd = env.round_id
+    checked = _payload(
+        await env.invoke("planner", "validate_run_sheet", round_id=rnd, run_sheet=own)
+    )
+    leaked = _payload(
+        await env.invoke("planner", "validate_run_sheet", round_id=rnd, run_sheet=foreign)
+    )
+
+    assert "treatment_not_applied" in {f["code"] for f in checked["findings"]}  # control
+    assert "treatment_not_applied" not in {f["code"] for f in leaked["findings"]}
+
+
+def test_sheet_protocol_is_the_sheets_own_protocol_only(env):
+    own = env.sheet()
+    foreign = env.sheet(protocol_id="protocol-b")
+    env.other_project()
+    missing = env.sheet(protocol_id="no-such-protocol")
+
+    assert sheet_protocol(env.deps, own) == env.protocol
+    assert sheet_protocol(env.deps, foreign) is None
+    assert sheet_protocol(env.deps, missing) is None
