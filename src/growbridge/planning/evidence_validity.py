@@ -142,7 +142,8 @@ def _rule_fit_hints(
                 card_id=card.id,
             )
     elif catalog.resolve(rule.sensor) is None:
-        return  # a device-only sensor name: nothing to compare against
+        # a device-only sensor name: no variable to compare, but the units still can be
+        yield from _unit_hint(kind, source, rule, card, catalog)
     elif not _same_variable(catalog, rule.sensor, card.variable):
         yield _hint(
             "variable_mismatch",

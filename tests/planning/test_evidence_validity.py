@@ -164,6 +164,14 @@ def test_a_sensor_outside_the_catalog_gives_no_variable_hint():
     assert fit(sheet, {"H": c}) == ()
 
 
+def test_a_sensor_outside_the_catalog_still_gets_the_unit_check():
+    c = card(variable="air_temperature", value=77.0, unit="degF")
+    sheet = sheet_citing("H", rule=True, sensor="tempB", unit="C")
+    f = only(fit(sheet, {"H": c}))
+    assert (f.code, f.blocking) == ("evidence_unit_mismatch", False)
+    assert f.params == {**RULE, "card_id": "H", "rule_unit": "C", "card_unit": "degF"}
+
+
 def test_a_unit_mismatch_names_both_units():
     c = card(variable="air_temperature", value=77.0, unit="degF")
     sheet = sheet_citing("H", rule=True, sensor="temp", unit="C")
