@@ -12,12 +12,12 @@ from collections.abc import Iterator, Mapping
 from growbridge.archive.evidence_book import card_statuses, visible_cards
 from growbridge.archive.evidence_ledger import EvidenceOrigin
 from growbridge.archive.evidence_status import CardStatus
-from growbridge.archive.models import EvidenceCard, FeedbackRule, RunSheet
+from growbridge.archive.models import EvidenceCard, FeedbackRule, ResearchProtocol, RunSheet
 from growbridge.archive.store import Archive
 from growbridge.planning.findings import block as _block
 from growbridge.planning.findings import hint as _hint
 from growbridge.planning.findings import source_text
-from growbridge.planning.validate import USER_INPUT_PREFIX, _evidence_refs
+from growbridge.planning.validate import USER_INPUT_PREFIX, _evidence_refs, check_evidence
 from growbridge.ports import Finding
 from growbridge.vocab import Catalog
 
@@ -227,6 +227,16 @@ def evidence_hints(
         catalog,
         crop_taxon,
     )
+
+
+def evidence_review(
+    sheet: RunSheet, archive: Archive, catalog: Catalog, protocol: ResearchProtocol | None
+) -> tuple[Finding, ...]:
+    """What a reviewer sees about the evidence: the cards the project may cite checked for
+    missing, unverified or uncalibrated sources, then the fit hints. None of it blocks."""
+    found = check_evidence(sheet, visible_cards(archive, sheet.project_id))
+    crop_taxon = protocol.crop_taxon if protocol is not None else ""
+    return (*found, *evidence_hints(sheet, archive, catalog, crop_taxon))
 
 
 def _stale_line(kind: str, source: str, status: CardStatus) -> str:

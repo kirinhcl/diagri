@@ -56,6 +56,7 @@ from growbridge.observer.report import (
     reports_due,
 )
 from growbridge.observer.service import Observer, build_observer
+from growbridge.planning.evidence_validity import evidence_gate
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
@@ -636,8 +637,9 @@ def build_runtime(
         dbs["workflow"],
         clock,
         control,
-        validate=lambda sheet: validate_run_sheet(
-            sheet, control.capabilities(), control.safety(), flow.catalog
+        validate=lambda sheet: (
+            *validate_run_sheet(sheet, control.capabilities(), control.safety(), flow.catalog),
+            *evidence_gate(sheet, archive),
         ),
         on_intervention=mirror,
     )

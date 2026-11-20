@@ -9,8 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from workbench_support import LAN_HOST, LAN_PORT
 
+from growbridge.archive.evidence_ledger import EvidenceOrigin, EvidenceRelation
 from growbridge.archive.models import EvidenceCard, TimedAction
-from growbridge.ports import Actor
+from growbridge.planning.evidence_validity import evidence_gate
+from growbridge.ports import Actor, Finding
 
 CARDS = "/wb/evidence"
 CARD = {
@@ -419,3 +421,87 @@ def test_the_hints_do_not_block_approval(bench, operator):
 
     assert approval.operator == "alice"
     assert operator.get(REVIEW).json()["blocking"] is False
+
+
+# --- evidence validity in the review -------------------------------------------------------------
+
+
+def supersede_card(bench, old: str, new: str) -> None:
+    relation = EvidenceRelation(
+        id=f"{new}-over-{old}",
+        kind="supersedes",
+        subject_id=new,
+        object_id=old,
+        reason="newer",
+        source="operator:op",
+        task_id=None,
+        project_id=None,
+        proposed_in=None,
+        at=1.0,
+    )
+    bench.archive.ledger.add_relation(relation, confirmed_by="op")
+
+
+def gated(bench) -> None:
+    """The workflow as the runtime builds it: its validator carries the evidence gate."""
+    bench.workflow.validate = lambda sheet: evidence_gate(sheet, bench.archive)
+
+
+def test_a_pending_stage_shows_the_superseded_card_as_blocking(bench, operator):
+    gated(bench)
+    proposed(bench, "old")
+    proposed(bench, "new")
+    cite(bench, "old", "old", "old")
+    supersede_card(bench, "old", "new")
+
+    review = operator.get(REVIEW).json()
+
+    blocking = [f["code"] for f in review["findings"] if f["blocking"]]
+    assert set(blocking) == {"superseded_source"} and review["blocking"] is True
+
+
+def test_a_running_stage_shows_the_superseded_card_as_a_hint(bench, operator):
+    gated(bench)
+    proposed(bench, "old")
+    proposed(bench, "new")
+    cite(bench, "old", "old", "old")
+    actor = Actor(kind="operator", id="alice", reauth_at=bench.clock.now())
+    bench.workflow.approve("stage-1", actor)
+    bench.run(bench.workflow.start_stage("stage-1", actor))
+    supersede_card(bench, "old", "new")
+
+    review = operator.get(REVIEW).json()
+
+    found = [f for f in review["findings"] if f["code"] == "superseded_source"]
+    assert found and all(f["blocking"] is False for f in found)
+    assert review["blocking"] is False
+
+
+def test_a_running_stage_keeps_other_blocking_findings_blocking(bench, operator):
+    cite(bench)
+    actor = Actor(kind="operator", id="alice", reauth_at=bench.clock.now())
+    bench.workflow.approve("stage-1", actor)
+    bench.run(bench.workflow.start_stage("stage-1", actor))
+    bench.workflow.validate = lambda sheet: (Finding(code="other_problem", message="m"),)
+
+    review = operator.get(REVIEW).json()
+
+    assert review["blocking"] is True
+
+
+def test_another_projects_round_card_is_no_evidence_in_the_review(bench, operator):
+    proposed(bench, "theirs")
+    bench.archive.ledger.add_origin(
+        EvidenceOrigin(
+            card_id="theirs",
+            project_id="other-project",
+            round_id="r",
+            report_artifact_id="a",
+            snapshot_ids=(),
+            label="descriptive",
+            at=0.0,
+        )
+    )
+    cite(bench, "theirs", "theirs", "theirs")
+
+    assert codes(operator) == ["no_evidence"] * 3

@@ -9,9 +9,10 @@ from growbridge.planning.evidence_validity import (
     cited_card_ids,
     evidence_gate,
     evidence_hints,
+    evidence_review,
     stale_evidence_lines,
 )
-from growbridge.sim.fixtures import humidity_rule, make_run_sheet
+from growbridge.sim.fixtures import humidity_rule, make_protocol, make_run_sheet
 from growbridge.vocab import load_catalog, packaged_catalog, packaged_text
 
 CATALOG = packaged_catalog()
@@ -305,3 +306,23 @@ def test_stale_lines_are_capped_at_five(archive):
     sheet = base.model_copy(update={"feedback_rules": rules})
     assert len(stale_evidence_lines(sheet, archive)) == 5
     assert len(stale_evidence_lines(sheet, archive, limit=2)) == 2
+
+
+def test_the_review_checks_the_visible_cards_then_adds_the_fit_hints(archive):
+    archive.add_evidence(card("H", crop_taxon=TAXON))
+    protocol = make_protocol(crop_taxon=OTHER_TAXON)
+    codes = [f.code for f in evidence_review(sheet_citing("H"), archive, CATALOG, protocol)]
+    assert codes == ["unverified_source", "crop_mismatch"]  # the card check, then the hints
+
+
+def test_the_review_without_a_protocol_skips_the_crop_check(archive):
+    archive.add_evidence(card("H", crop_taxon=TAXON))
+    found = evidence_review(sheet_citing("H"), archive, CATALOG, None)
+    assert "crop_mismatch" not in [f.code for f in found]
+
+
+def test_the_review_does_not_see_another_projects_round_card(archive):
+    archive.add_evidence(card("H"))
+    archive.ledger.add_origin(origin("descriptive"))  # origin of H is project-1
+    sheet = sheet_citing("H").model_copy(update={"project_id": "project-2"})
+    assert "no_evidence" in [f.code for f in evidence_review(sheet, archive, CATALOG, None)]

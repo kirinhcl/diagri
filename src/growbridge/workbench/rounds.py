@@ -19,8 +19,8 @@ from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import file_digest, new_id
 from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
 from growbridge.archive.store import Archive
-from growbridge.planning.validate import check_evidence
-from growbridge.ports import Actor, Denied
+from growbridge.planning.evidence_validity import evidence_review
+from growbridge.ports import Actor, Denied, Finding, StageRuntime
 from growbridge.research.notes import TEXT_LANGUAGE
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.scope import project_read, project_write, stage_read
@@ -28,6 +28,7 @@ from growbridge.workflow import denials
 from growbridge.workflow.access import Access
 from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
+from growbridge.workflow.states import StageState
 from growbridge.workflow.tasks import TaskBoard
 
 GOAL_ROLE = "orchestrator"  # the single entry point for a goal (architecture §4)
@@ -157,6 +158,27 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
     }
 
 
+GATE_CODES = frozenset({"superseded_source", "retracted_source", "dependency_invalid_source"})
+
+
+def _review_findings(
+    workflow: WorkflowService, stage: StageRuntime, archive: Archive | None
+) -> tuple[Finding, ...]:
+    """The validator's findings plus, with an archive, the evidence review. Once the stage is
+    past review the three evidence-validity blockers only inform: it already runs."""
+    sheet = stage.run_sheet
+    findings = tuple(workflow.validate(sheet)) if workflow.validate else ()
+    if archive is not None:
+        protocol = workflow.store.protocol(sheet.protocol_id, sheet.protocol_version)
+        findings = (*findings, *evidence_review(sheet, archive, workflow.catalog, protocol))
+    if stage.state is StageState.PENDING_REVIEW:
+        return findings
+    return tuple(
+        item.model_copy(update={"blocking": False}) if item.code in GATE_CODES else item
+        for item in findings
+    )
+
+
 def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | None = None) -> dict:
     """The run sheet as it would be approved now, checked by the validator ``approve`` uses.
     The digest is the one an approval records. Reading changes nothing.
@@ -166,10 +188,7 @@ def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | Non
     a verification. The hints never block."""
     stage = workflow.stage(stage_id)
     sheet = stage.run_sheet
-    findings = tuple(workflow.validate(sheet)) if workflow.validate else ()
-    if archive is not None:
-        cards = {card.id: card for card in archive.evidence()}
-        findings = (*findings, *check_evidence(sheet, cards))
+    findings = _review_findings(workflow, stage, archive)
     approval = workflow.current_approval(stage_id)
     return {
         "stage_id": stage.stage_id,

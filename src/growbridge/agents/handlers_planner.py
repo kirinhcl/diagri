@@ -27,7 +27,7 @@ from growbridge.agents.handlers_evidence import build_evidence_tools
 from growbridge.agents.tools import Tool
 from growbridge.archive.models import RunSheet
 from growbridge.planning.design import check_experimental_design, estimate_sample_size
-from growbridge.planning.validate import check_evidence
+from growbridge.planning.evidence_validity import evidence_gate, evidence_review
 from growbridge.ports import Denied
 
 ROLE = "planner"
@@ -126,11 +126,15 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
         return {"size": size, "design": data.design}
 
     def validate(data: ValidateInput) -> dict:
-        cards = {card.id: card for card in deps.archive.evidence()}
         if data.round_id is not None:
             require_round_project(deps, data.round_id)
         sheet = data.run_sheet
-        findings = [*check_sheet(deps, sheet, data.round_id), *check_evidence(sheet, cards)]
+        protocol = deps.workflow.store.protocol(sheet.protocol_id, sheet.protocol_version)
+        findings = (
+            *check_sheet(deps, sheet, data.round_id),
+            *evidence_gate(sheet, deps.archive),
+            *evidence_review(sheet, deps.archive, deps.workflow.catalog, protocol),
+        )
         return {"findings": findings_json(findings)}
 
     def save_draft(data: DraftInput) -> dict:
