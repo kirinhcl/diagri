@@ -348,6 +348,15 @@ _register(
     ("relation_note_required", ()),
 )
 
+# --- a round's conclusion as a card (research/round_cards.py) ----------------------------------
+_register(
+    "state",
+    ("round_card_not_delivered", ("round_id", "state")),
+    ("round_card_report_unusable", ("round_id", "problem")),
+    ("round_card_exists", ("round_id", "card_id")),
+    ("round_card_no_conclusion", ("round_id",)),
+)
+
 # --- root app (/api) and its browser sessions (api.py, dashboard.py) ----------------------------
 _register("entry", ("origin_not_allowed", ()), ("use_workbench", ()))
 _register("session", ("dashboard_not_connected", ()), ("link_used", ()))

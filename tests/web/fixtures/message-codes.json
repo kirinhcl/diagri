@@ -2231,6 +2231,37 @@
       "action": true,
       "of": "state"
     },
+    "round_card_not_delivered": {
+      "params": [
+        "round_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "round_card_report_unusable": {
+      "params": [
+        "round_id",
+        "problem"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "round_card_exists": {
+      "params": [
+        "round_id",
+        "card_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "round_card_no_conclusion": {
+      "params": [
+        "round_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
     "origin_not_allowed": {
       "params": [],
       "action": true,

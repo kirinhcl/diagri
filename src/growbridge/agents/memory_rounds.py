@@ -126,10 +126,18 @@ def _read(artifact: Any) -> dict | None:
 
 
 def _invalid(src: MemorySources, project_id: str, artifact: Any, body: dict) -> bool:
-    ids = {artifact.id, *_own_snapshots(src, project_id, body)}
-    if artifact.snapshot_id is not None:
-        ids.add(artifact.snapshot_id)
+    ids = (artifact.id, *report_snapshots(src, project_id, artifact, body))
     return any(src.archive.is_invalid(record_id) for record_id in ids)
+
+
+def report_snapshots(
+    src: MemorySources, project_id: str, artifact: Any, body: dict
+) -> tuple[str, ...]:
+    """The snapshots a report rests on: the one its artifact was built from, then those of its
+    evidence chain that belong to the project, without repeats."""
+    found = [] if artifact.snapshot_id is None else [artifact.snapshot_id]
+    found.extend(_own_snapshots(src, project_id, body))
+    return tuple(dict.fromkeys(found))
 
 
 def _own_snapshots(src: MemorySources, project_id: str, body: dict) -> Iterator[str]:

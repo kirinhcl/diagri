@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 63 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 64 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -103,6 +103,7 @@
 | `GET` | `/wb/rounds/{round_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/rounds/{round_id}/report` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds/{round_id}/choice` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `POST` | `/wb/rounds/{round_id}/evidence` | 操作员 | 局域网、覆盖网络 | 否 | `state`（未交付、报告不可用、已转过、没有结论）、`param` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
@@ -170,8 +171,9 @@
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |
 | `POST` | `/wb/rounds` | `project_id`、`protocol_id`（各 1 到 100） | `round_id`、`state` |
 | `GET` | `/wb/rounds/{round_id}` | 无 | `round_id`、`project_id`、`protocol_id`、`protocol_version`、`state`、`stages_done`、`stage_total`、`awaiting_choice`、`snapshot_id`、`report_artifact_id`，`project_name` 和 `round_number`（轮次在项目里同一协议的轮次中的序号，从 1 起），以及 `stages`（由 `stage_id`、`state`、`stage_index`（按创建顺序的序号，从 1 起）和 `phase`（协议版本给这个序号的生长期）组成的列表）。服务器找不到的名字（项目或协议已不存在、协议的生长期比阶段少）为 `null` |
-| `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`；其中 `estimate` 在 `note` 之外还有 `note_code` 和 `note_params`，精确估计的 `note_code` 为空）和 `primary_endpoint`（轮次的协议所定的主要终点指标，协议已不存在时为 `null`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。 |
+| `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`；其中 `estimate` 在 `note` 之外还有 `note_code` 和 `note_params`，精确估计的 `note_code` 为空）和 `primary_endpoint`（轮次的协议所定的主要终点指标，协议已不存在时为 `null`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。回答还带 `round_card`：能转时为 `{}`，转过后为 `{"card_id"}`，不能转时为 `{"refusal": {"reason", "params"}}`，写明原因。 |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`：`redo`、`next`、`verify` 或 `abort` | `round_id`、`state` |
+| `POST` | `/wb/rounds/{round_id}/evidence` | 可选 `growth_stage`（至多 100）、`conditions`（至多 8 个范围）、`conditions_note`（至多 500）、`value`（有限数）、`unit`（至多 40） | `card_id`、`verified`（恒为 true）、`label`（报告的标签）。把已交付轮次报告的结论转成一张 `local` 卡，范围限于该轮次的项目，由操作员核实；论断取报告的 `conclusion`（超过 1000 字则截断），变量取方案的主要终点（目录里没有就不填），作物和品种取方案的。给了 `value` 而没给 `unit` 时，单位取该变量的目录单位。卡与报告及其快照关联：其中任何一个后来被修正，卡就变成 `dependency_invalid`。一份报告只转一次；报告缺失、被改动、已失效或读过留出集时被拒绝。需要该项目的所有者 |
 | `POST` | `/wb/rounds/{round_id}/abort` | 无 | `round_id`、`state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`variant`、`params`、`message`、`blocking` 组成的列表：`variant` 为空，或把 `code` 细分到某一句话，`params` 是那句话要写出的值；先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking`、`approval`（阶段没有 `start` 会接受的批准时为 `null`，否则是 `approved_at` 和 `run_sheet_version`；它用的检查和 `start` 完全相同，所以控制台在它为 `null` 时让“开始”保持关闭） |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls`（整数，0 到 1000000）、`max_cost`（美元，0 到 1000000） | `project_id`、`max_calls`、`max_cost`、`remaining_calls`、`remaining_cost` |

@@ -9,7 +9,7 @@ refused with ``model_role``, reads included.
 
 import json
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
@@ -22,6 +22,7 @@ from growbridge.archive.store import Archive
 from growbridge.planning.evidence_validity import evidence_review
 from growbridge.ports import Actor, Denied, Finding, StageRuntime
 from growbridge.research.notes import TEXT_LANGUAGE
+from growbridge.research.round_cards import round_card_sources, round_card_state
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.scope import project_read, project_write, stage_read
 from growbridge.workflow import denials
@@ -119,9 +120,16 @@ def round_json(workflow: WorkflowService, round_id: str) -> dict:
 MAX_REPORT_BYTES = 1_000_000
 
 
-def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> dict:
+def report_json(
+    workflow: WorkflowService,
+    archive: Archive,
+    round_id: str,
+    holdout: Any = None,
+    access: Access | None = None,
+) -> dict:
     """The round's published report, read from its file once the file matches the digest the
-    archive recorded for it; a round without a report is refused with ``state``."""
+    archive recorded for it; a round without a report is refused with ``state``. ``round_card``
+    says whether it can become an evidence card (see ``round_card_state``)."""
     rnd = workflow.store.round(round_id)
     artifact = None if rnd.report_artifact_id is None else archive.artifact(rnd.report_artifact_id)
     if artifact is None or artifact.kind != "research_report":
@@ -155,6 +163,9 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
         "label": artifact.label,
         "sha256": artifact.sha256,
         "report": json.loads(path.read_text(encoding="utf-8")),
+        "round_card": round_card_state(
+            round_card_sources(workflow, archive, holdout, access is not None), round_id
+        ),
     }
 
 
@@ -294,6 +305,7 @@ def _steering_routes(
     workflow: WorkflowService,
     archive: Archive | None = None,
     access: Access | None = None,
+    holdout: Any = None,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
@@ -316,7 +328,7 @@ def _steering_routes(
                 "no archive is mounted: reports cannot be read",
                 reason="archive_not_mounted",
             )
-        return report_json(workflow, archive, round_id)
+        return report_json(workflow, archive, round_id, holdout, access)
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):
@@ -430,12 +442,13 @@ def add_round_routes(
     conversation: ConversationLog | None = None,
     *,
     access: Access | None = None,
+    holdout: Any = None,
 ) -> None:
     """Mount the routes on ``router``. ``operator`` and ``fresh`` are the workbench's operator
     dependencies (session, entry and origin checks; ``fresh`` also asks for a recent
     re-authentication). The budget and goal routes exist only when ``tasks`` and ``budget`` are
     given."""
     _design_routes(router, operator, workflow)
-    _steering_routes(router, operator, workflow, archive, access)
+    _steering_routes(router, operator, workflow, archive, access, holdout)
     if tasks is not None and budget is not None:
         _model_routes(router, operator, fresh, workflow, tasks, budget, conversation, access)
