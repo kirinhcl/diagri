@@ -160,7 +160,7 @@ def test_a_pending_or_confirmed_twin_is_a_duplicate(archive, cards):
         "relation_duplicate",
         {"relation_id": pending.relation.id},
     )
-    review_relation(archive, pending.relation.id, "rejected", "op", "", None)
+    review_relation(archive, pending.relation.id, "rejected", "op", "", "P")
     assert record(archive, "retracts", "a", viewer="P").state == "confirmed"
 
 
@@ -186,7 +186,7 @@ def test_reviewing_a_settled_relation_is_refused(archive, cards):
 
 def test_withdrawing_a_relation_that_is_not_confirmed_is_refused(archive, cards):
     pending = propose(archive, "retracts", "a")
-    exc = refused(lambda: withdraw_relation(archive, pending.relation.id, "op", "why", None))
+    exc = refused(lambda: withdraw_relation(archive, pending.relation.id, "op", "why", "P"))
     assert (exc.reason, exc.params) == (
         "relation_not_confirmed",
         {"relation_id": pending.relation.id, "state": "pending"},
@@ -196,10 +196,10 @@ def test_withdrawing_a_relation_that_is_not_confirmed_is_refused(archive, cards)
 def test_confirming_a_model_proposal_between_public_cards_needs_a_note(archive, cards):
     pending = propose(archive, "contradicts", "a", "b")
     exc = refused(
-        lambda: review_relation(archive, pending.relation.id, "confirmed", "op", "  ", None)
+        lambda: review_relation(archive, pending.relation.id, "confirmed", "op", "  ", "P")
     )
     assert (exc.reason, exc.params) == ("relation_note_required", {})
-    done = review_relation(archive, pending.relation.id, "confirmed", "op", "checked", None)
+    done = review_relation(archive, pending.relation.id, "confirmed", "op", "checked", "P")
     assert done.state == "confirmed"
 
 
@@ -284,16 +284,72 @@ def test_confirming_after_the_object_was_superseded_elsewhere_is_refused(archive
     pending = propose(archive, "supersedes", "a", "h")
     record(archive, "supersedes", "b", "h")
     exc = refused(
-        lambda: review_relation(archive, pending.relation.id, "confirmed", "op", "n", None)
+        lambda: review_relation(archive, pending.relation.id, "confirmed", "op", "n", "P")
     )
     assert exc.reason == "relation_already_superseded"
-    assert review_relation(archive, pending.relation.id, "rejected", "op", "", None).state == (
+    assert review_relation(archive, pending.relation.id, "rejected", "op", "", "P").state == (
         "rejected"
     )
 
 
 def test_confirming_does_not_count_the_relation_itself_as_a_duplicate(archive, cards):
     pending = propose(archive, "retracts", "a", task="t1")
-    done = review_relation(archive, pending.relation.id, "confirmed", "op", "n", None)
+    done = review_relation(archive, pending.relation.id, "confirmed", "op", "n", "P")
     assert done.state == "confirmed"
     assert card_statuses(archive, ["a"], None)["a"].validity == "retracted"
+
+
+def test_confirming_a_model_retraction_of_a_public_card_needs_a_note(archive, cards):
+    pending = propose(archive, "retracts", "a")
+    exc = refused(
+        lambda: review_relation(archive, pending.relation.id, "confirmed", "op", " ", "P")
+    )
+    assert exc.reason == "relation_note_required"
+    done = review_relation(archive, pending.relation.id, "confirmed", "op", "checked", "P")
+    assert done.state == "confirmed"
+
+
+def test_a_withdrawal_needs_a_reason_of_bounded_length(archive, cards):
+    made = record(archive, "retracts", "a")
+    for bad in ("", "   ", "x" * (REASON_MAX + 1)):
+        with pytest.raises(ValueError):
+            withdraw_relation(archive, made.relation.id, "op", bad, None)
+    assert archive.ledger.record(made.relation.id).state == "confirmed"
+    assert withdraw_relation(archive, made.relation.id, "op", " ok ", None).state == "withdrawn"
+
+
+def test_a_review_note_is_bounded_but_may_be_empty(archive, cards):
+    pending = propose(archive, "retracts", "a", project="P")
+    with pytest.raises(ValueError):
+        review_relation(archive, pending.relation.id, "rejected", "op", "x" * (REASON_MAX + 1), "P")
+    assert review_relation(archive, pending.relation.id, "rejected", "op", "", "P").state == (
+        "rejected"
+    )
+
+
+def test_a_pending_proposal_is_found_only_where_it_was_made(archive, cards):
+    pending = propose(archive, "contradicts", "a", "b", project="P")
+    for viewer in ("Q", None):
+        exc = refused(
+            lambda v=viewer: review_relation(archive, pending.relation.id, "rejected", "op", "", v)
+        )
+        assert (exc.reason, exc.params) == (
+            "record_not_found",
+            {"record_kind": "evidence_relation", "record_id": pending.relation.id},
+        )
+    assert review_relation(archive, pending.relation.id, "rejected", "op", "", "P").state == (
+        "rejected"
+    )
+
+
+def test_a_project_relation_is_not_found_from_another_project(archive, cards):
+    make_card(archive, "r", "P")
+    made = record(archive, "retracts", "r", viewer="P")
+    pending = propose(archive, "contradicts", "r", "a", project="P")
+    for rid in (made.relation.id, pending.relation.id):
+        assert refused(lambda r=rid: withdraw_relation(archive, r, "op", "w", "Q")).reason == (
+            "record_not_found"
+        )
+        assert refused(
+            lambda r=rid: review_relation(archive, r, "rejected", "op", "", "Q")
+        ).reason == ("record_not_found")

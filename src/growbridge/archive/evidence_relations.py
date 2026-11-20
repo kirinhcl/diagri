@@ -8,7 +8,7 @@ confirmed. A refusal is a ``RelationRefused`` carrying a registered denial reaso
 
 from typing import Annotated, Any, Literal
 
-from pydantic import StringConstraints
+from pydantic import StringConstraints, TypeAdapter
 
 from growbridge.archive.evidence_book import card_project, card_statuses, visible_cards
 from growbridge.archive.evidence_ledger import (
@@ -27,6 +27,9 @@ MODEL_RELATION_SOURCE = "model:planner"
 Reason = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=REASON_MAX)
 ]
+Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=REASON_MAX)]
+_REASON = TypeAdapter(Reason)
+_NOTE = TypeAdapter(Note)
 
 
 class RelationRequest(Model):
@@ -225,9 +228,15 @@ def _visible_record(archive: Archive, relation_id: str, viewer: str | None) -> R
     if record is None:
         raise _not_found(relation_id)
     relation = record.relation
+    # A pending proposal is seen only where it was made (as evidence_status does).
+    hidden = record.state == "pending" and relation.proposed_in not in (None, viewer)
     named = (relation.subject_id, relation.object_id)
     visible = visible_cards(archive, viewer)
-    if any(card_id is not None and card_id not in visible for card_id in named):
+    if (
+        hidden
+        or relation.project_id not in (None, viewer)
+        or any(card_id is not None and card_id not in visible for card_id in named)
+    ):
         raise _not_found(relation_id)
     return record
 
@@ -245,8 +254,8 @@ def _check_confirmable(
     archive: Archive, record: RelationRecord, note: str, viewer: str | None
 ) -> None:
     relation = record.relation
-    public_pair = relation.project_id is None and relation.object_id is not None
-    if relation.source.startswith(MODEL_SOURCE) and public_pair and not note.strip():
+    # A model's proposal about public cards takes effect everywhere; other projects see the note.
+    if relation.source.startswith(MODEL_SOURCE) and relation.project_id is None and not note:
         raise RelationRefused(
             "relation_note_required", "Say why you confirm this proposal (a note is required)."
         )
@@ -262,6 +271,7 @@ def review_relation(
     viewer_project: str | None,
 ) -> RelationRecord:
     """Confirm or reject a pending relation; confirming re-checks the rules first."""
+    note = _NOTE.validate_python(note)
     with archive.ledger.db.transaction():
         record = _visible_record(archive, relation_id, viewer_project)
         if record.state != "pending":
@@ -279,6 +289,7 @@ def withdraw_relation(
     archive: Archive, relation_id: str, actor: str, reason: str, viewer_project: str | None
 ) -> RelationRecord:
     """End a confirmed relation."""
+    reason = _REASON.validate_python(reason)
     with archive.ledger.db.transaction():
         record = _visible_record(archive, relation_id, viewer_project)
         if record.state != "confirmed":
