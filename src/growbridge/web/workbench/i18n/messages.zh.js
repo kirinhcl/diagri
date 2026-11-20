@@ -167,7 +167,7 @@ export default {
   "msg.finding.superseded_source":
     "{source_kind}{source}引用的证据卡已被新卡取代。",
   "msg.finding.superseded_source.action":
-    "改引用现行的证据卡。",
+    "改引用取代它的证据卡，或录入新的证据卡或用户输入。",
   "msg.finding.retracted_source":
     "{source_kind}{source}引用的证据卡已被撤销：{reason}",
   "msg.finding.retracted_source.action":
@@ -177,11 +177,11 @@ export default {
   "msg.finding.dependency_invalid_source.action":
     "改引用其他证据卡，或在有效数据上重做这一轮。",
   "msg.finding.contested_source":
-    "{source_kind}{source}引用的证据卡与其他卡相矛盾：{others}。",
+    "{source_kind}{source}引用的证据卡与其他卡相矛盾。",
   "msg.finding.contested_source.action":
     "先核对相互矛盾的证据卡再采用。",
   "msg.finding.pending_relation":
-    "{source_kind}{source}引用的证据卡还有待审核的关系：{relations}。",
+    "{source_kind}{source}引用的证据卡还有待审核的关系。",
   "msg.finding.pending_relation.action":
     "先审核这些关系。",
   "msg.finding.variable_mismatch":
@@ -201,7 +201,7 @@ export default {
   "msg.finding.uncataloged_card.action":
     "为这张证据卡补上目录变量。",
   "msg.finding.exploratory_finding":
-    "{source_kind}{source}引用的证据卡来自{label}轮次，不是确证性的。",
+    "{source_kind}{source}引用的证据卡来自标为{label}的轮次，不是确认性的。",
   "msg.finding.exploratory_finding.action":
     "只把它当作线索，不当作已确认的结果。",
   "msg.finding.unknown_treatment":

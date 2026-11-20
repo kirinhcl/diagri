@@ -195,7 +195,7 @@ export default {
   "msg.finding.superseded_source":
     "{source_kind} {source} cites an evidence card that a newer card has replaced.",
   "msg.finding.superseded_source.action":
-    "Cite the current card instead.",
+    "Cite its replacement, or enter a new card or a user input.",
   "msg.finding.retracted_source":
     "{source_kind} {source} cites an evidence card that has been retracted: {reason}",
   "msg.finding.retracted_source.action":
@@ -205,11 +205,11 @@ export default {
   "msg.finding.dependency_invalid_source.action":
     "Cite another card, or redo the round on valid data.",
   "msg.finding.contested_source":
-    "{source_kind} {source} cites an evidence card that other cards contradict: {others}.",
+    "{source_kind} {source} cites an evidence card that other cards contradict.",
   "msg.finding.contested_source.action":
     "Check the conflicting cards before relying on it.",
   "msg.finding.pending_relation":
-    "{source_kind} {source} cites an evidence card with relations still awaiting review: {relations}.",
+    "{source_kind} {source} cites an evidence card with relations still awaiting review.",
   "msg.finding.pending_relation.action":
     "Review those relations first.",
   "msg.finding.variable_mismatch":
@@ -229,7 +229,7 @@ export default {
   "msg.finding.uncataloged_card.action":
     "Add the catalog variable to the card.",
   "msg.finding.exploratory_finding":
-    "{source_kind} {source} cites an evidence card from an {label} round, not a confirmatory one.",
+    "{source_kind} {source} cites an evidence card from a round labelled {label}, not a confirmatory one.",
   "msg.finding.exploratory_finding.action":
     "Treat it as a lead, not a confirmed result.",
   "msg.finding.unknown_treatment":

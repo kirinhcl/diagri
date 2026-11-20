@@ -1,5 +1,6 @@
 import codes from "./codes.en.js";
 import denials from "./denials.en.js";
+import evidence from "./evidence.en.js";
 import forms from "./forms.en.js";
 import messages from "./messages.en.js";
 
@@ -8,6 +9,7 @@ export default {
   ...messages,
   ...denials,
   ...forms,
+  ...evidence,
   "app.title": "DiAGRI Workbench",
   "app.subtitle": "Workbench",
   "common.hello": "Hello, {name}",

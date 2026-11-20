@@ -1,126 +1,86 @@
-// Evidence cards: every card with its source and verification, a form to enter one, and verification of a model's card.
+// Evidence cards: every card with its status, source and verification, the filters, the relations
+// between cards, and the forms to enter a card and to record a relation.
 import { labelOr } from "../i18n.js";
+import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
-import { confirmOrCancel, simpleForm } from "../ui/forms.js";
-import { roleLabel } from "../ui/names.js";
-import { afterWrite, keyValues, note, pageHead, section, techDetails, timeText } from "../ui/section.js";
+import { note, pageHead, section } from "../ui/section.js";
+import { cardView } from "./evidence-card.js";
+import { enterForm } from "./evidence-forms.js";
+import { relationSections } from "./evidence-relations.js";
+import { variableName } from "./evidence-text.js";
 
-const SOURCE_CLASSES = ["handbook", "paper", "local"];
-const CLAIM_CHARS = 40;
+export { claimName } from "./evidence-text.js";
+export { enterFields } from "./evidence-forms.js";
 
-// A card as a notice names it: its claim, cut to CLAIM_CHARS characters with "…".
-export function claimName(claim) {
-  const chars = [...String(claim ?? "").trim().replace(/\s+/g, " ")];
-  return chars.length > CLAIM_CHARS ? `${chars.slice(0, CLAIM_CHARS).join("")}…` : chars.join("");
+const VALIDITIES = ["active", "superseded", "retracted", "dependency_invalid"];
+
+// A labelled select; picking a value reads the page again with the new address (the linked card is let go).
+function filterSelect(ctx, { label, key, params, options }) {
+  const id = `evidence-filter-${key}`;
+  const choose = (event) => ctx.navigate(hrefFor("evidence", { ...params, focus: undefined, [key]: event.target.value }));
+  const choices = options.map((option) => h("option", { attrs: { value: option.id, selected: option.id === (params[key] || "") }, text: option.text }));
+  const select = h("select", { class: "input", attrs: { id }, on: { change: choose } }, choices);
+  return h("div", { class: "field" }, h("label", { class: "field-label", attrs: { for: id }, text: label }), select);
 }
 
-const yesNo = (ctx) => [
-  { value: "yes", label: ctx.t("common.yes") },
-  { value: "no", label: ctx.t("common.no") },
-];
-
-// Whether a card was calibrated is recorded as the operator's own choice: no answer is preset.
-export function enterFields(ctx) {
-  const classes = SOURCE_CLASSES.map((value) => ({ value, label: labelOr(ctx.t, "evidence.class", value) }));
-  const calibration = [{ value: "", label: ctx.t("form.choose") }, ...yesNo(ctx)];
-  return [
-    { name: "source_class", label: ctx.t("evidence.sourceClass"), type: "select", required: true, options: classes },
-    { name: "citation", label: ctx.t("evidence.citation"), type: "textarea", required: true },
-    { name: "claim", label: ctx.t("evidence.claim"), type: "textarea", required: true },
-    { name: "value", label: ctx.t("evidence.value"), type: "number" },
-    { name: "unit", label: ctx.t("evidence.unit"), type: "text" },
-    { name: "calibrated", label: ctx.t("evidence.calibrated"), type: "select", required: true, options: calibration },
-  ];
-}
-
-function enterForm(ctx) {
-  const submitLabel = ctx.t("evidence.enter");
-  const onSubmit = async ({ calibrated, ...rest }) => {
-    await confirmOrCancel(ctx, { title: ctx.t("evidence.enterTitle"), lines: [ctx.t("evidence.enterLine")], confirmLabel: submitLabel });
-    const card = await ctx.api.post("/evidence", { ...rest, calibrated: calibrated === "yes" }, { action: submitLabel });
-    afterWrite(ctx, ctx.t("evidence.entered", { claim: claimName(card?.claim ?? rest.claim) }));
-  };
-  return simpleForm({ fields: enterFields(ctx), submitLabel, onSubmit, draftKey: "evidence:new", ctx });
-}
-
-function verifyForm(ctx, card) {
-  const submitLabel = ctx.t("evidence.verify");
-  const fields = [
-    { name: "note", label: ctx.t("evidence.note"), type: "text" },
-    { name: "calibrated", label: ctx.t("evidence.attest"), type: "checkbox" },
-  ];
-  const onSubmit = async ({ note: text, calibrated }) => {
-    await confirmOrCancel(ctx, { title: ctx.t("evidence.verifyTitle"), lines: [ctx.t("evidence.verifyLine")], confirmLabel: submitLabel });
-    const body = { note: text || "", calibrated: calibrated === true };
-    await ctx.api.post(`/evidence/${encodeURIComponent(card.id)}/verify`, body, { action: submitLabel });
-    afterWrite(ctx, ctx.t("evidence.verified", { claim: claimName(card.claim) }));
-  };
-  return simpleForm({ fields, submitLabel, onSubmit, draftKey: `evidence-verify:${card.id}`, ctx });
-}
-
-// Who entered a card: "you" for the signed-in operator, the agent's role for the model's own cards
-// (agents/handlers_evidence.py SOURCE), any other operator name as it was recorded.
-const AGENT_SOURCES = { "model:planner": "planner" };
-
-function enteredBy(ctx, source) {
-  if (!source) return "—";
-  if (ctx.me && source === ctx.me.operator) return roleLabel(ctx.t, "user");
-  return Object.hasOwn(AGENT_SOURCES, source) ? roleLabel(ctx.t, AGENT_SOURCES[source]) : source;
-}
-
-// The value as it was entered: no fixed number of decimals (a datum is never rounded on screen).
-const exactNumber = (value, lang) => Number(value).toLocaleString(lang, { maximumFractionDigits: 20 });
-
-function facts(ctx, card) {
-  const hasValue = card.value !== null && card.value !== undefined;
-  return keyValues([
-    [ctx.t("evidence.fact.class"), labelOr(ctx.t, "evidence.class", card.source_class)],
-    [ctx.t("evidence.fact.value"), hasValue ? `${exactNumber(card.value, ctx.lang)} ${card.unit || ""}`.trim() : null],
-    [ctx.t("evidence.fact.calibration"), ctx.t(card.calibrated ? "evidence.calibratedYes" : "evidence.uncalibrated")],
-    [ctx.t("evidence.fact.by"), enteredBy(ctx, card.source)],
-    [ctx.t("evidence.fact.at"), timeText(ctx, card.added_at)],
-  ]);
-}
-
-function verificationBlock(ctx, card) {
-  if (!card.verified_by) {
-    const summary = h("summary", { text: ctx.t("evidence.verify") });
-    return h("details", { class: "row-form" }, summary, verifyForm(ctx, card));
+async function projectChoices(ctx) {
+  try {
+    const data = await ctx.api.get("/projects");
+    const projects = data && Array.isArray(data.projects) ? data.projects : [];
+    return projects.map((project) => ({ id: project.project_id, text: project.name || project.project_id }));
+  } catch {
+    return [];
   }
-  const line = ctx.t("evidence.verifiedBy", { name: card.verified_by, time: timeText(ctx, card.verified_at) });
-  return h("p", { class: "cell-sub", text: card.note ? `${line} — ${card.note}` : line });
 }
 
-function cardView(ctx, card) {
-  const verified = Boolean(card.verified_by);
-  const pill = h("span", {
-    class: ["pill", verified ? "pill-active" : "pill-waiting"],
-    text: ctx.t(verified ? "evidence.status.verified" : "evidence.status.unverified"),
-  });
-  return h(
-    "li",
-    { class: "evidence-card" },
-    h("div", { class: "evidence-head" }, h("h3", { class: "evidence-claim", text: card.claim }), pill),
-    h("p", { class: "cell-sub", text: ctx.t("evidence.citedFrom", { citation: card.citation }) }),
-    facts(ctx, card),
-    verificationBlock(ctx, card),
-    techDetails(ctx.t, [[ctx.t("tech.id.id"), card.id], [ctx.t("evidence.fact.rawValue"), card.value]]),
-  );
+// Project, validity and variable.
+function filterBar(ctx, params, projects, variables) {
+  const all = { id: "", text: ctx.t("evidence.filter.all") };
+  const selects = [
+    { label: ctx.t("evidence.filter.project"), key: "projectId", options: [{ id: "", text: ctx.t("evidence.filter.global") }, ...projects] },
+    { label: ctx.t("evidence.filter.status"), key: "status", options: [all, ...VALIDITIES.map((id) => ({ id, text: labelOr(ctx.t, "evidence.validity", id) }))] },
+    { label: ctx.t("evidence.filter.variable"), key: "variable", options: [all, ...variables.map((v) => ({ id: v.id, text: variableName(ctx, variables, v.id) }))] },
+  ];
+  const group = { class: "filter-bar", attrs: { role: "group", "aria-label": ctx.t("evidence.filters") } };
+  return h("div", group, selects.map((spec) => filterSelect(ctx, { ...spec, params })));
 }
 
-function cardList(ctx, cards) {
-  return h("ul", { class: "evidence-list", attrs: { "aria-label": ctx.t("evidence.list") } }, cards.map((card) => cardView(ctx, card)));
+function cardList(ctx, cards, env) {
+  return h("ul", { class: "evidence-list", attrs: { "aria-label": ctx.t("evidence.list") } }, cards.map((card) => cardView(ctx, card, env)));
 }
 
-export async function render(ctx) {
-  const data = await ctx.api.get("/evidence");
+function query(params) {
+  const found = new URLSearchParams();
+  for (const [key, name] of [["projectId", "project_id"], ["status", "status"], ["variable", "variable"]]) {
+    if (params[key]) found.set(name, params[key]);
+  }
+  const text = found.toString();
+  return text ? `?${text}` : "";
+}
+
+// Once the page is in the document: bring the linked card into view (a no-op without scrollIntoView).
+function scrollToCard(element, focus) {
+  const find = (node) => [...(node.children || [])].flatMap((child) => [child, ...find(child)]);
+  const card = find(element).find((el) => el.getAttribute && el.getAttribute("id") === `card-${focus}`);
+  if (!card || typeof card.scrollIntoView !== "function") return;
+  setTimeout(() => card.scrollIntoView({ block: "center" }), 0);
+}
+
+export async function render(ctx, params = {}) {
+  const [data, projects] = await Promise.all([ctx.api.get(`/evidence${query(params)}`), projectChoices(ctx)]);
   const cards = Array.isArray(data && data.cards) ? data.cards : [];
+  const variables = Array.isArray(data && data.variables) ? data.variables : [];
+  const env = { variables, cards, byId: new Map(cards.map((card) => [card.id, card])), projectId: params.projectId, focus: params.focus };
+  const relations = await relationSections(ctx, env);
   const element = h(
     "div",
     { class: "page evidence" },
     pageHead(ctx.t("nav.evidence"), ctx.t("evidence.lead")),
-    section(ctx.t("evidence.list"), cards.length ? cardList(ctx, cards) : note(ctx.t("evidence.empty"))),
-    section(ctx.t("evidence.new"), enterForm(ctx)),
+    filterBar(ctx, params, projects, variables),
+    section(ctx.t("evidence.list"), cards.length ? cardList(ctx, cards, env) : note(ctx.t("evidence.empty"))),
+    section(ctx.t("evidence.new"), enterForm(ctx, variables), note(ctx.t("evidence.roundHint"))),
+    relations,
   );
+  if (params.focus) scrollToCard(element, params.focus);
   return { element };
 }
