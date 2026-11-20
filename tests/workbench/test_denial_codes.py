@@ -93,9 +93,27 @@ def coded_http_reasons(root: Path) -> set[str]:
     return {reason for _, _, reason in coded_http_sites(root) if reason}
 
 
+def relation_refused_reasons(root: Path) -> set[str]:
+    """The literal first argument of every ``RelationRefused(...)`` call under ``root``: the
+    evidence-relation rules raise it, and the service layer turns it into a ``Denied``."""
+    found: set[str] = set()
+    for path in sorted(root.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "RelationRefused":
+                reason = _literal(node.args[0]) if node.args else None
+                if reason:
+                    found.add(reason)
+    return found
+
+
 def sent_elsewhere() -> set[str]:
-    """Reasons sent by ``CodedHTTPError`` calls and by the root app's ``BridgeError`` table."""
-    return coded_http_reasons(SRC) | {reason for _, reason in BRIDGE_ERROR_CODES.values()}
+    """Reasons sent by ``CodedHTTPError`` calls, by the root app's ``BridgeError`` table and by
+    the evidence-relation rules' ``RelationRefused``."""
+    return (
+        coded_http_reasons(SRC)
+        | {reason for _, reason in BRIDGE_ERROR_CODES.values()}
+        | relation_refused_reasons(SRC)
+    )
 
 
 def test_a_denial_keeps_code_and_message_and_carries_reason_and_params() -> None:

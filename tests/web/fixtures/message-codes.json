@@ -2063,6 +2063,76 @@
       "action": false,
       "of": "quota"
     },
+    "relation_shape": {
+      "params": [
+        "kind"
+      ],
+      "action": true,
+      "of": "param"
+    },
+    "relation_self": {
+      "params": [],
+      "action": true,
+      "of": "param"
+    },
+    "relation_unknown_card": {
+      "params": [
+        "card_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_cross_scope": {
+      "params": [
+        "kind"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_card_inactive": {
+      "params": [
+        "card_id",
+        "validity"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_already_superseded": {
+      "params": [
+        "card_id",
+        "replacement_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_duplicate": {
+      "params": [
+        "relation_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_not_pending": {
+      "params": [
+        "relation_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_not_confirmed": {
+      "params": [
+        "relation_id",
+        "state"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "relation_note_required": {
+      "params": [],
+      "action": true,
+      "of": "state"
+    },
     "origin_not_allowed": {
       "params": [],
       "action": true,
