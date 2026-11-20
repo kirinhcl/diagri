@@ -51,8 +51,10 @@ def statuses(records, ids=("A", "B", "C"), invalid_at=None, as_of=1000.0, viewer
 
 
 def test_a_pending_relation_changes_nothing_but_shows_as_pending():
-    got = statuses([rec(subject="A", object_="B")])["B"]
-    assert got.validity == "active" and got.pending == ("rel-1",) and not got.blocks
+    got = statuses([rec(subject="A", object_="B")])
+    for card in ("A", "B"):
+        assert got[card].validity == "active" and got[card].pending == ("rel-1",)
+        assert not got[card].blocks
 
 
 def test_a_confirmed_supersede_names_the_end_of_the_chain():

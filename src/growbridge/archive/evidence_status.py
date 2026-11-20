@@ -7,7 +7,7 @@ Pure: the same records and ``as_of`` always give the same statuses. Precedence i
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
-from growbridge.archive.evidence_ledger import EvidenceRelation, RelationRecord
+from growbridge.archive.evidence_ledger import RelationRecord
 from growbridge.archive.models import Model
 
 Validity = Literal["active", "superseded", "retracted", "dependency_invalid"]
@@ -60,10 +60,6 @@ def _retraction_reason(record: RelationRecord, viewer_project: str | None) -> st
     return record.review.note if record.review is not None else ""
 
 
-def _affected_card(relation: EvidenceRelation) -> str | None:
-    return relation.subject_id if relation.kind == "retracts" else relation.object_id
-
-
 def _first_by_card(records: Iterable[RelationRecord], kind: str, as_of: float, key: str) -> dict:
     found: dict[str, RelationRecord] = {}
     for record in records:
@@ -81,10 +77,7 @@ def _pending_by_card(
         if not _is_pending(record, as_of, viewer_project):
             continue
         relation = record.relation
-        cards = [_affected_card(relation)]
-        if relation.kind == "contradicts":
-            cards.append(relation.subject_id)
-        for card in filter(None, cards):
+        for card in dict.fromkeys(filter(None, (relation.subject_id, relation.object_id))):
             pending.setdefault(card, []).append(relation.id)
     return {card: tuple(ids) for card, ids in pending.items()}
 
