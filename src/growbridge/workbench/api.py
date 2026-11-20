@@ -285,7 +285,7 @@ class Workbench:
             conversation,
             access=access,
         )
-        add_evidence_routes(self.router, self.operator, archive)
+        add_evidence_routes(self.router, self.operator, archive, workflow, access)
         add_manual_task_routes(
             self.router, self.operator, self.on_site, workflow, archive, control, self.clock, access
         )

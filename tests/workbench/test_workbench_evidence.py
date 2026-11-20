@@ -7,7 +7,7 @@ role is stored unverified; only an operator's verification record changes that.
 
 import pytest
 from fastapi.testclient import TestClient
-from workbench_support import LAN_HOST, LAN_PORT
+from workbench_support import LAN_HOST, LAN_PORT, Bench
 
 from growbridge.archive.evidence_ledger import EvidenceOrigin, EvidenceRelation
 from growbridge.archive.models import EvidenceCard, TimedAction
@@ -505,3 +505,130 @@ def test_another_projects_round_card_is_no_evidence_in_the_review(bench, operato
     cite(bench, "theirs", "theirs", "theirs")
 
     assert codes(operator) == ["no_evidence"] * 3
+
+
+# --- catalog-linked cards and the scoped list ---------------------------------------------------
+
+LINKED = {"variable": "air_temperature", "value": 24.0, "unit": "C"}
+
+
+def round_card(bench, card_id: str, project_id: str, **fields) -> None:
+    proposed(bench, card_id, **fields)
+    bench.archive.ledger.add_origin(
+        EvidenceOrigin(
+            card_id=card_id,
+            project_id=project_id,
+            round_id="r",
+            report_artifact_id=f"art-{card_id}",
+            snapshot_ids=(),
+            label="descriptive",
+            at=0.0,
+        )
+    )
+
+
+def test_an_alias_variable_is_refused_on_entry(bench, operator):
+    response = enter(bench, operator, variable="temp", value=24.0, unit="Cel")
+
+    assert response.status_code == 403
+    assert detail(response)["reason"] == "evidence_card_invalid"
+    assert not bench.archive.evidence_entries()
+
+
+def test_the_unit_is_stored_as_the_catalog_unit(bench, operator):
+    enter(bench, operator, **LINKED)
+
+    (entry,) = bench.archive.evidence_entries()
+    assert entry.card.unit == "Cel" and entry.card.variable == "air_temperature"
+
+
+def test_a_card_enters_with_conditions_and_crop_fields(bench, operator):
+    response = enter(
+        bench,
+        operator,
+        **LINKED,
+        conditions=[{"variable": "air_relative_humidity", "min": 50.0, "max": 80.0}],
+        crop_taxon="NCBITaxon:4236",
+        cultivar="Butterhead",
+        growth_stage="vegetative",
+        conditions_note="closed greenhouse",
+    )
+
+    assert response.status_code == 200
+    (entry,) = bench.archive.evidence_entries()
+    assert entry.card.conditions[0].variable == "air_relative_humidity"
+    assert entry.card.crop_taxon == "NCBITaxon:4236" and entry.card.cultivar == "Butterhead"
+
+
+def test_old_style_cards_still_enter_and_list(bench, operator):
+    assert enter(bench, operator).status_code == 200
+
+    (card,) = operator.get(CARDS).json()["cards"]
+    assert card["status"]["validity"] == "active" and "origin" not in card
+
+
+def test_the_list_filters_by_status_and_variable(bench, operator):
+    old = enter(bench, operator, **LINKED).json()["id"]
+    new = enter(bench, operator, **LINKED).json()["id"]
+    enter(bench, operator)
+    supersede_card(bench, old, new)
+
+    def ids(query: str) -> set[str]:
+        return {c["id"] for c in operator.get(f"{CARDS}?{query}").json()["cards"]}
+
+    assert ids("status=superseded") == {old}
+    assert ids("variable=air_temperature") == {old, new}
+    assert ids("variable=temp&status=active") == {new}
+    assert len(ids("")) == 3
+
+
+def test_the_list_as_of_shows_the_status_at_that_time(bench, operator):
+    old = enter(bench, operator).json()["id"]
+    new = enter(bench, operator).json()["id"]
+    supersede_card(bench, old, new)  # confirmed now; the relation is stamped at 1.0
+
+    def validity(**query) -> str:
+        cards = operator.get(CARDS, params=query).json()["cards"]
+        return next(c for c in cards if c["id"] == old)["status"]["validity"]
+
+    assert validity() == "superseded"
+    assert validity(as_of=0.5) == "active"
+
+
+def test_a_round_card_lists_with_its_origin_only_in_its_project(bench, operator):
+    round_card(bench, "mine", "p-1")
+    round_card(bench, "theirs", "p-2")
+    enter(bench, operator)
+
+    global_ids = {c["id"] for c in operator.get(CARDS).json()["cards"]}
+    mine = {c["id"]: c for c in operator.get(CARDS, params={"project_id": "p-1"}).json()["cards"]}
+
+    assert "mine" not in global_ids and "theirs" not in global_ids and len(global_ids) == 1
+    assert set(mine) == {"mine", *global_ids} and "theirs" not in mine
+    assert mine["mine"]["origin"] == {
+        "round_id": "r",
+        "report_artifact_id": "art-mine",
+        "label": "descriptive",
+    }
+
+
+def test_the_list_offers_the_variables_a_card_may_name(bench, operator):
+    variables = operator.get(CARDS).json()["variables"]
+
+    kinds = {v["kind"] for v in variables}
+    ids = {v["id"] for v in variables}
+    assert kinds <= {"sensor", "manual"} and "air_temperature" in ids
+    assert "temp" not in ids and {"id", "kind", "unit", "label_en", "label_zh"} <= set(variables[0])
+
+
+def test_the_list_of_a_project_needs_access_to_it(tmp_path):
+    bench = Bench.full(tmp_path)
+    alice, bob = bench.user("alice"), bench.user("bob")
+    bench.seed_round_as("alice")
+    url = f"{CARDS}?project_id={bench.project_id}"
+
+    assert alice.get(url).status_code == 200
+    refused = bob.get(url)
+    assert refused.status_code == 409
+    assert detail(refused)["reason"] == "record_not_found"
+    bench.db.close()
