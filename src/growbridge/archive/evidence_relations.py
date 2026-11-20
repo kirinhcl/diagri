@@ -60,7 +60,8 @@ def _cards(request: RelationRequest) -> tuple[str, ...]:
     return tuple(c for c in (request.card_id, request.other_card_id) if c is not None)
 
 
-def _check_shape(request: RelationRequest) -> None:
+def check_request(request: RelationRequest) -> None:
+    """Every check that depends on the request alone (its shape, a card related to itself)."""
     has_other = request.other_card_id is not None
     if has_other != (request.kind != "retracts"):
         raise RelationRefused(
@@ -166,7 +167,7 @@ def _validate(
     archive: Archive, request: RelationRequest, viewer: str | None, exclude: str | None = None
 ) -> str | None:
     """Refuse a relation the rules do not allow; return the project it belongs to."""
-    _check_shape(request)
+    check_request(request)
     _check_visible(archive, request, viewer)
     scope = _check_scope(archive, request)
     _check_status(archive, request, viewer)

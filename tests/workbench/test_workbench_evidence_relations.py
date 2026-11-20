@@ -209,3 +209,27 @@ def test_two_hidden_cards_of_two_projects_are_not_reported_as_cross_scope(world)
     response = bench.post(bob, RELATIONS, body)
 
     assert response.json()["detail"]["reason"] == "relation_unknown_card"
+
+
+@pytest.mark.parametrize(
+    ("kind", "other"), [("supersedes", None), ("contradicts", "same")], ids=["shape", "self"]
+)
+def test_a_malformed_request_answers_alike_for_hidden_and_missing_cards(world, kind, other):
+    bench, alice, bob = world
+    card(bench, "mine", bench.project_id)
+    details = []
+    for card_id in ("mine", "nothing"):
+        body = {"kind": kind, "card_id": card_id, "reason": "r"}
+        if other is not None:
+            body["other_card_id"] = card_id
+        detail = bench.post(bob, RELATIONS, body).json()["detail"]
+        details.append(
+            {
+                **detail,
+                "message": detail["message"].replace(card_id, "<id>"),
+                "params": {k: v for k, v in detail["params"].items() if v != card_id},
+            }
+        )
+
+    assert details[0] == details[1]
+    assert details[0]["reason"] in {"relation_shape", "relation_self"}

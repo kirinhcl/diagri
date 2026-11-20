@@ -24,6 +24,7 @@ from growbridge.archive.evidence_relations import (
     RelationRefused,
     RelationRequest,
     as_denied,
+    check_request,
     record_relation,
     relation_not_found,
     relation_scope,
@@ -110,6 +111,7 @@ class RelationRoutes:
     def record(self, body: RelationIn, actor: Actor) -> dict:
         request = RelationRequest(**body.model_dump())
         try:
+            check_request(request)
             self._check_cards_seen(actor, request)
             project = relation_scope(self.archive, request)
             self._write_guard(actor, project)
