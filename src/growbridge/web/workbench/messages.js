@@ -58,6 +58,14 @@ function problem(ctx, p) {
   return textOr(ctx.t, "findingProblem", p.kind, vars) ?? DASH;
 }
 
+// The next step for a citation of a replaced card: its replacement while that is in force, otherwise
+// a new card or a user input, naming the replacement's own status (design §5.3).
+function replacementStep(ctx, v) {
+  if (v === "active") return ctx.t("evidence.citeReplacement");
+  if (!isText(v)) return ctx.t("evidence.noReplacementStep");
+  return ctx.t("evidence.replacementInactive", { validity: labelOr(ctx.t, "evidence.validity", v) });
+}
+
 const EXACT = {
   at_local: guarded(isText, (ctx, v) => v),
   sensor: labelled("metric"),
@@ -99,6 +107,7 @@ const EXACT = {
   rule_unit: guarded(isText, (ctx, v) => unitText(v)),
   card_unit: guarded(isText, (ctx, v) => unitText(v)),
   label: labelled("report.labels"),
+  replacement_validity: replacementStep,
 };
 const LEVEL_NAMES = ["level", "min", "max", "expected", "protection_level"];
 const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name",

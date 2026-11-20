@@ -67,10 +67,15 @@ function pills(ctx, card) {
   return list;
 }
 
+// The end of the replacement chain, and when that card is no longer in force either, its status and
+// the way out (design §5.3).
 function replacement(ctx, status, env) {
   const target = status.current_replacement;
   if (!target) return h("p", { class: "cell-sub", text: ctx.t("evidence.noReplacement") });
-  return h("p", {}, `${ctx.t("evidence.replacedBy")}: `, cardRef(ctx, env, target.card_id));
+  const link = h("p", {}, `${ctx.t("evidence.replacedBy")}: `, cardRef(ctx, env, target.card_id));
+  if (target.validity === "active") return link;
+  const validity = labelOr(ctx.t, "evidence.validity", target.validity);
+  return [link, h("p", { class: "cell-sub", text: ctx.t("evidence.replacementInactive", { validity }) })];
 }
 
 // What the card's status says beyond its pill: the replacement, the reason, the contradicting cards.

@@ -226,6 +226,38 @@ test("a replaced source's next step is right with and without a replacement", ()
   assert.ok(!/current card instead/.test(action), action);
 });
 
+test("a replaced source whose replacement is no longer in force asks for a new card", () => {
+  const params = { source_kind: "rule", source: "r1", card_id: "c1", replacement_id: "c2" };
+  const step = (lang, validity) => say(lang, "finding", "superseded_source", { ...params, replacement_validity: validity }).action;
+  assert.match(step("en", "active"), /^Cite its replacement/);
+  const en = step("en", "retracted");
+  assert.match(en, /no longer in force either \(Retracted\)/);
+  assert.match(en, /enter a new card or use a user input/);
+  assert.doesNotMatch(en, /Cite its replacement/);
+  const zh = step("zh", "dependency_invalid");
+  assert.ok(zh.includes("替代卡也已失效") && zh.includes("所依据的数据已失效") && zh.includes("请录新卡"), zh);
+  for (const lang of ["en", "zh"]) assert.ok(!step(lang, null).includes("—"), step(lang, null));
+});
+
+test("an uncataloged card is never edited: a new card names the variable and replaces it", () => {
+  const params = { source_kind: "rule", source: "r1", card_id: "c1" };
+  const en = say("en", "finding", "uncataloged_card", params).action;
+  assert.match(en, /new card/);
+  assert.match(en, /supersedes/);
+  assert.doesNotMatch(en, /to the card/);
+  const zh = say("zh", "finding", "uncataloged_card", params).action;
+  assert.ok(zh.includes("新卡") && zh.includes("取代") && !zh.includes("补上"), zh);
+});
+
+test("a card whose replacement is no longer in force says so under the link", async () => {
+  const gone = { ...OLD, status: { ...OLD.status, current_replacement: { card_id: "card_new", validity: "retracted" } } };
+  const retracted = { ...NEWER, status: { ...NEWER.status, validity: "retracted", retracted_reason: "bad sensor" } };
+  const { element } = await renderPage("evidence", {}, { lang: "en", fixtures: evidence([gone, retracted]) });
+  assert.match(visibleText(element), /no longer in force either \(Retracted\): enter a new card or use a user input/);
+  const fine = await renderPage("evidence", {}, { lang: "en", fixtures: evidence([OLD, NEWER]) });
+  assert.doesNotMatch(visibleText(fine.element), /no longer in force/);
+});
+
 test("an undelivered round is not told to wait for delivery", () => {
   for (const lang of ["en", "zh"]) {
     const { text, action } = say(lang, "denial", "round_card_not_delivered", { state: "aborted" });

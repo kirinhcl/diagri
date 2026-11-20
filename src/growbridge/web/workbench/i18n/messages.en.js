@@ -195,7 +195,7 @@ export default {
   "msg.finding.superseded_source":
     "{source_kind} {source} cites an evidence card that a newer card has replaced.",
   "msg.finding.superseded_source.action":
-    "Cite its replacement, or enter a new card or a user input.",
+    "{replacement_validity}",
   "msg.finding.retracted_source":
     "{source_kind} {source} cites an evidence card that has been retracted: {reason}",
   "msg.finding.retracted_source.action":
@@ -227,7 +227,7 @@ export default {
   "msg.finding.uncataloged_card":
     "{source_kind} {source} cites an evidence card with a value but no catalog variable, so its unit cannot be checked.",
   "msg.finding.uncataloged_card.action":
-    "Add the catalog variable to the card.",
+    "Cards are never edited: enter a new card that names the catalog variable, and record that it supersedes this one.",
   "msg.finding.exploratory_finding":
     "{source_kind} {source} cites an evidence card from a round labelled {label}, not a confirmatory one.",
   "msg.finding.exploratory_finding.action":

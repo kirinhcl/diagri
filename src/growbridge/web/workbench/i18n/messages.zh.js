@@ -167,7 +167,7 @@ export default {
   "msg.finding.superseded_source":
     "{source_kind}{source}引用的证据卡已被新卡取代。",
   "msg.finding.superseded_source.action":
-    "改引用取代它的证据卡，或录入新的证据卡或用户输入。",
+    "{replacement_validity}",
   "msg.finding.retracted_source":
     "{source_kind}{source}引用的证据卡已被撤销：{reason}",
   "msg.finding.retracted_source.action":
@@ -199,7 +199,7 @@ export default {
   "msg.finding.uncataloged_card":
     "{source_kind}{source}引用的证据卡有数值但没有目录变量，无法核对单位。",
   "msg.finding.uncataloged_card.action":
-    "为这张证据卡补上目录变量。",
+    "证据卡不能修改：请录一张写明目录变量的新卡，并记录它取代这张卡。",
   "msg.finding.exploratory_finding":
     "{source_kind}{source}引用的证据卡来自标为{label}的轮次，不是确认性的。",
   "msg.finding.exploratory_finding.action":
