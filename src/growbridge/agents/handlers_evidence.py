@@ -25,9 +25,18 @@ from growbridge.archive.evidence_relations import (
     propose_relation,
 )
 from growbridge.archive.ids import new_id
-from growbridge.archive.models import ApplicabilityRange, EvidenceCard, ResearchTask
+from growbridge.archive.models import EvidenceCard, ResearchTask
 from growbridge.ports import Denied
-from growbridge.vocab.card_checks import checked_card
+from growbridge.vocab.card_checks import (
+    CardUnit,
+    Conditions,
+    ConditionsNote,
+    CropTaxon,
+    Cultivar,
+    GrowthStage,
+    VariableId,
+    checked_card,
+)
 
 ROLE = "planner"
 SOURCE = "model:planner"
@@ -35,13 +44,11 @@ MAX_PROPOSALS_PER_TASK = 20
 # The same limits as the operator's entry in the workbench (workbench/evidence.py).
 CITATION_MAX = 500
 CLAIM_MAX = 1000
-UNIT_MAX = 40
 
 Citation = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=CITATION_MAX)
 ]
 Claim = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=CLAIM_MAX)]
-Unit = Annotated[str, StringConstraints(strip_whitespace=True, max_length=UNIT_MAX)]
 
 
 class ProposeCardInput(ToolInput):
@@ -50,13 +57,14 @@ class ProposeCardInput(ToolInput):
     citation: Citation
     claim: Claim
     value: float | None = Field(default=None, allow_inf_nan=False)
-    unit: Unit | None = None
-    variable: str | None = None  # a catalog variable by its standard ID
-    conditions: tuple[ApplicabilityRange, ...] = ()
-    crop_taxon: str = ""
-    cultivar: str = ""  # lengths and the rest are checked by ``checked_card``
-    growth_stage: str = ""
-    conditions_note: str = ""
+    unit: CardUnit | None = None
+    # Bounded like the operator's entry (vocab/card_checks.py); the rest is ``checked_card``'s.
+    variable: VariableId | None = None  # a catalog variable by its standard ID
+    conditions: Conditions = ()
+    crop_taxon: CropTaxon = ""
+    cultivar: Cultivar = ""
+    growth_stage: GrowthStage = ""
+    conditions_note: ConditionsNote = ""
     # No ``calibrated`` here: a model cannot vouch for calibration. A proposed card is stored
     # uncalibrated, and an operator attests it when verifying.
 

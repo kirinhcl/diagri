@@ -13,17 +13,26 @@ record of its own (``Archive.verify_evidence``); the card text is never edited.
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import StringConstraints
 
 from growbridge.archive.evidence_book import card_project, card_statuses, visible_cards
 from growbridge.archive.evidence_status import Validity
 from growbridge.archive.ids import new_id
-from growbridge.archive.models import ApplicabilityRange, EvidenceCard
+from growbridge.archive.models import EvidenceCard
 from growbridge.archive.store import Archive, EvidenceEntry
 from growbridge.ports import Actor, Denied
 from growbridge.vocab import Catalog
-from growbridge.vocab.card_checks import checked_card
+from growbridge.vocab.card_checks import (
+    CardUnit,
+    Conditions,
+    ConditionsNote,
+    CropTaxon,
+    Cultivar,
+    GrowthStage,
+    VariableId,
+    checked_card,
+)
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import PathId
 from growbridge.workbench.scope import project_read
@@ -32,7 +41,6 @@ from growbridge.workflow.access import Access
 
 CITATION_MAX = 500  # a full reference with a DOI fits; a pasted page does not
 CLAIM_MAX = 1000
-UNIT_MAX = 40
 NOTE_MAX = 500
 Dependency = Callable[..., Awaitable[Actor]]
 
@@ -41,8 +49,9 @@ Citation = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=CITATION_MAX)
 ]
 Claim = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=CLAIM_MAX)]
-Unit = Annotated[str, StringConstraints(strip_whitespace=True, max_length=UNIT_MAX)]
 Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=NOTE_MAX)]
+# A point in time (epoch seconds) to list the cards as of; NaN and infinity are refused (422).
+AsOf = Annotated[float | None, Query(allow_inf_nan=False)]
 
 
 class CardIn(Body):
@@ -50,14 +59,14 @@ class CardIn(Body):
     citation: Citation
     claim: Claim
     value: float | None = None  # finite: the body refuses NaN and infinity
-    unit: Unit | None = None
+    unit: CardUnit | None = None
     calibrated: bool = True
-    variable: str | None = None
-    conditions: tuple[ApplicabilityRange, ...] = ()
-    crop_taxon: str = ""
-    cultivar: str = ""
-    growth_stage: str = ""
-    conditions_note: str = ""
+    variable: VariableId | None = None
+    conditions: Conditions = ()
+    crop_taxon: CropTaxon = ""
+    cultivar: Cultivar = ""
+    growth_stage: GrowthStage = ""
+    conditions_note: ConditionsNote = ""
 
 
 class VerifyIn(Body):
@@ -168,8 +177,7 @@ class EvidenceRoutes:
             project_read(
                 self.access, actor, project_id, lambda: denials.unknown("project", project_id)
             )
-        visible = visible_cards(self.archive, project_id)
-        entries = [e for e in self.archive.evidence_entries() if e.card.id in visible]
+        entries = self._entries(project_id, as_of)
         statuses = card_statuses(self.archive, [e.card.id for e in entries], project_id, as_of)
         origins = self.archive.ledger.origins()
         wanted = None if variable is None else self._key(variable)
@@ -182,6 +190,16 @@ class EvidenceRoutes:
                 continue
             cards.append(self._row(entry, state, origins.get(entry.card.id)))
         return {"cards": cards, "variables": pickable_variables(self.catalog)}
+
+    def _entries(self, project_id: str | None, as_of: float | None) -> list[EvidenceEntry]:
+        """The cards visible in the scope that existed at ``as_of``. A card entered later is left
+        out; a card with no entry time (no source record) is kept, as it always was."""
+        visible = visible_cards(self.archive, project_id)
+        return [
+            e
+            for e in self.archive.evidence_entries()
+            if e.card.id in visible and (as_of is None or e.added_at is None or e.added_at <= as_of)
+        ]
 
     def _key(self, name: str | None) -> str | None:
         if name is None:
@@ -224,7 +242,7 @@ def add_evidence_routes(
     async def list_cards(
         actor: Operator,
         project_id: str | None = None,
-        as_of: float | None = None,
+        as_of: AsOf = None,
         status: Validity | None = None,
         variable: str | None = None,
     ):

@@ -91,6 +91,13 @@ def test_entering_a_card_needs_no_recent_reauthentication(bench, operator):
         {"claim": ""},
         {"source_class": "blog"},
         {"unit": "u" * 41},
+        # the new fields are bounded at input, like the round card's (design §5.1)
+        {"variable": "v" * 64},
+        {"crop_taxon": "NCBITaxon:" + "1" * 31},
+        {"cultivar": "c" * 201},
+        {"growth_stage": "g" * 101},
+        {"conditions_note": "n" * 501},
+        {"conditions": [{"variable": "air_temperature", "min": float(i)} for i in range(9)]},
     ],
 )
 def test_a_card_that_is_not_acceptable_is_refused_and_stores_nothing(bench, operator, fields):
@@ -426,7 +433,7 @@ def test_the_hints_do_not_block_approval(bench, operator):
 # --- evidence validity in the review -------------------------------------------------------------
 
 
-def supersede_card(bench, old: str, new: str) -> None:
+def supersede_card(bench, old: str, new: str, at: float = 1.0) -> None:
     relation = EvidenceRelation(
         id=f"{new}-over-{old}",
         kind="supersedes",
@@ -437,7 +444,7 @@ def supersede_card(bench, old: str, new: str) -> None:
         task_id=None,
         project_id=None,
         proposed_in=None,
-        at=1.0,
+        at=at,
     )
     bench.archive.ledger.add_relation(relation, confirmed_by="op")
 
@@ -585,14 +592,33 @@ def test_the_list_filters_by_status_and_variable(bench, operator):
 def test_the_list_as_of_shows_the_status_at_that_time(bench, operator):
     old = enter(bench, operator).json()["id"]
     new = enter(bench, operator).json()["id"]
-    supersede_card(bench, old, new)  # confirmed now; the relation is stamped at 1.0
+    entered = bench.clock.now()
+    supersede_card(bench, old, new, at=entered + 60)  # confirmed a minute after both were entered
+    bench.clock.advance(120)
 
     def validity(**query) -> str:
         cards = operator.get(CARDS, params=query).json()["cards"]
         return next(c for c in cards if c["id"] == old)["status"]["validity"]
 
     assert validity() == "superseded"
-    assert validity(as_of=0.5) == "active"
+    assert validity(as_of=entered + 30) == "active"
+
+
+def test_the_list_as_of_leaves_out_cards_entered_after_that_time(bench, operator):
+    first = enter(bench, operator).json()["id"]
+    then = bench.clock.now()
+    bench.clock.advance(60)
+    enter(bench, operator)
+
+    listed = operator.get(CARDS, params={"as_of": then}).json()["cards"]
+
+    assert [c["id"] for c in listed] == [first]
+    assert len(operator.get(CARDS).json()["cards"]) == 2
+
+
+@pytest.mark.parametrize("as_of", ["nan", "inf", "-inf"])
+def test_the_list_refuses_a_time_that_is_not_a_finite_number(operator, as_of):
+    assert operator.get(CARDS, params={"as_of": as_of}).status_code == 422
 
 
 def test_a_round_card_lists_with_its_origin_only_in_its_project(bench, operator):

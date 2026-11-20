@@ -159,6 +159,15 @@ def test_only_the_projects_owner_converts_and_others_see_no_such_round(tmp_path)
     assert convert(bench, bench.user("alice"), round_id).status_code == 200
 
 
+def test_more_than_eight_conditions_are_refused_at_input(bench, operator):
+    round_id = deliver(bench)
+    conditions = [{"variable": "air_temperature", "min": float(i)} for i in range(9)]
+
+    response = convert(bench, operator, round_id, {"conditions": conditions})
+
+    assert response.status_code == 422 and bench.archive.evidence_entries() == ()
+
+
 def test_verifying_another_projects_round_card_answers_as_for_no_such_card(tmp_path):
     bench = Bench.full(tmp_path)
     for name in ("alice", "bob"):

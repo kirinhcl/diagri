@@ -9,34 +9,26 @@ from collections.abc import Awaitable, Callable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from pydantic import StringConstraints
 
-from growbridge.archive.models import ApplicabilityRange
 from growbridge.archive.store import Archive
 from growbridge.ports import Actor
 from growbridge.research.round_cards import RoundCardInput, convert_round, round_card_sources
+from growbridge.vocab.card_checks import CardUnit, Conditions, ConditionsNote, GrowthStage
 from growbridge.workbench.common import Body
 from growbridge.workbench.rounds import PathId
 from growbridge.workbench.scope import project_write
 from growbridge.workflow import denials
 from growbridge.workflow.access import Access
 
-GROWTH_STAGE_MAX = 100
-UNIT_MAX = 40
-NOTE_MAX = 500
 Dependency = Callable[..., Awaitable[Actor]]
-
-Stage = Annotated[str, StringConstraints(strip_whitespace=True, max_length=GROWTH_STAGE_MAX)]
-Unit = Annotated[str, StringConstraints(strip_whitespace=True, max_length=UNIT_MAX)]
-Note = Annotated[str, StringConstraints(strip_whitespace=True, max_length=NOTE_MAX)]
 
 
 class RoundCardIn(Body):
-    growth_stage: Stage = ""
-    conditions: tuple[ApplicabilityRange, ...] = ()
-    conditions_note: Note = ""
+    growth_stage: GrowthStage = ""
+    conditions: Conditions = ()
+    conditions_note: ConditionsNote = ""
     value: float | None = None
-    unit: Unit | None = None
+    unit: CardUnit | None = None
 
 
 def add_round_card_routes(

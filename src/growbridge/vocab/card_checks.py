@@ -1,14 +1,34 @@
 """What is wrong with an evidence card's variable, unit, applicability conditions and crop."""
 
+from typing import Annotated
+
+from pydantic import Field, StringConstraints
+
 from growbridge.archive.models import ApplicabilityRange, EvidenceCard
 from growbridge.ports import Denied
 from growbridge.vocab.catalog import Catalog
 from growbridge.vocab.checks import _variable_problems
-from growbridge.vocab.curie import taxon_problems
+from growbridge.vocab.curie import MAX_CULTIVAR_LENGTH, taxon_problems
 
+# The limits of a card's fields (design §5.1). Every route and tool that takes a card bounds its
+# input with the types below, so an over-long field is refused the same way everywhere.
 MAX_CONDITIONS = 8
 GROWTH_STAGE_MAX = 100
 CONDITIONS_NOTE_MAX = 500
+CULTIVAR_MAX = MAX_CULTIVAR_LENGTH
+CROP_TAXON_MAX = 40  # "NCBITaxon:" and a taxon number, with room to spare
+VARIABLE_MAX = 63  # the longest id catalog.ID_PATTERN allows
+UNIT_MAX = 40
+
+GrowthStage = Annotated[str, StringConstraints(strip_whitespace=True, max_length=GROWTH_STAGE_MAX)]
+ConditionsNote = Annotated[
+    str, StringConstraints(strip_whitespace=True, max_length=CONDITIONS_NOTE_MAX)
+]
+Cultivar = Annotated[str, StringConstraints(strip_whitespace=True, max_length=CULTIVAR_MAX)]
+CropTaxon = Annotated[str, StringConstraints(strip_whitespace=True, max_length=CROP_TAXON_MAX)]
+VariableId = Annotated[str, StringConstraints(strip_whitespace=True, max_length=VARIABLE_MAX)]
+CardUnit = Annotated[str, StringConstraints(strip_whitespace=True, max_length=UNIT_MAX)]
+Conditions = Annotated[tuple[ApplicabilityRange, ...], Field(max_length=MAX_CONDITIONS)]
 
 
 def card_problems(card: EvidenceCard, catalog: Catalog) -> list[str]:
