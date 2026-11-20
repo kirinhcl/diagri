@@ -1,7 +1,7 @@
 // The relations between evidence cards: the list with review and withdrawal, and the form to record one.
 import { labelOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
-import { confirmOrCancel, simpleForm } from "../ui/forms.js";
+import { confirmOrCancel, convert, fieldRow, simpleForm } from "../ui/forms.js";
 import { afterWrite, confirmedButton, errorParts, note, section, timeText } from "../ui/section.js";
 import { enteredBy } from "./evidence-card.js";
 import { claimName } from "./evidence-text.js";
@@ -27,11 +27,19 @@ function sentence(ctx, env, relation) {
   return Object.hasOwn(SENTENCES, relation.kind) ? ctx.t(SENTENCES[relation.kind], params) : ctx.t("common.unknown");
 }
 
-function reviewButton(ctx, relation, decision) {
+// The optional note of a review (the server asks for one to accept a model's proposal), sent with confirm or reject.
+function noteField(ctx) {
+  const field = { name: "note", label: ctx.t("evidence.relation.note"), type: "textarea", maxlength: REASON_CHARS };
+  return fieldRow(field, "", "UTC");
+}
+
+function reviewButton(ctx, relation, decision, noteEntry) {
   const keys = REVIEW_KEYS[decision];
   const label = ctx.t(keys.label);
   const run = async () => {
-    await ctx.api.post(`${base(relation.id)}/review`, { decision, note: "" }, { action: label });
+    const values = convert([noteEntry], "UTC", ctx.t);
+    if (!values) return;
+    await ctx.api.post(`${base(relation.id)}/review`, { decision, note: values.note ?? "" }, { action: label });
     afterWrite(ctx, ctx.t(keys.done));
   };
   return confirmedButton(ctx, { label, title: ctx.t(keys.title), lines: [ctx.t(keys.line)], tone: decision === "rejected" ? "quiet" : "primary", run });
@@ -51,7 +59,11 @@ function withdrawForm(ctx, relation) {
 
 function actions(ctx, record) {
   const relation = record.relation;
-  if (record.state === "pending") return h("div", { class: "action-row" }, reviewButton(ctx, relation, "confirmed"), reviewButton(ctx, relation, "rejected"));
+  if (record.state === "pending") {
+    const note = noteField(ctx);
+    const buttons = h("div", { class: "action-row" }, reviewButton(ctx, relation, "confirmed", note), reviewButton(ctx, relation, "rejected", note));
+    return h("div", { class: "action" }, note.row, buttons);
+  }
   if (record.state === "confirmed") return h("details", { class: "row-form" }, h("summary", { text: ctx.t("evidence.relation.withdraw") }), withdrawForm(ctx, relation));
   return null;
 }

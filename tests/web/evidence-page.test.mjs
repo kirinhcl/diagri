@@ -161,6 +161,43 @@ test("making a round's card sends its context and conditions to the round's rout
   assert.deepEqual(post.body, { growth_stage: "vegetative", conditions_note: "indoor", conditions: [] });
 });
 
+test("confirming or rejecting a pending relation sends the typed note", async () => {
+  const { element, ctx } = await renderPage("evidence", {}, { lang: "en", fixtures: { ...evidence([OLD, NEWER]), ...relations([RELATION]) } });
+  const field = walk(element).find((el) => el.localName === "textarea" && el.getAttribute("name") === "note");
+  field.value = "the model's evidence checks out";
+  answerNextDialog(true);
+  buttons(element, "Confirm")[0].dispatchEvent(new Event("click"));
+  await settle();
+  await settle();
+  const post = ctx.api.calls.find((call) => call.method === "POST");
+  assert.deepEqual(post.body, { decision: "confirmed", note: "the model's evidence checks out" });
+  field.value = "no";
+  answerNextDialog(true);
+  buttons(element, "Reject")[0].dispatchEvent(new Event("click"));
+  await settle();
+  await settle();
+  assert.deepEqual(ctx.api.calls.filter((call) => call.method === "POST")[1].body, { decision: "rejected", note: "no" });
+});
+
+test("a note over 500 characters is refused beside the field and nothing is sent", async () => {
+  const { element, ctx } = await renderPage("evidence", {}, { lang: "en", fixtures: { ...evidence([OLD, NEWER]), ...relations([RELATION]) } });
+  walk(element).find((el) => el.localName === "textarea" && el.getAttribute("name") === "note").value = "x".repeat(501);
+  answerNextDialog(true);
+  buttons(element, "Confirm")[0].dispatchEvent(new Event("click"));
+  await settle();
+  await settle();
+  assert.equal(ctx.api.calls.filter((call) => call.method === "POST").length, 0);
+});
+
+test("the round's card form says when the variable list could not be read", async () => {
+  const fixtures = { "report.json": { ...REPORT, round_card: {} }, "evidence.json": null };
+  const { element } = await renderPage("round", { roundId: "round_9d38ffa4ca3049948194e0b60315c650" }, { lang: "en", fixtures });
+  assert.match(visibleText(element), /list of variables could not be read/);
+  assert.equal(buttons(element, "Make evidence card").length, 1, "the card can still be made");
+  const ok = (await round({})).element;
+  assert.doesNotMatch(visibleText(ok), /list of variables could not be read/);
+});
+
 // --- copy fixes carried from earlier reviews -----------------------------------------------------
 
 const say = (lang, family, code, params) => messageParts(testCtx({ lang }), family, code, params);

@@ -85,4 +85,6 @@ export default {
   "round.card.exists": "这一轮的结论已经是一张证据卡。",
   "round.card.open": "打开这张卡",
   "round.card.cannot": "这一轮的报告不能转成证据卡。",
+  "evidence.relation.note": "备注（可选）",
+  "round.card.variablesFailed": "没能读到变量列表，所以不能选择条件。不填条件，仍可以做卡。",
 };

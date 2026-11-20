@@ -85,4 +85,6 @@ export default {
   "round.card.exists": "This round's conclusion is already an evidence card.",
   "round.card.open": "Open the card",
   "round.card.cannot": "This round's report cannot become an evidence card.",
+  "evidence.relation.note": "Note (optional)",
+  "round.card.variablesFailed": "The list of variables could not be read, so conditions cannot be picked. The card can still be made without them.",
 };

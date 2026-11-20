@@ -7,13 +7,13 @@ import { confirmOrCancel, simpleForm } from "../ui/forms.js";
 import { afterWrite, note, section } from "../ui/section.js";
 import { conditionsPart, contextFields } from "./evidence-forms.js";
 
-// The variables a condition may name: the evidence list's own picker, empty when it cannot be read.
+// The variables a condition may name: the evidence list's own picker. `failed` when it cannot be read.
 async function pickableVariables(ctx) {
   try {
     const data = await ctx.api.get("/evidence");
-    return Array.isArray(data && data.variables) ? data.variables : [];
+    return { variables: Array.isArray(data && data.variables) ? data.variables : [], failed: false };
   } catch {
-    return [];
+    return { variables: [], failed: true };
   }
 }
 
@@ -29,8 +29,9 @@ async function makeForm(ctx, round) {
     await ctx.api.post(`/rounds/${encodeURIComponent(round.round_id)}/evidence`, values, { action: submitLabel });
     afterWrite(ctx, ctx.t("round.card.made"));
   };
-  const parts = [conditionsPart(ctx, await pickableVariables(ctx))];
-  return simpleForm({ fields, parts, submitLabel, onSubmit, draftKey: `round-card:${round.round_id}`, ctx });
+  const { variables, failed } = await pickableVariables(ctx);
+  const form = simpleForm({ fields, parts: [conditionsPart(ctx, variables)], submitLabel, onSubmit, draftKey: `round-card:${round.round_id}`, ctx });
+  return failed ? [note(ctx.t("round.card.variablesFailed")), form] : [form];
 }
 
 function existingCard(ctx, round, cardId) {
@@ -50,5 +51,5 @@ export async function cardSection(ctx, round, card) {
   if (!card || typeof card !== "object") return null;
   if (card.card_id) return section(ctx.t("round.card.title"), ...existingCard(ctx, round, card.card_id));
   if (card.refusal) return section(ctx.t("round.card.title"), ...refusal(ctx, card.refusal));
-  return section(ctx.t("round.card.title"), note(ctx.t("round.card.lead")), await makeForm(ctx, round));
+  return section(ctx.t("round.card.title"), note(ctx.t("round.card.lead")), ...(await makeForm(ctx, round)));
 }
