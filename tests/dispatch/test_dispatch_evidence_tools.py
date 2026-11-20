@@ -3,10 +3,14 @@ only proposed.  (Lives beside the other dispatch tests for their ``env`` fixture
 
 import json
 
+import pytest
+from dispatch_helpers import call, script_calls
+
 from growbridge.agents.tools import ROLE_TOOLS
 from growbridge.archive.evidence_ledger import EvidenceOrigin
 from growbridge.archive.evidence_relations import RelationRequest, record_relation
 from growbridge.archive.models import EvidenceCard
+from growbridge.sim.llm import ScriptedClient
 
 CARD = {
     "source_class": "paper",
@@ -154,6 +158,35 @@ async def test_only_a_planner_task_may_propose_a_relation(env):
     denied = await env.refusal("planner", "propose_evidence_relation", task_id=task.id, **RELATION)
 
     assert denied.reason == "wrong_task_kind"
+
+
+@pytest.mark.parametrize("reason", ["r" * 501, "   "])
+async def test_a_blank_or_too_long_relation_reason_is_refused_with_the_limit(env, reason):
+    task = env.task("planner")
+    _add(env, "old")
+    _add(env, "new")
+
+    outcome = await env.invoke(
+        "planner", "propose_evidence_relation", task_id=task.id, **{**RELATION, "reason": reason}
+    )
+
+    assert outcome.is_error and "failed" not in outcome.content
+    assert env.archive.ledger.proposed_by(task.id) == 0
+
+
+class FakeSearch:
+    def search(self, query: str, limit: int = 5) -> list[dict]:
+        return [{"title": "Handbook", "url": "https://example.test/h", "snippet": "verify it"}]
+
+
+async def test_a_planner_that_read_the_web_has_no_relation_tool(env):
+    task = env.task("planner")
+    client = ScriptedClient(script_calls(call("search_and_verify_sources", query="lettuce light")))
+
+    await env.dispatcher(client, env.make_deps(search=FakeSearch())).run_task(task.id)
+
+    later = {tool["name"] for tool in client.requests[1]["tools"]}
+    assert "propose_evidence_relation" not in later and "query_evidence" in later
 
 
 def test_the_relation_tool_is_a_planner_write_tool(env):

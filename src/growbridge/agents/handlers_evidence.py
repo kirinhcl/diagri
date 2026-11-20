@@ -18,6 +18,7 @@ from growbridge.agents.evidence_query import EvidenceInput, query_cards
 from growbridge.agents.handlers_common import Deps, ToolInput, require_bound
 from growbridge.agents.tools import Tool
 from growbridge.archive.evidence_relations import (
+    Reason,
     RelationRefused,
     RelationRequest,
     as_denied,
@@ -65,7 +66,7 @@ class ProposeRelationInput(ToolInput):
     kind: Literal["supersedes", "contradicts", "retracts"]
     card_id: str
     other_card_id: str | None = None
-    reason: str  # its length and shape are checked by ``propose_relation``
+    reason: Reason  # stripped, 1-500 characters, the limit of the operator's own entry
 
 
 def _planner_task(deps: Deps, task_id: str, what: str) -> ResearchTask:

@@ -37,14 +37,17 @@ def _literal(node: ast.expr) -> str | None:
     return None
 
 
+def _dict_keys(node: ast.expr | None) -> frozenset[str] | None:
+    """The keys of a dict literal of plain string keys; None for anything else."""
+    if not isinstance(node, ast.Dict):
+        return None
+    keys = [_literal(k) if k is not None else None for k in node.keys]
+    return None if None in keys else frozenset(k for k in keys if k)
+
+
 def literal_keys(call: ast.Call) -> frozenset[str] | None:
     """The keys of the call's ``params={...}`` when it is a dict literal of plain string keys."""
-    for keyword in call.keywords:
-        value = keyword.value
-        if keyword.arg == "params" and isinstance(value, ast.Dict):
-            keys = [_literal(k) if k is not None else None for k in value.keys]
-            return None if None in keys else frozenset(k for k in keys if k)
-    return None
+    return next((_dict_keys(k.value) for k in call.keywords if k.arg == "params"), None)
 
 
 def _translates_a_refusal(call: ast.Call) -> bool:
@@ -107,13 +110,6 @@ def coded_http_reasons(root: Path) -> set[str]:
     return {reason for _, _, reason in coded_http_sites(root) if reason}
 
 
-def _positional_keys(node: ast.expr | None) -> frozenset[str] | None:
-    if not isinstance(node, ast.Dict):
-        return None
-    keys = [_literal(k) if k is not None else None for k in node.keys]
-    return None if None in keys else frozenset(k for k in keys if k)
-
-
 def relation_refused_sites(root: Path) -> list[Site]:
     """Each ``RelationRefused(reason, message, params)`` call under ``root`` with a literal
     reason. The evidence-relation rules raise it and ``as_denied`` turns it into a ``Denied``
@@ -121,13 +117,15 @@ def relation_refused_sites(root: Path) -> list[Site]:
     found: list[Site] = []
     for path in sorted(root.rglob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "RelationRefused":
-                reason = _literal(node.args[0]) if node.args else None
-                if reason:
-                    params = _positional_keys(node.args[2]) if len(node.args) > 2 else None
-                    found.append(
-                        Site(path.relative_to(root).as_posix(), node.lineno, None, reason, params)
-                    )
+            if not (
+                isinstance(node, ast.Call) and getattr(node.func, "id", None) == "RelationRefused"
+            ):
+                continue
+            reason = _literal(node.args[0]) if node.args else None
+            if reason:
+                params = _dict_keys(node.args[2]) if len(node.args) > 2 else None
+                site = Site(path.relative_to(root).as_posix(), node.lineno, None, reason, params)
+                found.append(site)
     return found
 
 
