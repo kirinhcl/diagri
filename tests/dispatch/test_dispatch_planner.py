@@ -326,3 +326,12 @@ async def test_another_projects_round_card_counts_as_no_evidence_in_validate(env
 
     codes = {f["code"] for f in body["findings"]}
     assert "no_evidence" in codes and "superseded_source" not in codes
+
+
+async def test_validate_run_sheet_refuses_a_sheet_of_another_project(env):
+    other_project, _ = env.other_project()
+    foreign = env.sheet_json(project_id=other_project)
+
+    denied = await env.refusal("planner", "validate_run_sheet", run_sheet=foreign)
+
+    assert denied.reason == "not_this_project"

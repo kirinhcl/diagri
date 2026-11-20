@@ -129,7 +129,10 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
         if data.round_id is not None:
             require_round_project(deps, data.round_id)
         sheet = data.run_sheet
+        require_project(deps, sheet.project_id)  # evidence is scoped by the sheet's project
         protocol = deps.workflow.store.protocol(sheet.protocol_id, sheet.protocol_version)
+        if protocol is not None and protocol.project_id != sheet.project_id:
+            protocol = None  # another project's protocol gives no crop comparison
         findings = (
             *check_sheet(deps, sheet, data.round_id),
             *evidence_gate(sheet, deps.archive),
