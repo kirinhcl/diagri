@@ -353,3 +353,20 @@ def test_a_project_relation_is_not_found_from_another_project(archive, cards):
         assert refused(
             lambda r=rid: review_relation(archive, r, "rejected", "op", "", "Q")
         ).reason == ("record_not_found")
+
+
+@pytest.mark.parametrize(
+    ("reason", "code", "params"),
+    [
+        ("relation_shape", "param", {"kind": "retracts"}),
+        ("relation_unknown_card", "state", {"card_id": "c1"}),
+        ("quota_proposal_limit", "quota", {"max_proposals": 10}),
+    ],
+)
+def test_a_refusal_becomes_a_denial_with_its_registered_code(reason, code, params):
+    from growbridge.archive.evidence_relations import as_denied
+
+    denied = as_denied(RelationRefused(reason, "why", params))
+
+    assert (denied.code, denied.reason, denied.params) == (code, reason, params)
+    assert str(denied) == "why"

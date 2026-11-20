@@ -66,6 +66,7 @@ export default {
   "chat.tool.save_plan_draft": "保存计划草稿",
   "chat.tool.query_evidence": "查询证据卡",
   "chat.tool.propose_evidence_card": "提出证据卡",
+  "chat.tool.propose_evidence_relation": "提出证据关系",
   "chat.tool.inspect_stage_data": "检查阶段数据",
   "chat.tool.freeze_dataset": "冻结数据集",
   "chat.tool.run_local_analysis": "运行本地分析",

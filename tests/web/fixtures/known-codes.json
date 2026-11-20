@@ -41,7 +41,7 @@
     "get_project_state", "get_run_status", "create_research_task", "delegate_task", "get_task_status",
     "read_artifact", "read_round_history", "get_device_capabilities", "find_prior_runs", "lookup_crop_conditions",
     "search_and_verify_sources", "check_experimental_design", "estimate_sample_size", "validate_run_sheet",
-    "save_plan_draft", "query_evidence", "propose_evidence_card", "inspect_stage_data", "freeze_dataset",
+    "save_plan_draft", "query_evidence", "propose_evidence_card", "propose_evidence_relation", "inspect_stage_data", "freeze_dataset",
     "run_local_analysis", "submit_compute_job", "get_compute_job", "fetch_compute_artifacts",
     "publish_research_report", "get_stage_records", "raise_audit_finding"
   ],

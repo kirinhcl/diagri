@@ -1,6 +1,7 @@
 """What is wrong with an evidence card's variable, unit, applicability conditions and crop."""
 
 from growbridge.archive.models import ApplicabilityRange, EvidenceCard
+from growbridge.ports import Denied
 from growbridge.vocab.catalog import Catalog
 from growbridge.vocab.checks import _variable_problems
 from growbridge.vocab.curie import taxon_problems
@@ -31,6 +32,14 @@ def with_catalog_unit(card: EvidenceCard, catalog: Catalog) -> EvidenceCard:
     if not card.variable or not card.unit:
         return card
     return card.model_copy(update={"unit": catalog.unit_aliases.get(card.unit, card.unit)})
+
+
+def checked_card(card: EvidenceCard, catalog: Catalog) -> EvidenceCard:
+    """The card with its catalog unit, or a ``Denied`` naming every problem it has."""
+    problems = card_problems(card, catalog)
+    if problems:
+        raise Denied("param", "; ".join(problems), reason="evidence_card_invalid", params={})
+    return with_catalog_unit(card, catalog)
 
 
 def _card_variable_problems(name: str, catalog: Catalog) -> list[str]:

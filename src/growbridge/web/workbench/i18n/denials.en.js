@@ -364,6 +364,7 @@ export default {
   "msg.denial.duplicate_experiment": "The same experiment is listed under two different rounds.",
   "msg.denial.table_invalid": "The data cannot be arranged into a valid analysis table.",
   "msg.denial.operator_only_evidence": "A local measurement can only be added as evidence by an operator.",
+  "msg.denial.evidence_card_invalid": "The evidence card does not fit the variable catalog: check its variable, unit, conditions and crop.",
   "msg.denial.unknown_treatment": "The treatment named in the report is not part of the protocol.",
   "msg.denial.snapshots_mixed_protocol": "The cited snapshots come from more than one protocol version and cannot be analysed together.",
   "msg.denial.snapshots_other_protocol": "The cited snapshots were not collected under the protocol named in the report.",

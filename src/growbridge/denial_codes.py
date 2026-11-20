@@ -325,6 +325,7 @@ _register(
     ("duplicate_experiment", ("experiment_id",)),
     ("table_invalid", ("detail",)),
     ("operator_only_evidence", ()),
+    ("evidence_card_invalid", ()),
     ("unknown_treatment", ("treatment_id",)),
     # mixed_protocol and not_this_protocol refine "scope"; these two sites raise "param"
     ("snapshots_mixed_protocol", ()),

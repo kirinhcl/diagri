@@ -253,7 +253,7 @@
 
 ## 模型角色的工具
 
-来源：[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`，以及 [`handlers_orchestrator.py`](../../../src/growbridge/agents/handlers_orchestrator.py)、[`handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)、[`handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py) 和 [`handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 里的处理函数。编排 Agent 有 7 个工具，计划 Agent 有 11 个，研究 Agent 有 9 个，监察 Agent 有 6 个。这些工具由守护进程内部的模型调用，既不是 HTTP 路由，也不是 MCP 工具。
+来源：[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`，以及 [`handlers_orchestrator.py`](../../../src/growbridge/agents/handlers_orchestrator.py)、[`handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)、[`handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py) 和 [`handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 里的处理函数。编排 Agent 有 7 个工具，计划 Agent 有 12 个，研究 Agent 有 9 个，监察 Agent 有 6 个。这些工具由守护进程内部的模型调用，既不是 HTTP 路由，也不是 MCP 工具。
 
 "类别"取值为 `read`、`write`、`web`（结果是不可信的网页内容）或 `sandbox`。一个角色在一次运行里调用过 `web` 工具之后，它的 `write` 和 `sandbox` 工具在这次运行的剩余部分都会被拒绝。输入里有未知字段时校验失败。被拒绝时，模型收到的是一条错误结果，格式为 `Error: denied (<code>): <message>`。
 
@@ -275,6 +275,7 @@
 | planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。带 `round_id` 时，还会像 `save_plan_draft` 一样检查运行单是否执行了本轮分配的处理。 |
 | planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
 | planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
+| planner | `propose_evidence_relation` | write | `task_id`、`kind`、`card_id`、`other_card_id`、`reason` | 提议一张卡取代或与另一张卡矛盾，或撤回自己。提议保持待定，操作员确认之前不改变任何卡。 |
 | planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。没有执行本轮分配处理的运行单（`treatment_not_applied`）不会保存。 |
 | planner | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
 | researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、人工任务是否按时完成、已有快照），不写入任何东西。留出批次的测量只给条数。 |

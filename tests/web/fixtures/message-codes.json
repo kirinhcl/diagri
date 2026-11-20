@@ -2130,6 +2130,11 @@
       "action": false,
       "of": "param"
     },
+    "evidence_card_invalid": {
+      "params": [],
+      "action": false,
+      "of": "param"
+    },
     "unknown_treatment": {
       "params": [
         "treatment_id"

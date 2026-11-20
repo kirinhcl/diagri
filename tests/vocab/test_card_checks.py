@@ -88,3 +88,26 @@ def test_crop_and_free_text_limits():
     assert card_problems(card(conditions_note="x" * 501), CATALOG) == [
         "conditions_note is longer than 500 characters"
     ]
+
+
+def test_a_checked_card_is_returned_with_the_catalog_unit():
+    from growbridge.vocab.card_checks import checked_card
+
+    fixed = checked_card(card(variable="air_temperature", value=20.0, unit="C"), CATALOG)
+
+    assert fixed.unit == "Cel"
+
+
+def test_a_checked_card_with_problems_is_refused_with_all_of_them():
+    import pytest
+
+    from growbridge.ports import Denied
+    from growbridge.vocab.card_checks import checked_card
+
+    with pytest.raises(Denied) as caught:
+        checked_card(
+            card(variable="temp", conditions=(ApplicabilityRange(variable="temp"),)), CATALOG
+        )
+
+    assert caught.value.code == "param" and caught.value.reason == "evidence_card_invalid"
+    assert "air_temperature" in str(caught.value) and "min, max or both" in str(caught.value)

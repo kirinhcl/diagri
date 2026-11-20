@@ -47,6 +47,18 @@ def literal_keys(call: ast.Call) -> frozenset[str] | None:
     return None
 
 
+def _translates_a_refusal(call: ast.Call) -> bool:
+    """``as_denied``'s ``Denied(..., reason=error.reason, ...)``: it carries a RelationRefused's
+    reason, which ``relation_refused_sites`` checks where it is raised."""
+    return any(
+        k.arg == "reason"
+        and isinstance(k.value, ast.Attribute)
+        and k.value.attr == "reason"
+        and getattr(k.value.value, "id", None) == "error"
+        for k in call.keywords
+    )
+
+
 def refusal_sites(root: Path) -> list[Site]:
     """Each ``Denied(...)`` and ``rejected(...)`` call under ``root``: its coarse code (the first
     argument; ``"param"`` for ``rejected``) and its literal ``reason=`` keyword, if any."""
@@ -58,6 +70,8 @@ def refusal_sites(root: Path) -> list[Site]:
             func = node.func
             called = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
             if called not in REFUSAL_CALLS:
+                continue
+            if _translates_a_refusal(node):
                 continue
             code = (
                 "param" if called == "rejected" else (_literal(node.args[0]) if node.args else None)
@@ -93,17 +107,33 @@ def coded_http_reasons(root: Path) -> set[str]:
     return {reason for _, _, reason in coded_http_sites(root) if reason}
 
 
-def relation_refused_reasons(root: Path) -> set[str]:
-    """The literal first argument of every ``RelationRefused(...)`` call under ``root``: the
-    evidence-relation rules raise it, and the service layer turns it into a ``Denied``."""
-    found: set[str] = set()
+def _positional_keys(node: ast.expr | None) -> frozenset[str] | None:
+    if not isinstance(node, ast.Dict):
+        return None
+    keys = [_literal(k) if k is not None else None for k in node.keys]
+    return None if None in keys else frozenset(k for k in keys if k)
+
+
+def relation_refused_sites(root: Path) -> list[Site]:
+    """Each ``RelationRefused(reason, message, params)`` call under ``root`` with a literal
+    reason. The evidence-relation rules raise it and ``as_denied`` turns it into a ``Denied``
+    with the coarse code the registry gives the reason, so the site itself names no code."""
+    found: list[Site] = []
     for path in sorted(root.rglob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "RelationRefused":
                 reason = _literal(node.args[0]) if node.args else None
                 if reason:
-                    found.add(reason)
+                    params = _positional_keys(node.args[2]) if len(node.args) > 2 else None
+                    found.append(
+                        Site(path.relative_to(root).as_posix(), node.lineno, None, reason, params)
+                    )
     return found
+
+
+def relation_refused_reasons(root: Path) -> set[str]:
+    """The literal reason of every ``RelationRefused(...)`` call under ``root``."""
+    return {site.reason for site in relation_refused_sites(root) if site.reason}
 
 
 def sent_elsewhere() -> set[str]:
@@ -186,6 +216,8 @@ def test_every_refusal_names_a_registered_reason_of_its_code() -> None:
     for site in refusal_sites(SRC):
         assert site.reason in DENIAL_CODES, site
         assert DENIAL_CODES[site.reason].of == site.code, site
+    for site in relation_refused_sites(SRC):
+        assert site.reason in DENIAL_CODES, site
 
 
 def test_every_registered_reason_is_sent_somewhere() -> None:
@@ -194,7 +226,7 @@ def test_every_registered_reason_is_sent_somewhere() -> None:
 
 
 def test_a_literal_params_dict_has_exactly_the_keys_the_registry_lists() -> None:
-    for site in refusal_sites(SRC):
+    for site in [*refusal_sites(SRC), *relation_refused_sites(SRC)]:
         if site.reason in DENIAL_CODES and site.keys is not None:
             assert site.keys == set(DENIAL_CODES[site.reason].params), site
 

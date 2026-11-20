@@ -66,6 +66,7 @@ export default {
   "chat.tool.save_plan_draft": "Save the plan draft",
   "chat.tool.query_evidence": "Look up evidence cards",
   "chat.tool.propose_evidence_card": "Propose an evidence card",
+  "chat.tool.propose_evidence_relation": "Propose an evidence relation",
   "chat.tool.inspect_stage_data": "Inspect the stage data",
   "chat.tool.freeze_dataset": "Freeze the dataset",
   "chat.tool.run_local_analysis": "Run a local analysis",

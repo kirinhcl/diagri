@@ -364,6 +364,7 @@ export default {
   "msg.denial.duplicate_experiment": "同一个实验被列在了两个不同的轮次里。",
   "msg.denial.table_invalid": "这些数据不能整理成合格的分析表。",
   "msg.denial.operator_only_evidence": "本地测量只能由操作员添加为证据。",
+  "msg.denial.evidence_card_invalid": "证据卡与变量目录不符：请检查变量、单位、适用条件和作物。",
   "msg.denial.unknown_treatment": "报告里写的处理不属于这个方案。",
   "msg.denial.snapshots_mixed_protocol": "引用的快照来自不止一个方案版本，不能放在一起分析。",
   "msg.denial.snapshots_other_protocol": "引用的快照不是在报告所写的方案下采集的。",

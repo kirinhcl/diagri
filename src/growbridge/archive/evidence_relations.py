@@ -19,6 +19,8 @@ from growbridge.archive.evidence_ledger import (
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Model
 from growbridge.archive.store import MODEL_SOURCE, Archive
+from growbridge.denial_codes import DENIAL_CODES
+from growbridge.ports import Denied
 
 REASON_MAX = 500
 MAX_RELATION_PROPOSALS_PER_TASK = 10
@@ -45,6 +47,13 @@ class RelationRefused(ValueError):
         self.reason = reason
         self.message = message
         self.params = params or {}
+
+
+def as_denied(error: RelationRefused) -> Denied:
+    """The refusal as a ``Denied`` with the coarse code its reason is registered under."""
+    return Denied(
+        DENIAL_CODES[error.reason].of, error.message, reason=error.reason, params=error.params
+    )
 
 
 def _cards(request: RelationRequest) -> tuple[str, ...]:
