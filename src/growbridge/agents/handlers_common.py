@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
-from growbridge.archive.models import ResearchTask, RunSheet, Snapshot
+from growbridge.archive.models import ResearchProtocol, ResearchTask, RunSheet, Snapshot
 from growbridge.planning.treatment import check_treatment
 from growbridge.planning.validate import validate_run_sheet
 from growbridge.ports import Actor, Denied, Finding
@@ -92,6 +92,15 @@ def findings_json(findings: Iterable[Finding]) -> list[dict]:
     return out
 
 
+def sheet_protocol(deps: Deps, sheet: RunSheet) -> ResearchProtocol | None:
+    """The sheet's protocol, only when it belongs to the sheet's project: a model-written sheet
+    may name another project's protocol, which must read as unknown."""
+    protocol = deps.workflow.store.protocol(sheet.protocol_id, sheet.protocol_version)
+    if protocol is None or protocol.project_id != sheet.project_id:
+        return None
+    return protocol
+
+
 def check_sheet(deps: Deps, sheet: RunSheet, round_id: str | None = None) -> tuple[Finding, ...]:
     """The program checks, and whether the sheet applies its round's treatment (a model's sheet
     must; without ``round_id`` it must apply one of the protocol's treatments)."""
@@ -99,7 +108,7 @@ def check_sheet(deps: Deps, sheet: RunSheet, round_id: str | None = None) -> tup
         sheet, deps.control.capabilities(), deps.control.safety(), deps.workflow.catalog
     )
     store = deps.workflow.store
-    protocol = store.protocol(sheet.protocol_id, sheet.protocol_version)
+    protocol = sheet_protocol(deps, sheet)
     if protocol is None:
         return own  # the workflow refuses an unknown protocol on submission
     number = None if round_id is None else store.round_number(round_id)
@@ -108,8 +117,9 @@ def check_sheet(deps: Deps, sheet: RunSheet, round_id: str | None = None) -> tup
 
 def submit_draft(deps: Deps, role: str, data: DraftInput) -> dict:
     """File a run-sheet draft for operator review; approval is never part of this."""
-    require_round_project(deps, data.round_id)  # a draft goes only into the run's own project
     sheet = data.run_sheet
+    require_project(deps, sheet.project_id)  # before any lookup of what the sheet names
+    require_round_project(deps, data.round_id)  # a draft goes only into the run's own project
     own = check_sheet(deps, sheet, data.round_id)
     if any(finding.blocking for finding in own):
         return {"saved": False, "stage_id": sheet.stage_id, "findings": findings_json(own)}
