@@ -1,5 +1,7 @@
 """Tracing in ``Dispatcher.run_task``: what a trace holds, and that it never changes a run."""
 
+import json
+
 import pytest
 from dispatch_helpers import call
 
@@ -129,31 +131,81 @@ async def test_budget_refusal_records_the_whole_denied(env, tmp_path):
     assert end["params"] == {"denied_code": "budget"}
 
 
-def _break_write(monkeypatch):
-    def broken(self, line):
-        raise OSError("disk full")
+class FlakyFile:
+    """The trace's file object, failing every write of one kind of line (after the header)."""
 
-    monkeypatch.setattr(RunTrace, "_write", broken)
+    def __init__(self, inner, fail_kind: str):
+        self._inner, self._fail_kind = inner, fail_kind
+
+    def write(self, text: str) -> int:
+        if json.loads(text)["kind"] == self._fail_kind:
+            raise OSError("disk full")
+        return self._inner.write(text)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
 
 
-@pytest.mark.parametrize("failure", ["no_file", "write_error"])
-async def test_trace_failure_leaves_the_run_unchanged(env, tmp_path, monkeypatch, failure):
-    first = env.task("planner")
-    await _traced(env, drafting(env), tmp_path / "x").run_task(first.id)
-    log = ConversationLog(env.db, env.clock)
-    expected = [(e.kind, e.role) for e in log.entries(env.project_id)]
-    second = env.task("planner", event="ev-2")
+def _inject(monkeypatch, failure: str) -> None:
+    real_open = RunTrace.open.__func__
     if failure == "no_file":
         monkeypatch.setattr(RunTrace, "open", classmethod(lambda cls, *a, **k: None))
-    else:
-        _break_write(monkeypatch)
+        return
+
+    def flaky(cls, *args, **kwargs):
+        trace = real_open(cls, *args, **kwargs)
+        trace._file = FlakyFile(trace._file, failure)
+        return trace
+
+    monkeypatch.setattr(RunTrace, "open", classmethod(flaky))
+
+
+def _delegated_planner(env, event: str):
+    """A planner task the orchestrator delegated, so its end also creates a follow-up."""
+    env.task("orchestrator", f"orch-{event}")
+    return env.task("planner", event, parent_task_id=f"task-orch-{event}")
+
+
+def _summary(env, task) -> dict:
+    """What a run leaves behind: task state, end entry, conversation, follow-up tasks."""
+    entries = ConversationLog(env.db, env.clock).entries(env.project_id)
+    mine = [e for e in entries if e.task_id == task.id]
+    ends = [e.detail for e in mine if e.kind == "status" and "reason" in e.detail]
+    follow_ups = [
+        (t.owner_role, t.state.value)
+        for t in env.tasks.list(env.project_id)
+        if t.trigger_event_id == f"followup:{task.id}"
+    ]
+    return {
+        "state": env.tasks.get(task.id).state,
+        "conversation": [(e.kind, e.role, e.text) for e in mine],
+        "end": [(d["code"], d["reason"], d["params"]) for d in ends],
+        "follow_ups": follow_ups,
+    }
+
+
+@pytest.mark.parametrize("failure", ["no_file", "run", "model", "tool", "end"])
+async def test_trace_failure_leaves_the_run_unchanged(env, tmp_path, monkeypatch, failure):
+    baseline = _delegated_planner(env, "ev-a")
+    untraced = env.dispatcher(drafting(env))
+    untraced.conversation = ConversationLog(env.db, env.clock)
+    await untraced.run_task(baseline.id)
+    expected = _summary(env, baseline)
+    assert expected["follow_ups"] and expected["end"][0][0] == "run_finished"
+    second = _delegated_planner(env, "ev-b")
+    _inject(monkeypatch, failure)
 
     run = await _traced(env, drafting(env), tmp_path).run_task(second.id)
 
     assert run is not None and run.stop_reason == "end_turn"
-    assert env.tasks.get(second.id).state is env.tasks.get(first.id).state
-    entries = [(e.kind, e.role) for e in log.entries(env.project_id)]
-    assert len(entries) == 2 * len(expected) and entries[len(expected) :] == expected
+    assert _summary(env, second) == expected
+    kinds = [
+        json.loads(line)["kind"]
+        for f in traces(tmp_path)
+        for line in f.read_text().split("\n")
+        if line
+    ]
+    assert failure not in kinds  # the injected failure really hit: that line never reached the file
 
 
 def test_last_seq_is_none_for_an_empty_project_and_the_max_otherwise(db, clock):
