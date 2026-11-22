@@ -297,6 +297,8 @@ class Dispatcher:
                     "turns": run.turns if run else 0,
                     "input_tokens": run.input_tokens if run else 0,
                     "output_tokens": run.output_tokens if run else 0,
+                    "cache_write_tokens": run.cache_write_tokens if run else 0,
+                    "cache_read_tokens": run.cache_read_tokens if run else 0,
                     "cost": run.cost if run else 0.0,
                     "seconds": self.clock.monotonic() - started,
                 }

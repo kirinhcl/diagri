@@ -244,3 +244,16 @@ def test_read_trace_rejects_unknown_format(tmp_path):
 def test_read_trace_rejects_an_unknown_kind(tmp_path):
     with pytest.raises(TraceFormatError):
         read_trace(write_lines(tmp_path, RUN, json.dumps({"kind": "zzz"})))
+
+
+async def test_model_lines_record_the_cache_tokens(tmp_path, clock):
+    trace = RunTrace.open(tmp_path, "task-1", clock, LOCAL)
+    OPENED.append(trace)
+    trace.begin({"task_id": "task-1"})
+    usage = {"cache_write_tokens": 40, "cache_read_tokens": 100}
+    cached = text_reply("ok").model_copy(update=usage)
+
+    await trace.client(ScriptedClient([cached])).create(**REQUEST)
+
+    (model,) = [line for line in lines_of(trace) if line["kind"] == "model"]
+    assert (model["cache_write_tokens"], model["cache_read_tokens"]) == (40, 100)

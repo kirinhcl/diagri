@@ -217,3 +217,14 @@ def test_last_seq_is_none_for_an_empty_project_and_the_max_otherwise(db, clock):
     log.add("other", "user", "message", "c")
 
     assert log.last_seq("p") == second
+
+
+async def test_end_line_totals_the_cache_tokens(env, tmp_path):
+    task = env.task("planner")
+    usage = {"cache_write_tokens": 40, "cache_read_tokens": 100}
+    client = ScriptedClient([text_reply("no draft").model_copy(update=usage)])
+
+    await env.dispatcher(client, trace=settings(tmp_path)).run_task(task.id)
+
+    end = read_trace(traces(tmp_path)[0]).end
+    assert (end["cache_write_tokens"], end["cache_read_tokens"]) == (40, 100)

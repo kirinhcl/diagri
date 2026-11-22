@@ -6,8 +6,16 @@ import json
 
 from trace_sample import TOOL_RESULT, write_sample
 
-from growbridge.agents.trace import read_trace
+from growbridge.agents.trace import Trace, read_trace
 from growbridge.agents.trace_show import SHORT_CHARS, render_trace, strip_controls
+
+
+def test_the_end_shows_the_cache_tokens():
+    end = {"code": "run_finished", "cache_write_tokens": 40, "cache_read_tokens": 100}
+
+    out = render_trace(Trace(run={"task_id": "t"}, end=end))
+
+    assert "Cache write tokens: 40" in out and "Cache read tokens: 100" in out
 
 
 async def test_steps_come_out_in_order(tmp_path, clock):

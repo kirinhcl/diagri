@@ -108,6 +108,8 @@ def _end(end: dict[str, Any], full: bool) -> list[str]:
         ("Turns", end.get("turns")),
         ("Input tokens", end.get("input_tokens")),
         ("Output tokens", end.get("output_tokens")),
+        ("Cache write tokens", end.get("cache_write_tokens", 0)),
+        ("Cache read tokens", end.get("cache_read_tokens", 0)),
         ("Cost", end.get("cost")),
         ("Seconds", end.get("seconds")),
     ]

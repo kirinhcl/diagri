@@ -80,6 +80,8 @@ def _reply(line: Mapping[str, Any]) -> ModelReply:
         content=line.get("content"),
         input_tokens=line.get("input_tokens", 0),
         output_tokens=line.get("output_tokens", 0),
+        cache_write_tokens=line.get("cache_write_tokens", 0),  # 0 in a trace from before caching
+        cache_read_tokens=line.get("cache_read_tokens", 0),
     )
 
 

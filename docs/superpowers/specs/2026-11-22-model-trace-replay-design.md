@@ -117,11 +117,11 @@ DiAGRI 的模型角色（编排、计划、研究、审计）在一次运行里�
 | `git_commit` | 能取到就填（源码目录里 `git rev-parse HEAD`），取不到为 `null` |
 | `at` | 运行开始时间 |
 
-**每次模型调用，`kind: "model"`**：`turn`、`at`（调用前）、`seconds`、`stop_reason`、`text`、`tool_calls`（`id`、`name`、`input`）、`content`（全部内容块，转成字典，包括 `thinking` 和 `redacted_thinking`，签名原样保留）、`input_tokens`、`output_tokens`。模型调用抛出错误时改记 `error`（`类型名: 信息`），没有回复字段。
+**每次模型调用，`kind: "model"`**：`turn`、`at`（调用前）、`seconds`、`stop_reason`、`text`、`tool_calls`（`id`、`name`、`input`）、`content`（全部内容块，转成字典，包括 `thinking` 和 `redacted_thinking`，签名原样保留）、`input_tokens`、`output_tokens`、`cache_write_tokens`、`cache_read_tokens`（提示缓存写入和读取的 token；没有这两项的旧记录按 0 计）。模型调用抛出错误时改记 `error`（`类型名: 信息`），没有回复字段。
 
 **每次工具调用，`kind: "tool"`**：`turn`、`at`（工具开始执行前）、`seconds`、`tool_use_id`、`name`、`input`、`content`（`ToolOutcome.content` 全文）、`is_error`、`external`。
 
-**最后一行，`kind: "end"`**：`at`、`state`、`code`、`reason`、`params`（被拒绝时含 `denied_code`）、`denied`（被拒绝时是 `Denied` 的 `code`、`message`、`reason`、`params`，否则为 `null`；回放重现拒绝时用它）、`turns`、`input_tokens`、`output_tokens`、`cost`、`seconds`。运行在写结尾之前就崩溃时没有这一行，`trace show` 要显示"记录不完整"，回放以退出码 2 结束。
+**最后一行，`kind: "end"`**：`at`、`state`、`code`、`reason`、`params`（被拒绝时含 `denied_code`）、`denied`（被拒绝时是 `Denied` 的 `code`、`message`、`reason`、`params`，否则为 `null`；回放重现拒绝时用它）、`turns`、`input_tokens`、`output_tokens`、`cache_write_tokens`、`cache_read_tokens`、`cost`、`seconds`。运行在写结尾之前就崩溃时没有这一行，`trace show` 要显示"记录不完整"，回放以退出码 2 结束。
 
 ## 8. 外部工具标记
 

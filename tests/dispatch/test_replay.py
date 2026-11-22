@@ -16,6 +16,7 @@ from growbridge.agents.dispatch import Dispatcher, TraceSettings
 from growbridge.agents.llm import ModelReply
 from growbridge.agents.replay import (
     IdMap,
+    ReplayClient,
     ReplayClock,
     ReplayToolset,
     mask_ids,
@@ -502,3 +503,14 @@ def test_id_map_pairs_ids_in_order_and_builds_new_values():
 
     assert mapped == {"project_id": new_p, "list": [f"in {new_r}"], "n": 1}
     assert value == {"project_id": old_p, "list": [f"in {old_r}"], "n": 1}  # not mutated
+
+
+async def test_replayed_replies_keep_their_cache_tokens():
+    line = {"turn": 1, "at": 1.0, "stop_reason": "end_turn", "text": "ok", "tool_calls": []}
+    cached = {**line, "cache_write_tokens": 40, "cache_read_tokens": 100}
+    client = ReplayClient([cached, line], ReplayClock(1.0))
+
+    first, older = await client.create(), await client.create()
+
+    assert (first.cache_write_tokens, first.cache_read_tokens) == (40, 100)
+    assert (older.cache_write_tokens, older.cache_read_tokens) == (0, 0)  # a trace from before

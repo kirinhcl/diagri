@@ -254,6 +254,8 @@ def _reply_line(turn: int, at: float, seconds: float, reply: ModelReply) -> dict
         "content": content_dicts(reply.content),
         "input_tokens": reply.input_tokens,
         "output_tokens": reply.output_tokens,
+        "cache_write_tokens": reply.cache_write_tokens,
+        "cache_read_tokens": reply.cache_read_tokens,
     }
 
 
