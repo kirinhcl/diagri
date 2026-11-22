@@ -68,7 +68,8 @@ def _mismatch_lines(step: StepResult) -> list[str]:
     diff = difflib.unified_diff(
         _pretty(step.recorded), _pretty(step.replayed), "recorded", "replayed", lineterm=""
     )
-    lines = [f"First difference: {step.name}"]
+    lines = [f"First difference: {step.name}", "  input:"]
+    lines += [f"    {line}" for line in _pretty(json.dumps(step.input, default=str))]
     if step.denied_code:
         lines.append(f"  replayed refusal: {step.denied_code}")
     if step.note:
@@ -118,6 +119,9 @@ def _replay(args: Any, load_settings: Callable[[], Settings]) -> int:
                 keep_copy=args.keep_copy,
             )
         )
+    except TraceFormatError as exc:
+        _error(f"{args.file}: {exc}")
+        return 2
     except (OSError, UnicodeDecodeError) as exc:
         _error(f"cannot replay {args.file}: {exc}")
         return 2

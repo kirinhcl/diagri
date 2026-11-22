@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from agent_helpers import make_tool
+from pydantic import BaseModel, ConfigDict
 
 from growbridge.agents.llm import ModelReply, ToolCall
-from growbridge.agents.tools import Toolset
+from growbridge.agents.tools import Tool, Toolset
 from growbridge.agents.trace import RunTrace
 from growbridge.sim.llm import ScriptedClient, text_reply
 
@@ -21,6 +21,18 @@ REQUEST = {
     "effort": "low",
 }
 TOOL_RESULT = "r" * 1000
+
+
+class EchoInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    text: str
+
+
+def make_tool(name: str, result: object) -> Tool:
+    async def handler(args: EchoInput):
+        return result
+
+    return Tool(name=name, description=f"{name} tool", input_model=EchoInput, handler=handler)
 
 
 def thinking_reply(thinking: str, call: ToolCall) -> ModelReply:

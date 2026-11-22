@@ -156,10 +156,35 @@ async def test_cli_replay_exit_codes(world, settings, capsys, monkeypatch):
 
     monkeypatch.setattr("growbridge.agents.replay.same_result", lambda *a, **k: False)
     assert await run(trace_path) == 1
-    assert "DIFFERENT" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "DIFFERENT" in out and "First difference: save_plan_draft" in out
+    assert '"round_id"' in out  # the recorded tool input is shown, indented
     monkeypatch.undo()
 
     cut = trace_path.with_name("cut.jsonl")
     cut.write_text("\n".join(trace_path.read_text().splitlines()[:2]) + "\n{broken\n")
     assert await run(cut) == 2
-    assert "Traceback" not in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert captured.out == ""  # no source line, no report for a file that cannot be read
+    assert captured.err.startswith(f"{cut}: ") and "not valid JSON" in captured.err
+    assert "Traceback" not in captured.err
+
+
+async def test_data_dir_option_on_a_pre_run_copy_leaves_it_byte_identical(world, settings):
+    _, trace_path = await _traced(world, settings)
+    pre = trace_path.with_suffix(".pre")
+    before = _digests(pre)
+
+    source, report, _ = await replay_file(trace_path, settings, data_dir=pre)
+
+    assert source.kind == "option" and source.reliable  # the trace's own pre-run copy
+    assert report.exit_code == 0
+    assert _digests(pre) == before  # side files included: no -wal or -shm appeared
+
+
+async def test_data_dir_option_elsewhere_is_not_reliable(world, settings):
+    _, trace_path = await _traced(world, settings)
+
+    source, _, _ = await replay_file(trace_path, settings, data_dir=settings.data_dir)
+
+    assert source.kind == "option" and not source.reliable

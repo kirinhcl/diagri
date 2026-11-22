@@ -225,6 +225,7 @@ class StepResult(Model):
     replayed: str | None  # None when the replay did not run this call
     denied_code: str | None  # the code of a replayed refusal, shown apart (spec §11.4)
     note: str = ""
+    input: Any = None  # the recorded tool input (the replayed one when the record has no line)
 
 
 class ReplayReport(Model):
@@ -315,6 +316,7 @@ class ReplayToolset:
                 replayed=ran.content if ran is not None else None,
                 denied_code=_denied_code(ran.content) if ran is not None else None,
                 note=note,
+                input=line.get("input"),
             )
         )
         if not same and not self._keep_going:
@@ -358,6 +360,7 @@ class ReplayToolset:
                 replayed=ran.content if ran is not None else None,
                 denied_code=_denied_code(ran.content) if ran is not None else None,
                 note=note,
+                input=line.get("input") if line is not None else given,
             )
         )
         if not self._keep_going:
@@ -456,6 +459,7 @@ def _unused_step(index: int, line: Mapping[str, Any]) -> StepResult:
         replayed=None,
         denied_code=None,
         note=NOT_CALLED,
+        input=line.get("input"),
     )
 
 

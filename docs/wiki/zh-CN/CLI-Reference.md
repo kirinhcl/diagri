@@ -41,7 +41,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `export-dataset` | `--snapshot SNAPSHOT`、`--out OUT`、`--licence LICENCE`、`--creator CREATOR`（都必填）、`--url URL` | 是 | 否，守护进程运行时也能执行 | 读取 DiAGRI 已记录的数据；命令本身不检查 `auto_research` |
 | `simulate` | 无 | 否 | 否 | 在临时目录里自建一个 DiAGRI 运行时 |
 | `trace show` | `file`（位置参数，必填），`--full`（不截断长内容） | 否 | 否 | 读取模型轨迹文件；不需要 DiAGRI 模式 |
-| `trace replay` | `file`（位置参数，必填），`--data-dir DIR`（在该数据目录的副本上重放），`--keep-going`（出现不一致后继续），`--keep-copy`（保留临时副本） | 否 | 否 | 需要配置文件；只写数据的临时副本 |
+| `trace replay` | `file`（位置参数，必填），`--data-dir DIR`（在该数据目录的副本上重放），`--keep-going`（出现不一致后继续），`--keep-copy`（保留临时副本） | 是 | 否 | 需要配置文件；只写数据的临时副本 |
 
 没有任何命令可以创建项目、研究协议或研究轮次，也没有命令可以设置项目的调用预算或创建编排 Agent 的第一个任务。这些事由操作员通过工作台路由来做，见[运行一轮研究](Run-a-Research-Round.md)。命令里只有 `simulate` 会做这些调用，位置在 [`runtime.py`](../../../src/growbridge/runtime.py) 的 `_design_and_start`。
 
@@ -61,7 +61,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `export-dataset` | 把一个冻结快照的训练数据集写进新建的目录 `OUT`：11 张 CSV 表和 `croissant.json`。只读取数据库和快照，除假名密钥外不向 `data_dir` 写任何东西。`--licence` 和 `--creator` 记进元数据（创作者记为组织）；`--url` 是数据集发布的地址（如果有）。`--licence`、`--creator` 和 `--url` 两端的空白会被去掉；只有空白的 `--url` 视为没有。见[训练数据集导出](Training-Dataset-Export.md)。 | 一个 JSON 对象，包含 `out`、`rows`（每个文件的数据行数）和 `counts`（元数据里的十项计数） |
 | `simulate` | 在临时目录里，用模拟的 AC5 和模拟时钟跑一个很短的阶段：批准安全配置，创建项目、协议和轮次，提交并批准运行单，启动阶段，一直 tick 到阶段结束。不用无线电，也不联网。 | 一个 JSON 对象，包含 `stage`、`round`、`beats`、`samples` 和 `writes` |
 | `trace show` | 逐步列出一个模型轨迹文件：先是运行头部，再是每一轮的思考、文字、工具调用和结果，最后是结束信息或 `Record incomplete: the run has no end line.` 这一行。超过 400 个字符的内容会被截断，除非加 `--full`；轨迹里的控制字符和转义序列会被去掉。 | 标准输出上的列表；文件读不了或被截断时退出码为 2，并在标准错误输出上给出原因（出错行之前的内容仍会列出） |
-| `trace replay` | 用记录下来的模型回复，在数据的临时副本上（权限 0700，结束后删除，除非加 `--keep-copy`）把一个模型轨迹按当前代码重新运行一遍。数据来源依次为 `--data-dir` 选项、轨迹旁该次运行的运行前副本、`data_dir`；输出第一行写明来源，来源不是运行前副本时再加一行 `Replay from <kind>: results are for reference only (no pre-run copy).` 来源目录和运行前副本绝不会被写入。重放不会启动设备链路，也没有通知渠道、心跳或计算服务。它为每次工具调用输出一行（`ok` 或 `DIFFERENT`），对第一个不一致处给出工具名、输入以及记录结果与重放结果的差异，最后给出两个结束代码。输出的值会去掉控制字符。 | 每一步和结束都一致时退出码为 0，有不一致时为 1，无法重放（文件读不了、被截断、没有结束行或配置文件无效）时为 2 |
+| `trace replay` | 用记录下来的模型回复，在数据的临时副本上（权限 0700，结束后删除，除非加 `--keep-copy`）把一个模型轨迹按当前代码重新运行一遍。数据来源依次为 `--data-dir` 选项、轨迹旁该次运行的运行前副本、`data_dir`；输出第一行写明来源，来源不是运行前副本时再加一行 `Replay from <kind>: results are for reference only (no pre-run copy).` 来源数据库的内容绝不会被修改，但 SQLite 读取一个正在使用的数据库时，可能在它旁边创建 `-wal`/`-shm` 辅助文件；运行前副本以只读且不可变方式打开，保持逐字节不变。重放不会启动设备链路，也没有通知渠道、心跳或计算服务。它为每次工具调用输出一行（`ok` 或 `DIFFERENT`），对第一个不一致处给出工具名、输入以及记录结果与重放结果的差异，最后给出两个结束代码。输出的值会去掉控制字符。 | 每一步和结束都一致时退出码为 0，有不一致时为 1，无法重放（文件读不了、被截断、没有结束行或配置文件无效）时为 2 |
 
 ### DiAGRI 模式下的 `serve`
 

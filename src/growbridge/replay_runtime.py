@@ -8,13 +8,12 @@ from pathlib import Path
 from typing import Literal
 
 from .agents.replay import (
-    EXIT_CANNOT,
     ReplayBudget,
     ReplayClock,
     ReplayReport,
     replay_trace,
 )
-from .agents.trace import PRE_RUN_SUFFIX, Trace, TraceFormatError, read_trace
+from .agents.trace import PRE_RUN_SUFFIX, Trace, read_trace
 from .archive.datacopy import copy_data_dir, relocate_paths
 from .archive.models import Model
 from .config import Settings
@@ -29,13 +28,21 @@ class ReplaySource(Model):
     reliable: bool  # only a pre-run copy holds the state the recorded run started from
 
 
+def is_pre_run_copy(path: Path) -> bool:
+    """A directory named ``<stem>.pre`` with a sibling ``<stem>.jsonl``: nothing writes it, so it
+    is opened immutably and stays byte for byte as it was."""
+    path = Path(path)
+    return path.name.endswith(PRE_RUN_SUFFIX) and path.with_suffix(".jsonl").is_file()
+
+
 def choose_source(
     trace_path: Path, trace: Trace, option: Path | None, settings: Settings
 ) -> ReplaySource:
     """The ``--data-dir`` option, else the run's own pre-run copy, else the configured data."""
-    if option is not None:
-        return ReplaySource(path=option, kind="option", reliable=False)
     copy = trace_path.with_suffix(PRE_RUN_SUFFIX)
+    if option is not None:
+        own = copy.is_dir() and option.resolve() == copy.resolve()
+        return ReplaySource(path=option, kind="option", reliable=own)
     if trace.run.get("pre_run_copy") and copy.is_dir():
         return ReplaySource(path=copy, kind="pre_run_copy", reliable=True)
     return ReplaySource(path=settings.data_dir, kind="config", reliable=False)
@@ -61,18 +68,6 @@ def build_replay_runtime(
         own, lambda _: SimulatedTransport(), clock, channels={}, heartbeats=None
     )
     return runtime, clock
-
-
-def _unreadable(error: TraceFormatError) -> ReplayReport:
-    partial = error.partial
-    return ReplayReport(
-        warnings=(str(error),),
-        steps=(),
-        recorded_end=partial.end if partial else None,
-        replayed_end=None,
-        stopped=None,
-        exit_code=EXIT_CANNOT,
-    )
 
 
 async def _replay_on(
@@ -104,17 +99,15 @@ async def replay_file(
     keep_going: bool = False,
     keep_copy: bool = False,
 ) -> tuple[ReplaySource, ReplayReport, Path | None]:
-    """Replay ``trace_path`` on a temporary copy of the chosen source; the source is only read."""
-    try:
-        trace = read_trace(trace_path)
-    except TraceFormatError as exc:
-        source = ReplaySource(path=settings.data_dir, kind="config", reliable=False)
-        return source, _unreadable(exc), None
+    """Replay ``trace_path`` on a temporary copy of the chosen source; the source is only read.
+
+    Raises ``TraceFormatError`` (or ``OSError``) when the trace cannot be read."""
+    trace = read_trace(trace_path)  # an unreadable trace raises, nothing is copied
     source = choose_source(trace_path, trace, data_dir, settings)
     root = Path(tempfile.mkdtemp(prefix="growbridge-replay-"))
     try:
         copy = root / "data"
-        copy_data_dir(source.path, copy, immutable=source.kind == "pre_run_copy")
+        copy_data_dir(source.path, copy, immutable=is_pre_run_copy(source.path))
         report = await _replay_on(trace, settings, copy, keep_going)
     except BaseException:
         shutil.rmtree(root, ignore_errors=True)
