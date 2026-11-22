@@ -88,4 +88,6 @@ async def write_sample(root: Path, clock, *, ended: bool = True, thinking: str =
                 "at": 1_795_000_002.0,
             }
         )
+    else:
+        trace._close()  # a run cut off before its end line: the file is closed, nothing added
     return trace.path

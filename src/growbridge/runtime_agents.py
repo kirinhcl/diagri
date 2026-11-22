@@ -106,14 +106,21 @@ def make_dispatcher(
 
 
 def trace_settings(runtime: Any) -> TraceSettings | None:
-    """Where and how runs are traced; None while ``model_trace`` is off."""
+    """Where and how runs are traced; None while ``model_trace`` is off, or when the trace
+    directory cannot be made (runs then go untraced: a trace must never stop the agents)."""
     from growbridge.runtime import private_dir  # runtime imports this module
 
-    if not getattr(runtime.settings, "model_trace", False):
+    settings = runtime.settings
+    if not getattr(settings, "model_trace", False):
         return None
-    data_dir = runtime.settings.data_dir
-    root = private_dir(data_dir / TRACE_DIR)
-    return TraceSettings(root, data_dir, getattr(runtime, "pre_run_copies", False))
+    data_dir = Path(settings.data_dir).absolute()  # the header holds an absolute path
+    try:
+        root = private_dir(data_dir / TRACE_DIR)
+    except Exception:
+        log.exception("cannot make the model trace directory in %s; runs go untraced", data_dir)
+        return None
+    recorded = settings.model_dump(mode="json", exclude={"token"})  # the token is the secret
+    return TraceSettings(root, data_dir, getattr(runtime, "pre_run_copies", False), recorded)
 
 
 def _audit_trigger(stage: StageRuntime, now: float) -> tuple[str, str] | None:

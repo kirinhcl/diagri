@@ -77,8 +77,9 @@ def _unwrapped(toolset: Toolset) -> Toolset:
 @dataclass(frozen=True)
 class TraceSettings:
     root: Path  # where trace files go (a private directory)
-    data_dir: Path  # what a pre-run copy copies
+    data_dir: Path  # what a pre-run copy copies (absolute: relocation rewrites this prefix)
     pre_run_copies: bool = False  # only the dev workbench asks for copies; serve never does
+    settings: Mapping[str, Any] | None = None  # the runtime's settings, the token left out
 
 
 class ReplayedRun(Model):
@@ -272,6 +273,7 @@ class Dispatcher:
             "conversation_seq": seq,
             "clock_synced": getattr(self.clock, "synced", None),
             "data_dir": str(self.trace.data_dir) if self.trace else None,
+            "settings": self.trace.settings if self.trace else None,
             "pre_run_copy": copy,
             "growbridge_version": __version__,
             "git_commit": git_commit(),
@@ -303,8 +305,9 @@ class Dispatcher:
             log.exception("cannot finish the model trace %s", trace.path)
 
     async def replay_run(self, task_id: str, client: ModelClient, wrap: ToolsetWrap) -> ReplayedRun:
-        """Run a task again with ``client`` and a wrapped toolset, in any state: it is not
-        claimed and not ended, so nothing about the task or its claims changes."""
+        """Run a task again with ``client`` and a wrapped toolset, in any state. The task is
+        not claimed and not ended, but its tools really run and the run's turns are recorded,
+        so this writes state: call it only on a copy of the data."""
         task = self.tasks.get(task_id)
         reviews: list[bool] = []
         deliveries: list[str] = []

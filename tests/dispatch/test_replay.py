@@ -462,7 +462,8 @@ async def test_unused_recorded_lines_are_mismatches(env, replay_db, tmp_path):
     left = report.steps[-1]
     assert left.index == 2 and left.name == "save_plan_draft" and left.replayed is None
     assert left.note
-    assert any("model repl" in w for w in report.warnings)
+    assert report.unused_replies == 1  # a difference of its own, not a warning
+    assert not any("model repl" in w for w in report.warnings)
     assert report.replayed_end is not None and report.replayed_end.code == "run_finished"
     assert report.stopped is None and report.exit_code == 1
 

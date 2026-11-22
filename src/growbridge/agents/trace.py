@@ -175,6 +175,19 @@ class RunTrace:
             log.exception("cannot write the model trace %s; recording stops", self.path)
             self._close()
 
+    def _write_built(self, build: Callable[[], Mapping[str, Any]]) -> None:
+        """Write the line ``build`` makes; a line that cannot be built stops the recording just
+        as a failed write does, and never reaches the run."""
+        if self._file is None:
+            return
+        try:
+            line = build()
+        except Exception:
+            log.exception("cannot build a line of the model trace %s; recording stops", self.path)
+            self._close()
+            return
+        self._write(line)
+
     def _close(self) -> None:
         file, self._file = self._file, None
         if file is None:
@@ -215,34 +228,33 @@ class TracingClient:
         try:
             reply = await self._inner.create(**request)
         except Exception as exc:
-            trace._write(
-                {
-                    "kind": "model",
-                    "turn": turn,
-                    "at": at,
-                    "seconds": time.monotonic() - started,
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
-            )
+            seconds = time.monotonic() - started
+            trace._write_built(functools.partial(_error_line, turn, at, seconds, exc))
             raise
+        seconds = time.monotonic() - started
         trace._pending_ids = deque(c.id for c in reply.tool_calls)
-        trace._write(
-            {
-                "kind": "model",
-                "turn": turn,
-                "at": at,
-                "seconds": time.monotonic() - started,
-                "stop_reason": reply.stop_reason,
-                "text": reply.text,
-                "tool_calls": [
-                    {"id": c.id, "name": c.name, "input": c.input} for c in reply.tool_calls
-                ],
-                "content": content_dicts(reply.content),
-                "input_tokens": reply.input_tokens,
-                "output_tokens": reply.output_tokens,
-            }
-        )
+        trace._write_built(functools.partial(_reply_line, turn, at, seconds, reply))
         return reply
+
+
+def _error_line(turn: int, at: float, seconds: float, exc: Exception) -> dict[str, Any]:
+    error = f"{type(exc).__name__}: {exc}"
+    return {"kind": "model", "turn": turn, "at": at, "seconds": seconds, "error": error}
+
+
+def _reply_line(turn: int, at: float, seconds: float, reply: ModelReply) -> dict[str, Any]:
+    return {
+        "kind": "model",
+        "turn": turn,
+        "at": at,
+        "seconds": seconds,
+        "stop_reason": reply.stop_reason,
+        "text": reply.text,
+        "tool_calls": [{"id": c.id, "name": c.name, "input": c.input} for c in reply.tool_calls],
+        "content": content_dicts(reply.content),
+        "input_tokens": reply.input_tokens,
+        "output_tokens": reply.output_tokens,
+    }
 
 
 class TracingToolset:

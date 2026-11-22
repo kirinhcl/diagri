@@ -235,6 +235,7 @@ class ReplayReport(Model):
     replayed_end: RunEnd | None
     stopped: str | None
     exit_code: int
+    unused_replies: int = 0  # recorded model replies the replay never asked for (a difference)
 
 
 class ReplayToolset:
@@ -471,28 +472,24 @@ def _report(
     end: RunEnd | None,
     stopped: str | None,
 ) -> ReplayReport:
-    """Every step, both ends and the exit code. Recorded lines the replay never took are a
-    mismatch too, unless the replay stopped early (then they are expected)."""
+    """Every step, both ends and the exit code. Recorded lines the replay never took (tool
+    lines and model replies) are a mismatch too, unless the replay stopped early (then they
+    are expected)."""
     steps = list(toolset.steps) if toolset is not None else []
-    notes = list(warnings)
-    models_left = len(trace.models) - client.served if stopped is None else 0
+    models_left = max(len(trace.models) - client.served, 0) if stopped is None else 0
     if stopped is None:
         used = toolset.used if toolset is not None else 0
         steps += [_unused_step(used + n, line) for n, line in enumerate(trace.tools[used:])]
-    if models_left > 0:
-        notes.append(
-            f"{models_left} of the {len(trace.models)} recorded model replies were not used: "
-            "the replay ended earlier than the record"
-        )
     same = all(s.same for s in steps) and _same_end(trace.end or {}, end)
-    clean = same and stopped is None and models_left <= 0
+    clean = same and stopped is None and models_left == 0
     return ReplayReport(
-        warnings=tuple(notes),
+        warnings=warnings,
         steps=tuple(steps),
         recorded_end=trace.end,
         replayed_end=end,
         stopped=stopped,
         exit_code=EXIT_SAME if clean else EXIT_DIFFERENT,
+        unused_replies=models_left,
     )
 
 

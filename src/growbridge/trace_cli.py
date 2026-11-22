@@ -8,13 +8,15 @@ import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .agents.replay import ReplayReport, StepResult
 from .agents.trace import TraceFormatError, read_trace
 from .agents.trace_show import render_trace, strip_controls
 from .config import Settings
-from .replay_runtime import ReplaySource, replay_file
+
+if TYPE_CHECKING:
+    from .replay_runtime import ReplaySource
 
 
 def add_trace_parser(sub: Any) -> None:
@@ -91,6 +93,11 @@ def _print_report(source: ReplaySource, report: ReplayReport, copy: Path | None)
         print(strip_controls(warning))
     for step in report.steps:
         print(_step_line(step))
+    if report.unused_replies:
+        print(
+            f"  unused model replies: {report.unused_replies} "
+            "(the replay ended earlier than the record): DIFFERENT"
+        )
     first = next((step for step in report.steps if not step.same), None)
     if first is not None:
         print("\n".join(_mismatch_lines(first)))
@@ -102,28 +109,51 @@ def _print_report(source: ReplaySource, report: ReplayReport, copy: Path | None)
         print(strip_controls(f"Copy kept at {copy}"))
 
 
+class _ConfigUnavailable(Exception):
+    """The configuration file a replay needed could not be loaded."""
+
+
+def _first_line(exc: BaseException) -> str:
+    return (str(exc).splitlines() or [""])[0]
+
+
+def _config_loader(load_settings: Callable[[], Settings]) -> Callable[[], Settings]:
+    """``load_settings`` with its failure (a missing or invalid config) told apart."""
+
+    def load() -> Settings:
+        try:
+            return load_settings()
+        except Exception as exc:
+            reason = _first_line(exc) or type(exc).__name__
+            raise _ConfigUnavailable(f"cannot load the configuration: {reason}") from exc
+
+    return load
+
+
 def _replay(args: Any, load_settings: Callable[[], Settings]) -> int:
-    try:
-        settings = load_settings()
-    except Exception as exc:  # a missing or invalid config: one line, exit 2
-        reason = (str(exc).splitlines() or [type(exc).__name__])[0]
-        _error(f"cannot load the configuration: {reason}")
-        return 2
+    from .replay_runtime import replay_file  # pulls in the runtime: only for a replay
+
     try:
         outcome = asyncio.run(
             replay_file(
                 args.file,
-                settings,
+                _config_loader(load_settings),
                 data_dir=args.data_dir,
                 keep_going=args.keep_going,
                 keep_copy=args.keep_copy,
             )
         )
+    except _ConfigUnavailable as exc:
+        _error(str(exc))
+        return 2
     except TraceFormatError as exc:
         _error(f"{args.file}: {exc}")
         return 2
     except (OSError, UnicodeDecodeError) as exc:
         _error(f"cannot replay {args.file}: {exc}")
+        return 2
+    except Exception as exc:  # anything else cannot replay either: one line, never a traceback
+        _error(f"cannot replay {args.file}: {type(exc).__name__}: {_first_line(exc)}")
         return 2
     _print_report(*outcome)
     return outcome[1].exit_code

@@ -12,6 +12,7 @@ import pytest
 from agent_helpers import make_tool
 from dispatch_helpers import call
 
+from growbridge.agents.llm import ModelReply
 from growbridge.agents.tools import Toolset
 from growbridge.agents.trace import (
     RunTrace,
@@ -38,9 +39,20 @@ def lines_of(trace: RunTrace) -> list[dict]:
     return [json.loads(line) for line in trace.path.read_text().splitlines()]
 
 
+OPENED: list[RunTrace] = []  # closed after each test, whether or not it wrote an end line
+
+
+@pytest.fixture(autouse=True)
+def close_opened_traces():
+    yield
+    while OPENED:
+        OPENED.pop()._close()
+
+
 def open_trace(tmp_path, clock, **kw) -> RunTrace:
     trace = RunTrace.open(tmp_path, "task-1", clock, LOCAL, **kw)
     assert trace is not None
+    OPENED.append(trace)
     return trace
 
 
@@ -132,6 +144,22 @@ async def test_a_failing_write_never_raises_and_stops_writing(tmp_path, clock):
     trace.end({"code": "x"})
     real.close()
     assert trace.path.read_text() == ""
+
+
+async def test_a_reply_that_cannot_be_recorded_passes_through_and_stops_recording(tmp_path, clock):
+    class Unrecordable:
+        def model_dump(self, mode="python"):
+            raise ValueError("cannot turn this block into a dict")
+
+    odd = ModelReply(stop_reason="end_turn", text="odd", content=[Unrecordable()])
+    trace = open_trace(tmp_path, clock)
+    trace.begin({"task_id": "task-1"})
+    client = trace.client(ScriptedClient([odd, text_reply("next")]))
+
+    assert await client.create(**REQUEST) is odd
+    assert (await client.create(**REQUEST)).text == "next"
+    trace.end({"code": "x"})
+    assert [line["kind"] for line in lines_of(trace)] == ["run"]
 
 
 async def test_invalid_first_call_keeps_the_second_id(tmp_path, clock):

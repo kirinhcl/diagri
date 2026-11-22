@@ -1,6 +1,8 @@
 """A traced model run on the simulator, and the pre-run copy the dev workbench asks for."""
 
 import sqlite3
+from contextlib import closing
+from pathlib import Path
 
 from test_e2e_agents import call, design, sheet_json, task
 
@@ -28,7 +30,7 @@ def _trace_files(settings) -> list:
 def _stage_count(directory) -> int:
     total = 0
     for path in directory.glob("*.sqlite3"):
-        with sqlite3.connect(path) as conn:
+        with closing(sqlite3.connect(path)) as conn:  # sqlite3's own `with` never closes
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master")}
             if "wf_stages" in tables:
                 total += conn.execute("SELECT COUNT(*) FROM wf_stages").fetchone()[0]
@@ -82,3 +84,41 @@ async def test_copy_failure_keeps_the_run_and_records_null(world, settings, monk
     assert trace.run["pre_run_copy"] is None
     assert trace.end is not None and trace.end["code"] == "run_finished"
     assert runtime.tasks.get("task-ev-plan").state.value == "done"
+
+
+async def test_an_uncreatable_trace_root_leaves_the_run_untraced(world, settings):
+    settings.model_trace = True
+    runtime = await world.boot()
+    (settings.data_dir / "model_traces").write_text("a file where the trace root should be")
+
+    await _planner_run(world, runtime)  # the task still runs and nothing is raised
+
+    assert runtime.tasks.get("task-ev-plan").state.value == "done"
+    assert (settings.data_dir / "model_traces").is_file()
+
+
+async def test_header_records_the_settings_but_not_the_token(world, settings):
+    settings.model_trace = True
+    runtime = await world.boot()
+
+    await _planner_run(world, runtime)
+
+    (trace_path,) = _trace_files(settings)
+    recorded = read_trace(trace_path).run["settings"]
+    assert recorded == settings.model_dump(mode="json", exclude={"token"})
+    assert "token" not in recorded and settings.token not in trace_path.read_text()
+
+
+async def test_a_relative_data_dir_is_absolute_in_the_header(
+    world, settings, tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    settings.data_dir = Path("data")
+    settings.model_trace = True
+    runtime = await world.boot()
+
+    await _planner_run(world, runtime)
+
+    (trace_path,) = _trace_files(settings)
+    recorded = read_trace(trace_path).run["data_dir"]
+    assert Path(recorded).is_absolute() and recorded == str(Path.cwd() / "data")
