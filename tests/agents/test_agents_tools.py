@@ -6,7 +6,14 @@ import pytest
 from agent_helpers import EchoInput, make_tool
 from pydantic import BaseModel, Field
 
-from growbridge.agents.tools import CONTROL_TOOLS, ROLE_TOOLS, Tool, build_toolset
+from growbridge.agents.tools import (
+    CONTROL_TOOLS,
+    ROLE_TOOLS,
+    Tool,
+    ToolOutcome,
+    build_toolset,
+    is_gate_refusal,
+)
 from growbridge.ports import Denied
 
 
@@ -178,6 +185,55 @@ async def test_sync_handler_supported():
     tool = Tool(name="get_project_state", description="d", input_model=EchoInput, handler=handler)
     out = await build_toolset("orchestrator", [tool]).call("get_project_state", {"text": "x"})
     assert out.content == "plain" and not out.is_error
+
+
+def test_gate_lets_a_valid_visible_call_through():
+    toolset = build_toolset("orchestrator", [make_tool("get_project_state")])
+    assert toolset.gate("get_project_state", {"text": "ab", "count": 2}) is None
+
+
+async def test_gate_refuses_write_sandbox_and_unknown_tools_as_call_does():
+    registry = [
+        make_tool("create_research_task", writes=True),
+        make_tool("get_task_status", sandbox=True),
+    ]
+    toolset = build_toolset("orchestrator", registry)
+    for name in ("create_research_task", "get_task_status"):
+        refused = toolset.gate(name, {"text": "x"}, restricted=True)
+        assert refused is not None and refused.is_error and "not available" in refused.content
+        assert refused == await toolset.call(name, {"text": "x"}, restricted=True)
+        assert is_gate_refusal(name, refused)
+        assert toolset.gate(name, {"text": "x"}) is None
+    unknown = toolset.gate("run_pump", {"seconds": 5})
+    assert unknown is not None and is_gate_refusal("run_pump", unknown)
+
+
+async def test_gate_refuses_invalid_input_as_call_does_and_runs_no_handler():
+    ran: list[EchoInput] = []
+
+    def handler(args: EchoInput):
+        ran.append(args)
+        return "ran"
+
+    tool = Tool(name="get_project_state", description="d", input_model=EchoInput, handler=handler)
+    toolset = build_toolset("orchestrator", [tool])
+
+    refused = toolset.gate("get_project_state", {"text": 5, "bogus": 1})
+
+    assert refused is not None and "invalid input for get_project_state" in refused.content
+    assert refused == await toolset.call("get_project_state", {"text": 5, "bogus": 1})
+    assert is_gate_refusal("get_project_state", refused)
+    assert ran == []
+
+
+def test_a_handler_error_or_a_result_is_no_gate_refusal():
+    name = "get_project_state"
+    denied = ToolOutcome(name=name, content="Error: denied (scope): nope", is_error=True)
+    crashed = ToolOutcome(name=name, content=f"Error: {name} failed (RuntimeError)", is_error=True)
+    plain = ToolOutcome(name=name, content=f"Error: tool {name!r} is not available")
+    assert not any(is_gate_refusal(name, o) for o in (denied, crashed, plain))
+    other = build_toolset("orchestrator", []).gate("get_run_status", {})
+    assert other is not None and not is_gate_refusal(name, other)  # another tool's refusal
 
 
 def test_reads_web_flag_is_exposed():

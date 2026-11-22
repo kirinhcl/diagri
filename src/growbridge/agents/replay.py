@@ -22,7 +22,7 @@ from growbridge.agents.dispatch import Dispatcher
 from growbridge.agents.llm import ModelClient, ModelReply, ToolCall
 from growbridge.agents.roles import ROLES
 from growbridge.agents.run_end import RunEnd, RunInterrupted
-from growbridge.agents.tools import ToolOutcome, Toolset
+from growbridge.agents.tools import ToolOutcome, Toolset, is_gate_refusal
 from growbridge.agents.trace import Trace, sha256_json
 from growbridge.agents.trace_show import INCOMPLETE
 from growbridge.archive.models import Model, ResearchTask
@@ -37,6 +37,10 @@ TIME_SLACK_SECONDS = 1.0  # allowed on top of the recorded tool's own duration
 EXIT_SAME, EXIT_DIFFERENT, EXIT_CANNOT = 0, 1, 2
 NO_LINE_LEFT = "no recorded tool call is left for this call"
 NOT_CALLED = "recorded, but the replay did not make this call"
+GATE_OPENED = (
+    "the record was refused before the handler, but the tool's gate now lets this call "
+    "through; the external handler was not run in the replay"
+)
 
 
 class ReplayClock:
@@ -270,6 +274,9 @@ class ReplayToolset:
     def external(self, name: str) -> bool:
         return self._inner.external(name)
 
+    def gate(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome | None:
+        return self._inner.gate(name, raw_input, restricted)
+
     @property
     def steps(self) -> tuple[StepResult, ...]:
         return tuple(self._steps)
@@ -288,12 +295,15 @@ class ReplayToolset:
         if line is None or line.get("name") != name:
             return await self._unmatched(index, line, name, given, restricted)
         external = bool(line.get("external")) or self._inner.external(name)
-        if external:  # the handler never runs: the recorded result is the result
-            outcome = ToolOutcome(name=name, content=line["content"], is_error=line["is_error"])
+        if external:
+            outcome, ran, note = self._external(line, name, given, restricted)
         else:
-            outcome = await self._inner.call(name, given, restricted)
+            outcome = ran = await self._inner.call(name, given, restricted)
+            note = ""
         self._ids.learn(str(line["content"]), outcome.content)
-        same = same_result(line, outcome, copy_dir=self._copy_dir, data_dir=self._data_dir)
+        same = not note and same_result(
+            line, outcome, copy_dir=self._copy_dir, data_dir=self._data_dir
+        )
         self._steps.append(
             StepResult(
                 index=index,
@@ -302,13 +312,30 @@ class ReplayToolset:
                 external=external,
                 same=same,
                 recorded=line["content"],
-                replayed=outcome.content,
-                denied_code=_denied_code(outcome.content),
+                replayed=ran.content if ran is not None else None,
+                denied_code=_denied_code(ran.content) if ran is not None else None,
+                note=note,
             )
         )
         if not same and not self._keep_going:
             raise ReplayStop(f"step {index + 1} ({name}) differs from the record")
         return outcome
+
+    def _external(
+        self, line: Mapping[str, Any], name: str, given: Any, restricted: bool
+    ) -> tuple[ToolOutcome, ToolOutcome | None, str]:
+        """An external step: the gate runs as the code is now, the handler never does. Returns
+        what the run gets, what the replay produced (None when nothing could be), and a note.
+
+        A refusal of the gate now is the replayed result. Otherwise the recorded result stands,
+        unless the record was itself a gate refusal: then the gate opened, which is a mismatch."""
+        refused = self._inner.gate(name, given, restricted)
+        if refused is not None:
+            return refused, refused, ""
+        recorded = ToolOutcome(name=name, content=line["content"], is_error=line["is_error"])
+        if is_gate_refusal(name, recorded):
+            return recorded, None, GATE_OPENED
+        return recorded, recorded, ""
 
     async def _unmatched(
         self, index: int, line: dict | None, name: str, given: Any, restricted: bool

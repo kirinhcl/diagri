@@ -4,6 +4,8 @@ A run is recorded with a traced dispatcher on one ``Env``, then replayed on a se
 the same way (other project and round ids) whose clock is the replay clock.
 """
 
+from dataclasses import replace
+
 import pytest
 from dispatch_env import Env
 from dispatch_helpers import call
@@ -12,9 +14,16 @@ from growbridge.agents import handlers_common, handlers_planner
 from growbridge.agents.conversation import ConversationLog
 from growbridge.agents.dispatch import Dispatcher, TraceSettings
 from growbridge.agents.llm import ModelReply
-from growbridge.agents.replay import IdMap, ReplayClock, mask_ids, replay_trace, same_result
-from growbridge.agents.tools import ToolOutcome
-from growbridge.agents.trace import Trace, read_trace
+from growbridge.agents.replay import (
+    IdMap,
+    ReplayClock,
+    ReplayToolset,
+    mask_ids,
+    replay_trace,
+    same_result,
+)
+from growbridge.agents.tools import ToolOutcome, Toolset
+from growbridge.agents.trace import Trace, TracingToolset, read_trace
 from growbridge.archive.db import Database
 from growbridge.ports import Denied
 from growbridge.sim.clock import FakeClock
@@ -52,12 +61,14 @@ class ExplodingSearch:
         raise AssertionError("an external tool ran during a replay")
 
 
-def dispatcher(env, client, *, budget=None, roles=None, deps=None, trace=None) -> Dispatcher:
+def dispatcher(
+    env, client, *, budget=None, roles=None, deps=None, tools=None, trace=None
+) -> Dispatcher:
     """A dispatcher as the runtime builds one: context names the round, conversation is kept."""
     return Dispatcher(
         client,
         env.roles if roles is None else roles,
-        env.tools(deps),
+        env.tools(deps) if tools is None else tools,
         env.tasks,
         budget or env.budget,
         env.clock,
@@ -68,17 +79,26 @@ def dispatcher(env, client, *, budget=None, roles=None, deps=None, trace=None) -
     )
 
 
-def make_for(env, deps=None):
+def make_for(env, deps=None, tools=None):
     return lambda client, budget, roles: dispatcher(
-        env, client, budget=budget, roles=roles, deps=deps
+        env, client, budget=budget, roles=roles, deps=deps, tools=tools
     )
 
 
-async def record(env, client, tmp_path, *, roles=None, deps=None) -> Trace:
+async def record(env, client, tmp_path, *, roles=None, deps=None, tools=None) -> Trace:
     settings = TraceSettings(root=tmp_path / "traces", data_dir=tmp_path / "data")
-    await dispatcher(env, client, roles=roles, deps=deps, trace=settings).run_task(TASK_ID)
+    traced = dispatcher(env, client, roles=roles, deps=deps, tools=tools, trace=settings)
+    await traced.run_task(TASK_ID)
     (path,) = sorted((tmp_path / "traces").rglob("*.jsonl"))
     return read_trace(path)
+
+
+def with_tool(tools: dict, name: str, **changes) -> dict:
+    """The role tools with tool ``name`` changed (as a code change would change it)."""
+    return {
+        role: [replace(tool, **changes) if tool.name == name else tool for tool in listed]
+        for role, listed in tools.items()
+    }
 
 
 def drafting(env) -> ScriptedClient:
@@ -211,6 +231,92 @@ async def test_external_handlers_are_never_called(env, replay_db, tmp_path):
     assert step.name == "search_and_verify_sources" and step.external and step.same
     assert step.replayed == trace.tools[0]["content"]
     assert report.exit_code == 0
+
+
+class StricterSearchInput(handlers_planner.SearchInput):
+    source: str  # a new required field: the call recorded without it is now refused
+
+
+def searching_then_saving(env) -> ScriptedClient:
+    sheet = env.sheet_json()
+    return ScriptedClient(
+        [
+            tool_reply(call("search_and_verify_sources", query="lettuce light")),
+            tool_reply(call("save_plan_draft", "c2", round_id=env.round_id, run_sheet=sheet)),
+            text_reply("done"),
+        ]
+    )
+
+
+async def test_a_gate_that_now_opens_is_a_mismatch_and_runs_no_external_handler(
+    env, replay_db, tmp_path
+):
+    """A web read hides the write tools for the rest of the run. No role holds both a web tool
+    and an external write tool (submit_compute_job), so save_plan_draft is marked external here
+    to stand in for one."""
+    env.task("planner")
+    recorded_tools = with_tool(
+        env.tools(env.make_deps(search=FakeSearch())), "save_plan_draft", external=True
+    )
+    trace = await record(env, searching_then_saving(env), tmp_path, tools=recorded_tools)
+    assert trace.tools[1]["is_error"] and "is not available" in trace.tools[1]["content"]
+    fresh, clock = fresh_env(replay_db, tmp_path, trace)
+    fresh.task("planner")
+    saved: list = []
+    replay_tools = with_tool(
+        fresh.tools(fresh.make_deps(search=ExplodingSearch())),
+        "save_plan_draft",
+        external=True,
+        handler=lambda data: saved.append(data) or {"saved": True},
+    )
+
+    unchanged = await replay_trace(trace, make_for(fresh, tools=replay_tools), clock)
+    regressed = await replay_trace(
+        trace,
+        make_for(
+            fresh, tools=with_tool(replay_tools, "search_and_verify_sources", reads_web=False)
+        ),
+        clock,
+    )
+
+    assert [s.same for s in unchanged.steps] == [True, True] and unchanged.exit_code == 0
+    assert [s.same for s in regressed.steps] == [True, False]
+    step = regressed.steps[-1]
+    assert step.name == "save_plan_draft" and step.external and step.replayed is None
+    assert "gate" in step.note and "not run" in step.note
+    assert regressed.stopped is not None and regressed.exit_code == 1
+    assert saved == []  # the external handler never ran in either replay
+
+
+async def test_a_stricter_gate_is_a_mismatch_and_runs_no_external_handler(env, replay_db, tmp_path):
+    env.task("planner")
+    client = ScriptedClient(
+        [tool_reply(call("search_and_verify_sources", query="lettuce light")), text_reply("x")]
+    )
+    trace = await record(env, client, tmp_path, deps=env.make_deps(search=FakeSearch()))
+    fresh, clock = fresh_env(replay_db, tmp_path, trace)
+    fresh.task("planner")
+    exploding = ExplodingSearch()
+    stricter = with_tool(
+        fresh.tools(fresh.make_deps(search=exploding)),
+        "search_and_verify_sources",
+        input_model=StricterSearchInput,
+    )
+
+    report = await replay_trace(trace, make_for(fresh, tools=stricter), clock)
+
+    (step,) = report.steps
+    assert step.external and not step.same
+    assert step.replayed is not None and "invalid input" in step.replayed
+    assert exploding.queries == [] and report.exit_code == 1
+    assert any("tool definitions" in w for w in report.warnings)
+
+
+def test_toolset_wrappers_offer_the_whole_toolset_api():
+    public = {name for name in dir(Toolset) if not name.startswith("_")}
+    assert {"call", "gate", "schemas", "external", "reads_web", "names"} <= public
+    for wrapper in (TracingToolset, ReplayToolset):
+        assert public <= set(dir(wrapper)), wrapper
 
 
 async def test_more_model_calls_than_recorded_is_a_mismatch(env, replay_db, tmp_path):

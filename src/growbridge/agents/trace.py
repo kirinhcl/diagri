@@ -263,6 +263,9 @@ class TracingToolset:
     def external(self, name: str) -> bool:
         return self._inner.external(name)
 
+    def gate(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome | None:
+        return self._inner.gate(name, raw_input, restricted)
+
     async def call(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome:
         trace = self._trace
         tool_use_id = trace._pending_ids.popleft() if trace._pending_ids else None
