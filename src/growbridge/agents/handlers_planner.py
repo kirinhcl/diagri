@@ -155,6 +155,7 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
             CropInput,
             crop_conditions,
             reads_web=True,
+            external=True,
         ),
         Tool(
             "search_and_verify_sources",
@@ -162,6 +163,7 @@ def build_planner_tools(deps: Deps) -> list[Tool]:
             SearchInput,
             search_sources,
             reads_web=True,
+            external=True,
         ),
         Tool("check_experimental_design", "Check a saved protocol's design.", DesignInput, design),
         Tool(

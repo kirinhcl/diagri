@@ -104,6 +104,7 @@ class Tool:
     input_model: type[BaseModel]
     handler: Callable[[Any], Any]  # receives the validated input model; sync or async
     reads_web: bool = False
+    external: bool = False  # reaches outside the machine; replay must never call it
     writes: bool = False
     sandbox: bool = False
 
@@ -190,6 +191,10 @@ class Toolset:
     def reads_web(self, name: str) -> bool:
         tool = self._tools.get(name)
         return bool(tool and tool.reads_web)
+
+    def external(self, name: str) -> bool:
+        tool = self._tools.get(name)
+        return bool(tool and tool.external)
 
     async def call(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome:
         """Validate and run one tool; every failure is returned as an error result."""
