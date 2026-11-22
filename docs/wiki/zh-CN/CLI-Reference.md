@@ -63,6 +63,14 @@ growbridge [-h] [--version] [--config CONFIG]
 | `trace show` | 逐步列出一个模型轨迹文件：先是运行头部，再是每一轮的思考、文字、工具调用和结果，最后是结束信息或 `Record incomplete: the run has no end line.` 这一行。超过 400 个字符的内容会被截断，除非加 `--full`；轨迹里的控制字符和转义序列会被去掉。 | 标准输出上的列表；文件读不了或被截断时退出码为 2，并在标准错误输出上给出原因（出错行之前的内容仍会列出） |
 | `trace replay` | 用记录下来的模型回复，在数据的临时副本上（权限 0700，结束后删除，除非加 `--keep-copy`）把一个模型轨迹按当前代码重新运行一遍。数据来源依次为 `--data-dir` 选项、轨迹旁该次运行的运行前副本、`data_dir`；输出第一行写明来源，来源不是运行前副本时再加一行 `Replay from <kind>: results are for reference only (no pre-run copy).` 来源数据库的内容绝不会被修改，但 SQLite 读取一个正在使用的数据库时，可能在它旁边创建 `-wal`/`-shm` 辅助文件；运行前副本以只读且不可变方式打开，保持逐字节不变。重放不会启动设备链路，也没有通知渠道、心跳或计算服务。它为每次工具调用输出一行（`ok` 或 `DIFFERENT`），对第一个不一致处给出工具名、输入以及记录结果与重放结果的差异，最后给出两个结束代码。输出的值会去掉控制字符。 | 每一步和结束都一致时退出码为 0，有不一致时为 1，无法重放（文件读不了、被截断、没有结束行或配置文件无效）时为 2 |
 
+### `trace show` 和 `trace replay`
+
+模型轨迹在配置了 `model_trace`（见[配置参考](Configuration-Reference.md)），或开发工作台带 `--trace` 运行时（见[环境搭建、测试与 CI](Development-Setup-Testing-and-CI.md)）才会写。两条命令怎么用，见手册：[模型运行出了问题：看它的轨迹](Troubleshooting-Runbook.md#模型运行出了问题看它的轨迹)。
+
+- `trace show` 还会把 Unicode 格式字符（零宽字符、方向标记）显示成 `<U+XXXX>`，它们就藏不进文字里。不需要配置文件。
+- `trace replay` 把记录下来的模型回复原样交还，所以不调用模型，也不花钱。会访问本机以外的工具（`lookup_crop_conditions`、`search_and_verify_sources`、`submit_compute_job`、`get_compute_job`、`fetch_compute_artifacts`）直接返回当时记录的结果，它们的处理函数不会运行；但工具闸门（受限模式下看得到哪些工具、输入校验）仍然检查。其余工具在副本上真的运行，结果比较前会先屏蔽生成的 id、副本的路径和很小的时钟差。
+- 恢复出来的备份不是受支持的来源：它没有 `archive/` 和 `agent_work/` 下的文件。请用运行前副本，或运行之前自己复制的数据目录。
+
 ### DiAGRI 模式下的 `serve`
 
 步骤见 `_serve_auto_research` 和 `_serve_listeners`。

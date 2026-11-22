@@ -175,6 +175,30 @@ POST /wb/compute/attempts/ATTEMPT_ID/settle
 
 Settling marks the attempt `failed` and removes its remote directory. A larger limit needs a new template version with a higher `max_storage_gb`.
 
+## A model run went wrong: use its trace
+
+**You see.** A model task (planner, researcher, auditor) ended `failed`, gave a wrong answer or called a tool in a way you did not expect, and the log does not say why.
+
+**The system has.** Nothing, unless `model_trace` was on. With `model_trace = true` in the configuration, each model role run writes one JSONL file, `<data_dir>/model_traces/<YYYY-MM-DD>/<task_id>-<HHMMSS>-<4 hex>.jsonl` (directories mode 0700, files mode 0600). A failure to write a trace never changes the run. The trace is not an archive record: see [Data, archive and traceability](Data-Archive-and-Traceability.md).
+
+**You do.**
+
+1. Turn on `model_trace` and restart `serve`. It records runs from then on, not the one that already happened. Traces hold prompts, user messages, web content, thinking and full tool results in clear text. DiAGRI never deletes them.
+2. Run the task again, then find the file: the date folder, then the task id from the task list in the workbench.
+3. List it with `growbridge trace show FILE` (add `--full` for long values). It needs no configuration and prints the run step by step. If the file is cut off, it prints what it could read and exits 2.
+4. Run it again against the current code with `growbridge trace replay FILE`. The model replies come from the file, so there is no model call and no cost. The command works on a temporary copy of the data and never starts the device link. It prints one line per tool call, `ok` or `DIFFERENT`, and stops at the first difference, with the tool name, input and a diff. Exit 0 means every step was the same, 1 a difference, 2 that the run could not be replayed. `--keep-going` goes on after a difference; `--keep-copy` keeps the copy to look at.
+5. Turn `model_trace` off when you are done, and delete the traces you no longer need.
+
+**Which data the replay starts from.** In order: `--data-dir DIR`, the pre-run copy next to the trace (`<trace name>.pre/`), then the configured data directory. Only a pre-run copy gives a reliable replay. With any other source the first output line says `results are for reference only`: the data have changed since the run, so a step that reads state can differ without the code having changed.
+
+**Why a trace from `serve` replays only for reference.** `serve` does not make pre-run copies, so its trace usually has none. Replaying it against the current data directory often differs from the first step that reads state, for example a task that has ended since. The dev workbench with `--trace` makes a pre-run copy before each run ([Setup, testing and CI](Development-Setup-Testing-and-CI.md)). To get a reliable replay of a run on a real host, copy the data directory before you run the task again and pass it as `--data-dir`.
+
+**Known limitations.**
+
+- Tools that reach outside the machine return their recorded result and their handlers do not run (`lookup_crop_conditions`, `search_and_verify_sources`, `submit_compute_job`, `get_compute_job`, `fetch_compute_artifacts`). What `submit_compute_job` and `fetch_compute_artifacts` write does not happen in a replay, so a later local step that reads their output can show a difference that is not a change in the code.
+- A restored backup is not a supported source: it has no files under `archive/` and `agent_work/`.
+- The replay does not change the database contents of its source, but SQLite may create `-wal` and `-shm` side files next to a live database it reads. A pre-run copy stays byte-identical.
+
 ## Other alerts
 
 | Alert kind | Meaning | What to do |

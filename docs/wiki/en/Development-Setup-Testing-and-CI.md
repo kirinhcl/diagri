@@ -127,7 +127,7 @@ The data lives in a fresh temporary directory unless you pass `--data-dir`. Stop
 
 `--claude-code` runs the roles on the local Claude Code CLI instead (`claude -p`, see [`scripts/claude_code_client.py`](../../../scripts/claude_code_client.py)): no API key, the account Claude Code is signed in with. Each model turn is one headless call with Claude Code's own tools switched off; diagri's loop still validates and runs every tool. Without `--roles`, all three roles run the default model.
 
-`--transcript FILE.jsonl` appends one line per model call. It holds prompts and tool results in clear text, so keep it for development.
+`--trace` records every model role run as a JSONL trace under `<data-dir>/model_traces` and, before each run, copies the data directory next to its trace as `<trace name>.pre/`. It needs `--data-dir`; without it the script exits with code 2. It turns on `model_trace` for you. `growbridge trace replay` then runs the recorded run again on that copy ([CLI reference](CLI-Reference.md)). Traces hold prompts and tool results in clear text and the copies hold the whole data directory, so keep `--trace` for development. `serve` never makes pre-run copies; see [A model run went wrong: use its trace](Troubleshooting-Runbook.md#a-model-run-went-wrong-use-its-trace).
 
 `--fast-forward` skips through a running stage: each step moves the clock on by one sampling interval of the run sheet, reads the simulated device and ticks, so a week-long stage ends in a minute or two with complete data. Outside a running stage time is real. The skipped time is kept in `dev_clock_offset` in the data directory, so a restart never sends the clock back. Sessions age with that clock: sign in again after a stage.
 

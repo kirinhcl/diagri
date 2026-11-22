@@ -127,7 +127,7 @@ GROWBRIDGE_DEV_SECRET='YOUR_DEV_SECRET' .venv/bin/python scripts/dev_workbench.p
 
 `--claude-code` 改用本机的 Claude Code 命令行（`claude -p`，见 [`scripts/claude_code_client.py`](../../../scripts/claude_code_client.py)）运行这些角色：不需要 API 密钥，用的是 Claude Code 已登录的账号。每一轮模型回复是一次无界面调用，Claude Code 自带的工具全部关闭；所有工具仍由 diagri 自己的循环校验和执行。不给 `--roles` 时，三个角色都用默认模型。
 
-`--transcript FILE.jsonl` 每次模型调用追加一行记录。里面是明文的提示词和工具结果，只在开发时使用。
+`--trace` 把每次模型角色运行记成一个 JSONL 轨迹，放在 `<data-dir>/model_traces` 下；每次运行之前还会把数据目录复制一份，放在轨迹旁边，名为 `<轨迹名>.pre/`。它必须和 `--data-dir` 一起用，否则脚本以退出码 2 结束。它会替你打开 `model_trace`。之后 `growbridge trace replay` 就能在这份副本上把记录下来的运行再跑一遍（见 [CLI 参考](CLI-Reference.md)）。轨迹里是明文的提示词和工具结果，副本是整个数据目录，所以 `--trace` 只在开发时使用。`serve` 从不做运行前副本，见[模型运行出了问题：看它的轨迹](Troubleshooting-Runbook.md#模型运行出了问题看它的轨迹)。
 
 `--fast-forward` 让运行中的阶段快进：每一步把时钟拨快运行单的一个采样间隔，读一次模拟设备再执行一次 tick，所以一周长的阶段一两分钟就跑完，数据也是完整的。阶段不在运行时按真实时间走。拨快的时间记在数据目录的 `dev_clock_offset` 里，重启后时钟不会倒退。登录会话也按这个时钟计时，阶段跑完后要重新登录。
 
