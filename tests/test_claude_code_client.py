@@ -60,10 +60,23 @@ def test_an_answer_with_calls_is_a_tool_use_turn_and_one_without_is_the_end(cc):
     reply = cc.to_reply(answer, usage)
     final = cc.to_reply({"text": "done", "tool_calls": []}, {})
 
-    assert reply.stop_reason == "tool_use" and reply.input_tokens == 102
+    assert reply.stop_reason == "tool_use"
     (call,) = reply.tool_calls
     assert reply.content[1] == {"type": "tool_use", "id": call.id, "name": call.name, "input": {}}
     assert final.stop_reason == "end_turn" and final.tool_calls == ()
+
+
+def test_cache_tokens_are_reported_apart_from_the_uncached_input(cc):
+    usage = {
+        "input_tokens": 2,
+        "cache_creation_input_tokens": 40,
+        "cache_read_input_tokens": 100,
+        "output_tokens": 7,
+    }
+
+    reply = cc.to_reply({"text": "done", "tool_calls": []}, usage)
+
+    assert (reply.input_tokens, reply.cache_write_tokens, reply.cache_read_tokens) == (2, 40, 100)
 
 
 def test_a_failed_cli_run_is_an_error(cc):

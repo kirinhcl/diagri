@@ -259,6 +259,21 @@ async def test_a_role_on_another_model_is_charged_at_its_own_price(env):
     assert client.requests[0]["model"] == "some-other-model"
 
 
+async def test_a_role_with_its_own_price_pays_for_the_cache_from_its_input_price(env):
+    env.roles["planner"] = RoleModel(
+        model="some-other-model", input_per_mtok=1.0, output_per_mtok=5.0
+    )
+    env.task("planner")
+    reply = text_reply("ok", input_tokens=0, output_tokens=0)
+    cached = reply.model_copy(update={"cache_write_tokens": MILLION, "cache_read_tokens": MILLION})
+    client = ScriptedClient([cached])
+
+    run = await env.dispatcher(client).run_task("task-ev-1")
+
+    # A million tokens written at 1.25 x $1.00 and a million read at 0.1 x $1.00.
+    assert run is not None and run.cost == pytest.approx(1.35)
+
+
 async def test_a_role_on_the_default_model_is_charged_at_the_default_price(env):
     env.task("planner")
     client = ScriptedClient([text_reply("ok", input_tokens=MILLION, output_tokens=MILLION)])
