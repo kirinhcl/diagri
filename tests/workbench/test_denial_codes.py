@@ -21,6 +21,9 @@ from growbridge.workbench.common import rejected
 SRC = Path(growbridge.__file__).resolve().parent
 assert SRC.is_relative_to(Path(__file__).resolve().parents[2] / "src"), "run with PYTHONPATH=src"
 REFUSAL_CALLS = {"Denied", "rejected"}
+# Files where a replay raises a refusal read back from a model trace: code, reason and params are
+# the recorded data, not literals. Only their sites with a non-literal code are exempt.
+REPLAYED_REFUSALS = {"agents/replay.py"}
 
 
 class Site(NamedTuple):
@@ -166,6 +169,8 @@ def test_the_denial_family_is_the_registry_dict() -> None:
 
 def test_every_refusal_names_a_registered_reason_of_its_code() -> None:
     for site in refusal_sites(SRC):
+        if site.path in REPLAYED_REFUSALS and site.code is None:
+            continue  # raises a recorded refusal again: its reason was checked when first raised
         assert site.reason in DENIAL_CODES, site
         assert DENIAL_CODES[site.reason].of == site.code, site
 
