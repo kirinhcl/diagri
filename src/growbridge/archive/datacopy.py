@@ -18,16 +18,16 @@ SKIPPED_SUFFIXES = ("-wal", "-shm", "-journal")
 DIR_MODE = 0o700
 
 
-def copy_data_dir(source: Path, target: Path) -> None:
+def copy_data_dir(source: Path, target: Path, *, immutable: bool = False) -> None:
     """Copy ``source`` to the not yet existing ``target`` without writing to ``source``."""
     if target.exists():
         raise FileExistsError(f"copy target already exists: {target}")
     target.mkdir(mode=DIR_MODE, parents=True)
     target.chmod(DIR_MODE)
-    _copy_tree(source, target, is_root=True)
+    _copy_tree(source, target, is_root=True, immutable=immutable)
 
 
-def _copy_tree(source: Path, target: Path, *, is_root: bool) -> None:
+def _copy_tree(source: Path, target: Path, *, is_root: bool, immutable: bool) -> None:
     for entry in sorted(source.iterdir()):
         if is_root and entry.name == TRACE_DIR:
             continue
@@ -35,11 +35,11 @@ def _copy_tree(source: Path, target: Path, *, is_root: bool) -> None:
         if entry.is_dir():
             destination.mkdir(mode=DIR_MODE)
             destination.chmod(DIR_MODE)
-            _copy_tree(entry, destination, is_root=False)
+            _copy_tree(entry, destination, is_root=False, immutable=immutable)
         elif entry.name.endswith(SKIPPED_SUFFIXES):
             continue
         elif entry.name.endswith(DATABASE_SUFFIX):
-            copy_database(str(entry), destination)
+            copy_database(str(entry), destination, immutable=immutable)
         else:
             shutil.copy2(entry, destination)
 

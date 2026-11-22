@@ -21,9 +21,14 @@ PAGES_PER_STEP = 256
 MANIFEST_SUFFIX = ".manifest.json"
 
 
-def copy_database(source_path: str, partial: Path) -> None:
-    """Copy the database file at ``source_path`` to ``partial`` without locking writers out."""
-    uri = Path(source_path).resolve().as_uri() + "?mode=ro"
+def copy_database(source_path: str, partial: Path, *, immutable: bool = False) -> None:
+    """Copy the database file at ``source_path`` to ``partial`` without locking writers out.
+
+    ``immutable`` promises that nothing writes the file, so SQLite creates no ``-wal``/``-shm``
+    side files beside it (a pre-run copy must stay byte for byte as it was)."""
+    uri = Path(source_path).resolve().as_uri() + (
+        "?mode=ro&immutable=1" if immutable else "?mode=ro"
+    )
     source = sqlite3.connect(uri, uri=True, isolation_level=None)
     copy = sqlite3.connect(partial)
     try:
