@@ -89,6 +89,13 @@ class ConversationLog:
         )
         return tuple(_entry(row) for row in rows)
 
+    def last_seq(self, project_id: str) -> int | None:
+        """The newest entry's ``seq`` of the project, or None when it has none."""
+        rows = self.db.query(
+            "SELECT MAX(seq) AS last FROM conversation WHERE project_id = ?", (project_id,)
+        )
+        return rows[0]["last"] if rows else None
+
     def recent(self, project_id: str, kinds: tuple[str, ...], limit: int) -> tuple[Entry, ...]:
         """The newest ``limit`` entries of the given kinds, oldest first."""
         marks = ", ".join("?" for _ in kinds)

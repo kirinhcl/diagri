@@ -16,9 +16,12 @@ import inspect
 import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from growbridge import __version__
 from growbridge.agents.context import task_language
 from growbridge.agents.conversation import ConversationLog, clip_json
 from growbridge.agents.handlers_common import bind_task
@@ -35,6 +38,8 @@ from growbridge.agents.run_end import (
     end_of_run,
 )
 from growbridge.agents.tools import ROLE_TOOLS, Tool, ToolOutcome, Toolset, build_toolset
+from growbridge.agents.trace import PRE_RUN_SUFFIX, RunTrace, git_commit, sha256_json
+from growbridge.archive.datacopy import copy_data_dir
 from growbridge.archive.db import Database
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Model, ResearchTask
@@ -67,6 +72,13 @@ ToolsetWrap = Callable[[Toolset], Toolset]
 
 def _unwrapped(toolset: Toolset) -> Toolset:
     return toolset
+
+
+@dataclass(frozen=True)
+class TraceSettings:
+    root: Path  # where trace files go (a private directory)
+    data_dir: Path  # what a pre-run copy copies
+    pre_run_copies: bool = False  # only the dev workbench asks for copies; serve never does
 
 
 class ReplayedRun(Model):
@@ -172,6 +184,7 @@ class Dispatcher:
         db: Database,
         context: ContextOf | None = None,
         conversation: ConversationLog | None = None,
+        trace: TraceSettings | None = None,
     ):
         self.client = client
         self.roles = roles
@@ -182,6 +195,7 @@ class Dispatcher:
         self.db = db
         self.context = context
         self.conversation = conversation
+        self.trace = trace
         db.migrate(NAMESPACE, STEPS)
 
     async def run_task(self, task_id: str) -> AgentRun | None:
@@ -190,20 +204,103 @@ class Dispatcher:
             return None
         reviews: list[bool] = []
         deliveries: list[str] = []
+        run: AgentRun | None = None
+        trace: RunTrace | None = None
+        started = self.clock.monotonic()
         try:
             user = self.message_for(task)
-            run = await self._run(
-                task, user, reviews, deliveries, client=self.client, wrap=_unwrapped
-            )
+            trace = self._open_trace(task, user)
+            client, wrap = (self.client, _unwrapped)
+            if trace is not None:
+                client, wrap = trace.client(self.client), trace.toolset
+            run = await self._run(task, user, reviews, deliveries, client=client, wrap=wrap)
         except Denied as exc:
-            self._finish(task, end_of_denied(exc))
-            return None
+            end = end_of_denied(exc)
         except Exception as exc:  # the model or its client failed; nothing else is affected
             log.exception("model run for task %s failed", task.id)
-            self._finish(task, end_of_error(exc))
-            return None
-        self._finish(task, end_of_run(run, task.owner_role, reviews, deliveries))
+            end = end_of_error(exc)
+        else:
+            end = end_of_run(run, task.owner_role, reviews, deliveries)
+        self._end_trace(trace, end, run, started)
+        self._finish(task, end)
         return run
+
+    def _open_trace(self, task: ResearchTask, user: str) -> RunTrace | None:
+        """Open the trace file and write its header; None when tracing is off or fails."""
+        if self.trace is None:
+            return None
+        try:
+            now = self.clock.now()
+            trace = RunTrace.open(self.trace.root, task.id, self.clock, datetime.fromtimestamp(now))
+            if trace is None:
+                return None
+            copy = self._pre_run_copy(trace)
+            trace.begin(self._header(task, user, now, copy))
+            return trace
+        except Exception:
+            log.exception("cannot start the model trace of task %s", task.id)
+            return None
+
+    def _pre_run_copy(self, trace: RunTrace) -> str | None:
+        """Copy the data directory next to the trace when asked; the copy's name, else None."""
+        if self.trace is None or not self.trace.pre_run_copies:
+            return None
+        target = trace.path.with_suffix(PRE_RUN_SUFFIX)
+        try:
+            copy_data_dir(self.trace.data_dir, target)
+        except Exception:
+            log.exception("cannot copy the data directory to %s", target)
+            return None
+        return target.name
+
+    def _header(self, task: ResearchTask, user: str, now: float, copy: str | None) -> dict:
+        role = task.owner_role
+        config = self.roles.get(role)
+        schemas = self.schemas_for(role)
+        system = ROLES[role].system
+        seq = self.conversation.last_seq(task.project_id) if self.conversation else None
+        return {
+            "task_id": task.id,
+            "project_id": task.project_id,
+            "role": role,
+            "role_config": config.model_dump(mode="json") if config is not None else None,
+            "system": system,
+            "system_sha256": sha256_json(system),
+            "tools": [s["name"] for s in schemas] if schemas is not None else None,
+            "tools_sha256": sha256_json(schemas) if schemas is not None else None,
+            "user": user,
+            "conversation_seq": seq,
+            "clock_synced": getattr(self.clock, "synced", None),
+            "data_dir": str(self.trace.data_dir) if self.trace else None,
+            "pre_run_copy": copy,
+            "growbridge_version": __version__,
+            "git_commit": git_commit(),
+            "at": now,
+        }
+
+    def _end_trace(
+        self, trace: RunTrace | None, end: RunEnd, run: AgentRun | None, started: float
+    ) -> None:
+        if trace is None:
+            return
+        try:
+            trace.end(
+                {
+                    "at": self.clock.now(),
+                    "state": end.state.value,
+                    "code": end.code,
+                    "reason": end.reason,
+                    "params": end.params,
+                    "denied": end.denied,
+                    "turns": run.turns if run else 0,
+                    "input_tokens": run.input_tokens if run else 0,
+                    "output_tokens": run.output_tokens if run else 0,
+                    "cost": run.cost if run else 0.0,
+                    "seconds": self.clock.monotonic() - started,
+                }
+            )
+        except Exception:
+            log.exception("cannot finish the model trace %s", trace.path)
 
     async def replay_run(self, task_id: str, client: ModelClient, wrap: ToolsetWrap) -> ReplayedRun:
         """Run a task again with ``client`` and a wrapped toolset, in any state: it is not

@@ -69,7 +69,7 @@ class Env:
     def tools(self, deps: Deps | None = None):
         return build_role_tools(deps or self.deps)
 
-    def dispatcher(self, client, deps: Deps | None = None, budget=None) -> Dispatcher:
+    def dispatcher(self, client, deps: Deps | None = None, budget=None, trace=None) -> Dispatcher:
         return Dispatcher(
             client,
             self.roles,
@@ -78,6 +78,7 @@ class Env:
             budget or self.budget,
             self.clock,
             self.db,
+            trace=trace,
         )
 
     async def invoke(self, role: str, name: str, deps: Deps | None = None, /, **fields):

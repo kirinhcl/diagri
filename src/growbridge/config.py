@@ -80,6 +80,7 @@ class Settings(BaseModel):
     report_time: str = Field(default="08:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     report_timezone: str = "UTC"
     roles: dict[str, RoleModel] = Field(default_factory=dict)
+    model_trace: bool = False  # record every model run as a JSONL trace under data_dir
     backup_dir: Path | None = None  # independent media for the SQLite online backups
     backup_interval_seconds: float = Field(default=6 * 3600, ge=60)
     # Compute service (CSC Roihu via FirecREST). Both unset: no templates, no compute service.

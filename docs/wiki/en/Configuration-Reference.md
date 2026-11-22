@@ -18,7 +18,7 @@ The fields are `Settings` and `RoleModel` in [`config.py`](../../../src/growbrid
 
 ## `Settings` fields
 
-There are 27 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
+There are 28 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
 
 | Field | Type | Default | Allowed values | What it does | DiAGRI only |
 | --- | --- | --- | --- | --- | --- |
@@ -45,6 +45,7 @@ There are 27 fields. "Required" means the field has no default. The last column 
 | `report_time` | string | `"08:00"` | 24-hour `HH:MM`, `00:00` to `23:59` | Local time from which the daily report of the day before is produced. A report is produced only while a stage is active. | yes |
 | `report_timezone` | string | `"UTC"` | an IANA time zone name known to the host | Time zone of `report_time` and of the report dates. It is also the zone in which the operator console shows and takes times (served as `timezone` by `GET /wb/me`). An unknown name is refused on load. | yes |
 | `roles` | table of `RoleModel` | `{}` | keys are role names | Model configuration of each model role. While it is empty, `serve` builds no model client and no model role runs. | yes |
+| `model_trace` | boolean | `false` | `true` or `false` | Write a complete JSONL trace of every model role run under `<data_dir>/model_traces` (private directories, mode 0700; files mode 0600). Off means no trace and no change to any run. | yes |
 | `backup_dir` | path or unset | unset | any path; `~` is expanded | Directory for the SQLite online backups. While unset there are no backups and the runtime raises a `backup_unconfigured` warning alert at start. | yes |
 | `backup_interval_seconds` | number | `21600` | 60 or more | Seconds between two backups. | yes |
 | `compute_templates_dir` | path or unset | unset | a directory holding `*.json` files; `~` is expanded | One reviewed job template (`JobTemplate`) per JSON file. With `compute_member` and the seven `FIRECREST_*` variables it turns the compute service on. Every file is validated at start; a bad one stops `serve` and the message names the file. | yes |

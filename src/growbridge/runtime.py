@@ -230,6 +230,7 @@ class Runtime:
     last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
     access_parts: AccessParts | None = None  # multi-user locks and rules; None when off
     notes: DeviceNotes | None = None  # notes people write about the device (memory)
+    pre_run_copies: bool = False  # set only by the dev workbench: copy the data before a traced run
 
     # --- life cycle ----------------------------------------------------------------------------
 
