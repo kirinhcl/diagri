@@ -111,6 +111,7 @@ DiAGRI 的模型角色（编排、计划、研究、审计）在一次运行里�
 | `conversation_seq` | 运行开始时这个项目对话记录的最大序号；没有对话记录时为 `null`（回放时判断副本是否比录制新） |
 | `clock_synced` | 运行开始时时钟的 `synced`；时钟没有这个属性时为 `null` |
 | `data_dir` | 数据目录的绝对路径 |
+| `settings` | 这次运行的全部设置（`Settings.model_dump(mode="json")`），只去掉 `token`；回放按它建运行时 |
 | `pre_run_copy` | 运行前副本的目录名（相对记录文件）；没有时为 `null` |
 | `growbridge_version` | `growbridge.__version__` |
 | `git_commit` | 能取到就填（源码目录里 `git rev-parse HEAD`），取不到为 `null` |
@@ -143,6 +144,7 @@ DiAGRI 的模型角色（编排、计划、研究、审计）在一次运行里�
 
 **运行时怎么建。** 在临时副本上用 `build_runtime` 建运行时：
 
+- 设置取记录里的 `settings`，加一个新的随机 `token`，`data_dir` 换成临时副本，不用当前配置文件里的设置（设备、时区、通道编号都影响第一条消息和工具结果）。只有来源退回到配置里的 `data_dir` 时才读配置文件；记录里没有 `settings` 的旧记录改用配置文件的设置，并警告一次；
 - 不调用 `runtime.start()`，transport 用模拟设备；
 - 不配置计算服务、心跳和通知渠道（第二道保险：万一有外部工具漏标，它也没有可连的后端）；
 - 时钟换成回放时钟：每次模型调用和每个工具执行之前，设成记录里这一步的 `at`；`synced` 返回记录的 `clock_synced`；
