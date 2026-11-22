@@ -74,7 +74,7 @@ async def test_no_model_carries_the_role(env):
     del env.roles["planner"]
 
     with pytest.raises(Denied) as caught:
-        await env.dispatcher(None)._run(task, [], [])
+        await env.dispatcher(None)._run(task, "", [], [], client=None, wrap=lambda t: t)
 
     assert (caught.value.code, caught.value.reason) == ("model_role", "no_model")
     assert caught.value.params == {"role": "planner"}

@@ -285,7 +285,7 @@ def test_every_compute_error_and_stuck_code_is_registered() -> None:
 
 def test_chat_end_codes_in_dispatch_match_the_registry() -> None:
     src = REPO / "src" / "growbridge" / "agents"
-    found = codes_at_calls(src, {"_end"})
+    found = codes_at_calls(src, {"_end", "RunEnd"})  # RunEnd is where the codes now live
     assert {code for _, _, code in found} == set(CODES["chat_end"])
     assert set(CODES["chat_end"]) == {
         "denied",
