@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,9 +17,20 @@ _ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 _CONTROLS = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
 
 
+def _mark_invisible(char: str) -> str:
+    if char in "\u2028\u2029" or unicodedata.category(char) == "Cf":
+        return f"<U+{ord(char):04X}>"
+    return char
+
+
 def strip_controls(text: str) -> str:
-    """Remove ANSI escape sequences and every control character except newline and tab."""
-    return _CONTROLS.sub("", _ANSI.sub("", text))
+    """Remove ANSI escape sequences and every control character except newline and tab.
+
+    Invisible format characters (category Cf, such as the bidirectional overrides) and the line
+    and paragraph separators are shown as ``<U+XXXX>`` so a reader sees that something was there.
+    """
+    visible = _CONTROLS.sub("", _ANSI.sub("", text))
+    return "".join(_mark_invisible(char) for char in visible)
 
 
 def _clip(value: Any, full: bool) -> str:
@@ -75,7 +87,7 @@ def _tool(call: dict[str, Any], results: dict[str, dict[str, Any]], full: bool) 
 
 
 def _turn(model: dict[str, Any], results: dict[str, dict[str, Any]], full: bool) -> list[str]:
-    out = [f"Turn {model.get('turn')}"]
+    out = [f"Turn {_clip(str(model.get('turn')), full)}"]
     if "error" in model:
         return [*out, f"  Model error: {_clip(model['error'], full)}"]
     for block in model.get("content") or []:

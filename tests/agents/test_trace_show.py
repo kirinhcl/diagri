@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from trace_sample import TOOL_RESULT, write_sample
 
 from growbridge.agents.trace import read_trace
@@ -38,3 +40,25 @@ async def test_web_content_cannot_control_the_terminal(tmp_path, clock):
 async def test_missing_end_says_incomplete(tmp_path, clock):
     out = render_trace(read_trace(await write_sample(tmp_path, clock, ended=False)))
     assert out.rstrip().endswith("Record incomplete: the run has no end line.")
+
+
+def test_format_characters_and_separators_are_shown_not_dropped():
+    assert strip_controls("a\u202eb") == "a<U+202E>b"
+    assert strip_controls("x\u2028y\u2029z") == "x<U+2028>y<U+2029>z"
+    assert strip_controls("a\u2066b\u2069") == "a<U+2066>b<U+2069>"
+
+
+def test_ordinary_text_passes_through_unchanged():
+    assert strip_controls("温度传感器 \u00e9 \t ok\n") == "温度传感器 \u00e9 \t ok\n"
+
+
+async def test_a_hostile_turn_field_cannot_control_the_terminal(tmp_path, clock):
+    path = await write_sample(tmp_path, clock)
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    for line in lines:
+        if line["kind"] == "model":
+            line["turn"] = "\x1b[2J\x1b]0;pwn\x07\u202e7"
+    path.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
+    out = render_trace(read_trace(path))
+    assert "\x1b" not in out and "\x07" not in out and "\u202e" not in out
+    assert "Turn <U+202E>7" in out
