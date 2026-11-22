@@ -10,7 +10,7 @@ The parser is `main()` in [`cli.py`](../../../src/growbridge/cli.py). The tables
 
 ```text
 growbridge [-h] [--version] [--config CONFIG]
-           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate} ...
+           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate,trace} ...
 ```
 
 ## Global options
@@ -25,7 +25,7 @@ Global options go before the subcommand, for example `growbridge --config /absol
 
 ## Subcommands
 
-There are 11 subcommands. `operator`, `host` and `recovery` each take one nested subcommand, which is required.
+There are 12 subcommands. `operator`, `host`, `recovery` and `trace` each take one nested subcommand, which is required.
 
 | Command | Arguments and options | Reads the configuration file | Needs a running daemon | DiAGRI mode |
 | --- | --- | --- | --- | --- |
@@ -40,6 +40,7 @@ There are 11 subcommands. `operator`, `host` and `recovery` each take one nested
 | `recovery bump` | `--reason REASON` (required) | yes | no, it must be stopped | meant for it; the command does not check `auto_research` |
 | `export-dataset` | `--snapshot SNAPSHOT`, `--out OUT`, `--licence LICENCE`, `--creator CREATOR` (all required), `--url URL` | yes | no, it can run while the daemon runs | reads what DiAGRI recorded; the command does not check `auto_research` |
 | `simulate` | none | no | no | builds its own DiAGRI runtime in a temporary directory |
+| `trace show` | `file` (positional, required), `--full` (do not cut long values) | no | no | reads a model trace file; needs no DiAGRI mode |
 
 No command creates a project, a research protocol or a research round, sets a project's call budget, or creates the first task of the orchestrator. An operator does these through the workbench routes; see [Run a research round](Run-a-Research-Round.md). Among the commands only `simulate` makes those calls, inside `_design_and_start` in [`runtime.py`](../../../src/growbridge/runtime.py).
 
@@ -58,6 +59,7 @@ No command creates a project, a research protocol or a research round, sets a pr
 | `recovery bump` | Takes the daemon lock, builds the runtime without starting it, raises the recovery number by one, revokes every write right, voids queued actions, moves every stage that is not finished to `recovery_check` and voids its approvals. `REASON` is stored with the event. | `Recovery number is now <n>; confirm the safety config and review live stages` |
 | `export-dataset` | Writes the training dataset of one frozen snapshot into the new directory `OUT`: eleven CSV tables and `croissant.json`. It only reads the databases and the snapshot, and writes only the pseudonym key into `data_dir`. `--licence` and `--creator` are recorded in the metadata (the creator as an organization); `--url` is where the dataset is published, if anywhere. Spaces around `--licence`, `--creator` and `--url` are stripped; a blank `--url` counts as none. See [Training dataset export](Training-Dataset-Export.md). | A JSON object with `out`, `rows` (the data rows of each file) and `counts` (the ten counts of the metadata) |
 | `simulate` | Runs one short stage on the simulated AC5 with a simulated clock, in a temporary directory: approve the safety configuration, create project, protocol and round, submit and approve a run sheet, start the stage, tick until it ends. No radio and no network. | A JSON object with `stage`, `round`, `beats`, `samples` and `writes` |
+| `trace show` | Lists one model trace file step by step: the run header, then each turn with its thinking, text, tool calls and results, then the end or the line `Record incomplete: the run has no end line.`. Values longer than 400 characters are cut unless `--full`; control and escape characters in the trace are removed. | The listing on standard output; exit 2 with a message on standard error when the file cannot be read or is cut off (the lines before the bad one are still listed) |
 
 ### `serve` in DiAGRI mode
 

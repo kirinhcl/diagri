@@ -13,6 +13,7 @@ from pathlib import Path
 from . import __version__
 from .config import default_config, initialize, load
 from .logging_setup import configure_logging
+from .trace_cli import add_trace_parser, run_trace
 
 ROLE_TOKEN_PREFIX = "GROWBRIDGE_ROLE_TOKEN_"
 TICK_SECONDS = 1.0
@@ -244,6 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--creator", required=True, help="Creator named in the metadata")
     export.add_argument("--url", help="Where the dataset is published, if anywhere")
     sub.add_parser("simulate", help="Run a short simulated stage (no radio, no network)")
+    add_trace_parser(sub)
     return parser
 
 
@@ -267,6 +269,8 @@ def main():
 
         print(json.dumps(asyncio.run(simulate_stage()), ensure_ascii=False, indent=2))
         return
+    if args.command == "trace":
+        raise SystemExit(run_trace(args, lambda: load(args.config)))
     settings = load(args.config)
     if args.command == "export-dataset":
         _export_dataset(settings, args)

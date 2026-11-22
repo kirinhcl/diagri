@@ -10,7 +10,7 @@
 
 ```text
 growbridge [-h] [--version] [--config CONFIG]
-           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate} ...
+           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate,trace} ...
 ```
 
 ## 全局选项
@@ -25,7 +25,7 @@ growbridge [-h] [--version] [--config CONFIG]
 
 ## 子命令
 
-共 11 个子命令。`operator`、`host` 和 `recovery` 各带一个必填的二级子命令。
+共 12 个子命令。`operator`、`host`、`recovery` 和 `trace` 各带一个必填的二级子命令。
 
 | 命令 | 参数和选项 | 是否读取配置文件 | 是否需要守护进程在运行 | DiAGRI 模式 |
 | --- | --- | --- | --- | --- |
@@ -40,6 +40,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `recovery bump` | `--reason REASON`（必填） | 是 | 否，而且必须先停掉 | 为它准备；命令本身不检查 `auto_research` |
 | `export-dataset` | `--snapshot SNAPSHOT`、`--out OUT`、`--licence LICENCE`、`--creator CREATOR`（都必填）、`--url URL` | 是 | 否，守护进程运行时也能执行 | 读取 DiAGRI 已记录的数据；命令本身不检查 `auto_research` |
 | `simulate` | 无 | 否 | 否 | 在临时目录里自建一个 DiAGRI 运行时 |
+| `trace show` | `file`（位置参数，必填），`--full`（不截断长内容） | 否 | 否 | 读取模型轨迹文件；不需要 DiAGRI 模式 |
 
 没有任何命令可以创建项目、研究协议或研究轮次，也没有命令可以设置项目的调用预算或创建编排 Agent 的第一个任务。这些事由操作员通过工作台路由来做，见[运行一轮研究](Run-a-Research-Round.md)。命令里只有 `simulate` 会做这些调用，位置在 [`runtime.py`](../../../src/growbridge/runtime.py) 的 `_design_and_start`。
 
@@ -58,6 +59,7 @@ growbridge [-h] [--version] [--config CONFIG]
 | `recovery bump` | 拿到守护进程锁，构建运行时但不启动，把恢复编号加一，撤销所有写入权，作废排队中的动作，把每个未结束的阶段转入 `recovery_check` 并作废它的审批。`REASON` 会随事件一起记录。 | `Recovery number is now <n>; confirm the safety config and review live stages` |
 | `export-dataset` | 把一个冻结快照的训练数据集写进新建的目录 `OUT`：11 张 CSV 表和 `croissant.json`。只读取数据库和快照，除假名密钥外不向 `data_dir` 写任何东西。`--licence` 和 `--creator` 记进元数据（创作者记为组织）；`--url` 是数据集发布的地址（如果有）。`--licence`、`--creator` 和 `--url` 两端的空白会被去掉；只有空白的 `--url` 视为没有。见[训练数据集导出](Training-Dataset-Export.md)。 | 一个 JSON 对象，包含 `out`、`rows`（每个文件的数据行数）和 `counts`（元数据里的十项计数） |
 | `simulate` | 在临时目录里，用模拟的 AC5 和模拟时钟跑一个很短的阶段：批准安全配置，创建项目、协议和轮次，提交并批准运行单，启动阶段，一直 tick 到阶段结束。不用无线电，也不联网。 | 一个 JSON 对象，包含 `stage`、`round`、`beats`、`samples` 和 `writes` |
+| `trace show` | 逐步列出一个模型轨迹文件：先是运行头部，再是每一轮的思考、文字、工具调用和结果，最后是结束信息或 `Record incomplete: the run has no end line.` 这一行。超过 400 个字符的内容会被截断，除非加 `--full`；轨迹里的控制字符和转义序列会被去掉。 | 标准输出上的列表；文件读不了或被截断时退出码为 2，并在标准错误输出上给出原因（出错行之前的内容仍会列出） |
 
 ### DiAGRI 模式下的 `serve`
 
