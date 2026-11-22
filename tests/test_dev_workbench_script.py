@@ -100,40 +100,44 @@ def test_dev_workbench_refuses_a_roles_file_it_cannot_use(tmp_path):
     assert result.returncode == 2 and "input_per_mtok" in result.stderr
 
 
-async def test_recording_client_writes_each_call_and_each_failure(tmp_path):
-    import json
+def test_trace_without_data_dir_is_refused(monkeypatch, capsys):
+    script = _load_script()
+    monkeypatch.setenv("GROWBRIDGE_DEV_SECRET", "a dev secret only")
+    monkeypatch.setattr(sys, "argv", ["dev_workbench.py", "--trace"])
+    assert script.main() == 2
+    assert (
+        "--trace needs --data-dir: the traces and pre-run copies must outlive the workbench"
+        in capsys.readouterr().err
+    )
 
-    import pytest
 
-    from growbridge.agents.llm import ToolCall
-    from growbridge.agents.roles import PLANNER
-    from growbridge.sim.llm import ScriptedClient, tool_reply
+async def test_trace_turns_on_model_trace_and_pre_run_copies(tmp_path, monkeypatch, capsys):
+    import growbridge.cli
+    import growbridge.runtime
+    from growbridge.config import Settings
 
     script = _load_script()
-    path = tmp_path / "calls.jsonl"
-    inner = ScriptedClient([tool_reply(ToolCall(id="t1", name="validate_run_sheet", input={}))])
-    ticks = iter([10.0, 12.5, 20.0, 21.0])
-    client = script.RecordingClient(inner, path, clock=lambda: next(ticks))
-    request = dict(
-        model="gpt-oss:20b", system=PLANNER.system, tools=[{"name": "validate_run_sheet"}],
-        max_tokens=256, effort="low",
-    )  # fmt: skip
-    first = [{"role": "user", "content": "the task"}]
-    reply = await client.create(messages=first, **request)
-    assert reply.tool_calls[0].name == "validate_run_sheet"
-    result = {"type": "tool_result", "tool_use_id": "t1", "content": "x" * 5000}
-    second = [*first, {"role": "assistant", "content": []}, {"role": "user", "content": [result]}]
-    with pytest.raises(AssertionError):  # the script ran out: the failure is recorded too
-        await client.create(messages=second, **request)
+    built = []
+    real_build = growbridge.runtime.build_runtime
 
-    lines = [json.loads(line) for line in path.read_text().splitlines()]
-    assert [line["role"] for line in lines] == ["planner", "planner"]
-    assert lines[0]["turn"] == 1 and lines[0]["newest"] == [{"text": "the task"}]
-    assert lines[0]["tool_calls"] == [{"name": "validate_run_sheet", "input": {}}]
-    assert lines[0]["stop_reason"] == "tool_use" and lines[0]["seconds"] == 2.5
-    assert lines[1]["turn"] == 2 and "AssertionError" in lines[1]["error"]
-    clipped = lines[1]["newest"][0]["tool_result"]
-    assert len(clipped) == script.TRANSCRIPT_CHARS + 1 and clipped.endswith("…")
+    def build(*args, **kwargs):
+        built.append(real_build(*args, **kwargs))
+        return built[-1]
+
+    async def no_server(app, settings):
+        return None
+
+    monkeypatch.setattr(growbridge.runtime, "build_runtime", build)
+    monkeypatch.setattr(growbridge.cli, "_serve_listeners", no_server)
+    data_dir = tmp_path / "data"
+    settings = Settings(
+        device="SIMULATED", token="x" * 32, data_dir=data_dir, controls_enabled=True,
+        lan_bind="127.0.0.1", lan_hosts=["localhost"], overlay_hosts=["127.0.0.1"],
+        model_trace=True,
+    )  # fmt: skip
+    await script._run(settings, "a dev secret only", trace=True)
+    assert built[0].pre_run_copies is True
+    assert f"Model traces: {data_dir / 'model_traces'}" in capsys.readouterr().out
 
 
 def test_the_offset_clock_only_moves_ahead_and_keeps_what_it_skipped(tmp_path):
