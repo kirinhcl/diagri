@@ -11,7 +11,7 @@ export function timeText(ctx, epoch) {
   return formatDateTime(epoch, siteZone(ctx), ctx.lang, nowSeconds(ctx));
 }
 
-function siteZone(ctx) {
+export function siteZone(ctx) {
   return (ctx.me && ctx.me.timezone) || "UTC";
 }
 

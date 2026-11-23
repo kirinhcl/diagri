@@ -7,10 +7,12 @@ role is stored unverified; only an operator's verification record changes that.
 
 import pytest
 from fastapi.testclient import TestClient
-from workbench_support import LAN_HOST, LAN_PORT
+from workbench_support import LAN_HOST, LAN_PORT, Bench
 
+from growbridge.archive.evidence_ledger import EvidenceOrigin, EvidenceRelation
 from growbridge.archive.models import EvidenceCard, TimedAction
-from growbridge.ports import Actor
+from growbridge.planning.evidence_validity import evidence_gate
+from growbridge.ports import Actor, Finding
 
 CARDS = "/wb/evidence"
 CARD = {
@@ -89,6 +91,13 @@ def test_entering_a_card_needs_no_recent_reauthentication(bench, operator):
         {"claim": ""},
         {"source_class": "blog"},
         {"unit": "u" * 41},
+        # the new fields are bounded at input, like the round card's (design §5.1)
+        {"variable": "v" * 64},
+        {"crop_taxon": "NCBITaxon:" + "1" * 31},
+        {"cultivar": "c" * 201},
+        {"growth_stage": "g" * 101},
+        {"conditions_note": "n" * 501},
+        {"conditions": [{"variable": "air_temperature", "min": float(i)} for i in range(9)]},
     ],
 )
 def test_a_card_that_is_not_acceptable_is_refused_and_stores_nothing(bench, operator, fields):
@@ -419,3 +428,233 @@ def test_the_hints_do_not_block_approval(bench, operator):
 
     assert approval.operator == "alice"
     assert operator.get(REVIEW).json()["blocking"] is False
+
+
+# --- evidence validity in the review -------------------------------------------------------------
+
+
+def supersede_card(bench, old: str, new: str, at: float = 1.0) -> None:
+    relation = EvidenceRelation(
+        id=f"{new}-over-{old}",
+        kind="supersedes",
+        subject_id=new,
+        object_id=old,
+        reason="newer",
+        source="operator:op",
+        task_id=None,
+        project_id=None,
+        proposed_in=None,
+        at=at,
+    )
+    bench.archive.ledger.add_relation(relation, confirmed_by="op")
+
+
+def gated(bench) -> None:
+    """The workflow as the runtime builds it: its validator carries the evidence gate."""
+    bench.workflow.validate = lambda sheet: evidence_gate(sheet, bench.archive)
+
+
+def test_a_pending_stage_shows_the_superseded_card_as_blocking(bench, operator):
+    gated(bench)
+    proposed(bench, "old")
+    proposed(bench, "new")
+    cite(bench, "old", "old", "old")
+    supersede_card(bench, "old", "new")
+
+    review = operator.get(REVIEW).json()
+
+    blocking = [f["code"] for f in review["findings"] if f["blocking"]]
+    assert set(blocking) == {"superseded_source"} and review["blocking"] is True
+
+
+def test_a_running_stage_shows_the_superseded_card_as_a_hint(bench, operator):
+    gated(bench)
+    proposed(bench, "old")
+    proposed(bench, "new")
+    cite(bench, "old", "old", "old")
+    actor = Actor(kind="operator", id="alice", reauth_at=bench.clock.now())
+    bench.workflow.approve("stage-1", actor)
+    bench.run(bench.workflow.start_stage("stage-1", actor))
+    supersede_card(bench, "old", "new")
+
+    review = operator.get(REVIEW).json()
+
+    found = [f for f in review["findings"] if f["code"] == "superseded_source"]
+    assert found and all(f["blocking"] is False for f in found)
+    assert review["blocking"] is False
+
+
+def test_a_running_stage_keeps_other_blocking_findings_blocking(bench, operator):
+    cite(bench)
+    actor = Actor(kind="operator", id="alice", reauth_at=bench.clock.now())
+    bench.workflow.approve("stage-1", actor)
+    bench.run(bench.workflow.start_stage("stage-1", actor))
+    bench.workflow.validate = lambda sheet: (Finding(code="other_problem", message="m"),)
+
+    review = operator.get(REVIEW).json()
+
+    assert review["blocking"] is True
+
+
+def test_another_projects_round_card_is_no_evidence_in_the_review(bench, operator):
+    proposed(bench, "theirs")
+    bench.archive.ledger.add_origin(
+        EvidenceOrigin(
+            card_id="theirs",
+            project_id="other-project",
+            round_id="r",
+            report_artifact_id="a",
+            snapshot_ids=(),
+            label="descriptive",
+            at=0.0,
+        )
+    )
+    cite(bench, "theirs", "theirs", "theirs")
+
+    assert codes(operator) == ["no_evidence"] * 3
+
+
+# --- catalog-linked cards and the scoped list ---------------------------------------------------
+
+LINKED = {"variable": "air_temperature", "value": 24.0, "unit": "C"}
+
+
+def round_card(bench, card_id: str, project_id: str, **fields) -> None:
+    proposed(bench, card_id, **fields)
+    bench.archive.ledger.add_origin(
+        EvidenceOrigin(
+            card_id=card_id,
+            project_id=project_id,
+            round_id="r",
+            report_artifact_id=f"art-{card_id}",
+            snapshot_ids=(),
+            label="descriptive",
+            at=0.0,
+        )
+    )
+
+
+def test_an_alias_variable_is_refused_on_entry(bench, operator):
+    response = enter(bench, operator, variable="temp", value=24.0, unit="Cel")
+
+    assert response.status_code == 403
+    assert detail(response)["reason"] == "evidence_card_invalid"
+    assert not bench.archive.evidence_entries()
+
+
+def test_the_unit_is_stored_as_the_catalog_unit(bench, operator):
+    enter(bench, operator, **LINKED)
+
+    (entry,) = bench.archive.evidence_entries()
+    assert entry.card.unit == "Cel" and entry.card.variable == "air_temperature"
+
+
+def test_a_card_enters_with_conditions_and_crop_fields(bench, operator):
+    response = enter(
+        bench,
+        operator,
+        **LINKED,
+        conditions=[{"variable": "air_relative_humidity", "min": 50.0, "max": 80.0}],
+        crop_taxon="NCBITaxon:4236",
+        cultivar="Butterhead",
+        growth_stage="vegetative",
+        conditions_note="closed greenhouse",
+    )
+
+    assert response.status_code == 200
+    (entry,) = bench.archive.evidence_entries()
+    assert entry.card.conditions[0].variable == "air_relative_humidity"
+    assert entry.card.crop_taxon == "NCBITaxon:4236" and entry.card.cultivar == "Butterhead"
+
+
+def test_old_style_cards_still_enter_and_list(bench, operator):
+    assert enter(bench, operator).status_code == 200
+
+    (card,) = operator.get(CARDS).json()["cards"]
+    assert card["status"]["validity"] == "active" and "origin" not in card
+
+
+def test_the_list_filters_by_status_and_variable(bench, operator):
+    old = enter(bench, operator, **LINKED).json()["id"]
+    new = enter(bench, operator, **LINKED).json()["id"]
+    enter(bench, operator)
+    supersede_card(bench, old, new)
+
+    def ids(query: str) -> set[str]:
+        return {c["id"] for c in operator.get(f"{CARDS}?{query}").json()["cards"]}
+
+    assert ids("status=superseded") == {old}
+    assert ids("variable=air_temperature") == {old, new}
+    assert ids("variable=temp&status=active") == {new}
+    assert len(ids("")) == 3
+
+
+def test_the_list_as_of_shows_the_status_at_that_time(bench, operator):
+    old = enter(bench, operator).json()["id"]
+    new = enter(bench, operator).json()["id"]
+    entered = bench.clock.now()
+    supersede_card(bench, old, new, at=entered + 60)  # confirmed a minute after both were entered
+    bench.clock.advance(120)
+
+    def validity(**query) -> str:
+        cards = operator.get(CARDS, params=query).json()["cards"]
+        return next(c for c in cards if c["id"] == old)["status"]["validity"]
+
+    assert validity() == "superseded"
+    assert validity(as_of=entered + 30) == "active"
+
+
+def test_the_list_as_of_leaves_out_cards_entered_after_that_time(bench, operator):
+    first = enter(bench, operator).json()["id"]
+    then = bench.clock.now()
+    bench.clock.advance(60)
+    enter(bench, operator)
+
+    listed = operator.get(CARDS, params={"as_of": then}).json()["cards"]
+
+    assert [c["id"] for c in listed] == [first]
+    assert len(operator.get(CARDS).json()["cards"]) == 2
+
+
+@pytest.mark.parametrize("as_of", ["nan", "inf", "-inf"])
+def test_the_list_refuses_a_time_that_is_not_a_finite_number(operator, as_of):
+    assert operator.get(CARDS, params={"as_of": as_of}).status_code == 422
+
+
+def test_a_round_card_lists_with_its_origin_only_in_its_project(bench, operator):
+    round_card(bench, "mine", "p-1")
+    round_card(bench, "theirs", "p-2")
+    enter(bench, operator)
+
+    global_ids = {c["id"] for c in operator.get(CARDS).json()["cards"]}
+    mine = {c["id"]: c for c in operator.get(CARDS, params={"project_id": "p-1"}).json()["cards"]}
+
+    assert "mine" not in global_ids and "theirs" not in global_ids and len(global_ids) == 1
+    assert set(mine) == {"mine", *global_ids} and "theirs" not in mine
+    assert mine["mine"]["origin"] == {
+        "round_id": "r",
+        "report_artifact_id": "art-mine",
+        "label": "descriptive",
+    }
+
+
+def test_the_list_offers_the_variables_a_card_may_name(bench, operator):
+    variables = operator.get(CARDS).json()["variables"]
+
+    kinds = {v["kind"] for v in variables}
+    ids = {v["id"] for v in variables}
+    assert kinds <= {"sensor", "manual"} and "air_temperature" in ids
+    assert "temp" not in ids and {"id", "kind", "unit", "label_en", "label_zh"} <= set(variables[0])
+
+
+def test_the_list_of_a_project_needs_access_to_it(tmp_path):
+    bench = Bench.full(tmp_path)
+    alice, bob = bench.user("alice"), bench.user("bob")
+    bench.seed_round_as("alice")
+    url = f"{CARDS}?project_id={bench.project_id}"
+
+    assert alice.get(url).status_code == 200
+    refused = bob.get(url)
+    assert refused.status_code == 409
+    assert detail(refused)["reason"] == "record_not_found"
+    bench.db.close()

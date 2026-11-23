@@ -113,6 +113,26 @@ async def test_an_unacceptable_proposal_is_refused_and_stores_nothing(env, field
     assert outcome.is_error and env.archive.evidence_entries() == ()
 
 
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"variable": "v" * 64},
+        {"crop_taxon": "NCBITaxon:" + "1" * 31},
+        {"cultivar": "c" * 201},
+        {"growth_stage": "g" * 101},
+        {"conditions_note": "n" * 501},
+        {"conditions": [{"variable": "air_temperature", "min": float(i)} for i in range(9)]},
+    ],
+)
+async def test_the_new_fields_are_bounded_at_input_like_the_operators_entry(env, fields):
+    task = env.task("planner")
+
+    outcome = await _propose(env, task.id, **fields)
+
+    assert outcome.is_error and "invalid input" in outcome.content
+    assert env.archive.evidence_entries() == ()
+
+
 async def test_a_proposal_needs_the_running_task_not_any_task(env):
     mine = env.task("planner", "ev-mine")
     other = env.task("planner", "ev-other")

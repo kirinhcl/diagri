@@ -18,7 +18,7 @@
 | 干预 | 表里的一行，没有模型 | 工作流服务。`InterventionMirror` 把每条干预向档案复制一次 | `intv_...` |
 | 数据快照 | `Snapshot` | 研究 Agent 的 `freeze_dataset` 工具 | `snap_...`，每个实验另有版本号 |
 | 产物 | `Artifact` | [`research/report.py`](../../../src/growbridge/research/report.py) 的 `publish_research_report` | `artifact_...` |
-| 证据卡 | `EvidenceCard` | `POST /wb/evidence`（操作员）或计划 Agent 的 `propose_evidence_card` 工具，都经 `Archive.add_evidence` | `evidence_...` |
+| 证据卡 | `EvidenceCard` | `POST /wb/evidence`（操作员）、`POST /wb/rounds/{round_id}/evidence`（操作员，来自已交付轮次的报告）或计划 Agent 的 `propose_evidence_card` 工具，都经 `Archive.add_evidence` | `evidence_...` |
 | 证据来源 | `EvidenceEntry` | 同一次调用，写入表 `evidence_sources` | 卡编号 |
 | 证据核实 | `EvidenceVerification` | `POST /wb/evidence/{card_id}/verify`，或操作员自己录入时，经 `Archive.verify_evidence` 写入表 `evidence_verifications` | 卡编号 |
 
@@ -27,6 +27,7 @@
 - **阶段启动之后收到的样本才归属实验。** 归档时逐条判断：这条样本收到的时候，哪个阶段在运行。阶段启动之前的样本照样保存，但不挂在任何实验下。
 - **动作账本有两份。** 控制服务在自己的数据库里保留工作副本。每个状态都会向档案追加一份，所以一次写入从 `pending` 到 `maybe_sent` 再到 `confirmed` 的经过，事后都查得到。
 - **证据卡记着是谁加的，核实是一条独立的记录。** 来源是 `operator:<姓名>`，或 `model:planner` 加提议它的任务 ID。卡片原文永不改动。核实（谁、什么时候、备注，以及操作员对“数值已用本地测量校准”的证明）追加在自己的表里，每张卡一条，第一条保留；对已核实的卡再加证明不会改变任何东西。`Archive.evidence()` 只在这条记录存在时才把卡报告为已核实，卡里存了什么都不算，所以模型永远产生不了已核实的卡：计划 Agent 的工具把每个提议都存成未核实，并且拒绝 `local` 类别，因为只有操作员才能把本地测量记成证据。运行单的审阅对任何类别的未核实卡，包括 `local`，都给出 `unverified_source` 提示。`calibrated` 用同样的办法得出：模型提议的卡，只有操作员的核实记录证明了才为真，所以模型不能声称已校准（提议工具没有这个字段，档案也把这样的卡存成未校准）；操作员录入的卡，则是操作员录入的值。操作员录入的卡，由这位操作员当场核实。图像记录在代码里完全没有。
+- **卡与卡之间的关系是独立的记录，卡的状态在读取时才算出来。** 关系表示一张卡取代、反驳或撤回另一张卡。它追加在表 `evidence_relations` 里（命名空间 `evidence_ledger`，在 `archive.sqlite3` 中）；审核、撤销和轮次卡的来源（轮次、报告、快照、标签）各有一张只追加的表（`evidence_relation_reviews`、`evidence_relation_withdrawals`、`evidence_origins`）。什么都不改：一条关系的第一次审核和第一次撤销为准，后来的会被拒绝。操作员记下的关系当场确认。模型的关系（计划 Agent 的 `propose_evidence_relation`）保持待定，直到操作员确认，在那之前不改变任何卡；模型不能审核或撤销任何东西。卡的状态——`active`、`superseded`、`retracted` 或 `dependency_invalid`——从不存储。每次读取时，按某个时刻 `as_of` 推算：关系从确认时起算（恰好在 `as_of` 确认也算），到撤销时结束（恰好在 `as_of` 撤销，就已经结束），所以同样的记录永远得出同样的状态。`retracted` 高于 `dependency_invalid`，`dependency_invalid` 高于 `superseded`。轮次卡是操作员从已交付轮次的报告生成的、已核实的 `local` 卡；报告或它依据的某个快照一旦因更正而失效，它就变成 `dependency_invalid`，而且不会再恢复有效：需要新开一轮。一张卡只能在同一范围内取代另一张卡，轮次卡只在它自己的项目里可见、可建立关系。模型写的理由留在它提出的那个项目里。
 
 ## 数据放在哪里
 
@@ -152,7 +153,7 @@ flowchart LR
 
 - 11.4 节要求备份数据库、原始图像和归档清单。代码只备份六个 SQLite 数据库。
 - 11.1 节描述了图像记录。代码里没有。
-- 6.2 节的证据卡包含作物、生长期、条件和页码等内容。`EvidenceCard` 只有来源类别、引用、论断、数值、单位和两个标记。
+- 6.2 节的证据卡包含作物、生长期、条件和页码等内容。`EvidenceCard` 有来源类别、引用、论断、数值、单位和两个标记，另有可选的目录变量、至多八个适用范围、作物分类单元、品种、生长期和一条关于条件的自由文字说明，没有页码。
 - 11.2 节要求为每个传感器记录单位、位置和校准版本，并区分主动状态查询和计划采样。`SampleRecord` 有来源和质量字段，但从旧表归档时填不上。
 - 11.1 节说产物要记录代码哈希和运行环境。`publish_research_report` 没有填 `code_sha256` 和 `environment`。
 

@@ -136,6 +136,25 @@ async def test_recording_client_writes_each_call_and_each_failure(tmp_path):
     assert len(clipped) == script.TRANSCRIPT_CHARS + 1 and clipped.endswith("…")
 
 
+async def test_recording_client_logs_the_cache_tokens(tmp_path):
+    import json
+
+    from growbridge.sim.llm import ScriptedClient, text_reply
+
+    script = _load_script()
+    path = tmp_path / "calls.jsonl"
+    usage = {"cache_write_tokens": 40, "cache_read_tokens": 100}
+    cached = text_reply("ok").model_copy(update=usage)
+    ticks = iter([10.0, 11.0])
+    client = script.RecordingClient(ScriptedClient([cached]), path, clock=lambda: next(ticks))
+    request = dict(model="m", system="s", tools=[], max_tokens=256, effort="low")
+
+    await client.create(messages=[{"role": "user", "content": "the task"}], **request)
+
+    (line,) = [json.loads(line) for line in path.read_text().splitlines()]
+    assert (line["cache_write_tokens"], line["cache_read_tokens"]) == (40, 100)
+
+
 def test_the_offset_clock_only_moves_ahead_and_keeps_what_it_skipped(tmp_path):
     script = _load_script()
     path = tmp_path / "offset"

@@ -3,6 +3,9 @@ import json
 import pytest
 from dispatch_helpers import call, result_blocks, script_calls
 
+from growbridge.agents.handlers_common import sheet_protocol
+from growbridge.archive.evidence_ledger import EvidenceOrigin, EvidenceRelation
+from growbridge.archive.models import EvidenceCard
 from growbridge.sim.llm import ScriptedClient
 from growbridge.workflow.states import StageState
 
@@ -268,3 +271,98 @@ async def test_save_plan_draft_disappears_after_the_model_read_the_web(env):
 
     later = {tool["name"] for tool in client.requests[1]["tools"]}
     assert "save_plan_draft" not in later and "validate_run_sheet" in later
+
+
+def _cited(env, ref: str) -> dict:
+    """The sheet of the round's allocated treatment, its first timed action citing ``ref``."""
+    first, *rest = env.sheet().timed_actions
+    cited = first.model_copy(update={"evidence": ref})
+    return env.sheet_json(timed_actions=(cited, *rest))
+
+
+def _card(card_id: str) -> EvidenceCard:
+    return EvidenceCard(id=card_id, source_class="paper", citation="Doe 2020", claim="c")
+
+
+async def test_validate_run_sheet_blocks_a_superseded_card(env):
+    env.archive.add_evidence(_card("old"))
+    env.archive.add_evidence(_card("new"))
+    relation = EvidenceRelation(
+        id="r1",
+        kind="supersedes",
+        subject_id="new",
+        object_id="old",
+        reason="newer",
+        source="operator:op",
+        task_id=None,
+        project_id=None,
+        proposed_in=None,
+        at=1.0,
+    )
+    env.archive.ledger.add_relation(relation, confirmed_by="op")
+
+    body = _payload(await env.invoke("planner", "validate_run_sheet", run_sheet=_cited(env, "old")))
+
+    (found,) = [f for f in body["findings"] if f["code"] == "superseded_source"]
+    assert found["blocking"] is True
+
+
+async def test_another_projects_round_card_counts_as_no_evidence_in_validate(env):
+    env.archive.add_evidence(_card("theirs"))
+    env.archive.ledger.add_origin(
+        EvidenceOrigin(
+            card_id="theirs",
+            project_id="other-project",
+            round_id="r",
+            report_artifact_id="a",
+            snapshot_ids=(),
+            label="descriptive",
+            at=0.0,
+        )
+    )
+
+    body = _payload(
+        await env.invoke("planner", "validate_run_sheet", run_sheet=_cited(env, "theirs"))
+    )
+
+    codes = {f["code"] for f in body["findings"]}
+    assert "no_evidence" in codes and "superseded_source" not in codes
+
+
+async def test_validate_run_sheet_refuses_a_sheet_of_another_project(env):
+    other_project, _ = env.other_project()
+    foreign = env.sheet_json(project_id=other_project)
+
+    denied = await env.refusal("planner", "validate_run_sheet", run_sheet=foreign)
+
+    assert denied.reason == "not_this_project"
+
+
+async def test_validate_run_sheet_does_not_read_another_projects_protocol(env):
+    env.other_project()  # protocol-b belongs to the other project
+    low = [{"id": "on", "channel": "light", "at": "06:00", "level": 40}]
+    own = env.sheet_json(timed_actions=low)
+    foreign = env.sheet_json(timed_actions=low, protocol_id="protocol-b")
+    assert foreign["project_id"] == env.project_id
+
+    rnd = env.round_id
+    checked = _payload(
+        await env.invoke("planner", "validate_run_sheet", round_id=rnd, run_sheet=own)
+    )
+    leaked = _payload(
+        await env.invoke("planner", "validate_run_sheet", round_id=rnd, run_sheet=foreign)
+    )
+
+    assert "treatment_not_applied" in {f["code"] for f in checked["findings"]}  # control
+    assert "treatment_not_applied" not in {f["code"] for f in leaked["findings"]}
+
+
+def test_sheet_protocol_is_the_sheets_own_protocol_only(env):
+    own = env.sheet()
+    foreign = env.sheet(protocol_id="protocol-b")
+    env.other_project()
+    missing = env.sheet(protocol_id="no-such-protocol")
+
+    assert sheet_protocol(env.deps, own) == env.protocol
+    assert sheet_protocol(env.deps, foreign) is None
+    assert sheet_protocol(env.deps, missing) is None

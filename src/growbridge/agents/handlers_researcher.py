@@ -12,8 +12,12 @@ import asyncio
 
 from pydantic import Field
 
+from growbridge.agents.evidence_query import (
+    QUERY_EVIDENCE_DESCRIPTION,
+    EvidenceInput,
+    query_cards,
+)
 from growbridge.agents.handlers_common import (
-    MAX_ITEMS,
     Deps,
     ToolInput,
     clip,
@@ -50,12 +54,6 @@ class FreezeInput(ToolInput):
 class InspectInput(ToolInput):
     task_id: str  # the researcher task; the stage must be its project's
     stage_id: str
-
-
-class EvidenceInput(ToolInput):
-    ids: tuple[str, ...] = ()
-    text: str = ""
-    limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
 
 class LocalAnalysisInput(ToolInput):
@@ -276,28 +274,6 @@ def _advance(deps: Deps, round_id: str, snapshot_id: str, whole: bool) -> str:
     return deps.workflow.mark_snapshot_frozen(round_id, snapshot_id, event).value
 
 
-def query_cards(deps: Deps, data: EvidenceInput) -> dict:
-    """Search the evidence cards (shared by the researcher and the planner)."""
-    cards = deps.archive.evidence(data.ids or None)
-    needle = data.text.casefold()
-    hits = [c for c in cards if not needle or needle in f"{c.claim} {c.citation}".casefold()]
-    return {
-        "cards": [
-            {
-                "id": c.id,
-                "source_class": c.source_class,
-                "citation": clip(c.citation, 300),
-                "claim": clip(c.claim, 300),
-                "value": c.value,
-                "unit": c.unit,
-                "verified": c.verified,
-                "calibrated": c.calibrated,
-            }
-            for c in hits[: data.limit]
-        ]
-    }
-
-
 def _compute(deps: Deps):
     if deps.compute is None:
         unavailable("compute service")
@@ -365,7 +341,7 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
         ),
         Tool(
             "query_evidence",
-            "Search evidence cards already in the archive.",
+            QUERY_EVIDENCE_DESCRIPTION,
             EvidenceInput,
             lambda d: query_cards(deps, d),
         ),

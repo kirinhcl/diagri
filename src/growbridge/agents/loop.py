@@ -41,6 +41,27 @@ class AgentRun(Model):
     cost: float
     tool_calls: tuple[ToolRecord, ...] = ()
     web_restricted: bool = False
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
+
+
+class RunUsage(Model):
+    """What a run has spent so far; each model call gives a new one."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_read_tokens: int = 0
+    cost: float = 0.0
+
+    def plus(self, reply: ModelReply, cost: float) -> RunUsage:
+        return RunUsage(
+            input_tokens=self.input_tokens + reply.input_tokens,
+            output_tokens=self.output_tokens + reply.output_tokens,
+            cache_write_tokens=self.cache_write_tokens + reply.cache_write_tokens,
+            cache_read_tokens=self.cache_read_tokens + reply.cache_read_tokens,
+            cost=self.cost + cost,
+        )
 
 
 def wrap_as_data(tool_name: str, content: str) -> str:
@@ -107,8 +128,7 @@ async def run_agent(
     messages: list[dict] = [{"role": "user", "content": user}]
     restricted = False
     records: list[ToolRecord] = []
-    tokens_in = tokens_out = 0
-    cost = 0.0
+    usage = RunUsage()
     last: ModelReply | None = None
     for turn in range(1, max_turns + 1):
         await _maybe_await(budget.reserve(project_id, calls=1))
@@ -120,35 +140,31 @@ async def run_agent(
             max_tokens=role.max_tokens,
             effort=role.effort,
         )
-        spent = price.cost(last.input_tokens, last.output_tokens)
-        await _maybe_await(budget.charge(project_id, spent))
-        tokens_in, tokens_out, cost = (
-            tokens_in + last.input_tokens,
-            tokens_out + last.output_tokens,
-            cost + spent,
+        spent = price.cost(
+            last.input_tokens, last.output_tokens, last.cache_write_tokens, last.cache_read_tokens
         )
+        await _maybe_await(budget.charge(project_id, spent))
+        usage = usage.plus(last, spent)
         stop = last.stop_reason
         if stop == "pause_turn":
             messages = [*messages, {"role": "assistant", "content": last.content}]
             continue
         if stop != "tool_use":  # end_turn, refusal, max_tokens, anything else: no tools run
             await _observe(observe, last, [])
-            return _finish(last, stop, turn, tokens_in, tokens_out, cost, records, restricted)
+            return _finish(last, stop, turn, usage, records, restricted)
         result_message, outcomes, restricted = await _run_tools(last, toolset, restricted)
         records.extend(ToolRecord(name=o.name, is_error=o.is_error) for o in outcomes)
         await _observe(observe, last, outcomes)
         messages = [*messages, {"role": "assistant", "content": last.content}, result_message]
-    return _finish(last, "max_turns", max_turns, tokens_in, tokens_out, cost, records, restricted)
+    return _finish(last, "max_turns", max_turns, usage, records, restricted)
 
 
-def _finish(last, stop, turns, tokens_in, tokens_out, cost, records, restricted) -> AgentRun:
+def _finish(last, stop, turns, usage: RunUsage, records, restricted) -> AgentRun:
     return AgentRun(
         text=last.text if last else "",
         stop_reason=stop,
         turns=turns,
-        input_tokens=tokens_in,
-        output_tokens=tokens_out,
-        cost=cost,
+        **usage.model_dump(),
         tool_calls=tuple(records),
         web_restricted=restricted,
     )

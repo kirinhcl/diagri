@@ -49,10 +49,12 @@ from growbridge.workbench.auth import (
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
+from growbridge.workbench.evidence_relations import add_evidence_relation_routes
 from growbridge.workbench.greenhouses import add_greenhouse_routes
 from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
+from growbridge.workbench.round_cards import add_round_card_routes
 from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workbench.scope import project_read, project_write, stage_read, stage_write
 from growbridge.workflow import denials
@@ -284,8 +286,11 @@ class Workbench:
             archive,
             conversation,
             access=access,
+            holdout=holdout,
         )
-        add_evidence_routes(self.router, self.operator, archive)
+        add_evidence_routes(self.router, self.operator, archive, workflow, access)
+        add_evidence_relation_routes(self.router, self.operator, archive, access)
+        add_round_card_routes(self.router, self.operator, archive, workflow, holdout, access)
         add_manual_task_routes(
             self.router, self.operator, self.on_site, workflow, archive, control, self.clock, access
         )

@@ -58,6 +58,14 @@ function problem(ctx, p) {
   return textOr(ctx.t, "findingProblem", p.kind, vars) ?? DASH;
 }
 
+// The next step for a citation of a replaced card: its replacement while that is in force, otherwise
+// a new card or a user input, naming the replacement's own status (design §5.3).
+function replacementStep(ctx, v) {
+  if (v === "active") return ctx.t("evidence.citeReplacement");
+  if (!isText(v)) return ctx.t("evidence.noReplacementStep");
+  return ctx.t("evidence.replacementInactive", { validity: labelOr(ctx.t, "evidence.validity", v) });
+}
+
 const EXACT = {
   at_local: guarded(isText, (ctx, v) => v),
   sensor: labelled("metric"),
@@ -97,9 +105,13 @@ const EXACT = {
   fraction: guarded(isNum, (ctx, v) => `${formatNumber(v * PERCENT, 0, ctx.lang)}%`),
   device_unit: guarded(isText, (ctx, v) => unitText(v)),
   rule_unit: guarded(isText, (ctx, v) => unitText(v)),
+  card_unit: guarded(isText, (ctx, v) => unitText(v)),
+  label: labelled("report.labels"),
+  replacement_validity: replacementStep,
 };
 const LEVEL_NAMES = ["level", "min", "max", "expected", "protection_level"];
-const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name"];
+const QUOTED_NAMES = ["source", "rule", "rule_a", "rule_b", "protection", "treatment", "control", "block", "metric", "name",
+  "reason", "rule_variable", "card_variable", "card_taxon", "protocol_taxon"];
 // counts: these names, every name ending in "_count" (e.g. file_count, limit_count), and max_*/min_*
 const COUNT_NAMES = ["version", "current_version", "attempts", "depth", "count", "blocks", "min_blocks", "flips", "failed", "priority", "round", "mode", "top_rowid", "cursor"];
 const BYTE_NAMES = ["bytes", "limit"];

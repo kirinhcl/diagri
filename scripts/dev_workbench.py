@@ -253,6 +253,8 @@ class RecordingClient:
             tool_calls=[{"name": c.name, "input": c.input} for c in reply.tool_calls],
             input_tokens=reply.input_tokens,
             output_tokens=reply.output_tokens,
+            cache_write_tokens=reply.cache_write_tokens,
+            cache_read_tokens=reply.cache_read_tokens,
         )
         self._write(line)
         return reply

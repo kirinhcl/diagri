@@ -49,6 +49,7 @@ ROLE_TOOLS: dict[str, frozenset[str]] = {
             "save_plan_draft",
             "query_evidence",
             "propose_evidence_card",
+            "propose_evidence_relation",
         }
     ),
     "researcher": frozenset(

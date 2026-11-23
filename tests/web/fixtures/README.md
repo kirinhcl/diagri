@@ -73,6 +73,7 @@ against the server's enums and literals.
 | safety-none.json | `/safety` when no limits are approved yet (`{"safety": null, "highest_version": null}`, synthetic; give it as `fixtures: {"safety.json": ...}`) |
 | alerts.json | `/alerts` |
 | evidence.json | `/evidence` |
+| evidence-relations.json | `/evidence/relations` (synthetic, no relations) |
 | compute.json | `/compute` (synthetic) |
 | variables.json, variables-pending.json | `/experiments/{experiment_id}/variables` of the ended stage's and of `stage-dev`'s experiment (synthetic) |
 

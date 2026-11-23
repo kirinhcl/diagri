@@ -90,6 +90,22 @@ CODES: dict[str, dict[str, Code]] = {
         "no_evidence": Code(("source_kind", "source")),
         "unverified_source": Code(("source_kind", "source", "card_id")),
         "uncalibrated": Code(("source_kind", "source", "card_id")),
+        "superseded_source": Code(
+            ("source_kind", "source", "card_id", "replacement_id", "replacement_validity")
+        ),
+        "retracted_source": Code(("source_kind", "source", "card_id", "reason")),
+        "dependency_invalid_source": Code(("source_kind", "source", "card_id", "dependency_id")),
+        "contested_source": Code(("source_kind", "source", "card_id", "others")),
+        "pending_relation": Code(("source_kind", "source", "card_id", "relations")),
+        "variable_mismatch": Code(
+            ("source_kind", "source", "card_id", "rule_variable", "card_variable")
+        ),
+        "evidence_unit_mismatch": Code(
+            ("source_kind", "source", "card_id", "rule_unit", "card_unit")
+        ),
+        "crop_mismatch": Code(("source_kind", "source", "card_id", "card_taxon", "protocol_taxon")),
+        "uncataloged_card": Code(("source_kind", "source", "card_id")),
+        "exploratory_finding": Code(("source_kind", "source", "card_id", "label")),
         # an undefined treatment has no name: these two carry the ids where the others name it
         "unknown_treatment": Code(("treatments",)),
         "missing_control.undefined": Code(("control",)),

@@ -107,6 +107,11 @@ Duties:
   cannot get there, end with a short statement of exactly what is missing; the task then goes
   to the user.
 - Cite sources you verified. Mark claims you could not verify as unverified.
+- Do not cite an evidence card that is superseded, retracted or invalid through a dependency;
+  cite its current_replacement instead. When you cite a card that is contested, say in the
+  draft's note which sources apply under which conditions and why you chose the one you did.
+- Propose an evidence relation (propose_evidence_relation) only with a reason taken from the
+  sources, never a guess; it stays pending until an operator confirms it.
 
 {_COMMON_LIMITS}""",
 )

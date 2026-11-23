@@ -623,6 +623,14 @@ class ManualMeasurement(Model):
     corrects: str | None = None  # the record this one corrects; raw records are never edited
 
 
+class ApplicabilityRange(Model):
+    """One condition under which a card holds: a catalog variable within [min, max]."""
+
+    variable: str
+    min: float | None = Field(default=None, allow_inf_nan=False)
+    max: float | None = Field(default=None, allow_inf_nan=False)
+
+
 class EvidenceCard(Model):
     id: str
     source_class: Literal["handbook", "paper", "local"]
@@ -632,6 +640,29 @@ class EvidenceCard(Model):
     unit: str | None = None
     verified: bool = False
     calibrated: bool = True  # False shows as "未校准" (light conversion without local measurement)
+    variable: str | None = None
+    conditions: tuple[ApplicabilityRange, ...] = ()
+    crop_taxon: str = ""
+    cultivar: str = ""
+    growth_stage: str = ""
+    conditions_note: str = ""
+
+    @model_serializer(mode="wrap")
+    def _without_empty_fields(self, handler):
+        # A card without the newer fields dumps as it did before they existed.
+        data = handler(self)
+        if isinstance(data, dict):
+            for name in (
+                "variable",
+                "conditions",
+                "crop_taxon",
+                "cultivar",
+                "growth_stage",
+                "conditions_note",
+            ):
+                if not data.get(name):
+                    data.pop(name, None)
+        return data
 
 
 class Snapshot(Model):

@@ -325,6 +325,7 @@ _register(
     ("duplicate_experiment", ("experiment_id",)),
     ("table_invalid", ("detail",)),
     ("operator_only_evidence", ()),
+    ("evidence_card_invalid", ()),
     ("unknown_treatment", ("treatment_id",)),
     # mixed_protocol and not_this_protocol refine "scope"; these two sites raise "param"
     ("snapshots_mixed_protocol", ()),
@@ -332,6 +333,29 @@ _register(
     action=False,
 )
 _register("quota", ("quota_proposal_limit", ("max_proposals",)), action=False)
+
+# --- evidence relations (archive/evidence_relations.py) ----------------------------------------
+_register("param", ("relation_shape", ("kind",)), ("relation_self", ()))
+_register(
+    "state",
+    ("relation_unknown_card", ("card_id",)),
+    ("relation_cross_scope", ("kind",)),
+    ("relation_card_inactive", ("card_id", "validity")),
+    ("relation_already_superseded", ("card_id", "replacement_id")),
+    ("relation_duplicate", ("relation_id",)),
+    ("relation_not_pending", ("relation_id", "state")),
+    ("relation_not_confirmed", ("relation_id", "state")),
+    ("relation_note_required", ()),
+)
+
+# --- a round's conclusion as a card (research/round_cards.py) ----------------------------------
+_register(
+    "state",
+    ("round_card_not_delivered", ("round_id", "state")),
+    ("round_card_report_unusable", ("round_id", "problem")),
+    ("round_card_exists", ("round_id", "card_id")),
+    ("round_card_no_conclusion", ("round_id",)),
+)
 
 # --- root app (/api) and its browser sessions (api.py, dashboard.py) ----------------------------
 _register("entry", ("origin_not_allowed", ()), ("use_workbench", ()))
