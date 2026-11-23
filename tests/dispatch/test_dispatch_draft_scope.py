@@ -64,12 +64,14 @@ async def test_a_draft_whose_sheet_names_another_project_is_refused(env, project
     assert exc.params == {"project_id": project_q}
 
 
-async def test_a_refused_foreign_draft_names_none_of_the_other_projects_treatments(env, project_q):
+@pytest.mark.parametrize("name", ["save_plan_draft", "validate_run_sheet"])
+async def test_a_sheet_of_another_project_names_none_of_its_treatments(env, project_q, name):
+    """The sheet's project and protocol are both Q's: refused, and nothing of Q comes back."""
     planner = env.task("planner", "ev-planner")
     sheet = env.sheet_json(stage_id="stage-q", project_id=project_q, protocol_id="protocol-q")
 
     outcome = await env.invoke_as(
-        planner.id, "planner", "save_plan_draft", round_id=env.round_id, run_sheet=sheet
+        planner.id, "planner", name, round_id=env.round_id, run_sheet=sheet
     )
 
     assert outcome.is_error and "denied (scope)" in outcome.content
