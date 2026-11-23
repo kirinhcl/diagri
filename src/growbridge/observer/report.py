@@ -32,6 +32,7 @@ class ReportContext(Model):
     todos: tuple[str, ...] = ()
     treatment_deviation: float | None = None  # fraction of time the actual treatment deviated
     recurring: tuple[str, ...] = ()  # problems that recur at about the same hour (episodes.py)
+    stale_evidence: tuple[str, ...] = ()  # cited evidence that no longer stands
 
 
 def _clock(seconds: float) -> str:
@@ -118,6 +119,8 @@ def render_daily_report(
     lines += _section("Crop observations", context.observations) + [""]
     if context.recurring:
         lines += _section("Recurring", context.recurring) + [""]
+    if context.stale_evidence:
+        lines += _section("Evidence no longer valid", context.stale_evidence) + [""]
     lines += _section("To do", context.todos)
     if narrative:
         lines += ["", "Narrative (model-written, no new figures):", narrative]

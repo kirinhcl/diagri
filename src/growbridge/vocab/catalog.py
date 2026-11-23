@@ -104,6 +104,18 @@ class Catalog:
         variable = self.resolve(name)
         return variable.id if variable else None
 
+    def current(self, name: str) -> Variable | None:
+        """The variable ``name`` stands for today: resolve it, then follow ``replaced_by`` to
+        the end. None when the name is unknown or the replacements loop back."""
+        variable = self.resolve(name)
+        seen: set[str] = set()
+        while variable is not None and variable.replaced_by is not None:
+            if variable.id in seen:
+                return None
+            seen.add(variable.id)
+            variable = self.get(variable.replaced_by)
+        return variable
+
     def same(self, a: str, b: str) -> bool:
         first, second = self.canonical(a), self.canonical(b)
         if first is None and second is None:

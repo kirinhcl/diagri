@@ -1,7 +1,8 @@
 import pytest
+from vocab_support import LOOP_ENTRIES, WITH_OLD
 
 from growbridge.control.device import SENSORS
-from growbridge.vocab import CatalogError, load_catalog, packaged_catalog
+from growbridge.vocab import CatalogError, load_catalog, packaged_catalog, packaged_text
 
 BASE = """version = 1
 [[variable]]
@@ -100,3 +101,14 @@ def test_snapshot_record_resolves_and_lists_unknown_names():
     assert [v["id"] for v in record["variables"]] == ["air_temperature", "light"]
     assert record["unresolved"] == ["heigth"]
     assert record["digest"] == packaged_catalog().digest
+
+
+def test_current_follows_replaced_by_to_the_end():
+    assert WITH_OLD.current("canopy_growth_old").id == "canopy_area_growth"
+    assert WITH_OLD.current("temp").id == "air_temperature"  # an alias resolves first
+    assert WITH_OLD.current("nope") is None
+
+
+def test_current_returns_none_on_a_replacement_loop():
+    looped = load_catalog(packaged_text() + LOOP_ENTRIES)  # a -> b -> a, both deprecated
+    assert looped.current("loop_a") is None

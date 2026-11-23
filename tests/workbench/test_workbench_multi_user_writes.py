@@ -68,6 +68,7 @@ def writes(bench: Bench, event_id: str) -> list[tuple[str, dict]]:
         ("/wb/rounds", {"project_id": project, "protocol_id": "protocol-1"}),
         (f"/wb/rounds/{round_id}/choice", {"choice": "redo"}),
         (f"/wb/rounds/{round_id}/abort", {}),
+        (f"/wb/rounds/{round_id}/evidence", {}),
         (f"/wb/projects/{project}/budget", {"max_calls": 1, "max_cost": 1.0}),
         ("/wb/goals", {"project_id": project, "goal": "grow"}),
         ("/wb/drafts/run-sheet", {"round_id": round_id, "run_sheet": _sheet(bench)}),
@@ -98,7 +99,7 @@ def answer(response) -> tuple[int, object]:
     return response.status_code, response.json()
 
 
-@pytest.mark.parametrize("index", range(25))
+@pytest.mark.parametrize("index", range(26))
 def test_b_cannot_write_a(world, index):
     bench, event_id = world
     path, body = writes(bench, event_id)[index]

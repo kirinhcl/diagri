@@ -10,6 +10,7 @@ import { inline, richText } from "../ui/rich-text.js";
 import { afterWrite, confirmedButton, errorParts, keyValues, note, pageHead, section, techDetails } from "../ui/section.js";
 import { statePill } from "../ui/status.js";
 import { table } from "../ui/table.js";
+import { cardSection } from "./round-card.js";
 import { analysisSection } from "./round-analysis.js";
 
 const CHOICES = ["redo", "next", "verify", "abort"];
@@ -200,18 +201,20 @@ export function reportView(ctx, data, round = {}) {
   );
 }
 
+// The report's section and, with it, what the server says of turning it into an evidence card.
 async function reportSection(ctx, round) {
-  if (!round.report_artifact_id) return null;
+  if (!round.report_artifact_id) return { section: null, card: null };
   try {
     const data = await ctx.api.get(`/rounds/${encodeURIComponent(round.round_id)}/report`);
-    return section(ctx.t("report.title"), reportView(ctx, data, round));
+    return { section: section(ctx.t("report.title"), reportView(ctx, data, round)), card: data.round_card };
   } catch (error) {
     // The report could not be read: the error's own fold, and the round's report and snapshot ids.
     const ids = techDetails(ctx.t, [
       [ctx.t("report.artifactId"), round.report_artifact_id],
       [ctx.t("tech.id.snapshot_id"), round.snapshot_id],
     ]);
-    return section(ctx.t("report.title"), h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)), ids);
+    const failed = h("div", { class: "form-status form-status-error" }, errorParts(ctx, error));
+    return { section: section(ctx.t("report.title"), failed, ids), card: null };
   }
 }
 
@@ -224,13 +227,15 @@ export async function render(ctx, params) {
     { label: name },
   ]);
   const [analysis, report] = await Promise.all([analysisSection(ctx, round), reportSection(ctx, round)]);
+  const card = await cardSection(ctx, round, report.card);
   const element = h(
     "div",
     { class: "page round" },
     pageHead(name, ctx.t("round.lead")),
     techDetails(ctx.t, nameDetails(round, ctx.t)),
     section(ctx.t("round.summary"), summary(ctx, round)),
-    report,
+    report.section,
+    card,
     round.awaiting_choice ? choiceForm(ctx, round) : null,
     section(ctx.t("round.stages"), stagesView(ctx, round)),
     CLOSED.has(round.state) ? null : section(ctx.t("round.abortSection"), note(ctx.t("round.abortNote")), abortButton(ctx, round)),

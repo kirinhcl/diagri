@@ -51,9 +51,9 @@
 
 **能读。** 传感器、通道和档位范围（`get_device_capabilities`）；本项目以往实验的快照和测量条数（`find_prior_runs`）；联网搜索结果（`lookup_crop_conditions`、`search_and_verify_sources`）。运行时没有接入搜索后端，所以这两个工具目前都返回 `unavailable`。
 
-**能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。草稿必须执行协议分配给本轮的处理：处理里给出档位的每个通道都要由主机控制，并用定时动作设到这个档位（允许设为 0，比如夜间）。只写 `retained_level` 不算执行，它只是阶段暂停时保持的状态。上下文会告诉计划 Agent 每一轮的 `protocol_round` 和 `treatment`（[`planning/treatment.py`](../../../src/growbridge/planning/treatment.py)）。这个工具能保存的只有运行单。搜索证据卡（`query_evidence`，每张卡都标明是否已核实），并提议新卡（`propose_evidence_card`）以便在运行单里引用。不管输入怎么写，提议都存成**未核实**，来源记为 `model:planner` 和正在运行的任务；卡 ID 由服务器生成，一个任务最多提议 20 张。读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。
+**能做。** 检查已保存协议的实验设计（`check_experimental_design`）；估算需要的区组数或单位数（`estimate_sample_size`）；校验运行单但不保存（`validate_run_sheet`）；提交运行单草稿（`save_plan_draft`），阶段随之进入 `pending_review`，等操作员处理。草稿必须执行协议分配给本轮的处理：处理里给出档位的每个通道都要由主机控制，并用定时动作设到这个档位（允许设为 0，比如夜间）。只写 `retained_level` 不算执行，它只是阶段暂停时保持的状态。上下文会告诉计划 Agent 每一轮的 `protocol_round` 和 `treatment`（[`planning/treatment.py`](../../../src/growbridge/planning/treatment.py)）。这个工具能保存的只有运行单。搜索证据卡（`query_evidence`，每张卡都标明是否已核实），并提议新卡（`propose_evidence_card`）以便在运行单里引用。卡可以带目录变量、适用范围、作物、品种和生长期，按目录检查，和操作员录入的卡一样。不管输入怎么写，提议都存成**未核实**，来源记为 `model:planner` 和正在运行的任务；卡 ID 由服务器生成，一个任务最多提议 20 张。读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。它还可以提议一张卡取代或反驳另一张卡，或撤回自己（`propose_evidence_relation`，每个任务最多 10 条，理由要来自它读到的内容而不是猜测）。提议保持待定：操作员确认之前，不改变任何卡。
 
-**绝对做不了。** 核实证据卡：那是操作员的事，是一条独立的记录，在核实之前，运行单的审阅会一直显示 `unverified_source` 提示。批准自己的草稿。保存或修改研究协议：它没有这样的工具，`save_protocol` 也拒绝模型身份。提交带阻断性问题的草稿：同样的校验在工作流服务里还会再做一遍。
+**绝对做不了。** 核实证据卡：那是操作员的事，是一条独立的记录，在核实之前，运行单的审阅会一直显示 `unverified_source` 提示。确认、驳回或撤销证据关系：那是操作员的事，模型写的理由也不会离开它自己的项目。提交引用了已被取代、已撤回或依据已失效数据的卡的草稿：`validate_run_sheet` 和 `save_plan_draft` 会把这作为阻断性问题返回。批准自己的草稿。保存或修改研究协议：它没有这样的工具，`save_protocol` 也拒绝模型身份。提交带阻断性问题的草稿：同样的校验在工作流服务里还会再做一遍。
 
 **代码。** [`agents/handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)，校验逻辑在 [`planning/`](../../../src/growbridge/planning/)。
 
@@ -61,7 +61,7 @@
 
 **做什么用。** 冻结一个阶段的数据，做分析，发布本轮的报告。
 
-**能读。** 档案里的证据卡（`query_evidence`）；本项目的数据快照，只能在沙箱里读；计算作业的状态（`get_compute_job`）。
+**能读。** 本项目看得到的证据卡及其状态（`query_evidence`）：已被取代、已撤回或依赖失效的卡不出现在搜索结果里，只计入 `hidden_inactive`；本项目的数据快照，只能在沙箱里读；计算作业的状态（`get_compute_job`）。
 
 **能做。**
 

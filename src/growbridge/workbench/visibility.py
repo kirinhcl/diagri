@@ -19,6 +19,7 @@ READ_RULES: dict[str, str] = {
     "/wb/environment": "device",
     "/wb/capabilities": "public",
     "/wb/evidence": "public",
+    "/wb/evidence/relations": "public",
     "/wb/experiments/{experiment_id}/variables": "project",
     "/wb/holdouts": "project",
     "/wb/inbox": "inbox",

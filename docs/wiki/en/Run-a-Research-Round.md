@@ -171,7 +171,7 @@ GET /wb/stages/STAGE_ID/run-sheet
 
 The answer has the full `run_sheet`, its `run_sheet_version` and `run_sheet_digest`, the validation `findings` as they are now, and `blocking`, which is `true` when a finding stops the approval. Reading changes nothing. A model role cannot call this route. There is **no route** to read a saved research protocol.
 
-The `findings` also carry the evidence hints of every set point (the timed actions, feedback rules and care steps): `no_evidence` when it cites no card (a card id that does not exist counts as no card, and `user:...` means you told the planner yourself), `unverified_source` when no operator has verified the card (this holds for every class of card, `local` included: a card the planner proposed is never `local`, because a model cannot propose a local card, and an unverified card always gets the hint), and `uncalibrated` when the card's value was not calibrated against a local measurement. A model cannot claim calibration: a card the planner proposed is stored uncalibrated, and the hint stays after you verify it until you attest the calibration yourself. They are hints and never block the approval. A card counts as verified once an operator has recorded a verification. Read and verify the cards before you approve:
+The `findings` also carry the evidence hints of every set point (the timed actions, feedback rules and care steps): `no_evidence` when it cites no card (a card id that does not exist counts as no card, and `user:...` means you told the planner yourself), `unverified_source` when no operator has verified the card (this holds for every class of card, `local` included: a card the planner proposed is never `local`, because a model cannot propose a local card, and an unverified card always gets the hint), and `uncalibrated` when the card's value was not calibrated against a local measurement. A model cannot claim calibration: a card the planner proposed is stored uncalibrated, and the hint stays after you verify it until you attest the calibration yourself. These three are hints and never block the approval (the hints about a card's fit are listed under "When a card stops being valid" below). A card counts as verified once an operator has recorded a verification. Read and verify the cards before you approve:
 
 ```http
 GET /wb/evidence
@@ -189,6 +189,34 @@ POST /wb/evidence
 ```
 
 A card you enter is verified by you in the same step; the answer has the new `id` to give the planner. Neither call asks for a recent re-authentication.
+
+### When a card stops being valid
+
+A card is never edited. When a better source replaces it, when two sources disagree, or when you find it was wrong, you record a relation between cards:
+
+```http
+POST /wb/evidence/relations
+{"kind": "supersedes", "card_id": "NEW_CARD_ID", "other_card_id": "OLD_CARD_ID", "reason": "the 2025 trial repeats it at higher light"}
+```
+
+`kind` is `supersedes` (`card_id` replaces `other_card_id`; both must be public, or both in the same project), `contradicts` (the two disagree and both stay; a public card and a project card may be joined, but cards of two different projects may not) or `retracts` (`card_id` is taken back; leave `other_card_id` out). A relation you record takes effect at once. When the planner proposes one it waits for you: list them with `GET /wb/evidence/relations?project_id=PROJECT_ID`, then answer with `POST /wb/evidence/relations/RELATION_ID/review`, body `{"decision": "confirmed", "note": "..."}` (a note is required only to confirm a planner proposal between public cards: it then takes effect in every project, and other projects see your note instead of the planner's reason) or `{"decision": "rejected"}`. Confirming checks the rules again, so a proposal whose old card was superseded in the meantime is refused with `relation_already_superseded`; you can still reject it. To end a confirmed relation, `POST /wb/evidence/relations/RELATION_ID/withdraw` with a `reason`. The first review and the first withdrawal stay.
+
+`GET /wb/evidence` then shows each card's `status`: `retracted`, `dependency_invalid`, `superseded` or `active` (a card that is several at once shows the first of these). Add `as_of` (epoch seconds) to see the cards and their status at an earlier time (a card entered later is left out), `status` or `variable` to narrow the list. The evidence page of the workbench has the same filters, with a date and time field for `as_of`.
+
+What this does to a run sheet:
+
+- **Blocking.** Submitting a run sheet, replacing one, and approving a stage are refused while a set point cites a card that is no longer active. The findings are `superseded_source` (it names the card that replaces it), `retracted_source` and `dependency_invalid_source` (the report or snapshot the card rests on was invalidated).
+- **A stage that already runs is not stopped.** Once the stage is past review the same findings only inform. The daily report of a running stage lists up to five such citations under "Evidence no longer valid", with the replacement when there is one.
+- **Hints.** `contested_source` (an active card contradicts it), `pending_relation` (a proposal about the card awaits review), `variable_mismatch`, `evidence_unit_mismatch` (the card's variable or unit differs from the rule's; for a sensor name the catalog does not know only the variables are not compared, the units still are; a card that names no catalog variable is not compared, and one that has a value gets `uncataloged_card` instead), `crop_mismatch`, `uncataloged_card` and `exploratory_finding` (the card comes from a round whose report was not confirmatory).
+
+To keep a result for later, turn a delivered round's conclusion into a card:
+
+```http
+POST /wb/rounds/ROUND_ID/evidence
+{}
+```
+
+The body may add `growth_stage`, `conditions`, `conditions_note`, `value` and `unit`. The card is a verified `local` card, visible and citable only in the round's project, and it remembers the report and the snapshots behind it. If a later correction invalidates either, the card becomes `dependency_invalid` and does not recover; a new round gives a new card. A round converts once, and a report with no conclusion is refused.
 
 ## 3. Approve the run sheet
 

@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 59 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 64 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -103,6 +103,7 @@
 | `GET` | `/wb/rounds/{round_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/rounds/{round_id}/report` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/rounds/{round_id}/choice` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
+| `POST` | `/wb/rounds/{round_id}/evidence` | 操作员 | 局域网、覆盖网络 | 否 | `state`（未交付、报告不可用、已转过、没有结论）、`param` |
 | `POST` | `/wb/rounds/{round_id}/abort` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/projects/{project_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
@@ -113,9 +114,13 @@
 | `POST` | `/wb/analysis/runs` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state`、`scope`、`snapshot_incomplete`、`already_run`、`sandbox_unavailable` |
 | `POST` | `/wb/holdouts` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope`、`state`、`batches`、`param` |
 | `GET` | `/wb/holdouts` | 操作员 | 局域网、覆盖网络 | 否 | `scope` |
-| `POST` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `POST` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | `param`（卡片没有通过目录检查） |
 | `POST` | `/wb/evidence/{card_id}/verify` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
-| `GET` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/evidence` | 操作员 | 局域网、覆盖网络 | 否 | `state`（看不到这个项目） |
+| `POST` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | `param`（形状不对、卡片与自己建立关系）、`state`（其余关系规则） |
+| `POST` | `/wb/evidence/relations/{relation_id}/review` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不在待确认、需要说明、规则复核、关系不存在） |
+| `POST` | `/wb/evidence/relations/{relation_id}/withdraw` | 操作员 | 局域网、覆盖网络 | 否 | `state`（未确认、关系不存在） |
+| `GET` | `/wb/evidence/relations` | 操作员 | 局域网、覆盖网络 | 否 | `state`（看不到这个项目） |
 | `POST` | `/wb/compute/balance` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required` |
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`scope` |
 | `POST` | `/wb/compute/attempts/{attempt_id}/settle` | 操作员 | 局域网、覆盖网络 | 是 | `reauth_required`、`state` |
@@ -166,8 +171,9 @@
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |
 | `POST` | `/wb/rounds` | `project_id`、`protocol_id`（各 1 到 100） | `round_id`、`state` |
 | `GET` | `/wb/rounds/{round_id}` | 无 | `round_id`、`project_id`、`protocol_id`、`protocol_version`、`state`、`stages_done`、`stage_total`、`awaiting_choice`、`snapshot_id`、`report_artifact_id`，`project_name` 和 `round_number`（轮次在项目里同一协议的轮次中的序号，从 1 起），以及 `stages`（由 `stage_id`、`state`、`stage_index`（按创建顺序的序号，从 1 起）和 `phase`（协议版本给这个序号的生长期）组成的列表）。服务器找不到的名字（项目或协议已不存在、协议的生长期比阶段少）为 `null` |
-| `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`；其中 `estimate` 在 `note` 之外还有 `note_code` 和 `note_params`，精确估计的 `note_code` 为空）和 `primary_endpoint`（轮次的协议所定的主要终点指标，协议已不存在时为 `null`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。 |
+| `GET` | `/wb/rounds/{round_id}/report` | 无 | 轮次已发布的报告：`round_id`、`artifact_id`、`label`、`sha256`，以及 `report`（报告文件内容：`label`、`reasons`、`conclusion`、`estimate`、`limitations`、`unresolved`、`next_round`、`evidence_chain`、`snapshot_id`；其中 `estimate` 在 `note` 之外还有 `note_code` 和 `note_params`，精确估计的 `note_code` 为空）和 `primary_endpoint`（轮次的协议所定的主要终点指标，协议已不存在时为 `null`）。只有文件和档案记录的摘要一致时才读出；不一致或轮次没有报告时返回 `state`。回答还带 `round_card`：能转时为 `{}`，转过后为 `{"card_id"}`，不能转时为 `{"refusal": {"reason", "params"}}`，写明原因。 |
 | `POST` | `/wb/rounds/{round_id}/choice` | `choice`：`redo`、`next`、`verify` 或 `abort` | `round_id`、`state` |
+| `POST` | `/wb/rounds/{round_id}/evidence` | 可选 `growth_stage`（至多 100）、`conditions`（至多 8 个范围）、`conditions_note`（至多 500）、`value`（有限数）、`unit`（至多 40） | `card_id`、`verified`（恒为 true）、`label`（报告的标签）。把已交付轮次报告的结论转成一张 `local` 卡，范围限于该轮次的项目，由操作员核实；论断取报告的 `conclusion`（超过 1000 字则截断），变量取方案的主要终点（目录里没有就不填），作物和品种取方案的。给了 `value` 而没给 `unit` 时，单位取该变量的目录单位。卡与报告及其快照关联：其中任何一个后来被修正，卡就变成 `dependency_invalid`。一份报告只转一次；报告缺失、被改动、已失效或读过留出集时被拒绝。需要该项目的所有者 |
 | `POST` | `/wb/rounds/{round_id}/abort` | 无 | `round_id`、`state` |
 | `GET` | `/wb/stages/{stage_id}/run-sheet` | 无 | `stage_id`、`state`、`run_sheet_version`、`run_sheet_digest`、`run_sheet`（即 `RunSheet`）、`findings`（由 `code`、`variant`、`params`、`message`、`blocking` 组成的列表：`variant` 为空，或把 `code` 细分到某一句话，`params` 是那句话要写出的值；先是校验器的发现，再是每个设定值的证据提示 `no_evidence`、`unverified_source`、`uncalibrated`，这些提示不阻塞）、`blocking`、`approval`（阶段没有 `start` 会接受的批准时为 `null`，否则是 `approved_at` 和 `run_sheet_version`；它用的检查和 `start` 完全相同，所以控制台在它为 `null` 时让“开始”保持关闭） |
 | `POST` | `/wb/projects/{project_id}/budget` | `max_calls`（整数，0 到 1000000）、`max_cost`（美元，0 到 1000000） | `project_id`、`max_calls`、`max_cost`、`remaining_calls`、`remaining_cost` |
@@ -177,9 +183,13 @@
 | `GET` | `/wb/protocols/{protocol_id}/analysis` | 查询参数 `project_id`（1 到 100） | `protocol_id`、`version`、`started`、`frozen`（`null`，或 `script_sha256`、`frozen_at`、`frozen_by`、`script`）、`snapshots`（一组 `snapshot_id`、`experiment_id`、`complete`、`run_status`、`created_at`） |
 | `POST` | `/wb/analysis/runs` | `project_id`、`protocol_id`、`snapshot_id`（各 1 到 100） | `run_id`、`status`、`exit_code`、`timed_out`、`stdout`、`stderr`（后两个截到 4000 个字符） |
 | `POST` | `/wb/holdouts` | `project_id`、`batch_ids`、`development_batch_ids`、`outcome_fields`（各 1 到 50 个名字，每个 1 到 100 个字符，不重复；两个批次列表不重叠，开发批次至少 2 个） | `holdout_id`（由服务端生成）、`project_id`、`batch_ids`、`outcome_fields`、`development_batch_ids`、`registered_at`、`registered_by`（会话中的操作员） |
-| `POST` | `/wb/evidence` | `source_class`（`handbook`、`paper` 或 `local`）、`citation`（去掉首尾空白后 1 到 500 个字符）、`claim`（1 到 1000）；可选 `value`（有限数）、`unit`（最多 40）、`calibrated`（默认为真） | `id`（由服务器生成）、`verified`（恒为真：录入的操作员当场核实）、`source`（`operator:<姓名>`） |
+| `POST` | `/wb/evidence` | `source_class`（`handbook`、`paper` 或 `local`）、`citation`（去掉首尾空白后 1 到 500 个字符）、`claim`（1 到 1000）；可选 `value`（有限数）、`unit`（最多 40）、`calibrated`（默认为真），以及可选的适用范围字段：`variable`（目录里的标准变量，用它的 ID；用别名会被拒绝，拒绝时写明该用的 ID）、`conditions`（至多 8 个范围，每个是一个目录 `variable` 加 `min`、`max` 或两者）、`crop_taxon`（`NCBITaxon:<数字>`，给了品种就必须填）、`cultivar`（至多 200）、`growth_stage`（至多 100）、`conditions_note`（至多 500） | `id`（由服务器生成）、`verified`（恒为真：录入的操作员当场核实）、`source`（`operator:<姓名>`）。卡片先按目录检查：变量未知、已弃用或是因子，有数值却没有单位或单位与变量的不同，范围超出变量的界限，分类单元格式不对，都以 `param` 拒绝，并列出每个问题。没有这些字段的卡片照旧保存 |
 | `POST` | `/wb/evidence/{card_id}/verify` | 可选 `note`（最多 500 个字符），可选 `calibrated`（默认为假：操作员证明这个数值已用本地测量校准过） | `card_id`、`verified`、`verified_by`、`verified_at`、`note`、`calibrated`。重复核实返回第一条记录（含证明），不再写入；对已核实的卡再传 `calibrated: true` 不会改变任何东西。卡不存在以 `state` 拒绝 |
-| `GET` | `/wb/evidence` | 无 | `cards`：每张卡，另有 `source`（`operator:<姓名>` 或 `model:planner`）、`task_id`、`added_at`、`verified`、`verified_by`、`verified_at`、`note` |
+| `GET` | `/wb/evidence` | 可选查询参数 `project_id`、`as_of`（有限的 epoch 秒，默认现在；在它之后录入的卡不列出）、`status`（`active`、`superseded`、`retracted` 或 `dependency_invalid`）、`variable`（目录变量，用 ID 或别名） | `cards`：这个范围内可见的卡，每张带 `source`（`operator:<姓名>` 或 `model:planner`）、`task_id`、`added_at`、`verified`、`verified_by`、`verified_at`、`note`、`status`（`card_id`、`validity`、`superseded_by`、`current_replacement`、`retracted_reason`、`invalid_dependency`、`contested_with`、`pending`，都按 `as_of` 计算），轮次卡另带 `origin`（`round_id`、`report_artifact_id`、`label`）；`variables`：卡片可以使用的目录变量（`id`、`kind`、`unit`、`label_en`、`label_zh`）。不带 `project_id` 时不列出某个项目的轮次卡；带上时，列出公开卡和该项目自己的卡 |
+| `POST` | `/wb/evidence/relations` | `kind`（`supersedes`、`contradicts` 或 `retracts`）、`card_id`、`other_card_id`（`supersedes` 和 `contradicts` 必填，`retracts` 不能填）、`reason`（去掉首尾空白后 1 到 500 个字符） | 关系记录：`relation`（`id`、`kind`、`subject_id`、`object_id`、`reason`、`source`，形如 `operator:<姓名>`、`project_id`、`at`）、`review` 和 `withdrawal`（有才出现）、`state`（`confirmed`：操作员记下的关系立即生效）。`supersedes` 里新卡是 `card_id`，旧卡是 `other_card_id`；`retracts` 里 `card_id` 是被收回的卡。会被拒绝的情况：卡不存在或调用者看不到；要取代别的卡的那张卡自己不是有效状态（已撤回、已取代或依赖失效）；`retracts` 指向一张已撤回的卡；旧卡已被另一张卡取代；两张卡分属两个不同的项目（任何关系都不行；公开卡与项目卡之间可以记 `contradicts`，不能记 `supersedes`）；同一条关系重复。有一张卡属于某个项目时，需要该项目的所有者 |
+| `POST` | `/wb/evidence/relations/{relation_id}/review` | `decision`（`confirmed` 或 `rejected`）、`note`（最多 500 个字符；只有确认计划 Agent 在公开卡之间的提议时才必填，这样的提议会在所有项目里生效） | 带新 `state` 的关系记录。只有待确认的关系能审核；第一次审核为准，再审核以 `relation_not_pending` 拒绝。确认时按卡片现在的样子重新检查规则，所以旧卡在此期间已被取代的提议会被拒绝（`relation_already_superseded`），但仍然可以驳回。需要提议所在项目的所有者 |
+| `POST` | `/wb/evidence/relations/{relation_id}/withdraw` | `reason`（去掉首尾空白后 1 到 500 个字符） | 关系记录，`state` 为 `withdrawn`。只有已确认的关系能撤销；第一次撤销为准。关系从那一刻起不再算数，用更早的 `as_of` 读状态仍然看得到它 |
+| `GET` | `/wb/evidence/relations` | 可选查询参数 `project_id` | `relations`：这个范围可见的关系记录，格式同上。模型的提议只在提出它的项目里可见；确认之后在别的项目里可见，但不带任务，并以操作员的审核说明代替模型的理由 |
 | `GET` | `/wb/holdouts` | 查询参数 `project_id` | `holdouts`：每个登记如上，另有 `reads`，一组 `reader`、`at`、`label`、`model_sha` |
 | `POST` | `/wb/compute/balance` | `cpu_hours`（有限的数，0 或更大；字符串和布尔值会被拒绝），可选 `note`（最多 500 个字符） | 这条录入：`cpu_hours`、`entered_by`（会话里的操作员；请求体里的姓名会被丢弃）、`note`、`recorded_at` |
 | `POST` | `/wb/compute/tasks/{task_id}/budget` | `cpu_hours`、`storage_gb`（有限的数，0 或更大） | 该任务的一行：`task_id`、`cpu_hours_budget`、`storage_gb_budget`、`cpu_hours_used`、`storage_gb_used`、`cpu_hours_reserved`、`storage_gb_reserved`。任务不存在时以 `scope` 拒绝。 |
@@ -253,7 +263,7 @@
 
 ## 模型角色的工具
 
-来源：[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`，以及 [`handlers_orchestrator.py`](../../../src/growbridge/agents/handlers_orchestrator.py)、[`handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)、[`handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py) 和 [`handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 里的处理函数。编排 Agent 有 7 个工具，计划 Agent 有 11 个，研究 Agent 有 9 个，监察 Agent 有 6 个。这些工具由守护进程内部的模型调用，既不是 HTTP 路由，也不是 MCP 工具。
+来源：[`agents/tools.py`](../../../src/growbridge/agents/tools.py) 的 `ROLE_TOOLS`，以及 [`handlers_orchestrator.py`](../../../src/growbridge/agents/handlers_orchestrator.py)、[`handlers_planner.py`](../../../src/growbridge/agents/handlers_planner.py)、[`handlers_researcher.py`](../../../src/growbridge/agents/handlers_researcher.py)、[`handlers_report.py`](../../../src/growbridge/agents/handlers_report.py)、[`handlers_auditor.py`](../../../src/growbridge/agents/handlers_auditor.py) 和 [`handlers_common.py`](../../../src/growbridge/agents/handlers_common.py) 里的处理函数。编排 Agent 有 7 个工具，计划 Agent 有 12 个，研究 Agent 有 9 个，监察 Agent 有 6 个。这些工具由守护进程内部的模型调用，既不是 HTTP 路由，也不是 MCP 工具。
 
 "类别"取值为 `read`、`write`、`web`（结果是不可信的网页内容）或 `sandbox`。一个角色在一次运行里调用过 `web` 工具之后，它的 `write` 和 `sandbox` 工具在这次运行的剩余部分都会被拒绝。输入里有未知字段时校验失败。被拒绝时，模型收到的是一条错误结果，格式为 `Error: denied (<code>): <message>`。
 
@@ -273,13 +283,14 @@
 | planner | `check_experimental_design` | read | `project_id`、`protocol_id` | 检查一份已保存的研究协议的设计。 |
 | planner | `estimate_sample_size` | read | `effect`、`sd` | 估算需要多少个区组或实验单位。 |
 | planner | `validate_run_sheet` | read | `run_sheet` | 校验运行单，但不保存。带 `round_id` 时，还会像 `save_plan_draft` 一样检查运行单是否执行了本轮分配的处理。 |
-| planner | `query_evidence` | read | 无 | 在档案里搜索证据卡；每张卡都标明操作员是否已核实。 |
-| planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。它不能核实证据卡。 |
+| planner | `query_evidence` | read | 无 | 按 `ids`、`text` 或 `variable` 搜索任务所在项目看得到的证据卡；每张卡标明操作员是否已核实以及它的状态。已被取代、已撤回或依赖失效的卡不出现在搜索结果里，只计入 `hidden_inactive`；按 ID 点名要时，只返回它的状态和替代它的卡。 |
+| planner | `propose_evidence_card` | write | `task_id`、`source_class`、`citation`、`claim` | 把计划 Agent 读到的一条来源存成“未核实”的证据卡，返回 `card_id`，供运行单引用。还可以给出 `variable`、`conditions`、`crop_taxon`、`cultivar`、`growth_stage` 和 `conditions_note`；卡片和操作员录入的卡一样按目录检查。它不能核实证据卡。 |
+| planner | `propose_evidence_relation` | write | `task_id`、`kind`、`card_id`、`reason` | 提议一张卡（`card_id`）取代另一张卡（`other_card_id`）或与它矛盾；或者用 `retracts` 提议收回 `card_id` 这张卡，这时不填 `other_card_id`。`supersedes` 里 `card_id` 是新卡，`other_card_id` 是被它取代的旧卡。提议保持待定，操作员确认之前不改变任何卡。 |
 | planner | `save_plan_draft` | write | `round_id`、`run_sheet` | 提交运行单草稿，等操作员审阅。它不做审批。没有执行本轮分配处理的运行单（`treatment_not_applied`）不会保存。 |
 | planner | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
 | researcher | `inspect_stage_data` | read | `task_id`、`stage_id` | 按冻结会用的时间窗汇总一个已启动阶段的数据（覆盖率、缺口、样本数、各通道取值范围、各指标的人工测量、人工任务是否按时完成、已有快照），不写入任何东西。留出批次的测量只给条数。 |
 | researcher | `freeze_dataset` | write | `task_id`、`stage_id` | 把一个阶段的数据冻结成经过校验的数据快照；带 `round_id` 且快照完整时，还会推进轮次。 |
-| researcher | `query_evidence` | read | 无 | 在项目档案里搜索证据卡。 |
+| researcher | `query_evidence` | read | 无 | 与计划 Agent 的 `query_evidence` 是同一个搜索，说明也相同。 |
 | researcher | `run_local_analysis` | sandbox | `task_id`、`snapshot_id`、`script` | 在沙箱里对一个数据快照运行探索性脚本。 |
 | researcher | `submit_compute_job` | write | `task_id`、`template_id` | 按已登记的模板提交一个计算作业。 |
 | researcher | `get_compute_job` | read | `attempt_id` | 读取计算作业的状态。 |
@@ -293,7 +304,9 @@
 | auditor | `read_round_history` | read | `round_id` | 与编排 Agent 相同。 |
 | auditor | `raise_audit_finding` | write | `task_id`、`stage_id`、`severity`、`summary` | 发出一条建议性的 `audit_finding` 告警（`info` 或 `warning`），可附若干行 `evidence`。它不暂停任何东西，也不改动别的东西。 |
 
-证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。
+证据卡。`propose_evidence_card` 需要调度器正在运行的任务，而且这个任务必须是计划任务。不管输入怎么写，卡片都以“未核实”保存，来源记为 `model:planner` 和任务 ID：输入里没有核实字段，多余的字段会被拒绝。输入里也没有 `calibrated` 字段：模型不能声称已校准，所以提议的卡以“未校准”保存，即使操作员核实之后，`uncalibrated` 提示仍然保留，直到操作员核实时用 `calibrated: true` 证明校准过（这个证明随核实记录一起保存；第一次核实为准）。操作员自己录入的卡，保留操作员录入的 `calibrated` 值。模型不能提议 `local` 卡：`source_class` 为 `local` 会以 `param` 拒绝，因为只有操作员才能把本地测量记成证据。任何类别的未核实卡，包括 `local`，在运行单的审阅里一律带 `unverified_source` 提示，直到操作员核实。卡 ID 由服务器生成，一个任务最多提议 20 张卡（`quota`）；读过网页内容的计划 Agent 在这次运行的剩余时间里就没有这个写入工具了，所以要先提议、再搜索。只有操作员能核实一张卡，经 `POST /wb/evidence/{card_id}/verify`；那会追加一条记录，卡片原文永不改动。提议的卡可以带和操作员录入的卡相同的适用范围字段（`variable`、`conditions`、`crop_taxon`、`cultivar`、`growth_stage`、`conditions_note`），按目录做同样的检查；检查不通过以 `param` 拒绝。
+
+证据关系。`propose_evidence_relation` 同样需要调度器正在运行的计划任务（其他任务以 `wrong_task_kind` 拒绝）。它把提议存成待定，记下 `model:planner`、任务 ID 和提出它的项目，返回 `relation_id`；一个任务最多提议 10 条关系（`quota`）。提议时适用和操作员一样的规则（项目看不到的卡视为不存在），操作员确认时再检查一遍。待定的提议不改变任何卡：它只会让引用这张卡的运行单在审阅里出现 `pending_relation` 提示。只有操作员能确认、驳回或撤销关系，经上面三条路由；模型没有这样的工具，它写的理由也不会离开它自己的项目。
 
 研究 Agent 的工具只要涉及快照、阶段、轮次或计算提交，就必须带 `task_id`。这个编号要和调度器正在运行的任务比对，而不是照单全收：任何其他编号、别的角色的任务、以及在调度运行之外发起的调用，都会以 `scope` 被拒绝；其他项目的阶段、轮次或快照同样以 `scope` 被拒绝。
 

@@ -8,8 +8,9 @@ refused with ``model_role``, reads included.
 """
 
 import json
+import pathlib
 from collections.abc import Awaitable, Callable
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Path, Query
 from pydantic import Field, StrictInt, StringConstraints
@@ -17,17 +18,25 @@ from pydantic import Field, StrictInt, StringConstraints
 from growbridge.agents.budget import BudgetUsage
 from growbridge.agents.conversation import ConversationLog
 from growbridge.archive.ids import file_digest, new_id
-from growbridge.archive.models import Budget, ResearchProtocol, ResearchTask, non_finite_paths
+from growbridge.archive.models import (
+    Artifact,
+    Budget,
+    ResearchProtocol,
+    ResearchTask,
+    non_finite_paths,
+)
 from growbridge.archive.store import Archive
-from growbridge.planning.validate import check_evidence
-from growbridge.ports import Actor, Denied
+from growbridge.planning.evidence_validity import GATE_CODES, evidence_review
+from growbridge.ports import Actor, Denied, Finding, StageRuntime
 from growbridge.research.notes import TEXT_LANGUAGE
+from growbridge.research.round_cards import round_card_sources, round_card_state
 from growbridge.workbench.common import REQUEST_ID, Body, rejected
 from growbridge.workbench.scope import project_read, project_write, stage_read
 from growbridge.workflow import denials
 from growbridge.workflow.access import Access
 from growbridge.workflow.naming import round_names, round_phases, stage_place
 from growbridge.workflow.service import Choice, WorkflowService
+from growbridge.workflow.states import StageState
 from growbridge.workflow.tasks import TaskBoard
 
 GOAL_ROLE = "orchestrator"  # the single entry point for a goal (architecture §4)
@@ -118,11 +127,9 @@ def round_json(workflow: WorkflowService, round_id: str) -> dict:
 MAX_REPORT_BYTES = 1_000_000
 
 
-def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> dict:
-    """The round's published report, read from its file once the file matches the digest the
-    archive recorded for it; a round without a report is refused with ``state``."""
-    rnd = workflow.store.round(round_id)
-    artifact = None if rnd.report_artifact_id is None else archive.artifact(rnd.report_artifact_id)
+def _report_artifact(archive: Archive, round_id: str, artifact_id: str | None) -> Artifact:
+    """The round's published report artifact; a round without one is refused with ``state``."""
+    artifact = None if artifact_id is None else archive.artifact(artifact_id)
     if artifact is None or artifact.kind != "research_report":
         raise Denied(
             "state",
@@ -130,6 +137,12 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
             reason="report_not_published",
             params={"round_id": round_id},
         )
+    return artifact
+
+
+def _report_path(archive: Archive, round_id: str, artifact: Artifact) -> pathlib.Path:
+    """The report's file, inside the data directory and matching the digest the archive recorded
+    for it; otherwise refused with ``state``."""
     path = archive.root.joinpath(artifact.path).resolve()
     data_dir = archive.root.resolve().parent
     if not path.is_relative_to(data_dir) or not path.is_file():
@@ -146,6 +159,22 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
             reason="artifact_digest_mismatch",
             params={"round_id": round_id, "artifact_id": artifact.id},
         )
+    return path
+
+
+def report_json(
+    workflow: WorkflowService,
+    archive: Archive,
+    round_id: str,
+    holdout: Any = None,
+    access: Access | None = None,
+) -> dict:
+    """The round's published report, read from its file once the file matches the digest the
+    archive recorded for it; a round without a report is refused with ``state``. ``round_card``
+    says whether it can become an evidence card (see ``round_card_state``)."""
+    rnd = workflow.store.round(round_id)
+    artifact = _report_artifact(archive, round_id, rnd.report_artifact_id)
+    path = _report_path(archive, round_id, artifact)
     protocol = workflow.store.protocol(rnd.protocol_id, rnd.protocol_version)
     return {
         "round_id": round_id,
@@ -154,7 +183,28 @@ def report_json(workflow: WorkflowService, archive: Archive, round_id: str) -> d
         "label": artifact.label,
         "sha256": artifact.sha256,
         "report": json.loads(path.read_text(encoding="utf-8")),
+        "round_card": round_card_state(
+            round_card_sources(workflow, archive, holdout, access is not None), round_id
+        ),
     }
+
+
+def _review_findings(
+    workflow: WorkflowService, stage: StageRuntime, archive: Archive | None
+) -> tuple[Finding, ...]:
+    """The validator's findings plus, with an archive, the evidence review. Once the stage is
+    past review the three evidence-validity blockers only inform: it already runs."""
+    sheet = stage.run_sheet
+    findings = tuple(workflow.validate(sheet)) if workflow.validate else ()
+    if archive is not None:
+        protocol = workflow.store.protocol(sheet.protocol_id, sheet.protocol_version)
+        findings = (*findings, *evidence_review(sheet, archive, workflow.catalog, protocol))
+    if stage.state is StageState.PENDING_REVIEW:
+        return findings
+    return tuple(
+        item.model_copy(update={"blocking": False}) if item.code in GATE_CODES else item
+        for item in findings
+    )
 
 
 def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | None = None) -> dict:
@@ -166,10 +216,7 @@ def review_json(workflow: WorkflowService, stage_id: str, archive: Archive | Non
     a verification. The hints never block."""
     stage = workflow.stage(stage_id)
     sheet = stage.run_sheet
-    findings = tuple(workflow.validate(sheet)) if workflow.validate else ()
-    if archive is not None:
-        cards = {card.id: card for card in archive.evidence()}
-        findings = (*findings, *check_evidence(sheet, cards))
+    findings = _review_findings(workflow, stage, archive)
     approval = workflow.current_approval(stage_id)
     return {
         "stage_id": stage.stage_id,
@@ -275,6 +322,7 @@ def _steering_routes(
     workflow: WorkflowService,
     archive: Archive | None = None,
     access: Access | None = None,
+    holdout: Any = None,
 ) -> None:
     Operator = Annotated[Actor, Depends(operator)]  # noqa: N806
 
@@ -297,7 +345,7 @@ def _steering_routes(
                 "no archive is mounted: reports cannot be read",
                 reason="archive_not_mounted",
             )
-        return report_json(workflow, archive, round_id)
+        return report_json(workflow, archive, round_id, holdout, access)
 
     @router.get("/stages/{stage_id}/run-sheet")
     async def read_run_sheet(stage_id: PathId, actor: Operator):
@@ -411,12 +459,13 @@ def add_round_routes(
     conversation: ConversationLog | None = None,
     *,
     access: Access | None = None,
+    holdout: Any = None,
 ) -> None:
     """Mount the routes on ``router``. ``operator`` and ``fresh`` are the workbench's operator
     dependencies (session, entry and origin checks; ``fresh`` also asks for a recent
     re-authentication). The budget and goal routes exist only when ``tasks`` and ``budget`` are
     given."""
     _design_routes(router, operator, workflow)
-    _steering_routes(router, operator, workflow, archive, access)
+    _steering_routes(router, operator, workflow, archive, access, holdout)
     if tasks is not None and budget is not None:
         _model_routes(router, operator, fresh, workflow, tasks, budget, conversation, access)
