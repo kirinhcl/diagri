@@ -2398,6 +2398,13 @@
       "action": true,
       "of": "state"
     },
+    "plants_not_removed": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
     "operator_name_length": {
       "params": [
         "max_length"

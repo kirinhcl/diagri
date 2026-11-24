@@ -429,6 +429,8 @@ export default {
   "msg.denial.greenhouses_taken.action": "None of the set was locked. Refresh the Greenhouses page, leave out the taken ones and try again.",
   "msg.denial.greenhouse_busy": "This greenhouse still has a stage that has not ended or stopped.",
   "msg.denial.greenhouse_busy.action": "Stop those stages or abort the round first, then release the greenhouse.",
+  "msg.denial.plants_not_removed": "Confirm that your plants have been taken out before releasing this greenhouse.",
+  "msg.denial.plants_not_removed.action": "Take your plants out, then tick the confirmation and release again.",
   "msg.denial.greenhouse_unknown": "There is no such greenhouse.",
   "msg.denial.greenhouse_unknown.action": "Refresh the Greenhouses page and pick from the list.",
   "msg.denial.greenhouses_named_twice": "Each greenhouse can be named only once.",

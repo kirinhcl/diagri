@@ -3,8 +3,10 @@
 A lock is taken for a whole selection at once or not at all. Releasing hands the device's care
 right back first (the control service voids its queued writes) and then, in one transaction,
 re-checks that nothing unfinished runs on the device, clears the stage's care pointer, marks the
-stage so a restart does not restore that care, and deletes the lock. The device keeps its current
-settings; protection rules keep running. Nothing here writes to a device.
+stage so a restart does not restore that care, and deletes the lock. Nothing here writes to a
+device: with no current stage left, the executor holds the device at its idle levels, if any are
+configured (design 2026-11-24). A holder releases only after confirming the plants are gone; an
+administrator's forced release needs no confirmation.
 
 The locks live in the workflow database, next to the stages: a run sheet submission checks the
 lock in the transaction that inserts its stage, so it and a release never interleave.
@@ -22,6 +24,7 @@ from growbridge.ports import ControlPort, Denied
 from growbridge.workflow.store import WorkflowStore
 
 NAMESPACE = "greenhouse_locks"
+PLANTS_REMOVED_NOTE = "plants removed"  # what a holder's own release records
 STEPS = (
     "CREATE TABLE greenhouse_locks(greenhouse_id TEXT PRIMARY KEY, holder TEXT NOT NULL,"
     " locked_at REAL NOT NULL)",
@@ -161,10 +164,19 @@ class GreenhouseLocks:
         return row
 
     async def release(
-        self, greenhouse_id: str, actor: str, *, force: bool = False, note: str = ""
+        self,
+        greenhouse_id: str,
+        actor: str,
+        *,
+        force: bool = False,
+        note: str = "",
+        plants_removed: bool = False,
     ) -> None:
         """Hand the device's care back, then free the greenhouse (see the module docstring)."""
         self._check_release(greenhouse_id, actor, force)
+        if not force:
+            _require_plants_removed(greenhouse_id, plants_removed)
+            note = PLANTS_REMOVED_NOTE
         holder = self.store.care_holder(self.greenhouse(greenhouse_id).device_id)
         if holder is None or holder.care_right is None:
             self._finish_release(greenhouse_id, actor, force, note)
@@ -193,3 +205,13 @@ class GreenhouseLocks:
             )
             action = "force_release" if force else "release"
             self._record(greenhouse_id, row["holder"], action, actor, note)
+
+
+def _require_plants_removed(greenhouse_id: str, plants_removed: bool) -> None:
+    if not plants_removed:
+        raise Denied(
+            "state",
+            "confirm the plants have been removed before releasing",
+            reason="plants_not_removed",
+            params={"greenhouse_id": greenhouse_id},
+        )

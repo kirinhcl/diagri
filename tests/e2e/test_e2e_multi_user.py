@@ -91,7 +91,7 @@ async def test_two_users_in_parallel(world, site):
     taken = await bob.post("/wb/greenhouses/lock", json={"greenhouse_ids": ["gh-01"]}, headers=PAGE)
     assert taken.status_code == 409 and taken.json()["detail"]["code"] == "lock_taken"
 
-    await post(alice, "/wb/greenhouses/gh-01/release")
+    await post(alice, "/wb/greenhouses/gh-01/release", {"plants_removed": True})
 
     assert (await post(bob, "/wb/greenhouses/lock", {"greenhouse_ids": ["gh-01"]})) == {
         "locked": ["gh-01"]

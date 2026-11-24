@@ -53,8 +53,24 @@ def test_release_over_http(bench):
         bench.post(bench.user("bob"), "/wb/greenhouses/gh-02/release").json()["detail"]["code"]
         == "not_lock_holder"
     )
-    assert bench.post(alice, "/wb/greenhouses/gh-02/release").json() == {"released": "gh-02"}
+    confirmed = {"plants_removed": True}
+    assert bench.post(alice, "/wb/greenhouses/gh-02/release", confirmed).json() == {
+        "released": "gh-02"
+    }
     assert states(alice)["gh-02"]["state"] == "free"
+
+
+def test_release_over_http_needs_the_plants_gone(bench):
+    alice = bench.user("alice")
+    bench.post(alice, "/wb/greenhouses/lock", {"greenhouse_ids": ["gh-02"]})
+
+    for body in ({}, {"plants_removed": False}):
+        refused = bench.post(alice, "/wb/greenhouses/gh-02/release", body)
+        assert refused.status_code == 409
+        assert refused.json()["detail"]["reason"] == "plants_not_removed"
+    assert states(alice)["gh-02"]["state"] == "mine"
+    done = bench.post(alice, "/wb/greenhouses/gh-02/release", {"plants_removed": True})
+    assert done.json() == {"released": "gh-02"}
 
 
 def test_admin_force_release_needs_note(bench):

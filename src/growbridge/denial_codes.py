@@ -385,6 +385,7 @@ _register(
     ("owner_still_active", ("project_id", "owner")),
     ("project_has_unfinished_stages", ("project_id",)),
     ("operator_not_active", ("name",)),
+    ("plants_not_removed", ("greenhouse_id",)),
 )
 _register(
     "param",

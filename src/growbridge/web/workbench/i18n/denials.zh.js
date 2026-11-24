@@ -429,6 +429,8 @@ export default {
   "msg.denial.greenhouses_taken.action": "整组都没有锁定。刷新「温室」页，去掉已占用的温室后再试。",
   "msg.denial.greenhouse_busy": "这个温室上还有没结束或停止的阶段。",
   "msg.denial.greenhouse_busy.action": "先停止这些阶段或中止轮次，再释放温室。",
+  "msg.denial.plants_not_removed": "释放前要先确认植物已经搬走。",
+  "msg.denial.plants_not_removed.action": "把植物搬走后，勾选确认再释放。",
   "msg.denial.greenhouse_unknown": "没有这个温室。",
   "msg.denial.greenhouse_unknown.action": "刷新「温室」页，从列表里选择。",
   "msg.denial.greenhouses_named_twice": "每个温室只能选一次。",

@@ -95,7 +95,7 @@ async def test_release_hands_over_care_and_frees(world, locks):
     care = world.svc.store.stage(stage).care_right
     locks.lock("alice", ["gh-01"])
 
-    await locks.release("gh-01", "alice")
+    await locks.release("gh-01", "alice", plants_removed=True)
 
     row = world.svc.store.stage(stage)
     assert (care, "release") in world.control.handovers
@@ -108,7 +108,7 @@ async def test_a_released_greenhouse_has_no_current_stage(world, locks):
     await _ended_with_care(world)
     locks.lock("alice", ["gh-01"])
 
-    await locks.release("gh-01", "alice")
+    await locks.release("gh-01", "alice", plants_removed=True)
 
     assert world.svc.active_stage() is None
 
@@ -123,15 +123,46 @@ async def test_the_released_stage_is_still_found_when_asked_for(world, locks):
     stage = await _ended_with_care(world)
     locks.lock("alice", ["gh-01"])
 
-    await locks.release("gh-01", "alice")
+    await locks.release("gh-01", "alice", plants_removed=True)
 
     assert world.svc.active_stage(include_released=True).stage_id == stage
+
+
+async def test_release_needs_the_plants_gone(world, locks):
+    stage = await _ended_with_care(world)
+    locks.lock("alice", ["gh-01"])
+
+    with pytest.raises(Denied) as denied:
+        await locks.release("gh-01", "alice")
+
+    assert denied.value.code == "state"
+    assert denied.value.reason == "plants_not_removed"
+    assert denied.value.params == {"greenhouse_id": "gh-01"}
+    assert locks.holder_of_device(DEVICE) == "alice"
+    care = world.svc.store.stage(stage).care_right
+    assert care is not None and (care, "release") not in world.control.handovers
+
+
+async def test_confirmed_release_is_logged(locks):
+    locks.lock("alice", ["gh-02"])
+
+    await locks.release("gh-02", "alice", plants_removed=True)
+
+    assert (locks.events()[0]["action"], locks.events()[0]["note"]) == ("release", "plants removed")
+
+
+async def test_forced_release_needs_no_confirmation(locks):
+    locks.lock("alice", ["gh-02"])
+
+    await locks.release("gh-02", "root", force=True, note="left for the summer")
+
+    assert locks.holder_of_device("AC5-2") is None
 
 
 async def test_release_without_care_holder_only_deletes_lock(world, locks):
     locks.lock("alice", ["gh-02"])
 
-    await locks.release("gh-02", "alice")
+    await locks.release("gh-02", "alice", plants_removed=True)
 
     assert locks.held_by("alice") == ()
     assert world.control.handovers == []
@@ -187,7 +218,7 @@ async def test_release_loses_to_concurrent_submission(world, locks):
     world.control.handover = racing
 
     with pytest.raises(Denied) as denied:
-        await locks.release("gh-01", "alice")
+        await locks.release("gh-01", "alice", plants_removed=True)
 
     assert denied.value.code == "greenhouse_busy"
     assert locks.holder_of_device(DEVICE) == "alice"
@@ -199,7 +230,7 @@ async def test_release_loses_to_concurrent_submission(world, locks):
 async def test_released_care_not_restored(world, locks):
     stage = await _ended_with_care(world)
     locks.lock("alice", ["gh-01"])
-    await locks.release("gh-01", "alice")
+    await locks.release("gh-01", "alice", plants_removed=True)
 
     await world.svc.on_restart()
 
@@ -215,7 +246,7 @@ async def test_crash_between_handover_and_commit_restores_care(world, locks, mon
 
     monkeypatch.setattr(locks, "_finish_release", crash)
     with pytest.raises(RuntimeError):
-        await locks.release("gh-01", "alice")
+        await locks.release("gh-01", "alice", plants_removed=True)
     monkeypatch.undo()
 
     # what start-up does: the control service voids every right, then the workflow recovers
@@ -237,7 +268,7 @@ async def test_release_during_recovery_keeps_care_away(world, locks):
     await world.svc.on_restart()
     assert world.svc.store.stage(stage).care_right is None
 
-    await locks.release("gh-01", "alice")
+    await locks.release("gh-01", "alice", plants_removed=True)
     world.control.stopped = True
     await world.svc.on_restart()
 
@@ -259,7 +290,7 @@ async def test_a_refused_release_gets_its_care_back(world, locks):
 
     world.control.handover = racing
     with pytest.raises(Denied):
-        await locks.release("gh-01", "alice")
+        await locks.release("gh-01", "alice", plants_removed=True)
 
     await world.svc.restore_care()  # what the runtime does on every tick
 
@@ -281,7 +312,7 @@ async def test_a_release_that_fails_after_the_hand_back_gets_its_care_back(
 
     monkeypatch.setattr(locks, "_finish_release", broken)
     with pytest.raises(RuntimeError):
-        await locks.release("gh-01", "alice")
+        await locks.release("gh-01", "alice", plants_removed=True)
 
     await world.svc.restore_care()
 

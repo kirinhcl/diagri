@@ -113,7 +113,7 @@ def test_environment_hides_previous_stage_and_experiment(bench):
     bench.workflow.approve("stage-1", bench.actor("bob"))
     bench.run(bench.workflow.start_stage("stage-1", bench.actor("bob")))
     bench.run(bench.workflow.stop_stage("stage-1", bench.actor("bob")))
-    bench.run(bench.locks.release("gh-01", "bob"))
+    bench.run(bench.locks.release("gh-01", "bob", plants_removed=True))
     bench.lock("alice", "gh-01")
     bench.clock.advance(5)
     _sample(bench, bench.clock.now(), "experiment-stage-1")  # still filed under bob's experiment

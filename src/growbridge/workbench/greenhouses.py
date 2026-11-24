@@ -25,6 +25,10 @@ class LockIn(Body):
     greenhouse_ids: list[str] = Field(min_length=1, max_length=MAX_SELECTION)
 
 
+class ReleaseIn(Body):
+    plants_removed: bool = False  # the holder confirms the chamber is empty
+
+
 def greenhouse_rows(locks: GreenhouseLocks, access: Access, actor: Actor) -> list[dict]:
     rows = []
     for row in locks.overview():
@@ -59,6 +63,7 @@ def add_greenhouse_routes(
         return {"locked": list(locks.lock(actor.id, body.greenhouse_ids))}
 
     @router.post("/greenhouses/{greenhouse_id}/release")
-    async def release(greenhouse_id: PathId, actor: Operator):
-        await locks.release(greenhouse_id, actor.id)
+    async def release(greenhouse_id: PathId, actor: Operator, body: ReleaseIn | None = None):
+        confirmed = body is not None and body.plants_removed
+        await locks.release(greenhouse_id, actor.id, plants_removed=confirmed)
         return {"released": greenhouse_id}
