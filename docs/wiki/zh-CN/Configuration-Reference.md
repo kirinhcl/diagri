@@ -18,7 +18,7 @@
 
 ## `Settings` 字段
 
-共 27 个字段。"必填"表示没有默认值。最后一列说明该字段是否只在 DiAGRI 模式下起作用。
+共 28 个字段。"必填"表示没有默认值。最后一列说明该字段是否只在 DiAGRI 模式下起作用。
 
 | 字段 | 类型 | 默认值 | 允许的取值 | 作用 | 仅 DiAGRI |
 | --- | --- | --- | --- | --- | --- |
@@ -37,7 +37,8 @@
 | `retention_days` | 整数 | `30` | 1 到 365 | 守护进程的样本库保留多少天的样本。在 DiAGRI 模式下，只删除已经复制到项目档案的样本。 | 否 |
 | `auto_research` | 布尔 | `false` | `true`、`false` | 把守护进程切换到 DiAGRI 模式：启动运行时和工作台路由，三个桥接写入路由返回 403，MCP 服务只提供读取工具。 | 它就是开关 |
 | `multi_user` | 布尔 | `false` | `true`、`false` | 与 `auto_research` 一起打开工作台的多用户：带角色的账号、温室锁定、项目所有者、每人只看自己的（见[多用户](#多用户)）。关闭时工作台与以前一样。 | 是 |
-| `greenhouses` | 表的列表 | `[]` | 每项 `{id, name, device_id}`；`id` 形如 `[a-z0-9][a-z0-9-]{0,31}`；编号与设备各不重复；`device` 必须在其中 | 操作员可以锁定的温室。为空时只有一个温室 `gh-01`，对应 `device`。 | 是 |
+| `greenhouses` | 表的列表 | `[]` | 每项 `{id, name, device_id}`，可选 `idle`；`id` 形如 `[a-z0-9][a-z0-9-]{0,31}`；编号与设备各不重复；`device` 必须在其中 | 操作员可以锁定的温室。为空时只有一个温室 `gh-01`，对应 `device`。 | 是 |
+| `idle` | 表 | 无 | `light` 0–100、`exhaust` 0–100、`fan` 0–10；不能写 `pump` | `greenhouses` 为空时那个隐式温室的空闲档位（登记了温室时，在每个温室上写 `idle`）。见[多用户](#多用户)。 | 是 |
 | `lan_hosts` | 字符串列表 | `[]` | 主机名或地址；端口部分会被忽略 | 局域网入口的地址。它们会加入受信任主机和允许的浏览器来源。 | 是 |
 | `overlay_hosts` | 字符串列表 | `[]` | 主机名或地址；端口部分会被忽略 | 覆盖网络入口的地址。它们会加入受信任主机和允许的浏览器来源（按 `https://`）。 | 是 |
 | `lan_bind` | 字符串 | `""` | 本机的一个地址 | 局域网监听绑定的地址。只有 `lan_bind` 和 `lan_port` 都设置了，这个监听才会启动。 | 是 |
@@ -169,7 +170,7 @@
 
 ## 多用户
 
-`multi_user = true`（且 `auto_research = true`）时，每个操作员有一个角色：`user` 或 `admin`（第一个管理员用 `growbridge operator add --admin` 创建）。操作员在控制台的「温室」页锁定温室；项目归创建它的人；动一个阶段既要是项目所有者，又要锁着这个阶段的温室。操作员只看到自己的项目、阶段、告警和回执；管理员看到全部，紧急时可以暂停或停止任何阶段，管理账号、强制释放温室，并把无人负责的项目转给别人。释放温室时交还养护规则，设备保持当前设置。设计见 [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md)。
+`multi_user = true`（且 `auto_research = true`）时，每个操作员有一个角色：`user` 或 `admin`（第一个管理员用 `growbridge operator add --admin` 创建）。操作员在控制台的「温室」页锁定温室；项目归创建它的人；动一个阶段既要是项目所有者，又要锁着这个阶段的温室。操作员只看到自己的项目、阶段、告警和回执；管理员看到全部，紧急时可以暂停或停止任何阶段，管理账号、强制释放温室，并把无人负责的项目转给别人。植物是使用者自带、用完搬走的：锁定人要先确认植物已经搬走才能释放温室。释放时交还养护规则；此后这个温室没有当前阶段，读数不再记入任何实验，旧项目也不再生成日报。温室没有当前阶段时（从没用过，或已释放，包括别人锁定之后、他的阶段启动之前），执行器把设备保持在这个温室的 `idle` 档位（如果配置了）：保护规则优先，从不写水泵，断连或重启后会补上。在控制器上手动改过的设置要到下次重启才会被改回。设计见 [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md)、[`docs/superpowers/specs/2026-11-24-empty-chamber-handover-design.md`](../../superpowers/specs/2026-11-24-empty-chamber-handover-design.md)。
 
 **在已有部署上打开。** 先用 `growbridge operator add --admin <名字>` 创建第一个管理员。打开之前建的项目都没有所有者：只有管理员能看到，任何人都不能操作，直到管理员把它转出（「管理」页，或 `POST /wb/admin/projects/{project_id}/owner`）；转移要求项目没有未结束的阶段。升级时还开着的告警也没有归属：只给管理员看，其中一部分会带着归属再出现一次，所以会收到一轮重复通知。
 
@@ -180,6 +181,7 @@ multi_user = true
 id = "gh-01"
 name = "温室 1"
 device_id = "SF-GGS-PS5"
+idle = { light = 0, exhaust = 10, fan = 0 }
 ```
 
 ## 示例

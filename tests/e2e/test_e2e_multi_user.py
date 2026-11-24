@@ -11,6 +11,7 @@ import pytest_asyncio
 from e2e_support import STAGE
 
 from growbridge.api import create_app
+from growbridge.archive.models import Channel
 from growbridge.config import Greenhouse
 from growbridge.sim.fixtures import make_protocol, make_safety
 
@@ -106,3 +107,68 @@ async def test_multi_user_off_is_unchanged(world):
     assert runtime.access_parts is None and runtime.workflow.access is None
     await world.approved_stage(runtime)  # the single-user flow, as before
     assert runtime.workflow.stage(STAGE).state.value == "running"
+
+
+IDLE = {"light": 15, "exhaust": 10, "fan": 0}  # light 15: not the end action's 0
+
+
+@pytest.fixture
+def idle_settings(settings):
+    first = HOUSES[0].model_copy(update={"idle": {Channel(k): v for k, v in IDLE.items()}})
+    return settings.model_copy(update={"greenhouses": [first, *HOUSES[1:]]})
+
+
+async def test_a_released_chamber_goes_idle_and_keeps_no_one_s_readings(world, idle_settings):
+    world.settings = idle_settings
+    runtime = await world.boot()
+    for name in ("alice", "bob"):
+        runtime.operators.add(name, SECRET, "user")
+    app = create_app(world.settings, bridge=runtime.bridge, workbench=runtime.workbench())
+    alice = await _signed_in(app, "alice")
+    project = await _alice_designs(world, runtime, alice)
+    review = (await alice.get(f"/wb/stages/{STAGE}/run-sheet")).json()
+    approval = {"expected_digest": review["run_sheet_digest"]}
+    await post(alice, f"/wb/stages/{STAGE}/approve", approval)
+    await post(alice, f"/wb/stages/{STAGE}/start")
+    await world.run_until_ended(runtime)
+
+    refused = await alice.post("/wb/greenhouses/gh-01/release", json={}, headers=PAGE)
+    assert refused.json()["detail"]["reason"] == "plants_not_removed"
+    await post(alice, "/wb/greenhouses/gh-01/release", {"plants_removed": True})
+    released_at = world.clock.now()
+    reports = _report_count(runtime, project)
+    for _ in range(3):
+        await world.beat(runtime, 60)
+
+    levels = (await runtime.control.read_state()).levels
+    assert {c.value: levels[c] for c in (Channel.LIGHT, Channel.EXHAUST, Channel.FAN)} == IDLE
+    await world.beat(runtime, 86400)  # past the next daily report time
+    assert _report_count(runtime, project) == reports
+    assert _experiments_after(runtime, released_at + 1) == {None}
+
+    bob = await _signed_in(app, "bob")  # a day later: a fresh sign-in
+    await post(bob, "/wb/greenhouses/lock", {"greenhouse_ids": ["gh-01"]})
+    await world.beat(runtime, 60)
+    assert runtime.workflow.idle_runtime() is not None  # still idle until bob's stage starts
+    for client in (alice, bob):
+        await client.aclose()
+
+
+async def _signed_in(app, name: str) -> httpx.AsyncClient:
+    client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=BASE)
+    response = await client.post("/wb/login", json={"name": name, "secret": SECRET}, headers=PAGE)
+    assert response.status_code == 200
+    return client
+
+
+def _report_count(runtime, project: str) -> int:
+    row = runtime.reports.db.one(
+        "SELECT COUNT(*) AS n FROM observer_reports WHERE project_id = ?", (project,)
+    )
+    return row["n"]
+
+
+def _experiments_after(runtime, at: float) -> set:
+    rows = runtime.archive.db.query("SELECT experiment_id FROM samples WHERE at > ?", (at,))
+    assert rows, "no readings were stored after the release"
+    return {row["experiment_id"] for row in rows}

@@ -18,7 +18,7 @@ The fields are `Settings` and `RoleModel` in [`config.py`](../../../src/growbrid
 
 ## `Settings` fields
 
-There are 27 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
+There are 28 fields. "Required" means the field has no default. The last column says whether the field has an effect only in DiAGRI mode.
 
 | Field | Type | Default | Allowed values | What it does | DiAGRI only |
 | --- | --- | --- | --- | --- | --- |
@@ -37,7 +37,8 @@ There are 27 fields. "Required" means the field has no default. The last column 
 | `retention_days` | integer | `30` | 1 to 365 | Days of samples the daemon's sample store keeps. In DiAGRI mode only samples already copied to the project archive are deleted. | no |
 | `auto_research` | boolean | `false` | `true`, `false` | Switches the daemon to DiAGRI mode: the runtime and the workbench routes start, the three bridge write routes answer 403, and the MCP server offers its read tools only. | it is the switch |
 | `multi_user` | boolean | `false` | `true`, `false` | With `auto_research`, turns on accounts with roles, greenhouse locks, project owners and per-operator visibility in the workbench (see [Multi-user](#multi-user)). Off, the workbench behaves as before. | yes |
-| `greenhouses` | list of tables | `[]` | each `{id, name, device_id}`; `id` is `[a-z0-9][a-z0-9-]{0,31}`; ids and devices unique; `device` must be one of them | The greenhouses operators can lock. Empty means one greenhouse, `gh-01`, for `device`. | yes |
+| `greenhouses` | list of tables | `[]` | each `{id, name, device_id}`, optionally `idle`; `id` is `[a-z0-9][a-z0-9-]{0,31}`; ids and devices unique; `device` must be one of them | The greenhouses operators can lock. Empty means one greenhouse, `gh-01`, for `device`. | yes |
+| `idle` | table | none | `light` 0–100, `exhaust` 0–100, `fan` 0–10; never `pump` | Idle levels of the one implicit greenhouse when `greenhouses` is empty (with registered greenhouses, set `idle` on each). See [Multi-user](#multi-user). | yes |
 | `lan_hosts` | list of strings | `[]` | host names or addresses; a port is ignored | Addresses of the LAN entry. They join the trusted hosts and the allowed browser origins. | yes |
 | `overlay_hosts` | list of strings | `[]` | host names or addresses; a port is ignored | Addresses of the overlay entry. They join the trusted hosts and the allowed browser origins (as `https://`). | yes |
 | `lan_bind` | string | `""` | an address of this machine | Address the LAN listener binds to. The listener starts only when `lan_bind` and `lan_port` are both set. | yes |
@@ -169,7 +170,7 @@ When no safety configuration has been approved, the thresholds are the defaults 
 
 ## Multi-user
 
-With `multi_user = true` (and `auto_research = true`) every operator has a role, `user` or `admin` (`growbridge operator add --admin` makes the first administrator). An operator locks greenhouses on the console's Greenhouses page; a project belongs to the operator who created it; acting on a stage needs both the project and the lock of the stage's greenhouse. Operators see only their own projects, stages, alerts and receipts; administrators see everything, pause or stop any stage in an emergency, manage accounts, force a release and hand an abandoned project to someone else. Releasing a greenhouse hands its care rules back and leaves the device as it is. Design: [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md).
+With `multi_user = true` (and `auto_research = true`) every operator has a role, `user` or `admin` (`growbridge operator add --admin` makes the first administrator). An operator locks greenhouses on the console's Greenhouses page; a project belongs to the operator who created it; acting on a stage needs both the project and the lock of the stage's greenhouse. Operators see only their own projects, stages, alerts and receipts; administrators see everything, pause or stop any stage in an emergency, manage accounts, force a release and hand an abandoned project to someone else. Users bring their own plants and take them away: the holder releases a greenhouse only after confirming the plants are gone. A release hands the care rules back; from then on the greenhouse has no current stage, so readings belong to no experiment and no daily report is written for the old project. While a greenhouse has no current stage (never used, or released, including after someone locks it and before their stage starts), the executor holds its device at the greenhouse's `idle` levels, if any: protection rules keep priority, the pump is never written, and the levels come back after a lost link or a restart. A change made by hand on the controller stays until the next restart. Design: [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md), [`docs/superpowers/specs/2026-11-24-empty-chamber-handover-design.md`](../../superpowers/specs/2026-11-24-empty-chamber-handover-design.md).
 
 **Switching it on for an existing installation.** Create the first administrator with `growbridge operator add --admin <name>`. Every project made before has no owner: only administrators see it, and nobody can act on it until an administrator hands it over (Administration page, or `POST /wb/admin/projects/{project_id}/owner`), which needs the project to have no unfinished stage. Alerts open at the upgrade have no owner either: they show to administrators only, and some come back once with an owner, so expect one round of duplicate notifications.
 
@@ -180,6 +181,7 @@ multi_user = true
 id = "gh-01"
 name = "Greenhouse 1"
 device_id = "SF-GGS-PS5"
+idle = { light = 0, exhaust = 10, fan = 0 }
 ```
 
 ## Examples

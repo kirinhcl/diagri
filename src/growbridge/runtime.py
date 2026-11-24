@@ -75,6 +75,7 @@ from growbridge.sim.fixtures import TIMEZONE, make_protocol, make_safety, treate
 from growbridge.transport import make_transport
 from growbridge.workbench.api import create_workbench
 from growbridge.workbench.auth import Operators
+from growbridge.workflow.idle import IdleCare
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.states import StageState
 from growbridge.workflow.tasks import TaskBoard
@@ -644,9 +645,10 @@ def build_runtime(
         ),
         on_intervention=mirror,
     )
+    flow.idle_care = IdleCare(flow.store, control, settings.device, settings.local_idle())
     parts = build_access(settings, dbs["workflow"], clock, flow, control)
     storage = StorageGuard(data_dir, STORAGE_LOW_BYTES, STORAGE_CRITICAL_BYTES, shutil.disk_usage)
-    executor = ExecutorEngine(control, flow, clock, storage.allows)
+    executor = ExecutorEngine(control, flow, clock, storage.allows, idle=flow.idle_runtime)
     book = AlertBook(dbs["observer"], clock, settings.device)
     outbox = Outbox(dbs["observer"], clock, OUTBOX_BASE_SECONDS, OUTBOX_CAP_SECONDS)
     selected = default_channels() if channels is None else dict(channels)
