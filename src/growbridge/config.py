@@ -7,6 +7,8 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from growbridge.archive.models import Channel, RuleAction, check_level
+
 DEFAULT_MODEL = "claude-opus-5-5"  # the model whose price is built in (agents/llm.py)
 
 
@@ -45,13 +47,38 @@ class RoleModel(BaseModel):
         return self
 
 
+IdleLevels = dict[Channel, int]
+
+
+def checked_idle(idle: IdleLevels | None) -> IdleLevels | None:
+    """Idle levels hold light, exhaust and fan only, each within its range; never the pump."""
+    for channel, level in (idle or {}).items():
+        if channel is Channel.PUMP:
+            raise ValueError("idle levels cannot name the pump")
+        check_level(channel, level)
+    return idle
+
+
+def idle_actions(idle: IdleLevels | None) -> tuple[RuleAction, ...]:
+    """The idle levels as actions, in channel order."""
+    levels = idle or {}
+    return tuple(RuleAction(channel=c, level=levels[c]) for c in Channel if c in levels)
+
+
 class Greenhouse(BaseModel):
-    """One greenhouse users can lock; ``device_id`` is the AC5 that controls it."""
+    """One greenhouse users can lock; ``device_id`` is the AC5 that controls it. ``idle`` are
+    the levels its device is held at while no stage is current (design 2026-11-24)."""
 
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{0,31}$")
     name: str = Field(min_length=1, max_length=64)
     device_id: str = Field(min_length=1)
+    idle: IdleLevels | None = None
+
+    @field_validator("idle")
+    @classmethod
+    def _idle_levels(cls, value: IdleLevels | None) -> IdleLevels | None:
+        return checked_idle(value)
 
 
 class Settings(BaseModel):
@@ -89,6 +116,12 @@ class Settings(BaseModel):
     # Multi-user workbench (off by default): accounts with roles, greenhouse locks, owners.
     multi_user: bool = False
     greenhouses: list[Greenhouse] = Field(default_factory=list)  # empty: the local device only
+    idle: IdleLevels | None = None  # idle levels of the implicit greenhouse (no registry)
+
+    @field_validator("idle")
+    @classmethod
+    def _idle_levels(cls, value: IdleLevels | None) -> IdleLevels | None:
+        return checked_idle(value)
 
     @field_validator("report_timezone")
     @classmethod
@@ -108,13 +141,20 @@ class Settings(BaseModel):
                 raise ValueError(f"greenhouse {field} values must be unique")
         if houses and self.device not in {house.device_id for house in houses}:
             raise ValueError(f"the local device {self.device!r} is not a registered greenhouse")
+        if houses and self.idle is not None:
+            raise ValueError("with registered greenhouses, set idle on each greenhouse")
         return self
 
     def greenhouse_registry(self) -> tuple[Greenhouse, ...]:
         """The configured greenhouses, or the local device as the only one."""
         if self.greenhouses:
             return tuple(self.greenhouses)
-        return (Greenhouse(id="gh-01", name="Greenhouse 1", device_id=self.device),)
+        return (Greenhouse(id="gh-01", name="Greenhouse 1", device_id=self.device, idle=self.idle),)
+
+    def local_idle(self) -> tuple[RuleAction, ...]:
+        """The idle levels of the local device, ``()`` when it has none."""
+        houses = [h for h in self.greenhouse_registry() if h.device_id == self.device]
+        return idle_actions(houses[0].idle) if houses else ()
 
     @property
     def url(self) -> str:
