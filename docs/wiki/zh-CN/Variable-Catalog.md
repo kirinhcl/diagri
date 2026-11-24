@@ -48,6 +48,18 @@
 
 目录第 2 版（2026-11-19）带上了第一批确认过的术语：`air_temperature`、`air_relative_humidity`、`co2_concentration`、`photosynthetic_photon_flux_density`、`soil_temperature` 和 `light` 有 `refs`，`Cel`、`%`、`[ppm]` 和 `umol/m2/s` 有 UO 术语。`vapour_pressure_deficit`、`canopy_area_growth`、`kPa` 和 `cm2/d` 没有，因为已知前缀里没有合适的术语。`light` 的术语 `PECO:0007224` light intensity exposure 只说明处理的类型：它的层级是灯具最大输出的百分比，不能和其他来源的光照层级相比。候选术语、出处和每条的取舍理由见 [`docs/superpowers/notes/2026-11-18-ontology-candidates.md`](../../superpowers/notes/2026-11-18-ontology-candidates.md)。
 
+### 设计与局限
+
+**只存 CURIE，没有本体文件。** 这些术语的用途是让导出能和其他来源的数据合并。为此只需要每个变量和单位有一个共享的全局 IRI，别的都不需要：导出不用类层级，也不做推理。所以仓库里没有任何本体文件（OWL 或其他格式），也没有代码去下载本体。目录只存 CURIE，[`vocab/curie.py`](../../../src/growbridge/vocab/curie.py) 给每个前缀一个 IRI 基址。两类基址的形式不同。六个 OBO 前缀展开为 `http://purl.obolibrary.org/obo/<PREFIX>_`，所以 `ENVO:09200001` 变成 `http://purl.obolibrary.org/obo/ENVO_09200001`。Crop Ontology 前缀展开为 `https://cropontology.org/rdf/CO_<数字>:`，所以 IRI 里保留整个 CURIE。
+
+**为什么确认要这么严。** 带有同一个术语的两个来源会被当作同一个量，所以错的术语比没有术语更糟：它会让两个不同的量看起来是同一个。因此术语只能由研究者确认，没有合适术语的条目留空（见候选术语说明的 [Purpose](../../superpowers/notes/2026-11-18-ontology-candidates.md#purpose)）。
+
+**术语没有固定到本体的某个发布版本。** 目录不记录本体版本，而本体以后可能改掉某个术语的标签，或把它标为废弃。每个确认过的术语是否存在、标签是否与候选术语说明一致、是否未被废弃，只在 2026-11-19 用 OLS4 查过一次；当时读的版本见 [Ontology versions used](../../superpowers/notes/2026-11-18-ontology-candidates.md#ontology-versions-used)。[`tests/vocab/test_vocab_refs.py`](../../../tests/vocab/test_vocab_refs.py) 固定的是打包目录带哪些 CURIE，不检查它们在上游的状态。下次修改目录时，以及发布数据集之前，要在 OLS 上把每个术语重新查一遍。
+
+**有一个单位术语只在一个条件下成立。** `[unit_refs]` 映射的是单位代码，不是条目，所以用这个单位的每个条目都得到同一个术语。`umol/m2/s` 映射到 `UO:0000160`（microeinstein per square meter per second），这是光子单位；而 UCUM 的 `umol/m2/s` 可以计任何物质。只要 `photosynthetic_photon_flux_density` 仍是唯一用这个单位的条目，这个映射就是对的。在另一个条目（例如 CO2 同化速率）用上 `umol/m2/s` 之前，要重新审视它（[Decisions (2026-11-19)](../../superpowers/notes/2026-11-18-ontology-candidates.md#decisions-2026-11-19)）。
+
+**扩大前缀列表要改代码**，不是改目录。在 `vocab/curie.py` 的 `PREFIXES` 里加上前缀和它的 IRI 基址（Crop Ontology 带编号的前缀则由那里的 `CO_` 模式匹配），在 `tests/vocab/test_vocab_refs.py` 已有测试旁边加测试，验证带新前缀的 CURIE 能加载并得到正确的基址，再把前缀加进上面的列表。之后，带新前缀的每个术语同样要经过确认。候选术语说明为这个决定保留了当前前缀之外的本体中的术语，其中包括为 `vapour_pressure_deficit` 找到的最合适的术语，即 Common Greenhouse Ontology 的 VPD：见 [Outside the allowed prefixes](../../superpowers/notes/2026-11-18-ontology-candidates.md#outside-the-allowed-prefixes)。
+
 ## 保存协议之前先声明变量
 
 研究协议必须声明 `variables`，即目录 ID 的列表。出现以下情况时，保存会被 422 `param` 拒绝，并列出每一个问题：
