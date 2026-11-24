@@ -20,6 +20,7 @@ from growbridge.archive.models import (
     RunSheet,
 )
 from growbridge.planning.treatment import check_treatment
+from growbridge.planning.validate import safety_contradictions
 from growbridge.ports import (
     Actor,
     ControlPort,
@@ -402,6 +403,9 @@ class WorkflowService(StageRecovery):
     def _check_startable(self, stage: StageRow, sheet: RunSheet) -> None:
         if conflicts := self.control.safety_conflicts(sheet):
             raise denials.safety_conflict(stage.stage_id, conflicts)
+        # the safety configuration in force may be newer than the sheet's review (spec 7.5)
+        if found := safety_contradictions(sheet, self.control.safety()):
+            raise denials.safety_conflict(stage.stage_id, [f.message for f in found])
         if self.control.interlocked():
             raise denials.pump_unconfirmed(stage.device_id)
         if other := self.store.live_stage_on(stage.device_id, stage.stage_id):

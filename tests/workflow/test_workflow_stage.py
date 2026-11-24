@@ -2,8 +2,16 @@ import asyncio
 
 import pytest
 
-from growbridge.archive.models import ActionRecord, ActionState, Channel, RightKind
+from growbridge.archive.models import (
+    ActionRecord,
+    ActionState,
+    Channel,
+    Condition,
+    RightKind,
+    RuleAction,
+)
 from growbridge.ports import Denied, Difference
+from growbridge.sim.fixtures import humidity_rule, make_safety
 from growbridge.workflow.permissions import REAUTH_SECONDS
 
 STAGE, CARE, MANUAL = RightKind.STAGE, RightKind.CARE, RightKind.MANUAL
@@ -454,3 +462,32 @@ async def test_stage_history_records_every_transition_in_order(world):
         ("running", "paused"),
         ("paused", "running"),
     ]
+
+
+# --- a stage starts only against the safety configuration in force (spec 7.4, 7.5) -----------
+
+
+def warm_light():
+    """Light 80 above 30 C: meets the fixture's overheat protection (above 35 C, light 0)."""
+    return humidity_rule(
+        id="warm-light",
+        sensor="temp",
+        unit="C",
+        trigger=Condition(op=">", value=30),
+        recover=Condition(op="<", value=20),
+        action=RuleAction(channel=Channel.LIGHT, level=80),
+        release=None,
+    )
+
+
+async def test_start_refuses_a_sheet_that_contradicts_a_later_safety_configuration(world):
+    world.control.safety_config = None  # no protection when the sheet is designed and approved
+    await world.approved(feedback_rules=(warm_light(),))
+    world.control.safety_config = make_safety(approved_by="op-1", approved_at=2.0)
+
+    with pytest.raises(Denied) as caught:
+        await world.svc.start_stage("stage-1", world.op)
+
+    assert caught.value.code == "safety_conflict"
+    assert "warm-light" in str(caught.value)
+    assert world.state() == "pending_review"
