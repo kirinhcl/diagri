@@ -7,7 +7,8 @@ pump on (the only pump action is the dedicated switch-off interlock path).
 Tick order (plan Task 12): interlock pump-off, protection rules, link accounting and the
 disconnect decision, RUNNING (external change, timed actions, feedback rules, end condition, end
 actions), care rules when the stage is not running or under takeover, and the longest-wait check
-of a paused stage. A stage that changes state during a tick is acted on at the next tick.
+of a paused stage. A stage that changes state during a tick is acted on at the next tick. With no
+current stage, the idle levels instead (design 2026-11-24), aligned like care rules.
 """
 
 import asyncio
@@ -41,6 +42,7 @@ from growbridge.ports import (
     ControlPort,
     Denied,
     Difference,
+    IdleRuntime,
     StageEvent,
     StagePort,
     StageRuntime,
@@ -114,11 +116,13 @@ class ExecutorEngine:
         stages: StagePort,
         clock: Clock,
         allow: Callable[[str], bool] | None = None,
+        idle: Callable[[], IdleRuntime | None] | None = None,
     ):
         self.control = control
         self.stages = stages
         self.clock = clock
         self._allow = allow  # storage guard: "experiment_action", "care" or "protection"
+        self._idle_source = idle  # the idle right and levels while there is no current stage
         self._trust = ClockTrust(clock)
         # stages the clock anomaly paused -> the stage right they were paused under
         self._clock_paused: dict[str, int | None] = {}
@@ -133,7 +137,7 @@ class ExecutorEngine:
         self._resent: dict[Channel, float] = {}  # last unverifiable protection re-send
         self._feedback: dict[str, RuleState] = {}
         self._protection: dict[str, RuleState] = {}
-        self._phase: tuple[str, StageState, int | None] | None = None
+        self._phase: tuple[object, ...] | None = None
         self._phase_mono = 0.0
         self._sent: frozenset[str] = frozenset()  # event ids already reported in this phase
 
@@ -177,6 +181,7 @@ class ExecutorEngine:
             await self._protect(tick, stage, mono)  # 2
         outage = self._link.observe(online, mono, now)
         if stage is None:
+            await self._idle(tick, online)
             return
         if outage is not None and await self._after_outage(tick, stage, outage, now):  # 3
             return
@@ -213,13 +218,36 @@ class ExecutorEngine:
         start, resume, handback or run-sheet switch the channels are first aligned and only then
         does the confirmed state become the new baseline.
         """
-        key = None if stage is None else (stage.stage_id, stage.state, stage.right_number)
+        key = self._phase_key(stage)
         if key == self._phase:
             return
         self._phase, self._phase_mono = key, mono
         self._applied, self._feedback, self._failed = {}, {}, {}
         self._unreadable_since = None
         self._sent = frozenset()
+
+    def _phase_key(self, stage: StageRuntime | None) -> tuple[object, ...]:
+        """A stage, its state and stage right; with no stage, the idle right (a new one after a
+        restart or a refused start realigns the device)."""
+        if stage is not None:
+            return (stage.stage_id, stage.state, stage.right_number)
+        idle = self._idle_runtime()
+        return ("idle", None if idle is None else idle.right)
+
+    def _idle_runtime(self) -> IdleRuntime | None:
+        return None if self._idle_source is None else self._idle_source()
+
+    async def _idle(self, tick: _Tick, online: bool) -> None:
+        """No current stage: bring each idle channel to its level, skipping protected ones."""
+        idle = self._idle_runtime()
+        if not online or idle is None:
+            return
+        held = self._protected()
+        for action in idle.levels:
+            if action.channel in held or self._applied.get(action.channel) == action.level:
+                continue
+            cause = f"idle:{action.channel.value}"
+            await self._write(tick, None, idle.right, "care", action, cause, str(idle.right))
 
     # --- 1. interlock -------------------------------------------------------------------------
 

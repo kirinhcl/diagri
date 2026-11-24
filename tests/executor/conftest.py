@@ -6,8 +6,8 @@ from executor_helpers import build_rig
 async def make_rig(settings, tmp_path):
     made = []
 
-    async def factory(allow=None, register=True):
-        rig = await build_rig(settings, tmp_path, allow, register)
+    async def factory(allow=None, register=True, idle_levels=()):
+        rig = await build_rig(settings, tmp_path, allow, register, idle_levels)
         made.append(rig)
         return rig
 

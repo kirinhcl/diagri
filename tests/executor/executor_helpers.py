@@ -22,6 +22,7 @@ from growbridge.service import Bridge
 from growbridge.sim.clock import FakeClock
 from growbridge.sim.device import SimulatedTransport
 from growbridge.sim.fixtures import TIMEZONE, make_protocol, make_run_sheet, make_safety
+from growbridge.workflow.idle import IdleCare
 from growbridge.workflow.service import WorkflowService
 
 HOST = "host-a"
@@ -59,14 +60,15 @@ class ListSink:
 
 
 class Rig:
-    def __init__(self, clock, sim, bridge, control, workflow, dbs, allow=None):
+    def __init__(self, clock, sim, bridge, control, workflow, dbs, allow=None, sink=None):
         self.clock = clock
         self.sim = sim
         self.bridge = bridge
         self.control = control
         self.svc = workflow
         self.dbs = dbs
-        self.engine = ExecutorEngine(control, workflow, clock, allow)
+        self.sink = sink
+        self.engine = ExecutorEngine(control, workflow, clock, allow, idle=workflow.idle_runtime)
         self.round_id = ""
         self.project_id = ""
 
@@ -183,7 +185,7 @@ class Rig:
         return await self.engine.tick()
 
 
-async def build_rig(settings, tmp_path, allow=None, register=True) -> Rig:
+async def build_rig(settings, tmp_path, allow=None, register=True, idle_levels=()) -> Rig:
     clock = FakeClock(now=local("10:00"))
     sim = SimulatedTransport()
     bridge = Bridge(settings, lambda _: sim, clock=clock)
@@ -196,10 +198,12 @@ async def build_rig(settings, tmp_path, allow=None, register=True) -> Rig:
         await asyncio.sleep(0.01)
     control_db = Database(tmp_path / "control.sqlite3")
     workflow_db = Database(tmp_path / "workflow.sqlite3")
-    control = ControlService(bridge, control_db, clock, HOST, ListSink())
+    sink = ListSink()
+    control = ControlService(bridge, control_db, clock, HOST, sink)
     if register:
         control.register_host()
     await control.startup()
     # fixture sheets run light 60, not the fixture protocol's 40/70 treatments
     workflow = WorkflowService(workflow_db, clock, control, check_treatments=False)
-    return Rig(clock, sim, bridge, control, workflow, (control_db, workflow_db), allow)
+    workflow.idle_care = IdleCare(workflow.store, control, control.device_id, idle_levels)
+    return Rig(clock, sim, bridge, control, workflow, (control_db, workflow_db), allow, sink)
