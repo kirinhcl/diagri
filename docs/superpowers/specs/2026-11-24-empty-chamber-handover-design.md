@@ -68,7 +68,8 @@
 - `WorkflowStore.active()`（从而 `active_stage()`）对已随释放结束养护的阶段（`care_released`）返回 `None`，两处口径一致；下一个阶段启动后恢复正常 **[设计方]**。`release_care_of_device` 已在释放事务里标记该设备所有已结束阶段，释放要求设备上没有未结束阶段，所以被标记的阶段不会再运行。
 - 由此带来的变化都是要的：`_ingest` 不给读数标实验；日报不再为上一个项目生成；阶段检查、读数冻结检查、观察者不再按那个阶段算；环境页没有当前阶段；执行器进入空闲分支（5.3）。
 - 实现前逐个核对调用点，确认没有依赖"释放后仍返回旧阶段"的地方：`runtime.py`（`_ingest`、日报、第 520 行）、`runtime_agents.py`、`agents/handlers_orchestrator.py`、`workbench/environment.py`、`workflow/recovery.py`（直接用 `store.active()`）、`observer/stage_checks.py`、`observer/frozen_watch.py`、`observer/service.py`、`executor/engine.py`。
-- 已知精度：读数按入库时有没有当前阶段判断，释放前几秒收到、释放后才入库的读数不记实验。可以接受 **[设计方]**。
+- 例外：审计员的"阶段结束审计"仍要能找到刚释放的阶段（释放可能早于模型循环下一次运行），所以 `active_stage(include_released=True)` 只给它用 **[设计方，核对调用点时补充]**。
+- 已知精度：读数按入库时有没有当前阶段判断，释放前几秒收到、释放后才入库的读数不记实验；释放时还没生成的日报（例如阶段最后一天的）不再补发。可以接受 **[设计方]**。
 
 ### 5.3 空闲设置
 

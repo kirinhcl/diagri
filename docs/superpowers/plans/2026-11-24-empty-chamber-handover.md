@@ -90,8 +90,11 @@ def test_no_idle_by_default(base):
 - Modify: `src/growbridge/ports.py:240-243` (`StagePort.active_stage` docstring)
 - Test: `tests/workflow/test_workflow_locks.py`
 
+**Also modify:** `src/growbridge/workflow/service.py:622-624` (`active_stage` parameter), `src/growbridge/runtime_agents.py:116` (`schedule_audits`)
+**Also test:** the existing `schedule_audits` tests (find them with `grep -rn schedule_audits tests`)
+
 **Interfaces:**
-- Produces: `WorkflowStore.active()` returns `None` when the latest started stage of an undelivered round has `care_released`; `WorkflowService.active_stage()` follows.
+- Produces: `WorkflowStore.active(include_released: bool = False)` returns `None` when the latest started stage of an undelivered round has `care_released` and `include_released` is false; `WorkflowService.active_stage(include_released: bool = False) -> StageRuntime | None` passes it through. Only `schedule_audits` passes `True`: the end-of-stage audit of a stage released before the model loop ran must still be opened.
 
 - [ ] **Step 1: Write the failing tests** (in `test_workflow_locks.py`, reusing `_ended_with_care`)
 
@@ -105,7 +108,15 @@ async def test_a_released_greenhouse_has_no_current_stage(world, locks):
 async def test_ended_stage_without_release_is_still_current(world, locks):
     stage = await _ended_with_care(world)
     assert world.svc.active_stage().stage_id == stage
+
+async def test_the_released_stage_is_still_found_when_asked_for(world, locks):
+    stage = await _ended_with_care(world)
+    locks.lock("alice", ["gh-01"])
+    await locks.release("gh-01", "alice", plants_removed=True)
+    assert world.svc.active_stage(include_released=True).stage_id == stage
 ```
+
+And next to the existing `schedule_audits` tests: a stage that ended and was released before `schedule_audits` ran still gets its `audit:<stage_id>:end` task.
 
 (`plants_removed=True` comes from Task 3; until then call without it, and add it in Task 3.)
 
@@ -287,7 +298,7 @@ async def test_nothing_without_idle_levels(make_rig): ...          # idle_levels
 - Modify: `docs/multi-user-adaptation.md` (item 6 done and how; the post-release samples limitation resolved; release confirmation; both languages)
 - Modify: `docs/wiki/en/Configuration-Reference.md`, `docs/wiki/zh-CN/Configuration-Reference.md` (`idle` on `[[greenhouses]]` and top level, the example)
 - Modify: `docs/wiki/en/API-Reference.md`, `docs/wiki/zh-CN/API-Reference.md` (release body)
-- Modify: `docs/wiki/en/Status-and-Known-Limitations.md`, `docs/wiki/zh-CN/Status-and-Known-Limitations.md` (remove the post-release samples limitation if listed; add: readings received in the seconds before a release but stored after it belong to no experiment)
+- Modify: `docs/wiki/en/Status-and-Known-Limitations.md`, `docs/wiki/zh-CN/Status-and-Known-Limitations.md` (remove the post-release samples limitation if listed; add: readings received in the seconds before a release but stored after it belong to no experiment; a daily report not yet saved when the greenhouse is released is not written afterwards)
 
 **Interfaces:**
 - Consumes: everything above.
