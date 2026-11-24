@@ -457,6 +457,15 @@ class WorkflowStore:
         )
         return None if row is None else self._stage_row(row)
 
+    def last_started_on(self, device_id: str) -> StageRow | None:
+        """The device's latest started stage, whatever the state of its round."""
+        row = self.db.one(
+            "SELECT * FROM wf_stages WHERE device_id = ? AND started_at IS NOT NULL"
+            " ORDER BY started_at DESC, rowid DESC LIMIT 1",
+            (device_id,),
+        )
+        return None if row is None else self._stage_row(row)
+
     def live_stage_on(self, device_id: str, stage_id: str) -> str | None:
         """The id of another stage still live or being checked on this device, if any."""
         states = [state.value for state in LIVE_STATES]

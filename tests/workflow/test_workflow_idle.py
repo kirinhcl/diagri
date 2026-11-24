@@ -165,3 +165,27 @@ async def test_no_idle_right_survives_a_start_that_a_tick_interleaves(world, mon
 
     idle_rights = [n for n, r in world.control.rights.items() if r.levels == IDLE]
     assert idle_rights and all(n in world.control.revoked for n in idle_rights)
+
+
+async def test_an_aborted_round_without_a_release_does_not_go_idle(world):
+    idle = attach(world)
+    await world.running("stage-1")
+
+    await world.svc.abort_round(world.round_id, world.op)
+    await world.svc.restore_care()
+
+    assert idle.right is None and world.svc.idle_runtime() is None  # plants may still be inside
+
+
+async def test_an_aborted_round_goes_idle_once_released(world):
+    idle = attach(world)
+    await world.running("stage-1")
+    await world.svc.abort_round(world.round_id, world.op)
+    houses = (Greenhouse(id="gh-01", name="One", device_id=DEVICE),)
+    locks = GreenhouseLocks(world.db, world.clock, houses, world.svc.store, world.control)
+    locks.lock("alice", ["gh-01"])
+
+    await locks.release("gh-01", "alice", plants_removed=True)
+    await world.svc.restore_care()
+
+    assert world.svc.idle_runtime() == IdleRuntime(right=idle.right, levels=IDLE)

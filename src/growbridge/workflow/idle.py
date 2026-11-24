@@ -1,11 +1,12 @@
 """The idle write right of a greenhouse (design 2026-11-24, 5.3).
 
-While the device has no current stage (it never ran one, or a release ended the last one), the
-workflow holds one care-kind write right that may write only the configured idle levels; the
+Before the device's first stage, and once a release ended its last one, the workflow holds one
+care-kind write right that may write only the configured idle levels; the
 executor aligns the device to them. A stage start hands the right back together with the care
 rights, so no idle write lands after it; while a start awaits those hand-overs no idle right is
 granted or used (a tick may run in between). The right is not stored: a restart revokes every
-right anyway, and ``restore`` grants a fresh one on the next tick.
+right anyway, and ``restore`` grants a fresh one on the next tick. An aborted or delivered round
+without a release is not idle: the holder's plants may still be inside.
 """
 
 from collections.abc import Iterator
@@ -62,7 +63,10 @@ class IdleCare:
             self._starts -= 1
 
     def _due(self) -> bool:
-        return not self._starts and bool(self.levels) and self.store.active() is None
+        if self._starts or not self.levels:
+            return False
+        last = self.store.last_started_on(self.device_id)
+        return last is None or last.care_released
 
     def _valid(self) -> bool:
         right = None if self._right is None else self.control.right(self._right)

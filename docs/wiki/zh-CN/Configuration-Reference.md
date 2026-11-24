@@ -170,7 +170,7 @@
 
 ## 多用户
 
-`multi_user = true`（且 `auto_research = true`）时，每个操作员有一个角色：`user` 或 `admin`（第一个管理员用 `growbridge operator add --admin` 创建）。操作员在控制台的「温室」页锁定温室；项目归创建它的人；动一个阶段既要是项目所有者，又要锁着这个阶段的温室。操作员只看到自己的项目、阶段、告警和回执；管理员看到全部，紧急时可以暂停或停止任何阶段，管理账号、强制释放温室，并把无人负责的项目转给别人。植物是使用者自带、用完搬走的：锁定人要先确认植物已经搬走才能释放温室。释放时交还养护规则；此后这个温室没有当前阶段，读数不再记入任何实验，旧项目也不再生成日报。温室没有当前阶段时（从没用过，或已释放，包括别人锁定之后、他的阶段启动之前），执行器把设备保持在这个温室的 `idle` 档位（如果配置了）：保护规则优先，从不写水泵，断连或重启后会补上。在控制器上手动改过的设置要到下次重启才会被改回。设计见 [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md)、[`docs/superpowers/specs/2026-11-24-empty-chamber-handover-design.md`](../../superpowers/specs/2026-11-24-empty-chamber-handover-design.md)。
+`multi_user = true`（且 `auto_research = true`）时，每个操作员有一个角色：`user` 或 `admin`（第一个管理员用 `growbridge operator add --admin` 创建）。操作员在控制台的「温室」页锁定温室；项目归创建它的人；动一个阶段既要是项目所有者，又要锁着这个阶段的温室。操作员只看到自己的项目、阶段、告警和回执；管理员看到全部，紧急时可以暂停或停止任何阶段，管理账号、强制释放温室，并把无人负责的项目转给别人。植物是使用者自带、用完搬走的：锁定人要先确认植物已经搬走才能释放温室。释放时交还养护规则；此后这个温室没有当前阶段，读数不再记入任何实验，旧项目也不再生成日报。温室还没启动过阶段、或已释放时（包括别人锁定之后、他的阶段启动之前；轮次中止或交付但没释放的不算，植物可能还在舱里），执行器把设备保持在这个温室的 `idle` 档位（如果配置了）：保护规则优先，从不写水泵，断连或重启后会补上。在控制器上手动改过的设置要到下次重启才会被改回。设计见 [`docs/superpowers/specs/2026-11-16-multi-user-locks-design.md`](../../superpowers/specs/2026-11-16-multi-user-locks-design.md)、[`docs/superpowers/specs/2026-11-24-empty-chamber-handover-design.md`](../../superpowers/specs/2026-11-24-empty-chamber-handover-design.md)。
 
 **在已有部署上打开。** 先用 `growbridge operator add --admin <名字>` 创建第一个管理员。打开之前建的项目都没有所有者：只有管理员能看到，任何人都不能操作，直到管理员把它转出（「管理」页，或 `POST /wb/admin/projects/{project_id}/owner`）；转移要求项目没有未结束的阶段。升级时还开着的告警也没有归属：只给管理员看，其中一部分会带着归属再出现一次，所以会收到一轮重复通知。
 
