@@ -411,6 +411,15 @@ class WorkflowService(StageRecovery):
         if other := self.store.live_stage_on(stage.device_id, stage.stage_id):
             raise denials.device_busy(stage, other)
 
+    async def _check_returnable(self, stage: StageRow, sheet: RunSheet) -> None:
+        """What a stage needs before it returns to running (resume_stage, handback): a valid
+        approval, a clear pump interlock and no unsettled actions, checked in that order."""
+        self._check_approval(stage, sheet)
+        if self.control.interlocked():
+            raise denials.pump_unconfirmed(stage.device_id)
+        if unsettled := await self.control.reconcile_unsettled():
+            raise denials.unsettled_actions(stage.stage_id, len(unsettled))
+
     def _release_care(self, holders: tuple[StageRow, ...]) -> None:
         for holder in holders:
             self.store.update_stage(self.store.stage(holder.stage_id), care_right=None)
@@ -442,11 +451,7 @@ class WorkflowService(StageRecovery):
         if stage.state is not S.PAUSED:
             raise denials.stage_not_resumable(stage)
         sheet = self._sheet(stage)
-        self._check_approval(stage, sheet)
-        if self.control.interlocked():
-            raise denials.pump_unconfirmed(stage.device_id)
-        if unsettled := await self.control.reconcile_unsettled():
-            raise denials.unsettled_actions(stage_id, len(unsettled))
+        await self._check_returnable(stage, sheet)
         diffs = await self.control.differences(sheet.expected_levels(self.clock.now()))
         if diffs:
             raise denials.device_differs_from_run_sheet(stage_id, diffs)
@@ -503,13 +508,16 @@ class WorkflowService(StageRecovery):
         self, stage_id: str, actor: Actor, accept_as_intervention: bool
     ) -> tuple[StageRuntime, tuple[Difference, ...]]:
         """Return a manual stage to automation; the differences to the run sheet's target at
-        this moment are listed, and recorded as an intervention when the operator accepts them."""
+        this moment are listed, and recorded as an intervention when the operator accepts them.
+        It makes resume_stage's checks first; a refusal leaves the stage manual, where the
+        operator can still stop it."""
         require_operator(actor, self.clock.now())
         stage = self.store.stage(stage_id)
         guard_stage(self.access, actor, stage)
         if stage.state is not S.MANUAL or stage.manual_right is None:
             raise denials.stage_not_in_manual(stage)
         sheet = self._sheet(stage)
+        await self._check_returnable(stage, sheet)
         # read first: if the device cannot be read the stage keeps its manual right
         diffs = await self.control.differences(sheet.expected_levels(self.clock.now()))
         self._require_unchanged(stage)  # stopped meanwhile: handing over would end irrigation
