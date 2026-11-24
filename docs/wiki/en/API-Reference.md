@@ -233,7 +233,7 @@ Mounted when `multi_user` is on ([`workbench/greenhouses.py`](../../../src/growb
 
 | Method and path | Who | Body | Answer | Codes |
 | --- | --- | --- | --- | --- |
-| `GET /wb/greenhouses` | operator | | `greenhouses`: `id`, `name`, `state` (`free`, `mine`, `taken`), `locked_at`; administrators also get `holder` | |
+| `GET /wb/greenhouses` | operator | | `greenhouses`: `id`, `name`, `state` (`free`, `mine`, `taken`), `locked_at`, `controlled` (this installation drives its device; only that greenhouse runs stages and shows its environment and safety limits); administrators also get `holder` | |
 | `POST /wb/greenhouses/lock` | operator, re-auth | `greenhouse_ids` (1 to 64) | `locked` | `lock_taken`, `state` |
 | `POST /wb/greenhouses/{greenhouse_id}/release` | operator holding it | `plants_removed` (must be `true`) | `released` | `not_lock_holder`, `greenhouse_busy`, `state` (`plants_not_removed`: the plants were not confirmed gone) |
 | `GET /wb/admin/operators` | administrator | | `operators`: `name`, `role`, `created_at`, `disabled_at`, `unfinished_stages`; `events` (the latest 200, newest first): `name`, `action` (`add`, `disable`, `reset_secret`), `actor` (`null`: the command line), `detail` (the role an account was added with), `at` | `admin_only` |

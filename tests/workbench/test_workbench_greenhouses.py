@@ -36,6 +36,12 @@ def test_lock_flow_over_http(bench):
     assert states(bob)["gh-03"]["state"] == "free"
 
 
+def test_rows_say_which_greenhouse_this_installation_controls(bench):
+    rows = states(bench.user("alice"))
+
+    assert [rows[g]["controlled"] for g in ("gh-01", "gh-02", "gh-03")] == [True, False, False]
+
+
 def test_lock_needs_reauth(bench):
     alice = bench.user("alice")
     bench.clock.advance(3600)

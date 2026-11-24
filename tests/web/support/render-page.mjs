@@ -82,6 +82,7 @@ function fixtureFor(path, pending) {
 }
 
 // `answers` maps a POST path to a function giving its answer (or throwing a refusal); others get {}.
+// A key "GET <path>" (no query string) does the same for a read, before any fixture.
 function fakeApi(files, answers = {}) {
   const pending = {
     round: files["round-pending.json"]?.round_id,
@@ -90,6 +91,11 @@ function fakeApi(files, answers = {}) {
   };
   const calls = [];
   const get = async (path) => {
+    const read = answers[`GET ${String(path).split("?")[0]}`];
+    if (typeof read === "function") {
+      calls.push({ method: "GET", path, fixture: null });
+      return read();
+    }
     const name = fixtureFor(path, pending);
     const found = name !== null && Object.hasOwn(files, name) && files[name] !== null;
     calls.push({ method: "GET", path, fixture: found ? name : null });

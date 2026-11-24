@@ -215,7 +215,7 @@ export async function render(ctx) {
     env = await load(ctx);
   } catch (error) {
     if (!isNotLockHolder(error)) throw error;
-    return { element: lockFirst(ctx, ctx.t("nav.environment")) };
+    return { element: await lockFirst(ctx, ctx.t("nav.environment")) };
   }
   const status = h("div");
   const now = h("div");

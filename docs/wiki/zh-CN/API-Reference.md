@@ -233,7 +233,7 @@
 
 | 方法与路径 | 谁可以 | 请求体 | 回答 | 拒绝码 |
 | --- | --- | --- | --- | --- |
-| `GET /wb/greenhouses` | 操作员 | | `greenhouses`：`id`、`name`、`state`（`free`、`mine`、`taken`）、`locked_at`；管理员另有 `holder` | |
+| `GET /wb/greenhouses` | 操作员 | | `greenhouses`：`id`、`name`、`state`（`free`、`mine`、`taken`）、`locked_at`、`controlled`（本系统驱动它的设备；只有这个温室能运行阶段、显示环境和安全限值）；管理员另有 `holder` | |
 | `POST /wb/greenhouses/lock` | 操作员，需重新认证 | `greenhouse_ids`（1 到 64 个） | `locked` | `lock_taken`、`state` |
 | `POST /wb/greenhouses/{greenhouse_id}/release` | 锁定它的操作员 | `plants_removed`（必须为 `true`） | `released` | `not_lock_holder`、`greenhouse_busy`、`state`（`plants_not_removed`：没有确认植物已搬走） |
 | `GET /wb/admin/operators` | 管理员 | | `operators`：`name`、`role`、`created_at`、`disabled_at`、`unfinished_stages`；`events`（最近 200 条，新的在前）：`name`、`action`（`add`、`disable`、`reset_secret`）、`actor`（`null` 表示命令行）、`detail`（添加账号时的角色）、`at` | `admin_only` |

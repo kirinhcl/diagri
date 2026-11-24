@@ -35,6 +35,8 @@ def greenhouse_rows(locks: GreenhouseLocks, access: Access, actor: Actor) -> lis
         holder = row["holder"]
         state = "free" if holder is None else ("mine" if holder == actor.id else "taken")
         shown = {"id": row["id"], "name": row["name"], "state": state}
+        # only this greenhouse's device is driven here: the others can be held but not run
+        shown["controlled"] = row["device_id"] == access.local_device
         # when a colleague took their greenhouse is theirs: the holder and administrators see it
         sees_when = state == "mine" or access.is_admin(actor)
         shown["locked_at"] = row["locked_at"] if sees_when else None

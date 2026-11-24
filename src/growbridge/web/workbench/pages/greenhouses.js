@@ -42,10 +42,11 @@ function columns(ctx, boxes) {
     { label: ctx.t("greenhouses.pick"), cell: (row) => checkbox(row, boxes) },
     { label: ctx.t("greenhouses.name"), cell: (row) => row.name },
     { label: ctx.t("greenhouses.status"), cell: (row) => stateText(ctx, row) },
+    { label: ctx.t("greenhouses.device"), cell: (row) => ctx.t(row.controlled ? "greenhouses.device.here" : "greenhouses.device.none") },
     { label: ctx.t("greenhouses.since"), cell: (row) => (row.locked_at ? timeText(ctx, row.locked_at) : "—") },
     { label: ctx.t("greenhouses.action"), cell: (row) => (row.state === "mine" ? releaseButton(ctx, row) : "") },
   ];
-  if (ctx.me && ctx.me.role === "admin") columnsList.splice(3, 0, { label: ctx.t("greenhouses.holder"), cell: (row) => row.holder || "—" });
+  if (ctx.me && ctx.me.role === "admin") columnsList.splice(4, 0, { label: ctx.t("greenhouses.holder"), cell: (row) => row.holder || "—" });
   return columnsList;
 }
 
@@ -82,7 +83,7 @@ function lockForm(ctx, rows) {
 export async function render(ctx) {
   const data = await ctx.api.get("/greenhouses");
   const rows = data && Array.isArray(data.greenhouses) ? data.greenhouses : [];
-  const body = rows.length ? lockForm(ctx, rows) : note(ctx.t("greenhouses.none"));
+  const body = rows.length ? [note(ctx.t("greenhouses.deviceNote")), lockForm(ctx, rows)] : note(ctx.t("greenhouses.none"));
   const element = h("div", { class: "page greenhouses" }, pageHead(ctx.t("nav.greenhouses"), ctx.t("greenhouses.lead")), section(ctx.t("greenhouses.list"), body));
   return { element };
 }

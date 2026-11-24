@@ -136,7 +136,7 @@ export async function render(ctx) {
     await readCurrent();
   } catch (error) {
     if (!isNotLockHolder(error)) throw error;
-    return { element: lockFirst(ctx, ctx.t("nav.safety")) };
+    return { element: await lockFirst(ctx, ctx.t("nav.safety")) };
   }
   const outcome = { text: ctx.t("form.done"), refused: false };
   const editorCtx = editorContext(ctx, refreshCurrent, outcome);

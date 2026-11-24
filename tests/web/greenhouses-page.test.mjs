@@ -100,3 +100,12 @@ test("releasing asks to confirm the plants are gone and sends that confirmation"
   assert.deepEqual(call.body, { plants_removed: true });
 });
 
+test("each greenhouse says whether this installation drives its device", async () => {
+  const { element } = await renderPage("greenhouses", {}, { lang: "en" });
+  const text = visibleText(element);
+
+  assert.match(text, /Only a connected greenhouse can run stages/);
+  assert.equal((text.match(/Not connected to this installation/g) || []).length, 2);
+  assert.match(text, /Connected/);
+});
+
