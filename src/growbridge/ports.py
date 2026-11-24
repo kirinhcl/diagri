@@ -153,6 +153,13 @@ class RawSample(Model):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class IdleRuntime(Model):
+    """The idle write right and the levels it may write (design 2026-11-24)."""
+
+    right: int
+    levels: tuple[RuleAction, ...]
+
+
 class StageRuntime(Model):
     """What the executor may know about the stage whose run sheet governs the device."""
 

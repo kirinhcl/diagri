@@ -14,6 +14,7 @@ from growbridge.archive.clock import Clock
 from growbridge.archive.models import RightKind, RunSheet
 from growbridge.ports import Actor, ControlPort, Denied, StageRuntime
 from growbridge.workflow.access import Access, guard_stage
+from growbridge.workflow.idle import IdleCare
 from growbridge.workflow.permissions import require_operator
 from growbridge.workflow.states import STAGE_TERMINAL, StageState
 from growbridge.workflow.store import Grant, Plan, StageRow, WorkflowStore, care_if_missing
@@ -26,6 +27,7 @@ class StageRecovery:
     control: ControlPort
     clock: Clock
     access: Access | None
+    idle_care: IdleCare | None
 
     async def on_restart(self) -> None:
         """Process start: every live stage needs checking and every old write right is void."""
@@ -49,7 +51,13 @@ class StageRecovery:
         await self.restore_care()
 
     async def restore_care(self) -> None:
-        """Re-issue the care right of the last finished stage once old writes are confirmed gone."""
+        """Re-issue the care right of the last finished stage once old writes are confirmed gone;
+        with no current stage, the idle right instead."""
+        self._restore_stage_care()
+        if self.idle_care is not None:
+            self.idle_care.restore()
+
+    def _restore_stage_care(self) -> None:
         stage = self.store.active()
         if stage is None or stage.care_right is not None or stage.care_released:
             return  # a released greenhouse keeps no care

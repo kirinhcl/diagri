@@ -8,6 +8,7 @@ transaction. Nothing is awaited inside a transaction; a stale revision raises ``
 
 import logging
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from typing import Any, Literal
 
 from growbridge.archive.clock import Clock
@@ -26,6 +27,7 @@ from growbridge.ports import (
     Denied,
     Difference,
     Finding,
+    IdleRuntime,
     StageEvent,
     StageEventKind,
     StageRuntime,
@@ -35,6 +37,7 @@ from growbridge.vocab.checks import check_protocol
 from growbridge.vocab.curie import taxon_problems
 from growbridge.workflow import denials
 from growbridge.workflow.access import Access, guard_project, guard_round, guard_sheet, guard_stage
+from growbridge.workflow.idle import IdleCare
 from growbridge.workflow.permissions import require_kind, require_operator
 from growbridge.workflow.recovery import StageRecovery
 from growbridge.workflow.states import ROUND_TERMINAL, STAGE_TERMINAL, RoundState, StageState
@@ -100,6 +103,7 @@ class WorkflowService(StageRecovery):
         self.store = WorkflowStore(db)
         self.catalog = catalog or packaged_catalog()
         self.access: Access | None = None  # multi-user rules; set once at assembly
+        self.idle_care: IdleCare | None = None  # idle levels with no current stage; at assembly
         self._unsent: list[dict] = []  # saved in a transaction, not yet handed on
 
     # --- design --------------------------------------------------------------------------------
@@ -391,13 +395,16 @@ class WorkflowService(StageRecovery):
             S.RUNNING,
             "start",
             updates={"started_at": self.clock.now(), "right_number": None},
-            handover=held(stage.care_right, *(holder.care_right for holder in holders)),
+            handover=held(
+                stage.care_right, *(holder.care_right for holder in holders), self._idle_right()
+            ),
             grants=(Grant(RightKind.STAGE, "right_number"), Grant(RightKind.CARE, "care_right")),
             reason="next stage starts",
             round_effect="started",
             extra=lambda _row: self._release_care(holders),
         )
-        return self._runtime(await self._apply_once(stage, plan, S.RUNNING))
+        with self.idle_care.held_back() if self.idle_care else nullcontext():
+            return self._runtime(await self._apply_once(stage, plan, S.RUNNING))
 
     def _check_startable(self, stage: StageRow, sheet: RunSheet) -> None:
         if conflicts := self.control.safety_conflicts(sheet):
@@ -622,6 +629,12 @@ class WorkflowService(StageRecovery):
     def active_stage(self, include_released: bool = False) -> StageRuntime | None:
         row = self.store.active(include_released)
         return None if row is None else self._runtime(row)
+
+    def idle_runtime(self) -> IdleRuntime | None:
+        return None if self.idle_care is None else self.idle_care.runtime()
+
+    def _idle_right(self) -> int | None:
+        return None if self.idle_care is None else self.idle_care.right
 
     async def report(self, event: StageEvent) -> None:
         stage = self.store.find_stage(event.stage_id)
