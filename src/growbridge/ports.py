@@ -190,7 +190,7 @@ class StageEventKind(StrEnum):
     PUMP_OFF_UNCONFIRMED = "pump_off_unconfirmed"
     TRANSPORT_UNCONFIRMED = "transport_unconfirmed"
     END_CONDITION_MET = "end_condition_met"
-    END_ACTIONS = "end_actions"  # detail: {"confirmed": bool}
+    END_ACTIONS = "end_actions"  # detail: {"confirmed": bool, "held"?: [channels protection held]}
     ALERT_PAUSE = "alert_pause"
     RULE_PAUSE = "rule_pause"
     MAX_WAIT_EXPIRED = "max_wait_expired"

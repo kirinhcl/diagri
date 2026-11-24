@@ -111,6 +111,15 @@ async def test_stage_end_actions_confirmed_ends_the_stage_and_hands_over_the_sta
     assert runtime.care_right == old.care_right
 
 
+async def test_stage_end_history_lists_the_channels_protection_held(world):
+    await world.running()
+    await world.report(Kind.END_CONDITION_MET)
+    await world.report(Kind.END_ACTIONS, detail={"confirmed": True, "held": ["light"]})
+    ended = [row for row in world.svc.history("stage-1") if row["event"] == "end_actions"][-1]
+    assert ended["to"] == "ended"
+    assert ended["detail"] == {"confirmed": True, "held": ["light"], "reason": "stage ended"}
+
+
 async def test_stage_end_actions_unconfirmed_keeps_the_stage_for_checking(world):
     await world.running()
     old = world.svc.stage("stage-1")
