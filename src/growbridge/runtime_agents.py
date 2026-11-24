@@ -113,7 +113,8 @@ def schedule_audits(runtime: Any) -> int:
 
     Only the model loop calls this, so a stage is only audited while a model is configured.
     Returns how many tasks were newly created."""
-    stage = runtime.workflow.active_stage()
+    # a stage released before this ran still gets its end audit
+    stage = runtime.workflow.active_stage(include_released=True)
     if stage is None:
         return 0
     now = runtime.clock.now()

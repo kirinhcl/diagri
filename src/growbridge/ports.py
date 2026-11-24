@@ -237,9 +237,10 @@ class RecordSink(Protocol):
 class StagePort(Protocol):
     """Implemented by the workflow service, read by the executor and the observer."""
 
-    def active_stage(self) -> StageRuntime | None:
+    def active_stage(self, include_released: bool = False) -> StageRuntime | None:
         """The stage whose run sheet currently governs the device, including the last ended
-        stage while the next one waits for review (its care rules keep running)."""
+        stage while the next one waits for review (its care rules keep running). After a
+        greenhouse release there is none, unless ``include_released``."""
         ...
 
     async def report(self, event: StageEvent) -> None: ...

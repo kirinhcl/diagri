@@ -30,10 +30,12 @@ PROJECT = "p1"
 
 
 class Stages:
-    def __init__(self, started_at: float | None, state=StageState.RUNNING):
-        self.started_at, self.state = started_at, state
+    def __init__(self, started_at: float | None, state=StageState.RUNNING, released=False):
+        self.started_at, self.state, self.released = started_at, state, released
 
-    def active_stage(self):
+    def active_stage(self, include_released: bool = False):
+        if self.released and not include_released:
+            return None  # a released greenhouse has no current stage
         return StageRuntime(
             stage_id=STAGE,
             experiment_id="e1",
@@ -52,13 +54,13 @@ def db(tmp_path):
     database.close()
 
 
-def rig(db, state=StageState.RUNNING, budget=True, started=True):
+def rig(db, state=StageState.RUNNING, budget=True, started=True, released=False):
     clock = FakeClock()
     board = TaskBoard(db, clock)
     calls = CallBudget(db, clock)
     if budget:
         calls.set(PROJECT, Budget(max_calls=50, max_cost=100.0))
-    stages = Stages(clock.now() if started else None, state)
+    stages = Stages(clock.now() if started else None, state, released)
     book = AlertBook(db, clock)
 
     def resolve_alert(kind, key, scope=None):
@@ -150,6 +152,14 @@ def test_an_ended_stage_gets_one_end_audit(db):
     (task,) = audits(runtime)
     assert task.trigger_event_id == f"audit:{STAGE}:end"
     assert "end" in task.question
+
+
+def test_a_stage_released_before_scheduling_still_gets_its_end_audit(db):
+    runtime = rig(db, state=StageState.ENDED, released=True)
+
+    assert schedule_audits(runtime) == 1
+    (task,) = audits(runtime)
+    assert task.trigger_event_id == f"audit:{STAGE}:end"
 
 
 def test_no_audit_for_a_project_without_a_call_budget(db):

@@ -467,15 +467,17 @@ class WorkflowStore:
         )
         return None if row is None else str(row["stage_id"])
 
-    def active(self) -> StageRow | None:
-        """Latest started stage of a round that is not yet delivered or aborted."""
+    def active(self, include_released: bool = False) -> StageRow | None:
+        """Latest started stage of a round that is not yet delivered or aborted; ``None`` when a
+        greenhouse release ended it, unless ``include_released`` (design 2026-11-24, 5.2)."""
         row = self.db.one(
             "SELECT s.* FROM wf_stages s JOIN wf_rounds r ON r.id = s.round_id"
             " WHERE s.started_at IS NOT NULL AND r.state NOT IN (?, ?)"
             " ORDER BY s.started_at DESC, s.rowid DESC LIMIT 1",
             (RoundState.DELIVERED.value, RoundState.ABORTED.value),
         )
-        return None if row is None else self._stage_row(row)
+        stage = None if row is None else self._stage_row(row)
+        return None if stage and stage.care_released and not include_released else stage
 
     def protocol_started(self, protocol_id: str, version: int) -> bool:
         """Whether any stage of any round that runs this protocol version has ever started."""

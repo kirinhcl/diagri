@@ -104,6 +104,30 @@ async def test_release_hands_over_care_and_frees(world, locks):
     assert locks.events()[0]["action"] == "release"
 
 
+async def test_a_released_greenhouse_has_no_current_stage(world, locks):
+    await _ended_with_care(world)
+    locks.lock("alice", ["gh-01"])
+
+    await locks.release("gh-01", "alice")
+
+    assert world.svc.active_stage() is None
+
+
+async def test_ended_stage_without_release_is_still_current(world, locks):
+    stage = await _ended_with_care(world)
+
+    assert world.svc.active_stage().stage_id == stage
+
+
+async def test_the_released_stage_is_still_found_when_asked_for(world, locks):
+    stage = await _ended_with_care(world)
+    locks.lock("alice", ["gh-01"])
+
+    await locks.release("gh-01", "alice")
+
+    assert world.svc.active_stage(include_released=True).stage_id == stage
+
+
 async def test_release_without_care_holder_only_deletes_lock(world, locks):
     locks.lock("alice", ["gh-02"])
 

@@ -619,8 +619,8 @@ class WorkflowService(StageRecovery):
 
     # --- events from the executor and the observer ---------------------------------------------
 
-    def active_stage(self) -> StageRuntime | None:
-        row = self.store.active()
+    def active_stage(self, include_released: bool = False) -> StageRuntime | None:
+        row = self.store.active(include_released)
         return None if row is None else self._runtime(row)
 
     async def report(self, event: StageEvent) -> None:
