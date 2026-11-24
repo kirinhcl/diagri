@@ -87,6 +87,8 @@ test("releasing asks to confirm the plants are gone and sends that confirmation"
   await flush();
   const [dialog] = openDialogs();
   assert.match(dialog.textContent, /My plants have been taken out and the chamber is empty/);
+  // with no idle levels configured the device keeps its settings: the dialog must not promise idle
+  assert.match(dialog.textContent, /idle settings if an administrator set them; otherwise it keeps its current settings/);
   const box = descendants(dialog).find((el) => el.getAttribute("type") === "checkbox");
   box.checked = true;
   box.dispatchEvent(new Event("change"));

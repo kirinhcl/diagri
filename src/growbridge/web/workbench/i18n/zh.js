@@ -684,7 +684,7 @@ export default {
   "greenhouses.takenMeanwhile": "这些温室刚被别人锁定：{ids}。其余勾选保留，请重新选择。",
   "greenhouses.release": "释放",
   "greenhouses.releaseTitle": "释放温室 {name}？",
-  "greenhouses.releaseLine": "释放后养护规则停止，设备转为温室的空闲设置；之后的读数不再记入任何实验。温室上还有未结束的阶段时不能释放。",
+  "greenhouses.releaseLine": "释放后养护规则停止。管理员设置了空闲档位时，设备转为空闲档位，否则保持当前设置。之后的读数不再记入任何实验。温室上还有未结束的阶段时不能释放。",
   "greenhouses.releaseTick": "我的植物已经搬走，舱已清空。",
   "greenhouses.released": "已释放 {name}。",
   "greenhouses.none": "系统里没有登记温室。",

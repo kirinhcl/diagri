@@ -684,7 +684,7 @@ export default {
   "greenhouses.takenMeanwhile": "Someone just locked these: {ids}. Your other ticks are kept; choose again.",
   "greenhouses.release": "Release",
   "greenhouses.releaseTitle": "Release greenhouse {name}?",
-  "greenhouses.releaseLine": "Care rules stop and the device goes to the greenhouse's idle settings; readings from then on belong to no experiment. A greenhouse with an unfinished stage cannot be released.",
+  "greenhouses.releaseLine": "Care rules stop. The device goes to the greenhouse's idle settings if an administrator set them; otherwise it keeps its current settings. Readings from then on belong to no experiment. A greenhouse with an unfinished stage cannot be released.",
   "greenhouses.releaseTick": "My plants have been taken out and the chamber is empty.",
   "greenhouses.released": "Released {name}.",
   "greenhouses.none": "No greenhouse is registered.",
