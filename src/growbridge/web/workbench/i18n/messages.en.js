@@ -140,6 +140,10 @@ export default {
     "Rule {rule} and protection {protection} disagree. {channel}: the rule can set {level}, the protection sets {protection_level}.",
   "msg.finding.safety_conflict.action":
     "Change the level so it no longer conflicts with the protection.",
+  "msg.finding.safety_conflict.release":
+    "Rule {rule} can release while protection {protection} still holds. {channel}: the release sets {level}, the protection holds {protection_level}.",
+  "msg.finding.safety_conflict.release.action":
+    "Change the release level or the recovery condition so the two cannot meet.",
   "msg.finding.sampling.validity":
     "Rule {rule}: a reading stays valid for {validity_seconds}, less than the sampling interval of {interval_seconds}.",
   "msg.finding.sampling.validity.action":

@@ -268,6 +268,51 @@ def test_feedback_with_disjoint_range_from_protection_is_not_conflict():
     assert "safety_conflict" not in codes(validate_run_sheet(sheet, CAPS, make_safety()))
 
 
+def release_rule(recover: Condition):
+    """Dims the light to protection's own 0 when warm, so only its release can clash."""
+    return humidity_rule(
+        id="warm-dim",
+        sensor="temp",
+        unit="C",
+        trigger=Condition(op=">", value=25),
+        recover=recover,
+        action=RuleAction(channel=Channel.LIGHT, level=0),
+        release=RuleAction(channel=Channel.LIGHT, level=60),
+    )
+
+
+def test_validate_blocks_a_release_that_contradicts_a_protection():
+    sheet = make_run_sheet(feedback_rules=(release_rule(Condition(op="<", value=38)),))
+
+    found = [
+        f for f in validate_run_sheet(sheet, CAPS, make_safety()) if f.code == "safety_conflict"
+    ]
+
+    assert [(f.blocking, f.variant) for f in found] == [(True, "release")]
+    assert found[0].params == {
+        "rule": "warm-dim",
+        "protection": "overheat-light-off",
+        "channel": "light",
+        "level": 60,
+        "protection_level": 0,
+    }
+
+
+def test_validate_allows_a_release_that_cannot_meet_the_protection():
+    sheet = make_run_sheet(feedback_rules=(release_rule(Condition(op="<", value=20)),))
+    assert "safety_conflict" not in codes(validate_run_sheet(sheet, CAPS, make_safety()))
+
+
+def test_validate_allows_a_rule_on_another_sensor_on_the_protected_channel():
+    rule = humidity_rule(
+        id="humid-light",
+        action=RuleAction(channel=Channel.LIGHT, level=80),
+        release=RuleAction(channel=Channel.LIGHT, level=60),
+    )
+    sheet = make_run_sheet(feedback_rules=(rule,))
+    assert "safety_conflict" not in codes(validate_run_sheet(sheet, CAPS, make_safety()))
+
+
 def test_sampling_problems_block():
     for plan in (
         SamplingPlan(interval_seconds=0, max_gap_seconds=120),

@@ -77,6 +77,9 @@ CODES: dict[str, dict[str, Code]] = {
         "humidity_exhaust_only": Code(("rule",)),
         "rule_conflict": Code(("rule_a", "rule_b", "channel", "priority")),
         "safety_conflict": Code(("rule", "protection", "channel", "level", "protection_level")),
+        "safety_conflict.release": Code(
+            ("rule", "protection", "channel", "level", "protection_level")
+        ),
         "sampling.validity": Code(("rule", "validity_seconds", "interval_seconds")),
         "sampling.interval": Code(("interval_seconds",)),
         "sampling.max_gap": Code(("max_gap_seconds",)),

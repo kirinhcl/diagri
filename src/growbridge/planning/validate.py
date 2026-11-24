@@ -9,6 +9,8 @@ from growbridge.archive.models import (
     FeedbackRule,
     ManualTask,
     Ownership,
+    ProtectionRule,
+    RuleAction,
     RunSheet,
     SafetyConfig,
 )
@@ -204,30 +206,52 @@ def _can_overlap(first: Condition, second: Condition) -> bool:
     return lower[0] < upper[0] or (lower[0] == upper[0] and lower[1] and upper[1])
 
 
-def _check_safety_conflicts(sheet: RunSheet, safety: SafetyConfig | None) -> list[Finding]:
-    findings = []
-    for rule in sheet.feedback_rules:
-        for protection in _protections(safety):
-            clash = (
-                rule.sensor == protection.sensor
-                and rule.action.channel is protection.action.channel
-                and rule.action.level != protection.action.level
-                and _can_overlap(rule.trigger, protection.trigger)
-            )
-            if clash:
-                findings.append(
-                    _block(
-                        "safety_conflict",
-                        f"rule {rule.id} can ask {rule.action.channel.value}={rule.action.level} "
-                        f"while protection {protection.id} asks {protection.action.level}",
-                        rule=rule.id,
-                        protection=protection.id,
-                        channel=rule.action.channel.value,
-                        level=rule.action.level,
-                        protection_level=protection.action.level,
-                    )
-                )
-    return findings
+def _moves(rule: FeedbackRule) -> Iterator[tuple[bool, Condition, RuleAction]]:
+    """(is it the release, the condition the reading meets, what the rule writes): the action
+    when the trigger holds, the release (if any) when the recovery holds."""
+    yield False, rule.trigger, rule.action
+    if rule.release is not None:
+        yield True, rule.recover, rule.release
+
+
+def _clash(condition: Condition, action: RuleAction, protection: ProtectionRule) -> bool:
+    return (
+        action.channel is protection.action.channel
+        and action.level != protection.action.level
+        and _can_overlap(condition, protection.trigger)
+    )
+
+
+def _contradiction(
+    rule: FeedbackRule, protection: ProtectionRule, release: bool, action: RuleAction
+) -> Finding:
+    params = {
+        "rule": rule.id,
+        "protection": protection.id,
+        "channel": action.channel.value,
+        "level": action.level,
+        "protection_level": protection.action.level,
+    }
+    move = f"{action.channel.value}={action.level} while protection {protection.id} asks"
+    if release:
+        message = f"rule {rule.id} can release {move} {protection.action.level}"
+        return _block("safety_conflict", message, variant="release", **params)
+    message = f"rule {rule.id} can ask {move} {protection.action.level}"
+    return _block("safety_conflict", message, **params)
+
+
+def safety_contradictions(sheet: RunSheet, safety: SafetyConfig | None) -> tuple[Finding, ...]:
+    """Feedback rules that contradict a protection rule on the same reading (spec 7.4): the
+    rule can write another level to the protection's channel while the protection's trigger
+    can hold. Rules on other sensors are left to the executor, where protection wins."""
+    return tuple(
+        _contradiction(rule, protection, release, action)
+        for rule in sheet.feedback_rules
+        for protection in _protections(safety)
+        if rule.sensor == protection.sensor
+        for release, condition, action in _moves(rule)
+        if _clash(condition, action, protection)
+    )
 
 
 def _check_rule_timing(sheet: RunSheet, safety: SafetyConfig | None) -> list[Finding]:
@@ -354,7 +378,7 @@ def validate_run_sheet(
         *_check_sensors(run_sheet, capabilities, safety),
         *_check_humidity(run_sheet, catalog),
         *_check_rule_conflicts(run_sheet),
-        *_check_safety_conflicts(run_sheet, safety),
+        *safety_contradictions(run_sheet, safety),
         *_check_numbers(run_sheet, safety),
         *_hints(run_sheet),
     )
