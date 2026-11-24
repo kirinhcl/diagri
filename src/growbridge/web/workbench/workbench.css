@@ -433,6 +433,7 @@ a {
 .dialog-body { display: grid; gap: 12px; padding: 26px; }
 .dialog-body h2 { margin: 0; font-size: 19px; letter-spacing: -0.4px; }
 .dialog-text { margin: 0; font-size: 13px; color: var(--muted-strong); }
+.dialog-tick { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
 .dialog-action {
   margin: 0;
   padding: 10px 12px;

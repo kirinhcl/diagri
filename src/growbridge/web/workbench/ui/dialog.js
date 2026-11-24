@@ -90,6 +90,33 @@ export function confirmAction(t, { title, lines = [], confirmLabel } = {}) {
   return openDialog(dialog, () => confirmed);
 }
 
+// A confirmation that needs one box ticked first ("my plants are gone"). The confirm button stays
+// disabled until the box is ticked; resolves true only when confirmed with it ticked.
+export function confirmWithTick(t, { title, lines = [], tickLabel, confirmLabel } = {}) {
+  const titleId = nextId("dialog-title");
+  const box = h("input", { class: "input-check", attrs: { type: "checkbox", name: "tick", required: true } });
+  const row = actions(t, confirmLabel || t("common.confirm"), () => dialog.close());
+  const confirm = [...row.children].find((button) => button.getAttribute("type") === "submit");
+  confirm.disabled = true;
+  box.addEventListener("change", () => (confirm.disabled = !box.checked));
+  let confirmed = false;
+  const submit = (event) => {
+    event.preventDefault();
+    if (!box.checked) return;
+    confirmed = true;
+    dialog.close();
+  };
+  const dialog = frame(
+    titleId,
+    submit,
+    h("h2", { attrs: { id: titleId }, text: title }),
+    lines.length ? h("ul", { class: "dialog-lines" }, lines.map((line) => h("li", { text: line }))) : null,
+    h("label", { class: "dialog-tick" }, box, h("span", { text: tickLabel })),
+    row,
+  );
+  return openDialog(dialog, () => confirmed);
+}
+
 // A confirmation with a plain text box that may stay empty. Resolves with the trimmed text (maybe
 // ""), or null when cancelled.
 export function askReason(t, { title, lines = [], label, maxlength, confirmLabel } = {}) {

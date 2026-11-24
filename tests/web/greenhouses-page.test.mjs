@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 
 import { ApiError } from "../../src/growbridge/web/workbench/api.js";
 import { takenIds } from "../../src/growbridge/web/workbench/pages/greenhouses.js";
+import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
 import { renderPage } from "./support/render-page.mjs";
 import { visibleText } from "./support/leaks.mjs";
 
@@ -69,3 +70,31 @@ test("an administrator also sees who holds each greenhouse", async () => {
 
   assert.match(visibleText(element), /alice/);
 });
+
+afterEach(() => {
+  try {
+    assertNoPendingDialogAnswers();
+  } finally {
+    resetDialogs();
+  }
+});
+
+test("releasing asks to confirm the plants are gone and sends that confirmation", async () => {
+  const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en" });
+  const release = descendants(element).find((el) => el.nodeName === "BUTTON" && el.textContent === "Release");
+
+  release.dispatchEvent(new Event("click"));
+  await flush();
+  const [dialog] = openDialogs();
+  assert.match(dialog.textContent, /My plants have been taken out and the chamber is empty/);
+  const box = descendants(dialog).find((el) => el.getAttribute("type") === "checkbox");
+  box.checked = true;
+  box.dispatchEvent(new Event("change"));
+  answerNextDialog(true);
+  await flush();
+
+  const call = ctx.api.calls.find((c) => c.method === "POST");
+  assert.equal(call.path, "/greenhouses/gh-01/release");
+  assert.deepEqual(call.body, { plants_removed: true });
+});
+

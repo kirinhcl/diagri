@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
-import { askSecret, confirmAction } from "../../src/growbridge/web/workbench/ui/dialog.js";
+import { askSecret, confirmAction, confirmWithTick } from "../../src/growbridge/web/workbench/ui/dialog.js";
 import { takeDraft } from "../../src/growbridge/web/workbench/drafts.js";
 import { Cancelled, confirmOrCancel, jsonEditor, simpleForm } from "../../src/growbridge/web/workbench/ui/forms.js";
 import { answerNextDialog, assertNoPendingDialogAnswers, openDialogs, resetDialogs } from "./support/dialogs.mjs";
@@ -112,3 +112,37 @@ test("a cancelled confirm keeps no draft and says nothing, in a simple form and 
   assert.equal(takeDraft("cancel-simple"), null);
   assert.equal(takeDraft("cancel-json"), null);
 });
+
+const TICKED = { ...PROMPT, tickLabel: "My plants are gone.", confirmLabel: "Release" };
+const nodesOf = (node) => [...(node.children || [])].flatMap((child) => [child, ...nodesOf(child)]);
+const tickBox = (dialog) => nodesOf(dialog).find((el) => el.getAttribute("type") === "checkbox");
+const confirmButton = (dialog) => nodesOf(dialog).find((el) => el.getAttribute("type") === "submit");
+
+test("a ticked confirmation confirms only once its box is ticked", async () => {
+  const ctx = testCtx({ lang: "en" });
+  const pending = confirmWithTick(ctx.t, TICKED);
+  await tick();
+  const [dialog] = openDialogs();
+  assert.ok(dialog.textContent.includes(TICKED.tickLabel));
+  assert.equal(confirmButton(dialog).disabled, true);
+
+  answerNextDialog(true); // confirming without the tick does nothing
+  assert.equal(openDialogs().length, 1);
+
+  const box = tickBox(dialog);
+  box.checked = true;
+  box.dispatchEvent(new Event("change"));
+  assert.equal(confirmButton(dialog).disabled, false);
+  answerNextDialog(true);
+  assert.equal(await pending, true);
+});
+
+test("a ticked confirmation can be cancelled", async () => {
+  const ctx = testCtx({ lang: "en" });
+  const pending = confirmWithTick(ctx.t, TICKED);
+  await tick();
+  tickBox(openDialogs()[0]).checked = true;
+  answerNextDialog(false);
+  assert.equal(await pending, false);
+});
+

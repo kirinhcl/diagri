@@ -20,11 +20,14 @@ export function takenIds(error) {
 function releaseButton(ctx, row) {
   const label = ctx.t("greenhouses.release");
   const run = async () => {
-    await ctx.api.post(`/greenhouses/${encodeURIComponent(row.id)}/release`, {}, { action: label });
+    const body = { plants_removed: true }; // the dialog only confirms once that box is ticked
+    await ctx.api.post(`/greenhouses/${encodeURIComponent(row.id)}/release`, body, { action: label });
     ctx.notify(ctx.t("greenhouses.released", { name: row.name }), "ok");
     ctx.reload();
   };
-  return confirmedButton(ctx, { label, title: ctx.t("greenhouses.releaseTitle", { name: row.name }), lines: [ctx.t("greenhouses.releaseLine")], run });
+  const title = ctx.t("greenhouses.releaseTitle", { name: row.name });
+  const tickLabel = ctx.t("greenhouses.releaseTick");
+  return confirmedButton(ctx, { label, title, lines: [ctx.t("greenhouses.releaseLine")], run, tickLabel });
 }
 
 function checkbox(row, boxes) {

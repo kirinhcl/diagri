@@ -1,6 +1,6 @@
 // Building blocks shared by the project, round and stage pages.
 import { formatAge, formatDateTime } from "../format.js";
-import { confirmAction } from "./dialog.js";
+import { confirmAction, confirmWithTick } from "./dialog.js";
 import { clear, h } from "./dom.js";
 import { errorDetail, errorLines } from "./forms.js";
 
@@ -190,12 +190,14 @@ export function showErrors(box, error, ctx) {
 }
 
 // A button that asks first. run() does the write; a refusal is written under the button.
-export function confirmedButton(ctx, { label, title, lines = [], tone = "quiet", run }) {
+// With tickLabel the dialog also needs that box ticked before it confirms.
+export function confirmedButton(ctx, { label, title, lines = [], tone = "quiet", run, tickLabel }) {
   const box = errorBox();
   const button = h("button", { class: ["button", `button-${tone}`], attrs: { type: "button" }, text: label });
   button.addEventListener("click", async () => {
     box.hidden = true;
-    if (!(await confirmAction(ctx.t, { title, lines, confirmLabel: label }))) return;
+    const ask = tickLabel ? confirmWithTick : confirmAction;
+    if (!(await ask(ctx.t, { title, lines, confirmLabel: label, tickLabel }))) return;
     button.disabled = true;
     try {
       await run();
