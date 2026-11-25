@@ -300,12 +300,17 @@ class ExecutorEngine:
         slot = str(int(since * 1000))
         await self._write(tick, stage, right, "protection", action, f"protect:{rule_id}", slot)
 
-    def _protected(self) -> frozenset[Channel]:
-        """Channels a protection rule is holding; schedules and rules leave them alone."""
+    def _protecting(self) -> dict[Channel, str]:
+        """Each channel an active protection rule holds, with that rule's id. Timed schedules,
+        care, feedback rules and end actions all leave these channels alone (spec 7.4)."""
         safety = self.control.safety()
         rules = () if safety is None else safety.rules
-        active = (r.action.channel for r in rules if self._protection.get(r.id, RuleState()).active)
-        return frozenset(active)
+        active = (r for r in rules if self._protection.get(r.id, RuleState()).active)
+        return {rule.action.channel: rule.id for rule in active}
+
+    def _protected(self) -> frozenset[Channel]:
+        """The channels in ``_protecting``."""
+        return frozenset(self._protecting())
 
     async def _verified(self, action: RuleAction) -> bool | None:
         """Does the device show the level now? ``None`` when the state cannot be read: that is
@@ -470,8 +475,8 @@ class ExecutorEngine:
             judged.append((rule, old, decision))
         chosen = resolve([(rule, decision) for rule, _, decision in judged])
         for rule, old, decision in judged:
-            done = await self._apply_decision(tick, stage, rule.id, old, decision, chosen)
-            self._feedback = {**self._feedback, rule.id: decision.state if done else old}
+            state = await self._apply_decision(tick, stage, rule.id, old, decision, chosen)
+            self._feedback = {**self._feedback, rule.id: state}
         paused = [rule.id for rule, _, decision in judged if decision.pause]
         if paused:
             await self._report(tick, stage, Kind.RULE_PAUSE, paused[0], {"rules": paused})
@@ -484,23 +489,31 @@ class ExecutorEngine:
         old: RuleState,
         decision: Decision,
         chosen: Mapping[Channel, RuleAction],
-    ) -> bool:
-        """Write what a rule decided; False keeps the old rule state so the next tick retries."""
+    ) -> RuleState:
+        """Write what a rule decided and return the rule's next state. A write that did not
+        happen keeps the old state, so the rule acts again on the next tick."""
         action = decision.action
         if action is None:
-            return True
+            return decision.state
         outside = action.channel not in stage.run_sheet.host_channels()
         if outside or chosen.get(action.channel) != action:
-            return True  # not a channel the executor may move, or a higher priority rule won
+            return decision.state  # not a channel the executor may move, or a rule won
         if self._applied.get(action.channel) == action.level:
-            return True
+            return decision.state
+        holder = self._protecting().get(action.channel)
+        if holder is not None:
+            cause = f"rule:{rule_id}: {action.channel.value} held by protection {holder}"
+            tick.denied.append(cause)
+            # the reading was seen: a long hold must not look like a gap that restarts the timer
+            return old.model_copy(update={"last_seen": decision.state.last_seen})
         since = old.since if old.since is not None else self.clock.monotonic()
         slot = str(int(since * 1000))
         cause = f"rule:{rule_id}"
         record = await self._write(
             tick, stage, stage.right_number, "experiment_action", action, cause, slot
         )
-        return record is not None and record.state is ActionState.CONFIRMED
+        confirmed = record is not None and record.state is ActionState.CONFIRMED
+        return decision.state if confirmed else old
 
     async def _end_condition(self, tick: _Tick, stage: StageRuntime, now: float) -> bool:
         if stage.started_at is None or now - stage.started_at < stage.run_sheet.duration_seconds:
@@ -514,17 +527,25 @@ class ExecutorEngine:
         if not stage.end_pending or stage.right_number is None:
             return
         hosted = stage.run_sheet.host_channels()
-        actions = [a for a in stage.run_sheet.end_actions if a.channel in hosted]
+        actions = [
+            a
+            for a in stage.run_sheet.end_actions
+            if a.channel in hosted and a.channel is not Channel.PUMP
+        ]
+        protecting = self._protecting()
+        held = [a.channel for a in actions if a.channel in protecting]
+        tick.denied.extend(f"end:{c.value}: held by protection {protecting[c]}" for c in held)
         results = [
             await self._end_action(tick, stage, action)
             for action in actions
-            if action.channel is not Channel.PUMP
+            if action.channel not in protecting
         ]
         if any(result is None for result in results):
             return  # refused or held back: try again next tick
-        confirmed = all(results)
+        confirmed = all(results)  # a held end action counts as done: the stage ends on time
         key = "confirmed" if confirmed else "unconfirmed"
-        await self._report(tick, stage, Kind.END_ACTIONS, key, {"confirmed": confirmed})
+        detail = {"confirmed": confirmed, **({"held": [c.value for c in held]} if held else {})}
+        await self._report(tick, stage, Kind.END_ACTIONS, key, detail)
 
     async def _end_action(
         self, tick: _Tick, stage: StageRuntime, action: RuleAction

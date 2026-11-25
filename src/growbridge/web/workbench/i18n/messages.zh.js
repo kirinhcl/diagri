@@ -112,6 +112,10 @@ export default {
     "规则{rule}可能把{channel}设为{level}，而保护规则{protection}会设为{protection_level}。",
   "msg.finding.safety_conflict.action":
     "改档位，让它不和保护规则冲突。",
+  "msg.finding.safety_conflict.release":
+    "规则{rule}恢复时会把{channel}设为{level}，而这时保护规则{protection}可能仍要设为{protection_level}。",
+  "msg.finding.safety_conflict.release.action":
+    "改恢复时的档位，或改恢复条件，让它和保护规则的触发条件不会同时成立。",
   "msg.finding.sampling.validity":
     "规则{rule}：读数的有效期是{validity_seconds}，短于采样间隔{interval_seconds}。",
   "msg.finding.sampling.validity.action":

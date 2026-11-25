@@ -2,8 +2,16 @@ import asyncio
 
 import pytest
 
-from growbridge.archive.models import ActionRecord, ActionState, Channel, RightKind
+from growbridge.archive.models import (
+    ActionRecord,
+    ActionState,
+    Channel,
+    Condition,
+    RightKind,
+    RuleAction,
+)
 from growbridge.ports import Denied, Difference
+from growbridge.sim.fixtures import humidity_rule, make_safety
 from growbridge.workflow.permissions import REAUTH_SECONDS
 
 STAGE, CARE, MANUAL = RightKind.STAGE, RightKind.CARE, RightKind.MANUAL
@@ -454,3 +462,94 @@ async def test_stage_history_records_every_transition_in_order(world):
         ("running", "paused"),
         ("paused", "running"),
     ]
+
+
+# --- a stage starts only against the safety configuration in force (spec 7.4, 7.5) -----------
+
+
+def warm_light():
+    """Light 80 above 30 C: meets the fixture's overheat protection (above 35 C, light 0)."""
+    return humidity_rule(
+        id="warm-light",
+        sensor="temp",
+        unit="C",
+        trigger=Condition(op=">", value=30),
+        recover=Condition(op="<", value=20),
+        action=RuleAction(channel=Channel.LIGHT, level=80),
+        release=None,
+    )
+
+
+async def test_start_refuses_a_sheet_that_contradicts_a_later_safety_configuration(world):
+    world.control.safety_config = None  # no protection when the sheet is designed and approved
+    await world.approved(feedback_rules=(warm_light(),))
+    world.control.safety_config = make_safety(approved_by="op-1", approved_at=2.0)
+
+    with pytest.raises(Denied) as caught:
+        await world.svc.start_stage("stage-1", world.op)
+
+    assert caught.value.code == "safety_conflict"
+    assert "warm-light" in str(caught.value)
+    assert world.state() == "pending_review"
+
+
+# --- handback makes the checks resume_stage makes ----------------------------------------------
+
+
+async def taken_over(world, paused: bool = False) -> int:
+    await world.running()
+    if paused:
+        await world.svc.pause_stage("stage-1", world.op, "check")
+    await world.svc.takeover("stage-1", world.op)
+    return world.svc.stage("stage-1").manual_right
+
+
+async def refused_handback(world, manual: int) -> Denied:
+    """handback is refused and leaves the stage manual, with its manual right still live."""
+    with pytest.raises(Denied) as caught:
+        await world.svc.handback("stage-1", world.op, accept_as_intervention=False)
+    stage = world.svc.stage("stage-1")
+    assert stage.state.value == "manual" and stage.manual_right == manual
+    assert manual in world.control.live(MANUAL)
+    assert (manual, "handback") not in world.control.handovers
+    return caught.value
+
+
+async def test_handback_refuses_a_stage_whose_approval_is_no_longer_valid(world):
+    manual = await taken_over(world, paused=True)
+    world.control.capability_version = "caps-2"
+
+    denied = await refused_handback(world, manual)
+
+    assert (denied.code, denied.reason) == ("approval_invalid", "capabilities_changed")
+    await world.svc.stop_stage("stage-1", world.op)
+    assert world.state() == "stopped"
+
+
+async def test_handback_refuses_while_the_pump_interlock_is_set(world):
+    manual = await taken_over(world)
+    world.control.interlock = True
+
+    denied = await refused_handback(world, manual)
+
+    assert denied.reason == "pump_unconfirmed"
+
+
+async def test_handback_refuses_with_unsettled_actions(world):
+    manual = await taken_over(world)
+    world.control.unsettled = (
+        ActionRecord(
+            request_id="r-1",
+            state=ActionState.UNKNOWN,
+            channel=Channel.LIGHT,
+            planned_level=60,
+            right_number=1,
+            right_kind=RightKind.STAGE,
+            trigger="light-on",
+            created_at=world.clock.now(),
+        ),
+    )
+
+    denied = await refused_handback(world, manual)
+
+    assert denied.reason == "unsettled_actions"

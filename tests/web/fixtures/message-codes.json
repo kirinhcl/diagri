@@ -271,6 +271,16 @@
       ],
       "action": true
     },
+    "safety_conflict.release": {
+      "params": [
+        "rule",
+        "protection",
+        "channel",
+        "level",
+        "protection_level"
+      ],
+      "action": true
+    },
     "sampling.validity": {
       "params": [
         "rule",

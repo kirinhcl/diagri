@@ -192,7 +192,7 @@ def test_every_finding_names_a_registered_message_code() -> None:
     assert emitted <= set(CODES["finding"]), emitted - set(CODES["finding"])
     # and the registry lists nothing the server never sends
     assert set(CODES["finding"]) <= emitted, set(CODES["finding"]) - emitted
-    assert len(CODES["finding"]) == 42
+    assert len(CODES["finding"]) == 43
 
 
 RECEIPT_CALLS = {"Outcome", "_void_queued"}
