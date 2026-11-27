@@ -41,7 +41,7 @@ The system offers the variables of the [variable catalog](Variable-Catalog.md). 
 
 ### 5. Analysis plan
 
-The system offers two methods, paired blocks and two groups. You choose one and give the target effect (the smallest difference worth finding, in the unit of the main outcome) and the exclusion rules. The largest share of missing data starts at 0.2 and the largest share of deviating runs at 0.1; you can change both.
+The system offers two methods, paired blocks and two groups. You choose one and give the target effect (the smallest difference worth finding, in the unit of the main outcome) and the exclusion rules. The largest share of missing data starts at 0.2 and the largest share of deviating runs at 0.1; you can change both. An analysis script hash the last version declared is shown read-only on the card; step 7 asks whether the new version keeps it.
 
 ### 6. Scale
 
