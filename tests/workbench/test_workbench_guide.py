@@ -413,6 +413,17 @@ def test_a_non_finite_number_in_an_answer_is_refused(bench, operator, sid, liter
     assert len(bench.guide.events(sid)) == before
 
 
+@pytest.mark.parametrize("spelled", ["nan", "Infinity", "-Infinity"])
+def test_a_non_finite_number_spelled_as_text_is_refused(bench, operator, sid, spelled):
+    before = len(bench.guide.events(sid))
+
+    r = choose(bench, operator, sid, "analysis", {**ANSWERS["analysis"], "target_effect": spelled})
+
+    assert r.status_code == 422 and detail(r)["reason"] == "guide_answer_invalid"
+    assert detail(r)["params"] == {"step": "analysis"}
+    assert len(bench.guide.events(sid)) == before
+
+
 def test_a_save_that_cannot_be_compared_records_no_edited_list(bench, operator, sid):
     answer_all(bench, operator, sid)
     review = operator.get(f"{GUIDE}/{sid}/review").json()

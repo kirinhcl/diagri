@@ -48,7 +48,11 @@ class GuideEvent(Model):
 
 
 def _canonical(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    """The stored text of a payload; a NaN or an infinity raises ``ValueError``, so it is never
+    written as something the record cannot read back as a number."""
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
 
 
 def _event(row: Any) -> GuideEvent:

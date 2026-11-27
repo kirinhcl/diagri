@@ -1,3 +1,4 @@
+import math
 import threading
 
 import pytest
@@ -41,6 +42,16 @@ def test_an_unknown_session_takes_no_event(store):
     with pytest.raises(KeyError):
         store.append_many("guide-nope", [("question", "chosen", {})], "alice")
     assert store.events("guide-nope") == ()
+
+
+@pytest.mark.parametrize("number", [math.nan, math.inf, -math.inf])
+def test_a_non_finite_number_is_never_written(store, number):
+    s = store.start("project-1", "alice", "zh")
+    payload = {"answer": {"target_effect": number}, "source": "own", "option_ids": []}
+
+    with pytest.raises(ValueError):
+        store.append(s.session_id, "analysis", "chosen", payload, "alice")
+    assert store.events(s.session_id) == ()
 
 
 def test_concurrent_appends_get_distinct_numbers(tmp_path):

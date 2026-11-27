@@ -71,6 +71,12 @@ def _invalid(step: str, message: str):
     return rejected(message[:MESSAGE_CHARS], reason="guide_answer_invalid", params={"step": step})
 
 
+def _refuse_non_finite(step: str, value: dict[str, Any]) -> None:
+    spoiled = non_finite_paths(value)
+    if spoiled:
+        raise _invalid(step, f"numbers must be finite; not at {', '.join(spoiled)}")
+
+
 class _Guide:
     def __init__(self, workflow: WorkflowService, guide: GuideStore, access: Access | None):
         self.workflow, self.guide, self.access = workflow, guide, access
@@ -186,13 +192,13 @@ class _Guide:
         return self.view(session)
 
     def _checked(self, step: StepId, raw: dict[str, Any], declared: frozenset[str]):
-        spoiled = non_finite_paths(raw)
-        if spoiled:
-            raise _invalid(step, f"numbers must be finite; not at {', '.join(spoiled)}")
+        _refuse_non_finite(step, raw)
         try:
             answer = parse_answer(step, raw)
         except ValueError as exc:
             raise _invalid(step, str(exc)) from None
+        # Pydantic also reads "nan" and "Infinity" spelled as text, so the parsed answer is checked.
+        _refuse_non_finite(step, answer.model_dump())
         problems = answer_problems(step, answer, self.workflow.catalog, declared)
         if problems:
             raise _invalid(step, "; ".join(problems))
