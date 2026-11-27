@@ -42,6 +42,7 @@ export default {
   "guide.treatments.level": "档位",
   "guide.treatments.add": "加一个处理",
   "guide.treatments.remove": "删除这个处理",
+  "guide.treatments.others": "其他因子保持不变",
   "guide.treatments.control": "对照处理",
   "guide.treatments.idTwice": "两个处理用了同一个编号。",
   "guide.treatments.noControl": "请选出哪个处理是对照。",

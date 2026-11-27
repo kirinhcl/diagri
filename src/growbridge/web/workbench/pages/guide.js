@@ -1,7 +1,6 @@
 // The guide page: a rail of the nine steps, the card of the step being answered, and the draft so far.
 // Steps 1-6 are answered here (guide-steps.js); the review and the round step come later, so for now
 // they show a plain card. Every answer is kept on the server; this page only holds which step is open.
-import { ApiError } from "../api.js";
 import { labelOr, textOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
@@ -85,6 +84,8 @@ export async function render(ctx, { sessionId }) {
     draft.replaceChildren(...draftPanel(ctx, session));
   };
 
+  const showFailure = (error) => stage.replaceChildren(h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)));
+
   async function drawStage() {
     const step = shown();
     const mine = ++drawn;
@@ -92,20 +93,12 @@ export async function render(ctx, { sessionId }) {
       stage.replaceChildren(section(ctx.t(`guide.step.${step}`), note(ctx.t("guide.later"))));
       return;
     }
-    let options = null;
-    let failure = null;
     try {
-      options = await ctx.api.get(`${base}/steps/${step}`);
+      const options = await ctx.api.get(`${base}/steps/${step}`);
+      if (mine === drawn) stage.replaceChildren(stepCard(ctx, { session, step, options, onChosen }));
     } catch (error) {
-      if (!(error instanceof ApiError)) throw error;
-      failure = error;
+      if (mine === drawn) showFailure(error);
     }
-    if (mine !== drawn) return;
-    if (failure) {
-      stage.replaceChildren(h("div", { class: "form-status form-status-error" }, errorParts(ctx, failure)));
-      return;
-    }
-    stage.replaceChildren(stepCard(ctx, { session, step, options, onChosen }));
   }
 
   // A saved answer: the page takes the server's view; with `stay` the card stays and says what to look at.
@@ -114,7 +107,7 @@ export async function render(ctx, { sessionId }) {
     session = view;
     viewing = keep;
     drawSides();
-    if (!stay) drawStage().catch(() => {});
+    if (!stay) drawStage();
   }
 
   // A finished step is opened again; the server records that, the answer given is shown ready to change.
@@ -123,8 +116,7 @@ export async function render(ctx, { sessionId }) {
       const view = await ctx.api.post(`${base}/steps/${step}/reopen`, {}, { action: ctx.t(`guide.step.${step}`) });
       if (Array.isArray(view && view.steps)) session = view;
     } catch (error) {
-      if (!(error instanceof ApiError)) throw error;
-      stage.replaceChildren(h("div", { class: "form-status form-status-error" }, errorParts(ctx, error)));
+      showFailure(error);
       return;
     }
     viewing = step;

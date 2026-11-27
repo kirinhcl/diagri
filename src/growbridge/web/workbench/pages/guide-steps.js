@@ -179,11 +179,34 @@ function factorItems(ctx, options) {
   });
 }
 
+// The factors of a carried treatment other than the one being edited: kept as they were, shown read-only.
+const otherFactors = (row, picked) => Object.fromEntries(Object.entries(row.factors || {}).filter(([key]) => key !== picked));
+
+function keptFactors(ctx, { options, rowsBefore, picked }) {
+  const holder = h("div", { class: "guide-kept-factors" });
+  const nameOf = (key) => {
+    const found = options.find((o) => o.id === key);
+    return found ? labelOf(ctx, found) : key;
+  };
+  const redraw = () => {
+    const lines = rowsBefore
+      .map((row) => [row.name, Object.entries(otherFactors(row, picked())).map(([key, value]) => `${nameOf(key)} ${value}`)])
+      .filter(([, parts]) => parts.length > 0)
+      .map(([name, parts]) => h("li", { text: `${name}: ${parts.join(ctx.t("common.listSep"))}` }));
+    holder.replaceChildren(...(lines.length ? [note(ctx.t("guide.treatments.others")), h("ul", { class: "guide-kept-list" }, lines)] : []));
+  };
+  redraw();
+  return { element: holder, redraw };
+}
+
 function treatmentsBody(ctx, { session, options, post, box }) {
   const before = answerOf(session, "treatments");
   const rowsBefore = array(before.treatments);
   const factorKey = Object.keys((rowsBefore[0] && rowsBefore[0].factors) || {})[0];
-  const factor = choiceGroup({ name: "factor", legend: ctx.t("guide.treatments.factor"), items: factorItems(ctx, options), selected: factorKey ? [factorKey] : [] });
+  let kept = null;
+  const onFactor = () => kept && kept.redraw();
+  const factor = choiceGroup({ name: "factor", legend: ctx.t("guide.treatments.factor"), items: factorItems(ctx, options), selected: factorKey ? [factorKey] : [], onChange: onFactor });
+  kept = keptFactors(ctx, { options, rowsBefore, picked: () => factor.chosen()[0] || factorKey });
   const control = selectField(ctx, { name: "control", label: ctx.t("guide.treatments.control"), picked: before.control_treatment_id || "" });
   let group = null;
   const refreshControl = () => {
@@ -213,11 +236,12 @@ function treatmentsBody(ctx, { session, options, post, box }) {
     control.fail("");
     if (!found) return null;
     if (!control.value()) return control.fail(ctx.t("guide.treatments.noControl"));
+    const prior = new Map(rowsBefore.map((row) => [row.id, row]));
     const described = new Map(rowsBefore.map((row) => [row.id, row.description || ""]));
-    const treatments = found.map((row) => ({ id: row.id, name: row.name, description: described.get(row.id) || "", factors: { [picked]: row.level } }));
+    const treatments = found.map((row) => ({ id: row.id, name: row.name, description: described.get(row.id) || "", factors: { ...otherFactors(prior.get(row.id) || {}, picked), [picked]: row.level } }));
     return post({ treatments, control_treatment_id: control.value() }, [picked]);
   };
-  return { content: [factor.element, group.element, control.row], submit };
+  return { content: [factor.element, group.element, kept.element, control.row], submit };
 }
 
 // --- measures ----------------------------------------------------------------------------------------
@@ -323,7 +347,10 @@ function helper(ctx, { session, box, activeCount }) {
 }
 
 function seedRow(ctx, seed) {
-  return h("div", { class: "field" }, h("span", { class: "field-label", text: ctx.t("guide.scale.seed") }), h("p", { class: "guide-seed", text: String(seed) }), h("p", { class: "field-hint", text: ctx.t("guide.scale.seedHint") }));
+  counter += 1;
+  const id = `guide-seed-${counter}`;
+  const input = h("input", { class: "input guide-seed", attrs: { id, type: "text", readonly: true, value: String(seed) } });
+  return h("div", { class: "field" }, h("label", { class: "field-label", attrs: { for: id }, text: ctx.t("guide.scale.seed") }), h("div", { class: "field-control" }, input), h("p", { class: "field-hint", text: ctx.t("guide.scale.seedHint") }));
 }
 
 // After a scale is saved the design is read once; findings that block it keep the person on this step.
@@ -340,6 +367,19 @@ async function checkDesign(ctx, { base, extra, box, done, view }) {
   if (blocking.length === 0) return done(view);
   extra.replaceChildren(note(ctx.t("guide.scale.blocking")), findingsList(ctx, blocking));
   return done(view, { stay: true });
+}
+
+// A carried allocation table is reused only when nothing it was made for has changed: layout, units,
+// the number of blocks or rounds, and the treatments. Otherwise the server draws a new one from the seed.
+function tableStillFits(session, before, layout, values) {
+  const table = array(before.allocations);
+  if (table.length === 0 || before.layout !== layout) return false;
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const count = layout === "series" ? "blocks" : "rounds";
+  const ids = array(answerOf(session, "treatments").treatments).map((row) => row.id);
+  const used = new Set(table.map((row) => row.treatment_id));
+  const sameTreatments = used.size === ids.length && ids.every((id) => used.has(id));
+  return same(values.units, before.units) && values[count] === before[count] && sameTreatments;
 }
 
 function scaleBody(ctx, { session, options, defaults, post, box, extra, base, done }) {
@@ -361,7 +401,7 @@ function scaleBody(ctx, { session, options, defaults, post, box, extra, base, do
     const values = fields.read([activeCount(), fields.entry("units"), fields.entry("stages")]);
     if (!picked || !values) return;
     const unit = before.experimental_unit || defaults.experimental_unit || "tent";
-    const kept = carried(before, ["randomization_seed", "allocations"]);
+    const kept = { ...carried(before, ["randomization_seed"]), ...(tableStillFits(session, before, picked, values) ? carried(before, ["allocations"]) : {}) };
     const view = await post({ layout: picked, ...values, experimental_unit: unit, ...kept }, [picked], { keepStep: true });
     await checkDesign(ctx, { base, extra, box, done, view });
   };

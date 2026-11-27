@@ -60,10 +60,10 @@ const ANSWERS = {
 };
 
 // A session view: the steps in `done` answered (with their source and status when given), the rest pending.
-function session(done = [], { source = {}, status = {} } = {}) {
+function session(done = [], { source = {}, status = {}, answers = {} } = {}) {
   const steps = BASE.steps.map(({ step }, index) =>
     done.includes(step)
-      ? { step, status: status[step] || "done", chosen: { step, answer: ANSWERS[step], source: source[step] || "own", option_ids: [], seq: index + 2 } }
+      ? { step, status: status[step] || "done", chosen: { step, answer: answers[step] || ANSWERS[step], source: source[step] || "own", option_ids: [], seq: index + 2 } }
       : { step, status: "pending", chosen: null },
   );
   return { ...BASE, steps };
@@ -333,4 +333,59 @@ test("no text of the page says AI, in either language", async () => {
       assert.doesNotMatch(text(element), /\bAI\b/, `${step} ${lang}`);
     }
   }
+});
+
+test("a failed read of the step options is shown on the page, at the start and after a save", async () => {
+  const boom = () => {
+    throw new TypeError("boom");
+  };
+  const first = await open("crop", { answers: { [`GET ${SESSION_PATH}/steps/crop`]: boom } });
+  assert.ok(byClass(first.element, "form-status-error").length > 0);
+  assert.equal(byClass(first.element, "guide-card").length, 0);
+  const answers = { ...answering("question", session(["question"])), [`GET ${SESSION_PATH}/steps/crop`]: boom };
+  const { element } = await renderPage("guide", { sessionId: "guide-1" }, { answers });
+  change(named(element, "question")[0], "Does more light speed up growth?");
+  await submit(element);
+  assert.ok(byClass(element, "form-status-error").length > 0);
+  assert.equal(byClass(element, "guide-card").length, 0);
+});
+
+const TABLE = [
+  { round: 1, block: 1, unit: "tent-1", treatment_id: "control" },
+  { round: 2, block: 1, unit: "tent-1", treatment_id: "high" },
+  { round: 3, block: 2, unit: "tent-1", treatment_id: "control" },
+  { round: 4, block: 2, unit: "tent-1", treatment_id: "high" },
+];
+const CARRIED_SCALE = { layout: "series", blocks: 2, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5, allocations: TABLE };
+
+async function resaveScale(change_) {
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale: CARRIED_SCALE } });
+  const answers = { ...answering("scale", view), [`GET ${SESSION_PATH}/review`]: () => ({ design: [] }) };
+  const { element, ctx } = await open("scale", { view, answers });
+  change_(element);
+  await submit(element);
+  return chooseCalls(ctx, "scale")[0].body.answer;
+}
+
+test("a carried allocation table is kept when nothing it was made for changed", async () => {
+  assert.deepEqual(await resaveScale(() => {}), CARRIED_SCALE);
+});
+
+test("a carried allocation table is dropped when the blocks change, and the seed stays", async () => {
+  const answer = await resaveScale((element) => change(named(element, "blocks")[0], "3"));
+  assert.equal(answer.blocks, 3);
+  assert.equal(answer.randomization_seed, 5);
+  assert.equal(Object.hasOwn(answer, "allocations"), false);
+});
+
+test("a carried treatment with two factors keeps the other factor when re-saved", async () => {
+  const two = {
+    treatments: ANSWERS.treatments.treatments.map((row, i) => ({ ...row, factors: { light: row.factors.light, co2: 400 + 400 * i } })),
+    control_treatment_id: "control",
+  };
+  const view = session(ALL, { status: { treatments: "needs_review" }, answers: { treatments: two } });
+  const { element, ctx } = await open("treatments", { view, answers: answering("treatments", view) });
+  assert.match(text(element), /其他因子保持不变/);
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "treatments")[0].body.answer, two);
 });

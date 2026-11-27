@@ -68,6 +68,29 @@ const EVIDENCE_CARDS = [
   { ...CARD, id: "card_6d098879b9c655be91d5b0d1b0ba0a073", source: "model:planner", value: null, unit: null, verified_by: null, verified_at: null, note: null },
 ];
 
+// The guide page with answers given: carried and system sources, a measures answer that keeps a variable the
+// catalog no longer offers (shown ticked by its own id), and the scale step with a seed of ten digits.
+const GUIDE = FIXTURES["guide-session.json"];
+const GUIDE_ANSWERS = {
+  question: { question: "Does more light speed up growth?", hypothesis: "" },
+  crop: { crop: "Lettuce", crop_taxon: "NCBITaxon:4236" },
+  treatments: { treatments: [{ id: "control", name: "Light 40", description: "", factors: { light: 40 } }, { id: "high", name: "Light 70", description: "", factors: { light: 70 } }], control_treatment_id: "control" },
+  measures: { variables: ["canopy_area_growth", "retired_height"], primary_endpoint: "retired_height" },
+  analysis: { target_effect: 0.15, method: "paired_block", exclusion_rules: [], max_missing_fraction: 0.2, max_deviation_fraction: 0.1 },
+};
+const GUIDE_SOURCES = { question: "own", crop: "system", treatments: "carried", measures: "carried", analysis: "own" };
+const guideSession = (status) => ({
+  ...GUIDE,
+  steps: GUIDE.steps.map(({ step }, index) =>
+    GUIDE_ANSWERS[step] ? { step, status: status[step] || "done", chosen: { step, answer: GUIDE_ANSWERS[step], source: GUIDE_SOURCES[step], option_ids: [], seq: index + 2 } } : { step, status: "pending", chosen: null },
+  ),
+});
+const GUIDE_OPTION = (id, zh, en, value) => ({ id, value, label_zh: zh, label_en: en });
+const GUIDE_MEASURES = { step: "measures", options: [GUIDE_OPTION("canopy_area_growth", "冠层面积增长", "Canopy area growth", { variable: "canopy_area_growth", kind: "manual", unit: "cm2" })], defaults: {} };
+const GUIDE_SCALE = { step: "scale", options: [GUIDE_OPTION("series", "连续轮次", "Run in series", { layout: "series" })], defaults: { randomization_seed: 1234567890, experimental_unit: "tent" } };
+const GUIDE_KEPT_VARIABLE = { "guide-session.json": guideSession({ measures: "needs_review" }), "guide-options-measures.json": GUIDE_MEASURES };
+const GUIDE_TEN_DIGIT_SEED = { "guide-session.json": guideSession({}), "guide-options-scale.json": GUIDE_SCALE };
+
 const PAGES_CHECKED = [
   { page: "inbox" },
   { page: "inbox", fixtures: BUSY_INBOX },
@@ -82,6 +105,8 @@ const PAGES_CHECKED = [
   { page: "project", params: { projectId: PROJECT.project_id }, fixtures: BUSY_PROJECT },
   { page: "environment" },
   { page: "guide", params: { sessionId: "guide-1" } },
+  { page: "guide", params: { sessionId: "guide-1" }, fixtures: GUIDE_KEPT_VARIABLE },
+  { page: "guide", params: { sessionId: "guide-1" }, fixtures: GUIDE_TEN_DIGIT_SEED },
   { page: "safety" },
   { page: "greenhouses" },
   { page: "admin" },

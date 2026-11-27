@@ -103,10 +103,30 @@ def _layout(
         assert scale.rounds is not None
         blocks = rounds = scale.rounds
     if scale.allocations is not None:
+        if not _table_fits(scale, ids, blocks, rounds):
+            raise ValueError(KEPT_TABLE_STALE)
         return scale.allocations, blocks, rounds
     if scale.layout == "series":
         return randomize_series(ids, blocks, seed, scale.units[0]), blocks, rounds
     return randomize_tents(ids, scale.units, rounds, seed), blocks, rounds
+
+
+KEPT_TABLE_STALE = (
+    "the kept allocation table no longer fits the scale; choose the scale again to re-randomize"
+)
+
+
+def _table_fits(scale: ScaleAnswer, ids: Sequence[str], blocks: int, rounds: int) -> bool:
+    """Whether the allocations a scale answer carries still match its units, counts and the
+    treatments, so a changed scale never reuses a table made for another one."""
+    table = scale.allocations or ()
+    if {a.unit for a in table} != set(scale.units):
+        return False
+    if len({a.round for a in table}) != rounds:
+        return False
+    if scale.layout == "series" and len({a.block for a in table}) != blocks:
+        return False
+    return {a.treatment_id for a in table} == set(ids)
 
 
 def new_protocol_id(project_id: str, taken: Sequence[str], count: int) -> str:

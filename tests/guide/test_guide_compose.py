@@ -93,6 +93,23 @@ def test_hand_written_allocations_come_back_exactly():
     assert composed.digest() == p.digest()
 
 
+def test_a_carried_table_that_no_longer_fits_the_scale_is_a_review_problem():
+    hand = (
+        Allocation(round=1, block=1, unit="tent-1", treatment_id="control"),
+        Allocation(round=2, block=1, unit="tent-1", treatment_id="high"),
+        Allocation(round=3, block=2, unit="tent-1", treatment_id="control"),
+        Allocation(round=4, block=2, unit="tent-1", treatment_id="high"),
+    )
+    answers = carried_answers(make_protocol(allocations=hand, randomization_seed=20261118))
+    fits = review(chosen_from(answers), **KEYS, **REVIEW)
+    assert fits.protocol is not None and fits.protocol.allocations == hand
+    for change in ({"blocks": 3}, {"units": ["tent-9"]}):
+        stale = {**answers, "scale": {**answers["scale"], **change}}
+        r = review(chosen_from(stale), **KEYS, **REVIEW)
+        assert r.protocol is None and not r.ready
+        assert any("no longer fits the scale" in problem for problem in r.problems)
+
+
 def test_a_missing_step_is_named():
     answers = carried_answers(make_protocol())
     del answers["scale"]

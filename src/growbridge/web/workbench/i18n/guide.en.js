@@ -42,6 +42,7 @@ export default {
   "guide.treatments.level": "Level",
   "guide.treatments.add": "Add a treatment",
   "guide.treatments.remove": "Remove this treatment",
+  "guide.treatments.others": "Other factors stay as they were",
   "guide.treatments.control": "Control treatment",
   "guide.treatments.idTwice": "Two treatments use this ID.",
   "guide.treatments.noControl": "Choose which treatment is the control.",
