@@ -63,9 +63,9 @@ def test_allowed_narrows_the_set():
     assert [s["name"] for s in toolset.schemas()] == ["get_task_status"]
 
 
-def test_schema_is_strict_and_closed():
+def test_schema_is_closed_and_not_strict():
     schema = build_toolset("orchestrator", [make_tool("get_project_state")]).schemas()[0]
-    assert schema["strict"] is True
+    assert "strict" not in schema
     assert schema["input_schema"]["additionalProperties"] is False
     assert schema["input_schema"]["properties"]["text"]["type"] == "string"
 
@@ -113,6 +113,50 @@ def test_every_model_role_tool_schema_is_self_contained(tmp_path):
     for role, tools in build_role_tools(deps).items():
         for schema in build_toolset(role, tools).schemas():
             assert "$ref" not in json.dumps(schema["input_schema"]), schema["name"]
+
+
+# Tools are sent without ``strict``. Its grammar rejected DiAGRI's schemas three ways on
+# 2026-11-27 (claude-opus-5-5): numeric and length limits, more than 24 optional parameters in one
+# request (the planner has 57), and "the compiled grammar is too large", a limit no test here can
+# see. Every input is validated against its input model when the tool is called instead.
+class Bounded(BaseModel):
+    limit: int = Field(1, ge=1, le=10)
+    ratio: float = Field(0.5, gt=0, lt=1)
+    note: str = Field("x", min_length=1, max_length=50)
+    tags: list[str] = Field(default_factory=list, max_length=8)
+
+
+def _bounded_toolset():
+    async def h(_):
+        return {"ok": True}
+
+    tool = Tool(name="get_run_status", description="d", input_model=Bounded, handler=h)
+    return build_toolset("orchestrator", [tool])
+
+
+def test_limits_stay_in_the_schema_the_model_sees():
+    props = _bounded_toolset().schemas()[0]["input_schema"]["properties"]
+    assert (props["limit"]["minimum"], props["limit"]["maximum"]) == (1, 10)
+    assert (props["ratio"]["exclusiveMinimum"], props["ratio"]["exclusiveMaximum"]) == (0, 1)
+    assert (props["note"]["minLength"], props["note"]["maxLength"]) == (1, 50)
+    assert props["tags"]["maxItems"] == 8
+
+
+async def test_limits_are_enforced_when_the_tool_runs():
+    toolset = _bounded_toolset()
+    assert not (await toolset.call("get_run_status", {"limit": 10})).is_error
+    for bad in ({"limit": 11}, {"ratio": 1}, {"note": ""}, {"tags": ["t"] * 9}):
+        assert (await toolset.call("get_run_status", bad)).is_error, bad
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_no_model_role_tool_is_sent_strict(tmp_path, restricted):
+    from growbridge.agents.handlers import Deps, build_role_tools
+
+    deps = Deps(*(None,) * 5, work_root=tmp_path)  # schemas only: no handler is called
+    for role, tools in build_role_tools(deps).items():
+        for schema in build_toolset(role, tools).schemas(restricted=restricted):
+            assert set(schema) == {"name", "description", "input_schema"}, (role, schema["name"])
 
 
 def test_restricted_schemas_drop_sandbox_and_write_tools():
