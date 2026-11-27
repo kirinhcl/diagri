@@ -85,5 +85,12 @@ export default {
   "guide.scale.estimateNeedsAnalysis": "请先回答分析计划。",
   "guide.scale.dontKnow": "不知道",
   "guide.scale.pilot": "按先导实验处理，结论会是不确定",
+  "guide.review.lead": "请检查下面的协议。保存前每个值都可以修改。",
+  "guide.review.missing": "还没回答的步骤",
+  "guide.review.problems": "保存前要解决的问题",
+  "guide.review.hints": "提示",
+  "guide.review.noProtocol": "协议暂时还拼不出来。请先解决上面的问题，再回到这一步。",
+  "guide.review.notRecorded": "协议已经保存，但引导还没能记下这件事。",
+  "guide.review.retry": "再试一次",
   "guide.scale.blocking": "这些结果会拦住设计。请改一下规模再保存。",
 };

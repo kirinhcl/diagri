@@ -57,6 +57,7 @@ const ROUTES = [
   [/^\/admin\/operators$/, () => "admin-operators.json"],
   [/^\/admin\/locks$/, () => "admin-locks.json"],
   [/^\/guide\/sessions\/[^/]+$/, () => "guide-session.json"],
+  [/^\/guide\/sessions\/[^/]+\/review$/, () => "guide-review.json"],
   [/^\/guide\/sessions\/[^/]+\/steps\/([a-z]+)$/, ([step]) => `guide-options-${step}.json`],
 ];
 

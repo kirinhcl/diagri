@@ -5,6 +5,7 @@ import { labelOr, textOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
 import { errorParts, note, pageHead, section } from "../ui/section.js";
+import { reviewStep } from "./guide-review.js";
 import { stepCard } from "./guide-steps.js";
 
 const RAIL = ["project", "question", "crop", "treatments", "measures", "analysis", "scale", "review", "round"];
@@ -89,6 +90,7 @@ export async function render(ctx, { sessionId }) {
   async function drawStage() {
     const step = shown();
     const mine = ++drawn;
+    if (step === "review") return drawReview(mine);
     if (!ANSWERED.includes(step)) {
       stage.replaceChildren(section(ctx.t(`guide.step.${step}`), note(ctx.t("guide.later"))));
       return;
@@ -99,6 +101,32 @@ export async function render(ctx, { sessionId }) {
     } catch (error) {
       if (mine === drawn) showFailure(error);
     }
+  }
+
+  // The review needs the project the protocol form takes, read the way the project page reads it.
+  async function drawReview(mine) {
+    try {
+      const project = await ctx.api.get(`/projects/${enc(session.session.project_id)}`);
+      const card = await reviewStep(ctx, { session, project, onSaved, onOpenStep: goTo });
+      if (mine === drawn) stage.replaceChildren(section(ctx.t("guide.step.review"), card));
+    } catch (error) {
+      if (mine === drawn) showFailure(error);
+    }
+  }
+
+  // The protocol is saved and recorded: the page takes the server's view and moves on to the round step.
+  function onSaved(view) {
+    if (Array.isArray(view && view.steps)) session = view;
+    viewing = "round";
+    drawSides();
+    return drawStage();
+  }
+
+  // A step not answered yet is opened as it is; nothing is recorded.
+  function goTo(step) {
+    viewing = step;
+    drawSides();
+    return drawStage();
   }
 
   // A saved answer: the page takes the server's view; with `stay` the card stays and says what to look at.

@@ -85,5 +85,12 @@ export default {
   "guide.scale.estimateNeedsAnalysis": "Answer the analysis plan first.",
   "guide.scale.dontKnow": "I don't know",
   "guide.scale.pilot": "Treated as a pilot experiment; the conclusion will be uncertain.",
+  "guide.review.lead": "Check the protocol below. Every value can be changed before you save it.",
+  "guide.review.missing": "Steps not answered yet",
+  "guide.review.problems": "Problems to solve before saving",
+  "guide.review.hints": "Hints",
+  "guide.review.noProtocol": "The protocol cannot be put together yet. Solve the points above, then come back to this step.",
+  "guide.review.notRecorded": "The protocol is saved, but the guide could not note it yet.",
+  "guide.review.retry": "Try again",
   "guide.scale.blocking": "These findings stop the design. Change the scale and save again.",
 };

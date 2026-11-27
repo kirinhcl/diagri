@@ -527,5 +527,6 @@ button.guide-rail-button:hover { background: var(--pale); }
 .guide-choice { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .guide-own[hidden], .guide-choices[hidden] { display: none; }
 .guide-helper { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.guide-review-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; justify-items: start; }
 .guide-draft-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .guide-draft-row { display: grid; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }
