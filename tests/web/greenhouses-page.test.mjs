@@ -71,6 +71,107 @@ test("an administrator also sees who holds each greenhouse", async () => {
   assert.match(visibleText(element), /alice/);
 });
 
+// --- device tests (design 2026-11-27) ---------------------------------------------------------
+
+const buttons = (element) => descendants(element).filter((el) => el.nodeName === "BUTTON");
+const testButtons = (element) => buttons(element).filter((el) => /^Test /.test(el.textContent || ""));
+const ROW = { id: "gh-01", name: "Greenhouse 1", state: "mine", locked_at: 1, controlled: true, testable: true,
+  test_running: null, test_unsettled: null, test_seconds: { light: 10, exhaust: 10, fan: 10, pump: 3 } };
+const withRow = (row) => ({ "greenhouses.json": { greenhouses: [{ ...ROW, ...row }] } });
+
+test("own testable row shows four test buttons with their durations", async () => {
+  const { element } = await renderPage("greenhouses", {}, { lang: "en" });
+  const labels = testButtons(element).map((b) => b.textContent);
+
+  assert.equal(labels.length, 4);
+  assert.match(labels.find((l) => /pump/.test(l)), /3 s/);
+  assert.match(labels.find((l) => /light/.test(l)), /10 s/);
+  assert.match(visibleText(element), /Have something to catch it/);
+});
+
+test("a running test disables every button until the reply, then shows the result", async () => {
+  let reply;
+  const answers = { "/greenhouses/gh-01/test/light": () => new Promise((resolve) => (reply = resolve)) };
+  const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en", answers });
+  const light = testButtons(element).find((b) => /light/.test(b.textContent));
+
+  light.dispatchEvent(new Event("click"));
+  await flush();
+
+  assert.ok(testButtons(element).every((b) => b.disabled));
+  assert.match(visibleText(element), /Testing/);
+  reply({ test_id: "t", channel: "light", test_level: 100, seconds: 10, result: "restored", actions: [] });
+  await flush();
+  assert.ok(testButtons(element).every((b) => !b.disabled));
+  assert.match(visibleText(element), /settings were put back/);
+  assert.ok(ctx.api.calls.some((c) => c.method === "POST" && c.path === "/greenhouses/gh-01/test/light"));
+});
+
+test("the pump asks for confirmation first", async () => {
+  const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en" });
+  const pump = testButtons(element).find((b) => /pump/.test(b.textContent));
+
+  answerNextDialog(false);
+  pump.dispatchEvent(new Event("click"));
+  await flush();
+
+  assert.equal(ctx.api.calls.filter((c) => c.method === "POST").length, 0);
+});
+
+test("unsettled test shows retry and settle instead of the test buttons", async () => {
+  const fixtures = withRow({ testable: false, test_unsettled: { test_id: "devtest_9", channel: "light", state: "restore_failed" } });
+  const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en", fixtures });
+
+  assert.equal(testButtons(element).length, 0);
+  const retry = buttons(element).find((b) => /Retry restore/.test(b.textContent));
+  retry.dispatchEvent(new Event("click"));
+  await flush();
+  assert.ok(ctx.api.calls.some((c) => c.method === "POST" && c.path === "/greenhouses/gh-01/tests/devtest_9/retry"));
+});
+
+test("settle needs a note", async () => {
+  const fixtures = withRow({ testable: false, test_unsettled: { test_id: "devtest_9", channel: "light", state: "restore_failed" } });
+  const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en", fixtures });
+  const form = descendants(element).find((el) => el.nodeName === "FORM" && el.classList.contains("settle-form"));
+  const input = descendants(form).find((el) => el.nodeName === "INPUT");
+
+  form.dispatchEvent(Object.assign(new Event("submit"), { preventDefault() {} }));
+  await flush();
+  assert.equal(ctx.api.calls.filter((c) => c.method === "POST").length, 0);
+  assert.match(visibleText(element), /Write a short note first/);
+
+  input.value = "light back on its timer";
+  form.dispatchEvent(Object.assign(new Event("submit"), { preventDefault() {} }));
+  await flush();
+  const call = ctx.api.calls.find((c) => c.method === "POST");
+  assert.deepEqual([call.path, call.body], ["/greenhouses/gh-01/tests/devtest_9/settle", { note: "light back on its timer" }]);
+});
+
+test("a round in progress shows that tests are unavailable", async () => {
+  const { element } = await renderPage("greenhouses", {}, { lang: "en", fixtures: withRow({ testable: false }) });
+
+  assert.equal(testButtons(element).length, 0);
+  assert.match(visibleText(element), /tests are unavailable/);
+});
+
+test("recent tests are listed with their outcome", async () => {
+  const { element } = await renderPage("greenhouses", {}, { lang: "en" });
+  const text = visibleText(element);
+
+  assert.match(text, /Recent tests/);
+  assert.match(text, /Restored/);
+  assert.match(text, /Handled on site/);
+});
+
+test("rows not held show no test section", async () => {
+  const fixtures = withRow({ state: "taken", testable: false, test_seconds: null });
+  const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en", fixtures });
+
+  assert.equal(testButtons(element).length, 0);
+  assert.doesNotMatch(visibleText(element), /Device test/);
+  assert.ok(!ctx.api.calls.some((c) => /\/tests$/.test(c.path)));
+});
+
 afterEach(() => {
   try {
     assertNoPendingDialogAnswers();

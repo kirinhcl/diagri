@@ -3,6 +3,7 @@ import { ApiError } from "../api.js";
 import { h } from "../ui/dom.js";
 import { table } from "../ui/table.js";
 import { confirmedButton, errorBox, note, pageHead, section, showErrors, timeText } from "../ui/section.js";
+import { hasTests, testSection } from "./greenhouse-tests.js";
 
 const STATE_KEYS = { free: "greenhouses.state.free", mine: "greenhouses.state.mine", taken: "greenhouses.state.taken" };
 
@@ -84,6 +85,19 @@ export async function render(ctx) {
   const data = await ctx.api.get("/greenhouses");
   const rows = data && Array.isArray(data.greenhouses) ? data.greenhouses : [];
   const body = rows.length ? [note(ctx.t("greenhouses.deviceNote")), lockForm(ctx, rows)] : note(ctx.t("greenhouses.none"));
-  const element = h("div", { class: "page greenhouses" }, pageHead(ctx.t("nav.greenhouses"), ctx.t("greenhouses.lead")), section(ctx.t("greenhouses.list"), body));
+  const tests = await testSections(ctx, rows);
+  const element = h("div", { class: "page greenhouses" }, pageHead(ctx.t("nav.greenhouses"), ctx.t("greenhouses.lead")), section(ctx.t("greenhouses.list"), body), ...tests);
   return { element };
+}
+
+// One device test block per greenhouse of the caller's that this installation drives.
+async function testSections(ctx, rows) {
+  const own = rows.filter(hasTests);
+  const blocks = await Promise.all(
+    own.map(async (row) => {
+      const data = await ctx.api.get(`/greenhouses/${encodeURIComponent(row.id)}/tests`).catch(() => null);
+      return testSection(ctx, row, data && Array.isArray(data.tests) ? data.tests : []);
+    }),
+  );
+  return blocks.length ? [section(ctx.t("greenhouses.tests.section"), ...blocks)] : [];
 }

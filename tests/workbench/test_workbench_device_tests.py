@@ -57,6 +57,8 @@ def test_rows_show_testable_only_for_own_idle_local(bench):
     assert (mine["gh-01"]["testable"], mine["gh-02"]["testable"]) == (True, False)
     assert theirs["gh-01"]["testable"] is False
     assert mine["gh-01"]["test_running"] is None and mine["gh-01"]["test_unsettled"] is None
+    assert mine["gh-01"]["test_seconds"] == {"light": 10, "exhaust": 10, "fan": 10, "pump": 3}
+    assert theirs["gh-01"]["test_seconds"] is None
 
 
 def test_unknown_channel_is_422(bench):

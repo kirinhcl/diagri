@@ -58,6 +58,7 @@ against the server's enums and literals.
 | project.json | `/projects/{project_id}` (Lettuce light series) |
 | holdouts.json | `/holdouts?project_id={project_id}` |
 | greenhouses.json | `/greenhouses` (multi-user; synthetic) |
+| greenhouse-tests.json | `/greenhouses/{id}/tests` (device tests; synthetic) |
 | admin-operators.json | `/admin/operators` (multi-user; synthetic) |
 | admin-locks.json | `/admin/locks` (multi-user; synthetic) |
 | conversation.json | `/projects/{project_id}/conversation?after=0` |

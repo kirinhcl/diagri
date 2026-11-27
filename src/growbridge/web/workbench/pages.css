@@ -512,3 +512,15 @@ code {
 .tasks-rules summary { cursor: pointer; }
 .tasks-rules summary:hover { color: var(--green-dark); }
 .tasks-rules p { margin: 6px 0 0; }
+
+/* Device tests on the Greenhouses page (design 2026-11-27) */
+.device-tests { display: grid; gap: 10px; padding: 14px 0; border-top: 1px solid var(--line); }
+.device-tests:first-of-type { border-top: 0; }
+.device-tests h3 { margin: 0; font-size: 15px; }
+.device-tests h4 { margin: 6px 0 2px; font-size: 13px; }
+.test-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.test-buttons .action { display: contents; }
+.block-note.warn { padding: 8px 12px; border-radius: 10px; background: var(--amber-soft); color: var(--amber); }
+.settle-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.settle-form input { flex: 1 1 220px; min-width: 0; }
+.test-history { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted-strong); }

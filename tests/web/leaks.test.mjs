@@ -247,7 +247,7 @@ const CHOOSING_ROUND = { ...ROUND_READ, state: "running", awaiting_choice: ROUND
 // What a form that asks first is sent with; forms without these fields are not sent.
 const FORM_VALUES = { choice: "redo", script: "print(1)", snapshot_id: FIXTURES["analysis.json"].snapshots[0].snapshot_id };
 const DIALOG_PAGES = [
-  { page: "greenhouses", dialogs: 1 }, // release
+  { page: "greenhouses", dialogs: 2 }, // release, the pump test
   { page: "admin", dialogs: 2 }, // disable, for each of two accounts
   { page: "stage", params: PARAMS.stage, fixtures: { "stage.json": LIVE_STAGE }, dialogs: 2 }, // stop, take over
   { page: "round", params: PARAMS.round, fixtures: { "round.json": CHOOSING_ROUND }, dialogs: 4 }, // abort, choice, freeze, run

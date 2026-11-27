@@ -1,0 +1,8 @@
+{
+  "tests": [
+    {"test_id": "devtest_2", "channel": "fan", "operator": "dev", "state": "done", "result": "restored",
+     "started_at": 1794821300.0, "ended_at": 1794821310.0, "note": ""},
+    {"test_id": "devtest_1", "channel": "light", "operator": "dev", "state": "settled_onsite",
+     "result": "restore_failed", "started_at": 1794821200.0, "ended_at": 1794821210.0, "note": "checked"}
+  ]
+}

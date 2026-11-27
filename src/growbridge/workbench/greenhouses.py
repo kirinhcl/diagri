@@ -43,7 +43,12 @@ HISTORY_FIELDS = {"test_id", "channel", "operator", "state", "result", "started_
 def test_fields(tests: DeviceTests | None, row: dict, actor: Actor) -> dict[str, Any]:
     """What the page needs to show a greenhouse's device test section (holder only)."""
     if tests is None or row["holder"] != actor.id:
-        return {"testable": False, "test_running": None, "test_unsettled": None}
+        return {
+            "testable": False,
+            "test_running": None,
+            "test_unsettled": None,
+            "test_seconds": None,
+        }
     running, unsettled = tests.running(row["device_id"]), tests.unsettled(row["device_id"])
     shown = None
     if unsettled is not None:
@@ -53,6 +58,7 @@ def test_fields(tests: DeviceTests | None, row: dict, actor: Actor) -> dict[str,
         "testable": tests.testable(row, actor),
         "test_running": None if running is None else running.channel.value,
         "test_unsettled": shown,
+        "test_seconds": tests.seconds(),
     }
 
 

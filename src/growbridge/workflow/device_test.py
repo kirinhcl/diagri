@@ -133,6 +133,11 @@ class DeviceTests:
         mine = row["holder"] == actor.id and device == self.access.local_device
         return mine and self.idle_device(device) and self.open_test(device) is None
 
+    def seconds(self) -> dict[str, float]:
+        """How long each channel's test runs, by channel name."""
+        levels = {channel.value: TEST_SECONDS for channel in TEST_LEVELS}
+        return levels | {Channel.PUMP.value: self.pump_seconds}
+
     def idle_device(self, device_id: str) -> bool:
         last = self.store.last_started_on(device_id)
         return last is None or last.care_released
