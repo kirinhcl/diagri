@@ -1,0 +1,125 @@
+import pytest
+from vocab_support import TEST_CATALOG
+
+from growbridge.guide.steps import (
+    ANSWER_MODELS,
+    ANSWERED,
+    DEPENDS_ON,
+    STEPS,
+    answer_problems,
+    parse_answer,
+)
+
+
+def t(id, factors):
+    return {"id": id, "name": id, "factors": factors}
+
+
+def treatments(*items, control="a"):
+    return parse_answer("treatments", {"treatments": list(items), "control_treatment_id": control})
+
+
+def test_steps_are_in_order_and_six_have_answers():
+    assert STEPS[-2:] == ("review", "round")
+    assert ANSWERED == STEPS[:6] and set(ANSWER_MODELS) == set(ANSWERED)
+    assert DEPENDS_ON["scale"] == {"treatments", "analysis"}
+
+
+def test_a_treatment_factor_must_be_a_catalog_factor():
+    answer = treatments(t("a", {"light": 40}), t("b", {"nutrient": 2}))
+    assert any("nutrient" in p for p in answer_problems("treatments", answer, TEST_CATALOG))
+
+
+def test_valid_treatments_have_no_problems():
+    answer = treatments(t("a", {"light": 40}), t("b", {"light": 70}))
+    assert answer_problems("treatments", answer, TEST_CATALOG) == ()
+
+
+def test_the_control_must_be_one_of_the_treatments():
+    answer = treatments(t("a", {"light": 40}), t("b", {"light": 70}), control="z")
+    assert any("z" in p for p in answer_problems("treatments", answer, TEST_CATALOG))
+
+
+def test_treatment_ids_are_not_repeated():
+    answer = treatments(t("a", {"light": 40}), t("a", {"light": 70}))
+    assert any("twice" in p for p in answer_problems("treatments", answer, TEST_CATALOG))
+
+
+def test_at_least_two_treatments_are_needed():
+    with pytest.raises(ValueError):
+        treatments(t("a", {"light": 40}))
+
+
+def test_the_primary_endpoint_must_be_a_listed_manual_variable():
+    sensor = parse_answer(
+        "measures", {"variables": ["air_temperature"], "primary_endpoint": "air_temperature"}
+    )
+    assert any("manual" in p for p in answer_problems("measures", sensor, TEST_CATALOG))
+    unlisted = parse_answer(
+        "measures", {"variables": ["height"], "primary_endpoint": "canopy_area_growth"}
+    )
+    assert any("listed" in p for p in answer_problems("measures", unlisted, TEST_CATALOG))
+    fine = parse_answer(
+        "measures", {"variables": ["canopy_area_growth"], "primary_endpoint": "canopy_area_growth"}
+    )
+    assert answer_problems("measures", fine, TEST_CATALOG) == ()
+
+
+def test_variables_are_unique_and_in_the_catalog():
+    answer = parse_answer(
+        "measures", {"variables": ["height", "height", "nope"], "primary_endpoint": "height"}
+    )
+    problems = answer_problems("measures", answer, TEST_CATALOG)
+    assert any("twice" in p for p in problems) and any("nope" in p for p in problems)
+
+
+def test_a_malformed_species_is_a_problem():
+    answer = parse_answer("crop", {"crop": "lettuce", "crop_taxon": "4236"})
+    assert any("crop_taxon" in p for p in answer_problems("crop", answer, TEST_CATALOG))
+    ok = parse_answer("crop", {"crop": "lettuce", "crop_taxon": "NCBITaxon:4236"})
+    assert answer_problems("crop", ok, TEST_CATALOG) == ()
+
+
+def test_steps_without_catalog_rules_have_no_problems():
+    q = parse_answer("question", {"question": "Does light matter?"})
+    assert answer_problems("question", q, TEST_CATALOG) == ()
+
+
+def test_series_needs_blocks_and_one_unit():
+    with pytest.raises(ValueError):
+        parse_answer(
+            "scale",
+            {"layout": "series", "units": ["tent-1", "tent-2"], "blocks": 2, "stages": ["veg"]},
+        )
+    with pytest.raises(ValueError):
+        parse_answer("scale", {"layout": "series", "units": ["tent-1"], "stages": ["veg"]})
+
+
+def test_tents_need_rounds():
+    with pytest.raises(ValueError):
+        parse_answer("scale", {"layout": "tents", "units": ["a", "b"], "stages": ["veg"]})
+    ok = parse_answer(
+        "scale", {"layout": "tents", "units": ["a", "b"], "rounds": 3, "stages": ["veg"]}
+    )
+    assert ok.rounds == 3 and ok.experimental_unit == "tent"
+
+
+def test_analysis_defaults_and_bounds():
+    a = parse_answer("analysis", {"target_effect": 0.15, "method": "paired_block"})
+    assert a.max_missing_fraction == 0.2 and a.max_deviation_fraction == 0.1
+    assert a.script_sha256 is None
+    with pytest.raises(ValueError):
+        parse_answer(
+            "analysis", {"target_effect": 0.1, "method": "paired_block", "max_missing_fraction": 2}
+        )
+    with pytest.raises(ValueError):
+        parse_answer("analysis", {"target_effect": 0.1, "method": "anova"})
+
+
+def test_parse_answer_rejects_unknown_fields_and_steps():
+    with pytest.raises(ValueError):
+        parse_answer("question", {"question": "Q", "extra": 1})
+    with pytest.raises(ValueError):
+        parse_answer("review", {})
+    with pytest.raises(ValueError):
+        parse_answer("question", {"question": ""})
