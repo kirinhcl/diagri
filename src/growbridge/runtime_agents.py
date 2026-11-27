@@ -5,17 +5,19 @@ Nothing here is reachable from ``Runtime.tick``: a model is only called when som
 """
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from growbridge.agents.context import project_context, task_language
-from growbridge.agents.dispatch import Dispatcher
+from growbridge.agents.dispatch import Dispatcher, TraceSettings
 from growbridge.agents.handlers import Deps, build_role_tools
 from growbridge.agents.handlers_common import local_time
 from growbridge.agents.llm import ModelClient
 from growbridge.agents.memory import build_history
 from growbridge.agents.memory_sources import MemorySources
 from growbridge.agents.tools import ROLE_TOOLS, Tool
+from growbridge.agents.trace import TRACE_DIR
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import Budget, ResearchTask
 from growbridge.config import RoleModel
@@ -68,14 +70,23 @@ def memory_sources(runtime: Any) -> MemorySources:
     )
 
 
-def make_dispatcher(runtime: Any, client: ModelClient, work_root: Path) -> Dispatcher:
+def make_dispatcher(
+    runtime: Any,
+    client: ModelClient,
+    work_root: Path,
+    *,
+    roles: Mapping[str, RoleModel] | None = None,
+    budget: Any = None,
+    tracing: bool = True,
+) -> Dispatcher:
     defaults = {AUDIT_ROLE: RoleModel(max_calls=AUDIT_MAX_CALLS)}
-    roles = {
-        name: runtime.settings.roles.get(name, defaults.get(name, RoleModel()))
-        for name in ROLE_TOOLS
-    }
+    if roles is None:
+        roles = {
+            name: runtime.settings.roles.get(name, defaults.get(name, RoleModel()))
+            for name in ROLE_TOOLS
+        }
     tools = role_tools(runtime, work_root)
-    args = (client, roles, tools, runtime.tasks, runtime.budget, runtime.clock)
+    args = (client, roles, tools, runtime.tasks, budget or runtime.budget, runtime.clock)
     timezone = runtime.settings.report_timezone
 
     def context(task):
@@ -85,7 +96,31 @@ def make_dispatcher(runtime: Any, client: ModelClient, work_root: Path) -> Dispa
         return {**base, "history": history}
 
     conversation = getattr(runtime, "conversation", None)
-    return Dispatcher(*args, runtime.agents_db, context=context, conversation=conversation)
+    return Dispatcher(
+        *args,
+        runtime.agents_db,
+        context=context,
+        conversation=conversation,
+        trace=trace_settings(runtime) if tracing else None,
+    )
+
+
+def trace_settings(runtime: Any) -> TraceSettings | None:
+    """Where and how runs are traced; None while ``model_trace`` is off, or when the trace
+    directory cannot be made (runs then go untraced: a trace must never stop the agents)."""
+    from growbridge.runtime import private_dir  # runtime imports this module
+
+    settings = runtime.settings
+    if not getattr(settings, "model_trace", False):
+        return None
+    data_dir = Path(settings.data_dir).absolute()  # the header holds an absolute path
+    try:
+        root = private_dir(data_dir / TRACE_DIR)
+    except Exception:
+        log.exception("cannot make the model trace directory in %s; runs go untraced", data_dir)
+        return None
+    recorded = settings.model_dump(mode="json", exclude={"token"})  # the token is the secret
+    return TraceSettings(root, data_dir, getattr(runtime, "pre_run_copies", False), recorded)
 
 
 def _audit_trigger(stage: StageRuntime, now: float) -> tuple[str, str] | None:

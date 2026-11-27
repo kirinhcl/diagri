@@ -59,7 +59,7 @@ workbench afterwards; a rehearsed data directory cannot be rehearsed again.
 ```sh
 unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY      # Claude Code uses its own sign-in
 DEMO_CLEAN_SEED=1 .venv/bin/python scripts/demo/launch_workbench.py --claude-code \
-  --fast-forward --data-dir /tmp/diagri-record --transcript /tmp/diagri-record.jsonl
+  --fast-forward --data-dir /tmp/diagri-record --trace
 # second terminal: the person on site
 .venv/bin/python scripts/demo/onsite_helper.py --log /tmp/diagri-helper.jsonl
 # third terminal: the recording (about 15 minutes)

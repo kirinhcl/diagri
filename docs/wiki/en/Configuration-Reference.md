@@ -46,10 +46,13 @@ There are 28 fields. "Required" means the field has no default. The last column 
 | `report_time` | string | `"08:00"` | 24-hour `HH:MM`, `00:00` to `23:59` | Local time from which the daily report of the day before is produced. A report is produced only while a stage is active. | yes |
 | `report_timezone` | string | `"UTC"` | an IANA time zone name known to the host | Time zone of `report_time` and of the report dates. It is also the zone in which the operator console shows and takes times (served as `timezone` by `GET /wb/me`). An unknown name is refused on load. | yes |
 | `roles` | table of `RoleModel` | `{}` | keys are role names | Model configuration of each model role. While it is empty, `serve` builds no model client and no model role runs. | yes |
+| `model_trace` | boolean | `false` | `true` or `false` | Write a complete JSONL trace of every model role run under `<data_dir>/model_traces` (private directories, mode 0700; files mode 0600). Off means no trace and no change to any run. | yes |
 | `backup_dir` | path or unset | unset | any path; `~` is expanded | Directory for the SQLite online backups. While unset there are no backups and the runtime raises a `backup_unconfigured` warning alert at start. | yes |
 | `backup_interval_seconds` | number | `21600` | 60 or more | Seconds between two backups. | yes |
 | `compute_templates_dir` | path or unset | unset | a directory holding `*.json` files; `~` is expanded | One reviewed job template (`JobTemplate`) per JSON file. With `compute_member` and the seven `FIRECREST_*` variables it turns the compute service on. Every file is validated at start; a bad one stops `serve` and the message names the file. | yes |
 | `compute_member` | string or unset | unset | at least 1 character | The CSC account name under which the researcher role's jobs are submitted. | yes |
+
+**`model_trace` holds clear text.** A trace has the system prompts, the user's messages, web content the researcher read, the model's thinking and the full result of every tool. Its first line also holds the non-secret settings of the run, every setting in this table except `token` (host lists, greenhouse ids and the role configurations included), so that `trace replay` can run under them. It is off by default. A trace is not in a backup (backups copy only the SQLite databases) and not in the training-dataset export. DiAGRI never deletes a trace: turn `model_trace` off after you have found what you were looking for, and delete old traces by hand. A trace that cannot be written never changes or stops the run. File names and use: [A model run went wrong: use its trace](Troubleshooting-Runbook.md#a-model-run-went-wrong-use-its-trace).
 
 The exact pattern of `report_time` is:
 

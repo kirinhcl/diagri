@@ -40,7 +40,7 @@ claude auth status   # "loggedIn": true; otherwise sign in with: claude auth log
 export GROWBRIDGE_DEV_SECRET='at least twelve characters'
 unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY   # Claude Code uses its own sign-in
 .venv/bin/python scripts/dev_workbench.py --claude-code --fast-forward \
-  --data-dir /tmp/diagri-example --transcript /tmp/diagri-example.jsonl
+  --data-dir /tmp/diagri-example --trace
 ```
 
 Open `http://localhost:8770/workbench`, sign in as `dev`, and follow the steps below in the console. `--fast-forward` skips through a running stage one sampling interval at a time; outside a stage time is real. The simulated sensors follow a small tent model, so the readings change by day and night and under the light. See [Setup, testing and CI](Development-Setup-Testing-and-CI.md). Three things to know before you start:

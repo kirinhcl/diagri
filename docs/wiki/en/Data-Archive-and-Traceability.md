@@ -149,6 +149,10 @@ What the backup does **not** cover:
 
 After a restore, stop the daemon and run `growbridge recovery bump --reason ...`. The recovery number goes up and every earlier write right, approval and session is void. See [Control and safety model](Control-and-Safety-Model.md).
 
+## Model traces and pre-run copies are not evidence
+
+With `model_trace` on, each model role run writes a trace under `<data_dir>/model_traces`, and the dev workbench with `--trace` also writes a pre-run copy of the data directory next to it. Both are debugging aids. They are not part of the archive, not in a snapshot, a report or the training-dataset export, and not in a backup. Nothing in a report or a claim may cite them as a source, and replaying a trace proves nothing about the experiment: it only shows whether the current code behaves as it did. The research record is what the sections above describe. Traces hold prompts and web content in clear text and are never deleted automatically; see [A model run went wrong: use its trace](Troubleshooting-Runbook.md#a-model-run-went-wrong-use-its-trace).
+
 ## Where the code differs from the architecture document
 
 - Section 11.4 backs up databases, raw images and an archive manifest. The code backs up the six SQLite databases only.

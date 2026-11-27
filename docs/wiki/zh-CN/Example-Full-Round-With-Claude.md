@@ -40,7 +40,7 @@ claude auth status   # 应为 "loggedIn": true；否则登录：claude auth logi
 export GROWBRIDGE_DEV_SECRET='至少十二个字符的口令'
 unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY   # Claude Code 用它自己的登录
 .venv/bin/python scripts/dev_workbench.py --claude-code --fast-forward \
-  --data-dir /tmp/diagri-example --transcript /tmp/diagri-example.jsonl
+  --data-dir /tmp/diagri-example --trace
 ```
 
 打开 `http://localhost:8770/workbench`，以 `dev` 登录，然后在控制台里按下面的步骤操作。`--fast-forward` 会在阶段运行时按采样间隔逐步快进，阶段以外按真实时间走。模拟传感器套用了一个小帐篷模型，读数会随昼夜和灯光变化。见[开发环境、测试与 CI](Development-Setup-Testing-and-CI.md)。开始前要知道三件事：

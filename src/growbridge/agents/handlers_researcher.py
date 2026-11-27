@@ -367,14 +367,22 @@ def build_researcher_tools(deps: Deps) -> list[Tool]:
             SubmitJobInput,
             submit_job,
             writes=True,
+            external=True,
         ),
-        Tool("get_compute_job", "Read the state of a compute job.", AttemptInput, get_job),
+        Tool(
+            "get_compute_job",
+            "Read the state of a compute job.",
+            AttemptInput,
+            get_job,
+            external=True,
+        ),
         Tool(
             "fetch_compute_artifacts",
             "Fetch and verify the outputs of a compute job.",
             AttemptInput,
             fetch,
             writes=True,
+            external=True,
         ),
         Tool(
             "publish_research_report",

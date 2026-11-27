@@ -10,7 +10,7 @@ The parser is `main()` in [`cli.py`](../../../src/growbridge/cli.py). The tables
 
 ```text
 growbridge [-h] [--version] [--config CONFIG]
-           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate} ...
+           {init,scan,serve,mcp,status,dashboard,operator,host,recovery,export-dataset,simulate,trace} ...
 ```
 
 ## Global options
@@ -25,7 +25,7 @@ Global options go before the subcommand, for example `growbridge --config /absol
 
 ## Subcommands
 
-There are 11 subcommands. `operator`, `host` and `recovery` each take one nested subcommand, which is required.
+There are 12 subcommands. `operator`, `host`, `recovery` and `trace` each take one nested subcommand, which is required.
 
 | Command | Arguments and options | Reads the configuration file | Needs a running daemon | DiAGRI mode |
 | --- | --- | --- | --- | --- |
@@ -40,6 +40,8 @@ There are 11 subcommands. `operator`, `host` and `recovery` each take one nested
 | `recovery bump` | `--reason REASON` (required) | yes | no, it must be stopped | meant for it; the command does not check `auto_research` |
 | `export-dataset` | `--snapshot SNAPSHOT`, `--out OUT`, `--licence LICENCE`, `--creator CREATOR` (all required), `--url URL` | yes | no, it can run while the daemon runs | reads what DiAGRI recorded; the command does not check `auto_research` |
 | `simulate` | none | no | no | builds its own DiAGRI runtime in a temporary directory |
+| `trace show` | `file` (positional, required), `--full` (do not cut long values) | no | no | reads a model trace file; needs no DiAGRI mode |
+| `trace replay` | `file` (positional, required), `--data-dir DIR` (replay on a copy of this data directory), `--keep-going` (go on after a mismatch), `--keep-copy` (keep the temporary copy) | only when it falls back to the configured `data_dir` (no `--data-dir` and no pre-run copy) or the trace records no settings | no | writes only a temporary copy of the data |
 
 No command creates a project, a research protocol or a research round, sets a project's call budget, or creates the first task of the orchestrator. An operator does these through the workbench routes; see [Run a research round](Run-a-Research-Round.md). Among the commands only `simulate` makes those calls, inside `_design_and_start` in [`runtime.py`](../../../src/growbridge/runtime.py).
 
@@ -58,6 +60,16 @@ No command creates a project, a research protocol or a research round, sets a pr
 | `recovery bump` | Takes the daemon lock, builds the runtime without starting it, raises the recovery number by one, revokes every write right, voids queued actions, moves every stage that is not finished to `recovery_check` and voids its approvals. `REASON` is stored with the event. | `Recovery number is now <n>; confirm the safety config and review live stages` |
 | `export-dataset` | Writes the training dataset of one frozen snapshot into the new directory `OUT`: eleven CSV tables and `croissant.json`. It only reads the databases and the snapshot, and writes only the pseudonym key into `data_dir`. `--licence` and `--creator` are recorded in the metadata (the creator as an organization); `--url` is where the dataset is published, if anywhere. Spaces around `--licence`, `--creator` and `--url` are stripped; a blank `--url` counts as none. See [Training dataset export](Training-Dataset-Export.md). | A JSON object with `out`, `rows` (the data rows of each file) and `counts` (the ten counts of the metadata) |
 | `simulate` | Runs one short stage on the simulated AC5 with a simulated clock, in a temporary directory: approve the safety configuration, create project, protocol and round, submit and approve a run sheet, start the stage, tick until it ends. No radio and no network. | A JSON object with `stage`, `round`, `beats`, `samples` and `writes` |
+| `trace show` | Lists one model trace file step by step: the run header, then each turn with its thinking, text, tool calls and results, then the end or the line `Record incomplete: the run has no end line.`. Values longer than 400 characters are cut unless `--full`; control and escape characters in the trace are removed. | The listing on standard output; exit 2 with a message on standard error when the file cannot be read or is cut off (the lines before the bad one are still listed) |
+| `trace replay` | Re-runs one model trace against the current code, with the recorded model replies, on a temporary copy of the data (mode 0700, removed afterwards unless `--keep-copy`). The source is the `--data-dir` option, else the run's pre-run copy next to the trace, else `data_dir`; the first output line names it, and anything but a pre-run copy adds `Replay from <kind>: results are for reference only (no pre-run copy).` The replay runs under the settings the trace records (all but the `token`; a fresh random one is used), not the current configuration; the configuration file is read only to find `data_dir` when the source falls back to it, or, with a warning, for a trace that records no settings. The database contents of the source are never modified, but SQLite may create its `-wal`/`-shm` side files next to a live database it reads; a pre-run copy is opened read-only as immutable and stays byte-identical. The replay never starts the device link and has no notification channel, heartbeat or compute service. It prints one line per tool call (`ok` or `DIFFERENT`), a line `unused model replies: <n> ... DIFFERENT` when recorded model replies were left over, for the first mismatch the tool name, input and a diff of the recorded and replayed results, and both end codes. Printed values have control characters removed. | Exit 0 when every step and the end match, 1 on a mismatch, 2 when the trace cannot be replayed (unreadable, cut off, no end line, no valid configuration where one is read, or any other error, reported in one line on standard error with its type) |
+
+### `trace show` and `trace replay`
+
+A model trace is written when `model_trace` is on ([Configuration reference](Configuration-Reference.md)) or when the dev workbench runs with `--trace` ([Setup, testing and CI](Development-Setup-Testing-and-CI.md)). How to use the two commands is in the runbook: [A model run went wrong: use its trace](Troubleshooting-Runbook.md#a-model-run-went-wrong-use-its-trace).
+
+- `trace show` also shows Unicode format characters (zero-width characters, direction marks) as `<U+XXXX>`, so they cannot hide in the text. It needs no configuration file.
+- `trace replay` feeds the recorded model replies back, so there is no model call and no cost. Tools that reach outside the machine (`lookup_crop_conditions`, `search_and_verify_sources`, `submit_compute_job`, `get_compute_job`, `fetch_compute_artifacts`) return their recorded result and their handlers never run; the tool gate (what a restricted mode shows, input validation) is still checked. Every other tool runs for real on the copy and its result is compared after masking generated ids, the path of the copy and small clock differences.
+- A restored backup is not a supported source: it lacks the files under `archive/` and `agent_work/`. Use the pre-run copy, or a copy of the data directory made before the run.
 
 ### `serve` in DiAGRI mode
 
@@ -105,7 +117,8 @@ On success it exits 0 and prints the JSON summary. Any failure that is not one o
 | --- | --- | --- | --- |
 | Success | all | see the table above | 0 |
 | Missing subcommand, unknown option, missing required argument | all | usage text and `growbridge: error: ...` | 2 |
-| The configuration file is missing or does not pass `load` | all that read it | Python traceback (`FileNotFoundError`, `ValidationError`, `ValueError`, ...) | 1 |
+| The configuration file is missing or does not pass `load` | all that read it, except `trace replay` | Python traceback (`FileNotFoundError`, `ValidationError`, `ValueError`, ...) | 1 |
+| The configuration file is missing or does not pass `load`, when a replay reads it | `trace replay` | `cannot load the configuration: <reason>` | 2 |
 | The configuration file already exists | `init` | traceback ending in `FileExistsError` | 1 |
 | The export cannot proceed | `export-dataset` | `export refused: <message>`, see [`export-dataset`](#export-dataset) | 1 |
 | Another daemon holds the lock on `data_dir` | `serve` | `A daemon already owns this data directory` | 2 |

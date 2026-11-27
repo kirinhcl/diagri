@@ -16,19 +16,33 @@ import inspect
 import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from growbridge import __version__
 from growbridge.agents.context import task_language
 from growbridge.agents.conversation import ConversationLog, clip_json
 from growbridge.agents.handlers_common import bind_task
 from growbridge.agents.llm import DEFAULT_PRICE, ModelClient, ModelReply, TokenPrice
 from growbridge.agents.loop import AgentRun, run_agent
 from growbridge.agents.roles import ROLES, Handoff
+from growbridge.agents.run_end import (
+    DELIVERABLES,
+    REPORT_TOOL,
+    RunEnd,
+    RunInterrupted,
+    end_of_denied,
+    end_of_error,
+    end_of_run,
+)
 from growbridge.agents.tools import ROLE_TOOLS, Tool, ToolOutcome, Toolset, build_toolset
+from growbridge.agents.trace import PRE_RUN_SUFFIX, RunTrace, git_commit, sha256_json
+from growbridge.archive.datacopy import copy_data_dir
 from growbridge.archive.db import Database
 from growbridge.archive.ids import new_id
-from growbridge.archive.models import ResearchTask
+from growbridge.archive.models import Model, ResearchTask
 from growbridge.codes import checked
 from growbridge.config import RoleModel
 from growbridge.ports import Denied
@@ -38,7 +52,6 @@ from growbridge.workflow.tasks import TaskBoard
 
 log = logging.getLogger(__name__)
 
-REPORT_TOOL = "publish_research_report"
 NAMESPACE = "dispatch"
 STEPS = (
     "CREATE TABLE dispatch_claims("
@@ -46,31 +59,34 @@ STEPS = (
 )
 INTRO = "Your task record (JSON). Do the work it describes with your tools:\n"
 LEAD = "orchestrator"
-# What a run of the role must have done to count as finished: one of these tools without error
-# and, where a field is named, with that result field true. (A frozen dataset or a compute job is
-# real progress for the researcher: the next step comes in a later task.)
-DELIVERABLES: dict[str, dict[str, str | None]] = {
-    "planner": {"save_plan_draft": "saved"},
-    "researcher": {
-        "freeze_dataset": None,
-        "submit_compute_job": None,
-        "fetch_compute_artifacts": None,
-        REPORT_TOOL: None,
-    },
-}
-UNDELIVERED = {
-    "planner": "ended without saving a run sheet draft",
-    "researcher": "ended without freezing data, computing or publishing a report",
-}
 HISTORY_KINDS = ("message", "reply")
 HISTORY_ENTRIES = 12
 HISTORY_CHARS = 1500
-REASON_CHARS = 1500
 OUTCOME_CHARS = 6000  # the ended task's final text, handed to the follow-up in full
 TOOL_INPUT_CHARS = 1500
 TOOL_RESULT_CHARS = 2500
 TASK_REF = "task:"
 ContextOf = Callable[[ResearchTask], dict]
+ToolsetWrap = Callable[[Toolset], Toolset]
+
+
+def _unwrapped(toolset: Toolset) -> Toolset:
+    return toolset
+
+
+@dataclass(frozen=True)
+class TraceSettings:
+    root: Path  # where trace files go (a private directory)
+    data_dir: Path  # what a pre-run copy copies (absolute: relocation rewrites this prefix)
+    pre_run_copies: bool = False  # only the dev workbench asks for copies; serve never does
+    settings: Mapping[str, Any] | None = None  # the runtime's settings, the token left out
+
+
+class ReplayedRun(Model):
+    """What a replayed run was asked and how it ended."""
+
+    user: str
+    end: RunEnd
 
 
 def role_price(config: RoleModel) -> TokenPrice:
@@ -169,6 +185,7 @@ class Dispatcher:
         db: Database,
         context: ContextOf | None = None,
         conversation: ConversationLog | None = None,
+        trace: TraceSettings | None = None,
     ):
         self.client = client
         self.roles = roles
@@ -179,6 +196,7 @@ class Dispatcher:
         self.db = db
         self.context = context
         self.conversation = conversation
+        self.trace = trace
         db.migrate(NAMESPACE, STEPS)
 
     async def run_task(self, task_id: str) -> AgentRun | None:
@@ -187,48 +205,127 @@ class Dispatcher:
             return None
         reviews: list[bool] = []
         deliveries: list[str] = []
+        run: AgentRun | None = None
+        trace: RunTrace | None = None
+        started = self.clock.monotonic()
         try:
-            run = await self._run(task, reviews, deliveries)
+            user = self.message_for(task)
+            trace = self._open_trace(task, user)
+            client, wrap = (self.client, _unwrapped)
+            if trace is not None:
+                client, wrap = trace.client(self.client), trace.toolset
+            run = await self._run(task, user, reviews, deliveries, client=client, wrap=wrap)
         except Denied as exc:
-            self._end(
-                task,
-                TaskState.NEEDS_ATTENTION,
-                f"{exc.code}: {exc}",
-                code="denied",
-                params={"denied_code": exc.code},
-            )
-            return None
+            end = end_of_denied(exc)
         except Exception as exc:  # the model or its client failed; nothing else is affected
             log.exception("model run for task %s failed", task.id)
-            self._end(
-                task,
-                TaskState.NEEDS_ATTENTION,
-                f"model unavailable: {type(exc).__name__}: {exc}",
-                code="model_unavailable",
-            )
-            return None
-        said = run.text.strip()
-        if run.stop_reason != "end_turn":
-            self._end(
-                task,
-                TaskState.NEEDS_ATTENTION,
-                f"model stopped without finishing: {run.stop_reason}",
-                code="model_stopped",
-                params={"stop_reason": run.stop_reason},
-            )
-        elif task.owner_role in DELIVERABLES and not deliveries:
-            reason = f"{UNDELIVERED[task.owner_role]}: {said or '(no text)'}"
-            self._end(
-                task,
-                TaskState.NEEDS_ATTENTION,
-                reason[:REASON_CHARS],
-                code="undelivered",
-                params={"role": task.owner_role},
-            )
+            end = end_of_error(exc)
         else:
-            state = TaskState.NEEDS_REVIEW if reviews else TaskState.DONE
-            self._end(task, state, "run finished", said, code="run_finished")
+            end = end_of_run(run, task.owner_role, reviews, deliveries)
+        self._end_trace(trace, end, run, started)
+        self._finish(task, end)
         return run
+
+    def _open_trace(self, task: ResearchTask, user: str) -> RunTrace | None:
+        """Open the trace file and write its header; None when tracing is off or fails."""
+        if self.trace is None:
+            return None
+        try:
+            now = self.clock.now()
+            trace = RunTrace.open(self.trace.root, task.id, self.clock, datetime.fromtimestamp(now))
+            if trace is None:
+                return None
+            copy = self._pre_run_copy(trace)
+            trace.begin(self._header(task, user, now, copy))
+            return trace
+        except Exception:
+            log.exception("cannot start the model trace of task %s", task.id)
+            return None
+
+    def _pre_run_copy(self, trace: RunTrace) -> str | None:
+        """Copy the data directory next to the trace when asked; the copy's name, else None."""
+        if self.trace is None or not self.trace.pre_run_copies:
+            return None
+        target = trace.path.with_suffix(PRE_RUN_SUFFIX)
+        try:
+            copy_data_dir(self.trace.data_dir, target)
+        except Exception:
+            log.exception("cannot copy the data directory to %s", target)
+            return None
+        return target.name
+
+    def _header(self, task: ResearchTask, user: str, now: float, copy: str | None) -> dict:
+        role = task.owner_role
+        config = self.roles.get(role)
+        schemas = self.schemas_for(role)
+        system = ROLES[role].system
+        seq = self.conversation.last_seq(task.project_id) if self.conversation else None
+        return {
+            "task_id": task.id,
+            "project_id": task.project_id,
+            "role": role,
+            "role_config": config.model_dump(mode="json") if config is not None else None,
+            "system": system,
+            "system_sha256": sha256_json(system),
+            "tools": [s["name"] for s in schemas] if schemas is not None else None,
+            "tools_sha256": sha256_json(schemas) if schemas is not None else None,
+            "user": user,
+            "conversation_seq": seq,
+            "clock_synced": getattr(self.clock, "synced", None),
+            "data_dir": str(self.trace.data_dir) if self.trace else None,
+            "settings": self.trace.settings if self.trace else None,
+            "pre_run_copy": copy,
+            "growbridge_version": __version__,
+            "git_commit": git_commit(),
+            "at": now,
+        }
+
+    def _end_trace(
+        self, trace: RunTrace | None, end: RunEnd, run: AgentRun | None, started: float
+    ) -> None:
+        if trace is None:
+            return
+        try:
+            trace.end(
+                {
+                    "at": self.clock.now(),
+                    "state": end.state.value,
+                    "code": end.code,
+                    "reason": end.reason,
+                    "params": end.params,
+                    "denied": end.denied,
+                    "turns": run.turns if run else 0,
+                    "input_tokens": run.input_tokens if run else 0,
+                    "output_tokens": run.output_tokens if run else 0,
+                    "cache_write_tokens": run.cache_write_tokens if run else 0,
+                    "cache_read_tokens": run.cache_read_tokens if run else 0,
+                    "cost": run.cost if run else 0.0,
+                    "seconds": self.clock.monotonic() - started,
+                }
+            )
+        except Exception:
+            log.exception("cannot finish the model trace %s", trace.path)
+
+    async def replay_run(self, task_id: str, client: ModelClient, wrap: ToolsetWrap) -> ReplayedRun:
+        """Run a task again with ``client`` and a wrapped toolset, in any state. The task is
+        not claimed and not ended, but its tools really run and the run's turns are recorded,
+        so this writes state: call it only on a copy of the data."""
+        task = self.tasks.get(task_id)
+        reviews: list[bool] = []
+        deliveries: list[str] = []
+        user = self.message_for(task)
+        try:
+            run = await self._run(task, user, reviews, deliveries, client=client, wrap=wrap)
+        except RunInterrupted:
+            raise
+        except Denied as exc:
+            return ReplayedRun(user=user, end=end_of_denied(exc))
+        except Exception as exc:
+            return ReplayedRun(user=user, end=end_of_error(exc))
+        return ReplayedRun(user=user, end=end_of_run(run, task.owner_role, reviews, deliveries))
+
+    def _finish(self, task: ResearchTask, end: RunEnd) -> None:
+        self._end(task, end.state, end.reason, end.said, code=end.code, params=end.params)
 
     def _claim(self, task_id: str) -> ResearchTask | None:
         try:
@@ -250,7 +347,14 @@ class Dispatcher:
             return cursor.rowcount == 1
 
     async def _run(
-        self, task: ResearchTask, reviews: list[bool], deliveries: list[str]
+        self,
+        task: ResearchTask,
+        user: str,
+        reviews: list[bool],
+        deliveries: list[str],
+        *,
+        client: ModelClient,
+        wrap: ToolsetWrap,
     ) -> AgentRun:
         role = task.owner_role
         config = self.roles.get(role)
@@ -261,7 +365,7 @@ class Dispatcher:
                 reason="no_model",
                 params={"role": role},
             )
-        toolset = self._toolset(role, config, reviews)
+        toolset = wrap(self._toolset(role, config, reviews))
 
         def observe(reply: ModelReply, outcomes: list[ToolOutcome]) -> None:
             deliveries.extend(o.name for o in outcomes if delivered(role, o))
@@ -269,10 +373,10 @@ class Dispatcher:
 
         with bind_task(task.id):  # the tools learn their task here, never from model output
             return await run_agent(
-                self.client,
+                client,
                 config,
                 ROLES[role].system,
-                self._message(task),
+                user,
                 toolset,
                 self.budget,
                 task.project_id,
@@ -281,7 +385,18 @@ class Dispatcher:
                 observe=observe,
             )
 
-    def _message(self, task: ResearchTask) -> str:
+    def schemas_for(self, role: str) -> list[dict] | None:
+        """The tool definitions a run of ``role`` is offered; ``None`` when the role has no
+        model configured or its tool list cannot be built. Calls no handler."""
+        config = self.roles.get(role)
+        if config is None:
+            return None
+        try:
+            return self._toolset(role, config, []).schemas()
+        except Denied:
+            return None
+
+    def message_for(self, task: ResearchTask) -> str:
         context = self.context(task) if self.context is not None else None
         history: list[dict] = []
         if self.conversation is not None and task.owner_role == LEAD:

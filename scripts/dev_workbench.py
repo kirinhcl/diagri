@@ -20,14 +20,13 @@ The skipped time is kept in ``dev_clock_offset`` in the data directory, so a res
 the clock back. Sessions and re-authentication age with that clock: sign in again afterwards.
 The simulated sensors follow a small tent model (``Greenhouse``): day and night, the light and
 the exhaust move temperature, humidity and CO2, with noise, so no reading looks frozen.
-``--transcript FILE.jsonl`` appends one line per model call: the role, the newest message, the
-reply's stop reason, text and tool calls, token counts and seconds. It is for development only:
-it holds prompts and tool results in clear text.
+``--trace`` records every model-role run as a JSONL trace under ``<data-dir>/model_traces`` and
+copies the data directory before each run, so ``growbridge trace replay`` can run it again exactly.
+It needs ``--data-dir``, holds prompts and tool results in clear text and is for development only.
 """
 
 import argparse
 import asyncio
-import json
 import os
 import secrets
 import sys
@@ -196,74 +195,6 @@ def load_roles(path: Path) -> dict:
     return {name: RoleModel(**table) for name, table in tables.items()}
 
 
-TRANSCRIPT_CHARS = 4000  # per text field; enough to read a tool result, small enough to scan
-
-
-def _clip(value) -> str:
-    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, default=str)
-    return text if len(text) <= TRANSCRIPT_CHARS else text[:TRANSCRIPT_CHARS] + "…"
-
-
-def _role_of(system: str) -> str:
-    from growbridge.agents.roles import ROLES
-
-    return next((name for name, role in ROLES.items() if role.system == system), "?")
-
-
-def _newest(messages) -> list[dict]:
-    """The newest message in a readable form: its text, or each tool result's content."""
-    content = messages[-1]["content"] if messages else ""
-    if isinstance(content, str):
-        return [{"text": _clip(content)}]
-    return [
-        {"tool_result": _clip(block.get("content", "")), "is_error": block.get("is_error", False)}
-        for block in content
-        if isinstance(block, dict)
-    ]
-
-
-class RecordingClient:
-    """A model client that writes every call and its reply (or error) to a JSONL file."""
-
-    def __init__(self, inner, path: Path, clock=time.monotonic):
-        self.inner = inner
-        self.path = path
-        self.clock = clock
-
-    async def create(self, **request):
-        line = {
-            "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "role": _role_of(request.get("system", "")),
-            "model": request.get("model"),
-            "turn": (len(request.get("messages", ())) + 1) // 2,
-            "tools_offered": len(request.get("tools", ())),
-            "newest": _newest(request.get("messages", [])),
-        }
-        started = self.clock()
-        try:
-            reply = await self.inner.create(**request)
-        except Exception as error:
-            line.update(error=f"{type(error).__name__}: {error}", seconds=self.clock() - started)
-            self._write(line)
-            raise
-        line.update(
-            seconds=round(self.clock() - started, 2),
-            stop_reason=reply.stop_reason,
-            text=_clip(reply.text),
-            tool_calls=[{"name": c.name, "input": c.input} for c in reply.tool_calls],
-            input_tokens=reply.input_tokens,
-            output_tokens=reply.output_tokens,
-            cache_write_tokens=reply.cache_write_tokens,
-            cache_read_tokens=reply.cache_read_tokens,
-        )
-        self._write(line)
-        return reply
-
-    def _write(self, line: dict) -> None:
-        with self.path.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
-
-
 ROLE_NAMES = ("orchestrator", "planner", "researcher")
 
 
@@ -278,7 +209,7 @@ def claude_code_client():
 async def _run(
     settings,
     secret: str,
-    transcript: Path | None = None,
+    trace: bool = False,
     claude_code: bool = False,
     fast_forward: bool = False,
 ) -> None:
@@ -299,6 +230,7 @@ async def _run(
     sim = SimulatedTransport()
     greenhouse = Greenhouse()
     runtime = build_runtime(settings, lambda _: sim, clock, channels={})
+    runtime.pre_run_copies = trace  # only this script may set it: never serve, never the config
     try:
         prepare(runtime, secret, fresh)
         router = runtime.workbench({})
@@ -315,9 +247,8 @@ async def _run(
             print("Model client: Claude Code CLI (claude -p)")
         else:
             client = model_client_or_none(runtime)
-        if client is not None and transcript is not None:
-            client = RecordingClient(client, transcript)
-            print(f"Model transcript: {transcript}")
+        if trace:
+            print(f"Model traces: {settings.data_dir / 'model_traces'}")
         agents = None if client is None else asyncio.create_task(_agents_forever(runtime, client))
         if settings.roles:
             state = "on" if agents else "off (see the model_client alert)"
@@ -340,12 +271,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--data-dir", type=Path, help="default: a fresh temporary directory")
     parser.add_argument("--roles", type=Path, help="TOML file of model roles; default: none run")
-    parser.add_argument("--transcript", type=Path, help="JSONL file to append model calls to")
+    parser.add_argument(
+        "--trace", action="store_true", help="record each model run, with a pre-run data copy"
+    )
     parser.add_argument(
         "--claude-code", action="store_true", help="run the roles on the local claude CLI"
     )
     parser.add_argument("--fast-forward", action="store_true", help="skip through a running stage")
     args = parser.parse_args()
+    if args.trace and args.data_dir is None:
+        print(
+            "--trace needs --data-dir: the traces and pre-run copies must outlive the workbench",
+            file=sys.stderr,
+        )
+        return 2
     secret = os.environ.get(SECRET_VARIABLE, "")
     if len(secret) < 12:
         print(f"{SECRET_VARIABLE} must be set to at least 12 characters", file=sys.stderr)
@@ -373,11 +312,10 @@ def main() -> int:
             lan_hosts=["localhost"],
             overlay_hosts=["127.0.0.1"],
             roles=roles,
+            model_trace=args.trace,
         )
         try:
-            asyncio.run(
-                _run(settings, secret, args.transcript, args.claude_code, args.fast_forward)
-            )
+            asyncio.run(_run(settings, secret, args.trace, args.claude_code, args.fast_forward))
         except KeyboardInterrupt:
             pass
     return 0

@@ -105,6 +105,7 @@ class Tool:
     input_model: type[BaseModel]
     handler: Callable[[Any], Any]  # receives the validated input model; sync or async
     reads_web: bool = False
+    external: bool = False  # reaches outside the machine; replay must never call it
     writes: bool = False
     sandbox: bool = False
 
@@ -164,6 +165,24 @@ def _error(name: str, message: str) -> ToolOutcome:
     return ToolOutcome(name=name, content=f"Error: {message}"[:MAX_ERROR_CHARS], is_error=True)
 
 
+def _unavailable(name: str) -> ToolOutcome:
+    return _error(name, f"tool {name!r} is not available")
+
+
+def _invalid_input(name: str, detail: str) -> ToolOutcome:
+    return _error(name, f"invalid input for {name}: {detail}")
+
+
+def is_gate_refusal(name: str, outcome: ToolOutcome) -> bool:
+    """Whether ``outcome`` is a refusal ``Toolset.gate`` gives for ``name`` (the tool not
+    available, or invalid input): the call never reached the handler."""
+    if not outcome.is_error:
+        return False
+    return outcome.content == _unavailable(name).content or outcome.content.startswith(
+        _invalid_input(name, "").content
+    )
+
+
 class Toolset:
     def __init__(self, role: str, tools: Sequence[Tool]):
         self.role = role
@@ -192,15 +211,35 @@ class Toolset:
         tool = self._tools.get(name)
         return bool(tool and tool.reads_web)
 
-    async def call(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome:
-        """Validate and run one tool; every failure is returned as an error result."""
+    def external(self, name: str) -> bool:
+        tool = self._tools.get(name)
+        return bool(tool and tool.external)
+
+    def _admit(
+        self, name: str, raw_input: Any, restricted: bool
+    ) -> ToolOutcome | tuple[Tool, BaseModel]:
+        """The tool and its validated input, or the error result that stops the call first."""
         tool = self._tools.get(name)
         if tool is None or tool not in self._visible(restricted):
-            return _error(name, f"tool {name!r} is not available")
+            return _unavailable(name)
         try:
-            args = tool.input_model.model_validate(raw_input)
+            return tool, tool.input_model.model_validate(raw_input)
         except ValidationError as exc:
-            return _error(name, f"invalid input for {name}: {exc.error_count()} problem(s): {exc}")
+            return _invalid_input(name, f"{exc.error_count()} problem(s): {exc}")
+
+    def gate(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome | None:
+        """The error result ``call`` would give before reaching the handler (the tool not
+        available under ``restricted``, or invalid input); None when the call would reach it.
+        Calls no handler."""
+        admitted = self._admit(name, raw_input, restricted)
+        return admitted if isinstance(admitted, ToolOutcome) else None
+
+    async def call(self, name: str, raw_input: Any, restricted: bool = False) -> ToolOutcome:
+        """Validate and run one tool; every failure is returned as an error result."""
+        admitted = self._admit(name, raw_input, restricted)
+        if isinstance(admitted, ToolOutcome):
+            return admitted
+        tool, args = admitted
         return await self._run(tool, args)
 
     async def _run(self, tool: Tool, args: BaseModel) -> ToolOutcome:
