@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 64 个路由；打开 `multi_user` 时再多 10 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 64 个路由；打开 `multi_user` 时再多 14 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -233,9 +233,13 @@
 
 | 方法与路径 | 谁可以 | 请求体 | 回答 | 拒绝码 |
 | --- | --- | --- | --- | --- |
-| `GET /wb/greenhouses` | 操作员 | | `greenhouses`：`id`、`name`、`state`（`free`、`mine`、`taken`）、`locked_at`、`controlled`（本系统驱动它的设备；只有这个温室能运行阶段、显示环境和安全限值）；管理员另有 `holder` | |
+| `GET /wb/greenhouses` | 操作员 | | `greenhouses`：`id`、`name`、`state`（`free`、`mine`、`taken`）、`locked_at`、`controlled`（本系统驱动它的设备；只有这个温室能运行阶段、显示环境和安全限值）；管理员另有 `holder`。设备测试：`testable`、`test_running`（通道或 `null`）、`test_unsettled`（`test_id`、`channel`、`state`，或 `null`）、`test_seconds`（按通道）；只对调用者锁定的温室给出，其余为 `false`/`null` | |
 | `POST /wb/greenhouses/lock` | 操作员，需重新认证 | `greenhouse_ids`（1 到 64 个） | `locked` | `lock_taken`、`state` |
-| `POST /wb/greenhouses/{greenhouse_id}/release` | 锁定它的操作员 | `plants_removed`（必须为 `true`） | `released` | `not_lock_holder`、`greenhouse_busy`、`state`（`plants_not_removed`：没有确认植物已搬走） |
+| `POST /wb/greenhouses/{greenhouse_id}/release` | 锁定它的操作员 | `plants_removed`（必须为 `true`） | `released` | `not_lock_holder`、`greenhouse_busy`、`state`（`plants_not_removed`：没有确认植物已搬走；`device_test_unsettled`：有设备测试正在进行或没能还原） |
+| `POST /wb/greenhouses/{greenhouse_id}/test/{channel}` | 锁定它的操作员 | 路径里的 `channel`：`light`、`exhaust`、`fan`、`pump` | 测试结束后：`test_id`、`channel`、`test_level`、`seconds`、`result`（`restored`、`restore_failed`、`protected`）、`actions` | `not_lock_holder`、`state`（`device_test_not_local`、`device_test_not_idle`、`device_test_running`、`device_test_unsettled`、`device_test_protected`）、`not_connected`、`controls_disabled`、水泵限制 |
+| `POST /wb/greenhouses/{greenhouse_id}/tests/{test_id}/retry` | 锁定它的操作员 | | 同上 | `not_lock_holder`、`state` |
+| `POST /wb/greenhouses/{greenhouse_id}/tests/{test_id}/settle` | 锁定它的操作员 | `note`（1 到 500 字） | `settled` | `not_lock_holder`、`state`、`param` |
+| `GET /wb/greenhouses/{greenhouse_id}/tests` | 锁定它的操作员、管理员 | | `tests`（最近 20 条）：`test_id`、`channel`、`operator`、`state`（`running`、`done`、`restore_failed`、`settled_onsite`）、`result`、`started_at`、`ended_at`、`note` | `not_lock_holder` |
 | `GET /wb/admin/operators` | 管理员 | | `operators`：`name`、`role`、`created_at`、`disabled_at`、`unfinished_stages`；`events`（最近 200 条，新的在前）：`name`、`action`（`add`、`disable`、`reset_secret`）、`actor`（`null` 表示命令行）、`detail`（添加账号时的角色）、`at` | `admin_only` |
 | `POST /wb/admin/operators` | 管理员，需重新认证 | `name`、`secret`、`role` | `name`、`role` | `admin_only`、`param` |
 | `POST /wb/admin/operators/disable` | 管理员，需重新认证 | `name` | `disabled` | `admin_only`、`param` |
