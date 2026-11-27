@@ -117,8 +117,9 @@ def check_sheet(deps: Deps, sheet: RunSheet, round_id: str | None = None) -> tup
 
 def submit_draft(deps: Deps, role: str, data: DraftInput) -> dict:
     """File a run-sheet draft for operator review; approval is never part of this."""
-    require_round_project(deps, data.round_id)  # a draft goes only into the run's own project
     sheet = data.run_sheet
+    require_project(deps, sheet.project_id)  # before any lookup of what the sheet names
+    require_round_project(deps, data.round_id)  # a draft goes only into the run's own project
     own = check_sheet(deps, sheet, data.round_id)
     if any(finding.blocking for finding in own):
         return {"saved": False, "stage_id": sheet.stage_id, "findings": findings_json(own)}
