@@ -36,7 +36,7 @@ from growbridge.ports import (
 from growbridge.vocab import Catalog, packaged_catalog
 from growbridge.vocab.checks import check_protocol
 from growbridge.vocab.curie import taxon_problems
-from growbridge.workflow import denials
+from growbridge.workflow import denials, device_test_denials
 from growbridge.workflow.access import Access, guard_project, guard_round, guard_sheet, guard_stage
 from growbridge.workflow.idle import IdleCare
 from growbridge.workflow.permissions import require_kind, require_operator
@@ -105,6 +105,7 @@ class WorkflowService(StageRecovery):
         self.catalog = catalog or packaged_catalog()
         self.access: Access | None = None  # multi-user rules; set once at assembly
         self.idle_care: IdleCare | None = None  # idle levels with no current stage; at assembly
+        self.device_tests: Any = None  # DeviceTests (multi-user), set at assembly when built
         self._unsent: list[dict] = []  # saved in a transaction, not yet handed on
 
     # --- design --------------------------------------------------------------------------------
@@ -408,6 +409,9 @@ class WorkflowService(StageRecovery):
             return self._runtime(await self._apply_once(stage, plan, S.RUNNING))
 
     def _check_startable(self, stage: StageRow, sheet: RunSheet) -> None:
+        busy = self.device_tests and self.device_tests.open_test(stage.device_id)
+        if busy:
+            raise device_test_denials.unsettled(busy.greenhouse_id, busy.test_id)
         if conflicts := self.control.safety_conflicts(sheet):
             raise denials.safety_conflict(stage.stage_id, conflicts)
         # the safety configuration in force may be newer than the sheet's review (spec 7.5)

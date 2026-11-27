@@ -24,6 +24,7 @@ from growbridge.archive.ids import new_id
 from growbridge.archive.models import ActionRecord, ActionState, Channel, Model, RightKind
 from growbridge.config import Greenhouse
 from growbridge.ports import ActionRequest, Actor, ChannelSnapshot, ControlPort, RightScope
+from growbridge.workflow import denials as workflow_denials
 from growbridge.workflow import device_test_denials as denials
 from growbridge.workflow.access import Access
 from growbridge.workflow.idle import IdleCare
@@ -263,7 +264,7 @@ class DeviceTests:
             operator=record.operator,
         )
 
-    def _finish(self, record: DeviceTestRecord, result: str) -> None:
+    def _finish(self, record: DeviceTestRecord, result: str, resolve: bool = False) -> None:
         state = "restore_failed" if result == "restore_failed" else "done"
         with self.db.transaction():
             self.db.execute(
@@ -274,6 +275,8 @@ class DeviceTests:
             self.locks.note_event(record.greenhouse_id, "test", record.operator, note)
         if state == "restore_failed":
             self._alert(record)
+        elif resolve:
+            self.resolve(ALERT, record.test_id, ("device", record.device_id))
 
     def _alert(self, record: DeviceTestRecord) -> None:
         params = {
@@ -287,6 +290,80 @@ class DeviceTests:
         )
         scope = ("device", record.device_id)
         self.alert(ALERT, record.test_id, message, "critical", scope, code=ALERT, params=params)
+
+    # --- unsettled tests -----------------------------------------------------------------------
+
+    async def retry(self, greenhouse_id: str, test_id: str, actor: Actor) -> dict[str, Any]:
+        """Write an unrestored test's snapshot back again, under a fresh TEST right."""
+        record = self._own_open(greenhouse_id, test_id, actor)
+        actions: list[str] = []
+        result = await self._restore_again(record, actions)
+        return self._reply(record, result, actions)
+
+    def settle(self, greenhouse_id: str, test_id: str, actor: Actor, note: str) -> DeviceTestRecord:
+        """The holder checked the device on site: the test no longer blocks the greenhouse."""
+        if not note.strip():
+            raise ValueError("settling a device test needs a note")
+        record = self._own_open(greenhouse_id, test_id, actor)
+        with self.db.transaction():
+            self._mark_settled(record, actor.id, note.strip())
+        return self.record(test_id) or record
+
+    def settle_for_release(self, device_id: str, actor: str, note: str) -> None:
+        """An administrator's forced release: the device's unsettled test is settled with it."""
+        record = self.unsettled(device_id)
+        if record is not None:
+            self._mark_settled(record, actor, note)
+
+    async def resume(self) -> None:
+        """Each runtime tick: one restore attempt for every test a restart left running, once
+        the device link is usable."""
+        ready = self.control.connected() and self.control.transport_stopped()
+        if not ready or self.control.interlocked():
+            return
+        rows = self.db.query("SELECT test_id FROM device_tests WHERE state = 'running'")
+        for row in rows:
+            record = self.record(row["test_id"])
+            if record is not None and record.test_id not in self._active:
+                await self._restore_again(record, [])
+
+    def _own_open(self, greenhouse_id: str, test_id: str, actor: Actor) -> DeviceTestRecord:
+        house = self.locks.greenhouse(greenhouse_id)
+        if self.locks.holder_of_device(house.device_id) != actor.id:
+            raise denials.not_held(greenhouse_id)
+        record = self.record(test_id)
+        if record is None or record.greenhouse_id != greenhouse_id:
+            raise workflow_denials.record_not_found("device_test", test_id, "no such device test")
+        if record.state not in OPEN_STATES:
+            raise workflow_denials.record_not_found("device_test", test_id, "test already settled")
+        if record.test_id in self._active:
+            raise denials.running(greenhouse_id, record.channel.value)
+        return record
+
+    async def _restore_again(self, record: DeviceTestRecord, actions: list[str]) -> str:
+        if record.snapshot is None:  # cut off before anything was written
+            self._finish(record, "restored", resolve=True)
+            return "restored"
+        self._active.add(record.test_id)
+        try:
+            async with self._idle_paused():
+                right = self._grant(record, record.snapshot)
+                try:
+                    result = await self._put_back(record, right, record.snapshot, actions)
+                finally:
+                    await self.control.handover(right, "device test")
+            self._finish(record, result, resolve=True)
+            return result
+        finally:
+            self._active.discard(record.test_id)
+
+    def _mark_settled(self, record: DeviceTestRecord, actor: str, note: str) -> None:
+        self.db.execute(
+            "UPDATE device_tests SET state = 'settled_onsite', note = ? WHERE test_id = ?",
+            (note, record.test_id),
+        )
+        self.locks.note_event(record.greenhouse_id, "test_settled", actor, note)
+        self.resolve(ALERT, record.test_id, ("device", record.device_id))
 
     def _reply(self, record: DeviceTestRecord, result: str, actions: list[str]) -> dict:
         pump = record.channel is Channel.PUMP

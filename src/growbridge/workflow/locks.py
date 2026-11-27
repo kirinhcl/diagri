@@ -21,6 +21,7 @@ from growbridge.archive.clock import Clock
 from growbridge.archive.db import Database
 from growbridge.config import Greenhouse
 from growbridge.ports import ControlPort, Denied
+from growbridge.workflow import device_test_denials
 from growbridge.workflow.store import WorkflowStore
 
 NAMESPACE = "greenhouse_locks"
@@ -48,6 +49,7 @@ class GreenhouseLocks:
         self.registry = {house.id: house for house in registry}
         self.store = store
         self.control = control
+        self.tests: Any = None  # the device tests (DeviceTests), set at assembly when built
         db.migrate(NAMESPACE, STEPS)
 
     # --- reading -------------------------------------------------------------------------------
@@ -179,6 +181,7 @@ class GreenhouseLocks:
     ) -> None:
         """Hand the device's care back, then free the greenhouse (see the module docstring)."""
         self._check_release(greenhouse_id, actor, force)
+        self._check_tests(greenhouse_id, actor, force, note)
         if not force:
             _require_plants_removed(greenhouse_id, plants_removed)
             note = PLANTS_REMOVED_NOTE
@@ -198,6 +201,20 @@ class GreenhouseLocks:
                 # restore_care issues care again rather than waiting for a stage that may never
                 # start or for a restart
                 self.store.drop_care(holder.stage_id, holder.care_right)
+
+    def _check_tests(self, greenhouse_id: str, actor: str, force: bool, note: str) -> None:
+        """A holder cannot release during or after an unrestored device test; an administrator's
+        forced release settles it."""
+        open_test = (
+            None
+            if self.tests is None
+            else self.tests.open_test(self.greenhouse(greenhouse_id).device_id)
+        )
+        if open_test is None:
+            return
+        if not force:
+            raise device_test_denials.unsettled(greenhouse_id, open_test.test_id)
+        self.tests.settle_for_release(open_test.device_id, actor, note)
 
     def _finish_release(self, greenhouse_id: str, actor: str, force: bool, note: str) -> None:
         with self.db.transaction():
