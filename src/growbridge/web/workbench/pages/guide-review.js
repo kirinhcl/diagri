@@ -98,6 +98,14 @@ export async function reviewStep(ctx, { session, project, onSaved, onOpenStep = 
   return h("div", { class: "guide-review" }, missingSteps(ctx, review, onOpenStep), problemsBlock(ctx, review), hintsBlock(ctx, review), lead, kept.element, holder, box);
 }
 
+// The review after a save with nothing chosen since: what was saved and the way on to step 8. There is no form,
+// so the same protocol is never offered again as one more version.
+export function savedReview(ctx, { saved, onOpenStep = () => {} }) {
+  const name = protocolName(ctx.t, saved.protocol_id, saved.version);
+  const next = h("button", { class: ["button", "guide-to-round"], attrs: { type: "button" }, text: ctx.t("guide.step.round"), on: { click: () => onOpenStep("round") } });
+  return h("div", { class: "guide-review" }, note(ctx.t("guide.review.savedUnchanged", { protocol: name })), next);
+}
+
 // --- step 8: the round and the goal (both optional) ---------------------------------------------------
 
 const link = (href, text) => h("a", { class: "text-link", attrs: { href }, text });

@@ -101,6 +101,7 @@ export default {
   "guide.review.hash": "上一版声明了分析脚本的哈希。",
   "guide.review.keepHash": "保存时保留这个哈希",
   "guide.review.retry": "再试一次",
+  "guide.review.savedUnchanged": "已保存为{protocol}，之后没有改动。",
   "guide.entry.title": "按引导新建项目",
   "guide.entry.lead": "建好项目，设好调用预算（数字可以改），然后打开引导来建立协议。",
   "guide.entry.create": "创建并开始引导",

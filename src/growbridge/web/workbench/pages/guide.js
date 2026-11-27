@@ -5,7 +5,7 @@ import { labelOr, textOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
 import { errorParts, note, pageHead, section } from "../ui/section.js";
-import { reviewStep, roundStep } from "./guide-review.js";
+import { reviewStep, roundStep, savedReview } from "./guide-review.js";
 import { stepCard } from "./guide-steps.js";
 
 const RAIL = ["project", "question", "crop", "treatments", "measures", "analysis", "scale", "review", "round"];
@@ -15,14 +15,26 @@ const enc = encodeURIComponent;
 
 const entryOf = (session, step) => array(session.steps).find((entry) => entry.step === step) || { step, status: "pending", chosen: null };
 
-// The project step is always done; review and round have no answer here, so they stay pending.
+// The latest save came after every choice, so the protocol saved is what the choices make: the review has
+// nothing new to offer until something is chosen again.
+export function savedUnchanged(session) {
+  const last = array(session.saved).at(-1);
+  if (!last || !Number.isInteger(last.seq)) return false;
+  return array(session.steps).every((entry) => !entry.chosen || entry.chosen.seq < last.seq);
+}
+
+// The project step is always done; the review is done while nothing was chosen since a save; the round has
+// no answer here, so it stays pending.
 function statusOf(session, step) {
   if (step === "project") return "done";
+  if (step === "review") return savedUnchanged(session) ? "done" : "pending";
   return ANSWERED.includes(step) ? entryOf(session, step).status : "pending";
 }
 
-// The first step still to answer or to look at again; the review once all six are done.
+// The round step after a save with no choice since; otherwise the first step still to answer or to look at
+// again, and the review once all six are done.
 export function currentStep(session) {
+  if (savedUnchanged(session)) return "round";
   return ANSWERED.find((step) => statusOf(session, step) !== "done") || "review";
 }
 
@@ -59,7 +71,7 @@ function railItem(ctx, { session, step, index, shown, open }) {
   const title = h("span", { class: "guide-rail-title", text: ctx.t(`guide.step.${step}`) });
   const number = h("span", { class: "guide-rail-number", text: String(index) });
   const mark = status === "needs_review" ? h("span", { class: "guide-rail-status", text: ctx.t("guide.status.needs_review") }) : null;
-  const clickable = ANSWERED.includes(step) && status !== "pending";
+  const clickable = (ANSWERED.includes(step) || step === "review") && status !== "pending";
   const inner = [number, h("span", { class: "guide-rail-text" }, title, mark)];
   const control = clickable ? h("button", { class: "guide-rail-button", attrs: { type: "button" }, on: { click: () => open(step) } }, inner) : h("span", { class: "guide-rail-button" }, inner);
   const attrs = { "aria-current": step === shown ? "step" : null };
@@ -80,7 +92,7 @@ export async function render(ctx, { sessionId }) {
   const shown = () => viewing || currentStep(session);
 
   const drawSides = () => {
-    const open = (step) => openStep(step);
+    const open = (step) => (ANSWERED.includes(step) ? openStep(step) : goTo(step));
     rail.replaceChildren(...RAIL.map((step, index) => railItem(ctx, { session, step, index, shown: shown(), open })));
     draft.replaceChildren(...draftPanel(ctx, session));
   };
@@ -90,6 +102,10 @@ export async function render(ctx, { sessionId }) {
   async function drawStage() {
     const step = shown();
     const mine = ++drawn;
+    if (step === "review" && savedUnchanged(session)) {
+      stage.replaceChildren(section(ctx.t("guide.step.review"), savedReview(ctx, { saved: array(session.saved).at(-1), onOpenStep: goTo })));
+      return;
+    }
     if (step === "review") return drawReview(mine);
     if (step === "round") {
       const saved = array(session.saved).at(-1) || null;

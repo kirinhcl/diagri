@@ -141,8 +141,15 @@ class _Guide:
         return {
             "session": session.model_dump(mode="json"),
             "steps": [state.model_dump(mode="json") for state in step_states(events)],
+            # ``seq`` tells the page whether anything was chosen after a save.
             "saved": [
-                {key: e.payload[key] for key in ("protocol_id", "version", "digest", "edited")}
+                {
+                    **{
+                        key: e.payload[key]
+                        for key in ("protocol_id", "version", "digest", "edited")
+                    },
+                    "seq": e.seq,
+                }
                 for e in events
                 if e.kind == "saved"
             ],

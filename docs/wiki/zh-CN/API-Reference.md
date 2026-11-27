@@ -176,7 +176,7 @@
 | `GET` | `/wb/devices/{device_id}/notes` | 无 | `notes`：这台设备最新的 10 条日志（`id`、`device_id`、`at`、`actor`、`sensor`、`text`），最新在前。日志写的是设备本身，不属于某个实验，之后持有这个温室的人也能看到 |
 | `POST` | `/wb/devices/{device_id}/notes` | `text`（1 到 500 字）、可选 `sensor`（最多 40 字） | 新写入的日志 |
 | `POST` | `/wb/guide/sessions` | `project_id`，可选 `lang`（`en` 或 `zh`，默认 `zh`） | `session_id`。项目已有保存的协议时，会话开始时六个要回答的步骤从最近保存的版本带过来；规模一步原样保留 `rounds` 和 `blocks`、随机种子，以及种子重现不出来的分配表，所以不改动的版本组成后和原来相同 |
-| `GET` | `/wb/guide/sessions/{session_id}` | 无 | `session`、`steps`（六个要回答的步骤，每步有 `status`：`pending`、`done` 或 `needs_review`，以及最新的 `chosen`）和 `saved`（`protocol_id`、`version`、`digest`、`edited`）。项目的所有者和管理员可以读；其他人得到的是"会话不存在"的回答 |
+| `GET` | `/wb/guide/sessions/{session_id}` | 无 | `session`、`steps`（六个要回答的步骤，每步有 `status`：`pending`、`done` 或 `needs_review`，以及最新的 `chosen`）和 `saved`（`protocol_id`、`version`、`digest`、`edited`，以及事件序号 `seq`：某次保存的 `seq` 大于每个步骤所选的序号，说明保存之后没有再选过）。项目的所有者和管理员可以读；其他人得到的是"会话不存在"的回答 |
 | `GET` | `/wb/guide/sessions/{session_id}/steps/{step}` | 无 | 这一步的 `options`（`id`、`value`、`label_en`、`label_zh`，来自目录、查证过的作物表或固定清单，从不来自模型）和 `defaults`。`step` 是 `question`、`crop`、`treatments`、`measures`、`analysis`、`scale`、`review`、`round` 之一，其他值返回 422 |
 | `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/choose` | `answer`（对象）、可选 `option_ids` | 会话视图。一次记下给出的选项和所做的选择；带 `option_ids` 时来源是 `system`，不带是 `own`。答案不合格、目录不接受的变量或因子、没有给出过的选项，或所选选项的值不在回答里（别的作物或物种、有处理缺少的因子、没列出的变量、别的方法或布局），都返回 422，原因是 `guide_answer_invalid`。引导组成的实验有上限：连续轮次最多 100 个区组，多帐篷并行最多 200 轮；单位最多 50 个，处理最多 20 个，阶段最多 20 个。另一个计数（连续轮次的轮数、多帐篷的区组数）只由沿用的版本带回来，分别最多 2000 和 200。分配超过 2000 条的布局在复核时列为问题。只有开始这个会话的操作员能调用 |
 | `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/reopen` | 无 | 会话视图，并记下一条 `reopened`。只有开始这个会话的操作员能调用 |

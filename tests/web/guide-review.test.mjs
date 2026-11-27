@@ -223,6 +223,38 @@ test("on the guide page a saved review moves on to the round step", async () => 
   assert.deepEqual(posts(ctx).map((call) => call.path), ["/protocols", SAVED_PATH]);
 });
 
+// --- coming back to a session -------------------------------------------------------------------------
+
+const answeredFrom = (seq) => ({ ...SESSION, steps: SESSION.steps.map((entry, i) => ({ ...entry, status: "done", chosen: { step: entry.step, answer: {}, source: "own", option_ids: [], seq: seq + i } })) });
+const SAVED_ONCE = [{ protocol_id: "protocol-2-55fbcb", version: 3, digest: "d", edited: [], seq: 20 }];
+const railNamed = (element, title) => byClass(element, "guide-rail-item").find((item) => byClass(item, "guide-rail-title")[0].textContent === title);
+const currentRail = (element) => byClass(byClass(element, "guide-rail-item").find((item) => item.getAttribute("aria-current") === "step"), "guide-rail-title")[0].textContent;
+
+test("a session saved after its last choice opens on the round step, with the review done and no form", async () => {
+  const view = { ...answeredFrom(2), saved: SAVED_ONCE };
+  const { element, ctx } = await renderPage("guide", { sessionId: "guide-1" }, { lang: "zh", fixtures: { "guide-session.json": view } });
+  await flush();
+  assert.equal(currentRail(element), "轮次与目标");
+  assert.ok(railNamed(element, "复核保存").classList.contains("guide-rail-done"));
+  byTag(railNamed(element, "复核保存"), "button")[0].dispatchEvent(new Event("click"));
+  await flush();
+  assert.equal(currentRail(element), "复核保存");
+  assert.match(visibleText(element), /已保存为协议 2，第 3 版，之后没有改动/);
+  assert.equal(byTag(element, "form").length, 0, "no form that would save the same protocol again");
+  assert.ok(!ctx.api.calls.some((call) => call.path.endsWith("/review")), "the review is not composed again");
+  byClass(element, "guide-to-round")[0].dispatchEvent(new Event("click"));
+  await flush();
+  assert.equal(currentRail(element), "轮次与目标");
+});
+
+test("a choice after the save opens the review form again", async () => {
+  const view = { ...answeredFrom(30), saved: SAVED_ONCE };
+  const { element } = await renderPage("guide", { sessionId: "guide-1" }, { lang: "en", fixtures: { "guide-session.json": view } });
+  await flush();
+  assert.equal(currentRail(element), "Review and save");
+  assert.equal(byTag(element, "form").length, 1);
+});
+
 test("the review page has no 'AI' text", async () => {
   const { element } = await open({ lang: "zh" });
   assert.ok(!/\bAI\b/.test(visibleText(element)));

@@ -53,6 +53,8 @@ The guide composes experiments up to a size: at most 100 blocks in series, 200 r
 
 The guide shows what is missing or wrong: steps not answered yet, problems to solve before saving, and hints. Then it shows the composed protocol in the normal protocol form, with every value open to change. The same values give the same protocol digest as the hand-filled form. **Saving is always your own click.** The guide never saves on its own; the form saves through `POST /wb/protocols` like the project page. If the last version of the protocol declared an analysis script hash, it is shown with a "keep" box, ticked at first. The hash goes back on the new version only if you leave the box ticked and save the same protocol id.
 
+Once the protocol is saved and nothing has been chosen since, the guide opens on step 8 and the review says only what was saved; it offers no form, so the same protocol is not saved again as one more version. Answering any step again brings the form back.
+
 ### 8. Round and goal
 
 After the save you can create a round of the saved protocol and state the goal. Both are optional: you can skip this step and do it later from the project page. If nothing has been saved in this guide yet, the step says so and points back to the review. The goal box starts with your research question; you can change it before you send it. When the goal is sent, the step links to the round page.

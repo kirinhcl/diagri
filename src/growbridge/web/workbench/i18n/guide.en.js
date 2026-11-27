@@ -101,6 +101,7 @@ export default {
   "guide.review.hash": "The last version declared an analysis script hash.",
   "guide.review.keepHash": "Keep this hash when saving",
   "guide.review.retry": "Try again",
+  "guide.review.savedUnchanged": "Saved as {protocol}; nothing changed since.",
   "guide.scale.blocking": "These findings stop the design. Change the scale and save again.",
   "guide.entry.title": "New project with the guide",
   "guide.entry.lead": "Makes the project, sets its call budget (change the numbers if you like), and opens the guide to set up the protocol.",

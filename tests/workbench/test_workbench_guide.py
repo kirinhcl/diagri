@@ -184,6 +184,18 @@ def test_a_complete_draft_reviews_ready_and_saves_through_the_normal_route(bench
     assert view["saved"][0]["digest"] == saved.json()["digest"]
 
 
+def test_a_saved_entry_says_where_it_stands_among_the_choices(bench, operator, sid):
+    answer_all(bench, operator, sid)
+    review = operator.get(f"{GUIDE}/{sid}/review").json()
+    bench.post(operator, "/wb/protocols", {"protocol": review["protocol"]})
+    body = {"protocol_id": review["protocol_id"], "version": review["version"]}
+
+    view = bench.post(operator, f"{GUIDE}/{sid}/saved", body).json()
+
+    chosen = max(step["chosen"]["seq"] for step in view["steps"])
+    assert view["saved"][0]["seq"] == bench.guide.events(sid)[-1].seq > chosen
+
+
 def test_an_unfinished_draft_names_what_is_missing(bench, operator, sid):
     review = operator.get(f"{GUIDE}/{sid}/review").json()
 
