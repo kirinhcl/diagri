@@ -136,6 +136,14 @@
       ],
       "action": true
     },
+    "device_test_restore_failed": {
+      "params": [
+        "greenhouse_id",
+        "channel",
+        "test_id"
+      ],
+      "action": true
+    },
     "run_health": {
       "params": [
         "failures"
@@ -1308,6 +1316,13 @@
       "action": true,
       "of": "right_held"
     },
+    "restore_invalid": {
+      "params": [
+        "detail"
+      ],
+      "action": true,
+      "of": "param"
+    },
     "right_channel": {
       "params": [
         "right_id",
@@ -2411,6 +2426,44 @@
     "plants_not_removed": {
       "params": [
         "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_not_local": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_not_idle": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_running": {
+      "params": [
+        "greenhouse_id",
+        "channel"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_unsettled": {
+      "params": [
+        "greenhouse_id",
+        "test_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_protected": {
+      "params": [
+        "greenhouse_id",
+        "channel"
       ],
       "action": true,
       "of": "state"

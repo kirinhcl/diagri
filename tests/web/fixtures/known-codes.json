@@ -62,7 +62,7 @@
     "stage_review", "stage_manual", "stage_recovery", "stage_paused", "round_choice", "alert", "compute_stuck", "task"
   ],
   "tickStep": [
-    "archive", "executor", "recovery", "observer", "outbox", "tasks", "compute", "report", "backup", "health"
+    "archive", "executor", "recovery", "device_tests", "observer", "outbox", "tasks", "compute", "report", "backup", "health"
   ],
   "probe": [
     "growbridge_response", "executor_evaluation", "capture", "archive_write", "oldest_undelivered_alert",

@@ -155,7 +155,7 @@ def test_the_alert_codes_the_runtime_picks_by_outcome_are_registered() -> None:
     # runtime_agents builds these two families from the outcome; a literal scan cannot see them
     for family in ("agent_task", "audit_task"):
         assert {f"{family}_failed", f"{family}_attention"} <= set(CODES["alert"])
-    assert len(CODES["alert"]) == 33
+    assert len(CODES["alert"]) == 34
 
 
 def literal_text(node: ast.expr | None) -> str | None:

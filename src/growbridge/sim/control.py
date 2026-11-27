@@ -1,19 +1,23 @@
 """In-memory ``ControlPort`` for workflow tests: settable device facts, a log of rights."""
 
+import asyncio
 from collections.abc import Mapping
 
 from growbridge.archive.models import (
     LEVEL_RANGES,
     ActionRecord,
+    ActionState,
     Channel,
     RightKind,
     RunSheet,
     SafetyConfig,
     WriteRight,
 )
+from growbridge.control.service import snapshot_digest
 from growbridge.ports import (
     ActionRequest,
     Capabilities,
+    ChannelSnapshot,
     DeviceState,
     Difference,
     PumpOffTrigger,
@@ -136,6 +140,12 @@ class FakeControl:
     ) -> ActionRecord:
         raise NotImplementedError("FakeControl does not simulate writes")
 
+    async def snapshot(self, channel: Channel) -> ChannelSnapshot:
+        raise NotImplementedError("FakeControl does not simulate writes")
+
+    async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
+        raise NotImplementedError("FakeControl does not simulate writes")
+
     def irrigating(self) -> bool:
         return False
 
@@ -196,3 +206,89 @@ class FakeControl:
 
     def _now(self) -> float:
         return self.clock.now() if self.clock is not None else 0.0
+
+
+class WritingFakeControl(FakeControl):
+    """A ``FakeControl`` that also writes: levels and blocks change in memory, every call is
+    logged. ``fail_restore`` / ``unreadable`` simulate a restore the device did not take and a
+    device that cannot be read; ``refuse`` maps a method name (submit, irrigate, restore) to the
+    ``Denied`` it raises before anything is sent; ``not_taken`` makes a write fail unsent; the
+    gates hold ``snapshot`` and ``handover`` until they are set."""
+
+    def __init__(self, clock=None):
+        super().__init__(clock)
+        self.blocks: dict[Channel, dict] = {}
+        self.fail_restore = False
+        self.unreadable = False
+        self.not_taken = False
+        self.refuse: dict[str, Exception] = {}
+        self.snapshot_gate: asyncio.Event | None = None
+        self.handover_gate: asyncio.Event | None = None
+
+    async def submit(self, request: ActionRequest) -> ActionRecord:
+        self._maybe_refuse("submit")
+        self.log.append(("submit", request.channel, request.level, request.request_id))
+        if self.not_taken:
+            return self._receipt(request, ActionState.FAILED, "not_sent")
+        self.levels[request.channel] = request.level
+        return self._receipt(request, ActionState.CONFIRMED)
+
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
+        self._maybe_refuse("irrigate")
+        self.levels[Channel.PUMP] = 0  # switched on, then off and confirmed
+        self.log.append(("irrigate", seconds, request.request_id))
+        return self._receipt(request, ActionState.CONFIRMED)
+
+    async def handover(self, number: int, reason: str) -> None:
+        if self.handover_gate is not None:
+            self.log.append(("handover_waiting", number, reason))
+            await self.handover_gate.wait()
+        await super().handover(number, reason)
+
+    async def snapshot(self, channel: Channel) -> ChannelSnapshot:
+        if self.snapshot_gate is not None:
+            await self.snapshot_gate.wait()
+        if self.unreadable:
+            raise ConnectionError("simulated: the device cannot be read")
+        block = dict(self.blocks.get(channel, {"modeType": 0}))
+        level = self.levels.get(channel, 0)
+        digest = snapshot_digest(channel, block)
+        return ChannelSnapshot(
+            channel=channel,
+            block=block,
+            level=level,
+            mode=block.get("modeType"),
+            block_digest=digest,
+        )
+
+    async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
+        self._maybe_refuse("restore")
+        self.log.append(("restore", request.channel, request.level, request.request_id))
+        if self.fail_restore:
+            return self._receipt(request, ActionState.FAILED)
+        self.levels[request.channel] = request.level
+        self.blocks[request.channel] = dict(snapshot.block)
+        return self._receipt(request, ActionState.CONFIRMED)
+
+    def _maybe_refuse(self, method: str) -> None:
+        if method in self.refuse:
+            raise self.refuse[method]
+
+    def _receipt(
+        self, request: ActionRequest, state: ActionState, error_code: str | None = None
+    ) -> ActionRecord:
+        right = self.rights[request.right_number]
+        return ActionRecord(
+            error_code=error_code,
+            request_id=request.request_id,
+            state=state,
+            channel=request.channel,
+            planned_level=request.level,
+            right_number=right.number,
+            right_kind=right.kind,
+            trigger=request.trigger,
+            created_at=self._now(),
+            operator=request.operator or right.operator,
+        )

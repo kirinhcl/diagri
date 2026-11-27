@@ -99,6 +99,16 @@ class DeviceState(Model):
     at: float
 
 
+class ChannelSnapshot(Model):
+    """One channel's AC5 configuration block before a device test, to write back unchanged."""
+
+    channel: Channel
+    block: dict[str, Any]  # the module block, or the pump outlet block, as the device had it
+    level: int | None  # the instant read-back level
+    mode: int | None  # the block's modeType
+    block_digest: str  # content digest of channel and block: a restore refuses a changed block
+
+
 class Capabilities(Model):
     version: str
     sensors: dict[str, str]  # sensor name -> unit
@@ -304,6 +314,16 @@ class ControlPort(Protocol):
 
         Never switches the pump on. Raises ``Denied`` before anything is sent.
         """
+        ...
+
+    async def snapshot(self, channel: Channel) -> ChannelSnapshot:
+        """Read one channel's configuration block; needs no right, writes nothing."""
+        ...
+
+    async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
+        """Write a snapshot's block back under a TEST right; confirmed by mode (and level when
+        the mode is manual). Raises ``Denied`` (``restore_invalid``) for any other right or a
+        changed snapshot."""
         ...
 
     async def irrigate(

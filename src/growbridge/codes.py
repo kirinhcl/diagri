@@ -56,6 +56,7 @@ CODES: dict[str, dict[str, Code]] = {
         "intervention_mirror": Code(("intervention_kind",)),
         "stage_waiting": Code(("stage_id", "entry_id", "state", "event", "detail")),
         "task_deadline": Code(("task_id", "project_id", "role")),
+        "device_test_restore_failed": Code(("greenhouse_id", "channel", "test_id")),
         "run_health": Code(("failures",)),
         "external_monitor": Code(("signal",)),
         "backup": Code(),

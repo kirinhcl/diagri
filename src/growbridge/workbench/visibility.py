@@ -5,7 +5,8 @@ checks each rule's routes with two operators. A new read route needs an entry an
 
 - project, stage, round, receipt: the object's project owner (and administrators); anyone else
   gets the route's own answer for an id that does not exist.
-- device: the lock holder of the local greenhouse (and administrators).
+- device: the lock holder of the local greenhouse, or of the greenhouse named (and
+  administrators).
 - alerts, inbox, compute: filtered item by item.
 - public: every signed-in operator (evidence cards are literature, and the device's capabilities
   are the hardware's fixed ranges the forms check against: neither is anyone's data).
@@ -43,6 +44,7 @@ READ_RULES: dict[str, str] = {
     "/wb/stages/{stage_id}/readings": "stage",
     "/wb/stages/{stage_id}/run-sheet": "stage",
     "/wb/greenhouses": "self",
+    "/wb/greenhouses/{greenhouse_id}/tests": "device",  # that greenhouse's holder
     "/wb/admin/operators": "admin",
     "/wb/admin/locks": "admin",
 }

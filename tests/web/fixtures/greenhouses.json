@@ -1,7 +1,11 @@
 {
   "greenhouses": [
-    {"id": "gh-01", "name": "Greenhouse 1", "state": "mine", "locked_at": 1794821000.0, "controlled": true},
-    {"id": "gh-02", "name": "Greenhouse 2", "state": "taken", "locked_at": null, "controlled": false},
-    {"id": "gh-03", "name": "Greenhouse 3", "state": "free", "locked_at": null, "controlled": false}
+    {"id": "gh-01", "name": "Greenhouse 1", "state": "mine", "locked_at": 1794821000.0, "controlled": true,
+     "testable": true, "test_running": null, "test_unsettled": null,
+     "test_seconds": {"light": 10, "exhaust": 10, "fan": 10, "pump": 3}},
+    {"id": "gh-02", "name": "Greenhouse 2", "state": "taken", "locked_at": null, "controlled": false,
+     "testable": false, "test_running": null, "test_unsettled": null, "test_seconds": null},
+    {"id": "gh-03", "name": "Greenhouse 3", "state": "free", "locked_at": null, "controlled": false,
+     "testable": false, "test_running": null, "test_unsettled": null, "test_seconds": null}
   ]
 }

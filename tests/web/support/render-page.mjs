@@ -54,6 +54,7 @@ const ROUTES = [
   [/^\/evidence\/relations$/, () => "evidence-relations.json"],
   [/^\/compute$/, () => "compute.json"],
   [/^\/greenhouses$/, () => "greenhouses.json"],
+  [/^\/greenhouses\/[^/]+\/tests$/, () => "greenhouse-tests.json"],
   [/^\/admin\/operators$/, () => "admin-operators.json"],
   [/^\/admin\/locks$/, () => "admin-locks.json"],
   [/^\/guide\/sessions\/[^/]+$/, () => "guide-session.json"],

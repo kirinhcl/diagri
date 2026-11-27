@@ -9,8 +9,8 @@ right anyway, and ``restore`` grants a fresh one on the next tick. An aborted or
 without a release is not idle: the holder's plants may still be inside.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
 from growbridge.archive.models import RightKind, RuleAction
 from growbridge.ports import ControlPort, IdleRuntime, RightScope
@@ -31,6 +31,7 @@ class IdleCare:
         self.levels = levels
         self._right: int | None = None
         self._starts = 0  # stage starts handing rights back right now
+        self._tests = 0  # device tests running right now
 
     @property
     def right(self) -> int | None:
@@ -62,8 +63,26 @@ class IdleCare:
         finally:
             self._starts -= 1
 
+    @property
+    def stage_starting(self) -> bool:
+        """A stage start is handing rights back: the device is no longer idle (device tests)."""
+        return self._starts > 0
+
+    @asynccontextmanager
+    async def paused(self) -> AsyncIterator[None]:
+        """Around a device test: the idle right is handed back and none is granted or used until
+        it is over; ``restore`` grants a fresh one on the next tick."""
+        self._tests += 1
+        try:
+            if self._valid():
+                assert self._right is not None
+                await self.control.handover(self._right, "device test")
+            yield
+        finally:
+            self._tests -= 1
+
     def _due(self) -> bool:
-        if self._starts or not self.levels:
+        if self._starts or self._tests or not self.levels:
             return False
         last = self.store.last_started_on(self.device_id)
         return last is None or last.care_released

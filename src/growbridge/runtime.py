@@ -63,10 +63,17 @@ from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
-from growbridge.runtime_access import AccessParts, build_access, workbench_access
+from growbridge.runtime_access import (
+    AccessParts,
+    build_access,
+    device_test_step,
+    wire_device_tests,
+    workbench_access,
+)
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_alerts import expire_tasks, stage_alerts
 from growbridge.runtime_backup import Backups
+from growbridge.runtime_compute import build_compute
 from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
 from growbridge.runtime_mirror import InterventionMirror
 from growbridge.service import Bridge
@@ -95,9 +102,6 @@ OUTBOX_CAP_SECONDS = 1800.0
 GIB = 1024**3
 STORAGE_LOW_BYTES = 2 * GIB
 STORAGE_CRITICAL_BYTES = GIB // 2
-# Service-level ceilings until real CSC quotas are known (architecture doc §12.3).
-COMPUTE_CPU_CAP_HOURS = 1000.0
-COMPUTE_STORAGE_CAP_GB = 100.0
 # Run-health limits: age in seconds of the thing each probe watches.
 HEALTH_LIMITS = {
     "growbridge_response": 60.0,
@@ -350,6 +354,7 @@ class Runtime:
             ("archive", self._ingest),
             ("executor", self.executor.tick),
             ("recovery", self._follow_up),
+            ("device_tests", device_test_step(self.access_parts)),
             ("observer", self.observer.tick),
             ("outbox", self._deliver),
             ("tasks", self._expire),
@@ -607,17 +612,6 @@ def _probes(
     }
 
 
-def _compute(
-    backend: Any, db: Database, clock: Clock, snapshots: Path, templates: Any, members: Any
-) -> ComputeService | None:
-    """Inputs are references under ``snapshots``; they stay refused until the input guard is
-    installed (``runtime_compute.install_input_guard``)."""
-    if backend is None:
-        return None
-    caps = (COMPUTE_CPU_CAP_HOURS, COMPUTE_STORAGE_CAP_GB)
-    return ComputeService(db, clock, backend, templates, members, *caps, input_root=snapshots)
-
-
 def build_runtime(
     settings: Settings,
     transport_factory: Callable[[Settings], Any] = make_transport,
@@ -697,7 +691,7 @@ def build_runtime(
         holdout=HoldoutRegistry(dbs["agents"], clock, outcomes, flow.catalog),
         sandbox=sandbox,
         operators=Operators(dbs["workflow"], clock),
-        compute=_compute(
+        compute=build_compute(
             compute_backend,
             dbs["compute"],
             clock,
@@ -721,6 +715,7 @@ def build_runtime(
     executor.watchdog.alert = runtime._alert
     executor.watchdog.resolve = runtime.resolve_alert
     backups.alert = runtime.alert
+    wire_device_tests(parts, executor, runtime)
     return runtime
 
 

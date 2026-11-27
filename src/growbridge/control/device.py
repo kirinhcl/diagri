@@ -179,6 +179,11 @@ class DeviceIO:
             params = self.params(config, channel, level)
         except (BridgeError, ConnectionError, KeyError, TypeError) as error:
             return Outcome(ActionState.FAILED, f"{NOT_SENT}: {error}", error_code="not_sent")
+        failed = await self._send_field(params)
+        return failed or await self.confirm(channel, level)
+
+    async def _send_field(self, params: dict[str, Any]) -> Outcome | None:
+        """Send one ``setConfigField``; the failed outcome, or None once the device answered."""
         try:
             await self.bridge.request("setConfigField", params)
         except BridgeError as error:
@@ -189,7 +194,55 @@ class DeviceIO:
             return Outcome(
                 ActionState.UNKNOWN, f"link broke while sending: {error}", error_code="link_broke"
             )
-        return await self.confirm(channel, level)
+        return None
+
+    # --- whole-block snapshot and restore (device tests) ----------------------------------------
+
+    def key_path(self, channel: Channel) -> tuple[str, str]:
+        """Where a channel's block lives in the configuration file."""
+        if channel is Channel.PUMP:
+            return ("outlet", self._pump_key())
+        return ("device", MODULES[channel])
+
+    async def read_block(self, channel: Channel) -> tuple[dict[str, Any], int | None]:
+        """A copy of the channel's configuration block and its instant level; raises when the
+        device cannot be read or the block is missing."""
+        section, key = self.key_path(channel)
+        block = (await self.bridge.configuration()).get(section, {}).get(key)
+        if not isinstance(block, dict):
+            raise BridgeError(f"{key} is absent from the live configuration")
+        status = await self.bridge.request("getDevSta")
+        return copy.deepcopy(block), self.levels_from(status["data"]).get(channel)
+
+    async def write_block(self, channel: Channel, block: dict[str, Any], level: int) -> Outcome:
+        """Write a whole block back unchanged and read it back. Never raises for device or
+        link trouble."""
+        section, key = self.key_path(channel)
+        failed = await self._send_field({"keyPath": [section, key], key: copy.deepcopy(block)})
+        return failed or await self.confirm_block(channel, block, level)
+
+    async def confirm_block(self, channel: Channel, block: dict[str, Any], level: int) -> Outcome:
+        """Confirmed when the read-back mode is the block's; a manual block also by level. The
+        AC5's own program may change other fields of a non-manual block at any time."""
+        mode = block.get("modeType")
+        if mode == 0:
+            return await self.confirm(channel, level)
+        try:
+            actual = self.modes_from(await self.bridge.configuration()).get(channel)
+        except (BridgeError, ConnectionError, OSError) as error:
+            return Outcome(
+                ActionState.UNKNOWN,
+                f"read-back unavailable: {error}",
+                error_code="readback_unavailable",
+            )
+        if actual != mode:
+            return Outcome(
+                ActionState.FAILED,
+                f"read-back mode is {actual}, expected {mode}",
+                error_code="readback_mode",
+                error_params={"mode": actual},
+            )
+        return CONFIRMED
 
     async def confirm(self, channel: Channel, level: int) -> Outcome:
         try:

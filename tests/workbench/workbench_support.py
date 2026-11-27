@@ -31,11 +31,12 @@ from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SandboxResult
 from growbridge.sim.clock import FakeClock
-from growbridge.sim.control import FakeControl
+from growbridge.sim.control import WritingFakeControl
 from growbridge.sim.fixtures import make_protocol, make_run_sheet
 from growbridge.workbench.api import create_workbench
 from growbridge.workbench.auth import Operators
 from growbridge.workflow.access import Access
+from growbridge.workflow.device_test import DeviceTests
 from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.service import WorkflowService
 from growbridge.workflow.tasks import TaskBoard
@@ -57,7 +58,7 @@ GREENHOUSES = [
 ]
 
 
-class RecordingControl(FakeControl):
+class RecordingControl(WritingFakeControl):
     """FakeControl that records the writes it is asked for and keeps their receipts."""
 
     def __init__(self, clock: Clock):
@@ -99,6 +100,19 @@ class RecordingControl(FakeControl):
 
     def receipt(self, request_id: str) -> ActionRecord | None:
         return self.receipts.get(request_id)
+
+
+class Sleeper:
+    """Stands in for ``asyncio.sleep`` in device tests: records each wait, blocks on ``gate``."""
+
+    def __init__(self):
+        self.calls: list[float] = []
+        self.gate: asyncio.Event | None = None
+
+    async def __call__(self, seconds: float) -> None:
+        self.calls.append(seconds)
+        if self.gate is not None:
+            await self.gate.wait()
 
 
 class ScriptedSandbox:
@@ -168,12 +182,28 @@ class Bench:
         )
         self.locks: GreenhouseLocks | None = None
         self.access: Access | None = None
+        self.device_tests: DeviceTests | None = None
         if multi_user:
             registry = self.settings.greenhouse_registry()
             store = self.workflow.store
             self.locks = GreenhouseLocks(self.db, self.clock, registry, store, self.control)
             self.access = Access(store, self.locks, self.settings.device)
             self.workflow.access = self.access
+            self.sleeper = Sleeper()
+            self.device_tests = DeviceTests(
+                self.db,
+                self.clock,
+                self.control,
+                self.locks,
+                self.access,
+                store,
+                None,
+                sleep=self.sleeper,
+                max_pump_seconds=self.settings.max_pump_seconds,
+            )
+            self.test_alerts: list[tuple] = []
+            self.device_tests.alert = lambda *args, **kwargs: self.test_alerts.append(args)
+            self.locks.tests = self.workflow.device_tests = self.device_tests
         self.router = create_workbench(
             self.workflow,
             self.control,
@@ -192,6 +222,7 @@ class Bench:
             locks=self.locks,
             notes=self.notes,
             guide=self.guide,
+            tests=self.device_tests if multi_user else None,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)
         self.lan = TestClient(self.app, base_url=f"http://{LAN_HOST}:{LAN_PORT}")

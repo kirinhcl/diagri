@@ -150,6 +150,21 @@ A refusal has the body `{"detail": {"code": "...", "message": "..."}}`.
 
 A `422` means the body is malformed: an unknown channel, a level outside the range, `seconds` outside 0 to 60, or a `request_id` in the wrong form. All codes are listed in [Denial codes and stage events](Denial-Codes-and-Events.md).
 
+## Test the devices before a round
+
+With several users (`multi_user` on), whoever holds a greenhouse can check its devices on site before a round starts: the light, the exhaust, the fan and the pump. Open the Greenhouses page in the console; under the list there is a "Device test" block for each greenhouse you hold that this installation drives.
+
+- Each button runs one device for a short time and then puts its settings back exactly as they were, including a timer or program the controller runs by itself. Light and exhaust go to 100, the fan to 10, for 10 seconds. The pump runs for 3 seconds (less if `max_pump_seconds` is lower), after asking you to confirm.
+- The pump test lets water flow even in an empty chamber. Have something to catch it.
+- The server keeps time. Closing the page or losing the connection does not stop the device from being put back.
+- Tests are possible only before a round starts in that greenhouse. During a round, use the takeover above.
+- A device a safety rule is controlling cannot be tested. If a safety rule takes over during a test, the device is left to the rule.
+- The page lists the last 20 tests with who ran them and what happened.
+
+If a test could not put the settings back, the block says so and the greenhouse is held back: no new test, no stage start, and you cannot release it. Check the device on site, then either press "Retry restore" or write what you did and press "I handled it on site". An administrator's forced release also clears it. If the daemon restarts in the middle of a test, it puts the settings back by itself once the device is reachable.
+
+The routes are listed under "Multi-user routes" in [API reference](API-Reference.md).
+
 ## See also
 
 - [Run a research round](Run-a-Research-Round.md)

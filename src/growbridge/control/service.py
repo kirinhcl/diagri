@@ -12,7 +12,7 @@ recovered as "result unknown" and never replayed.
 import asyncio
 import logging
 import math
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from typing import Any
 
 from growbridge.archive.clock import Clock
@@ -41,6 +41,7 @@ from growbridge.control.priority_gate import NORMAL, URGENT, PriorityGate
 from growbridge.ports import (
     ActionRequest,
     Capabilities,
+    ChannelSnapshot,
     Denied,
     DeviceState,
     Difference,
@@ -392,6 +393,38 @@ class ControlService:
             self._recheck(record, request)
             return await self._send(record)
 
+    # --- device tests: snapshot and whole-block restore ----------------------------------------
+
+    async def snapshot(self, channel: Channel) -> ChannelSnapshot:
+        block, level = await self.device.read_block(channel)
+        mode = block.get("modeType")
+        return ChannelSnapshot(
+            channel=channel,
+            block=block,
+            level=level,
+            mode=None if mode is None else int(mode),
+            block_digest=snapshot_digest(channel, block),
+        )
+
+    async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
+        _check_snapshot(request, snapshot)
+        content = {"request": request.model_dump(mode="json"), "snapshot": snapshot.block_digest}
+        fingerprint = content_digest(content)
+        known = self._known(request.request_id, fingerprint)
+        if known is not None:
+            return known
+        right = self._authorize(request)
+        if right.kind is not RightKind.TEST:
+            raise refusals.restore_invalid("a restore needs a test write right")
+        record = rights.intent(request, right, request.level, self.clock.now())
+        self._save(record, fingerprint)
+        async with self.gate.acquire(NORMAL):
+            self._recheck(record, request)
+            update = {"state": ActionState.MAYBE_SENT, "sent_at": self.clock.now()}
+            sent = self._save(record.model_copy(update=update))
+            write = self.device.write_block(snapshot.channel, snapshot.block, request.level)
+            return self._settle(sent, await _guarded(write))
+
     def _supersede_queued(self, channel: Channel) -> None:
         """A protection write has the last word: ordinary writes queued ahead of it on its channel
         would otherwise run after it and undo it. The write already on its way is left alone."""
@@ -522,15 +555,7 @@ class ControlService:
         return self._settle(sent, await self._write(sent.channel, sent.planned_level))
 
     async def _write(self, channel: Channel, level: int) -> Outcome:
-        try:
-            return await self.device.write(channel, level)
-        except Exception as error:
-            log.exception("device write failed unexpectedly")
-            return Outcome(
-                ActionState.UNKNOWN,
-                f"{type(error).__name__}: {error}",
-                error_code="internal_error",
-            )
+        return await _guarded(self.device.write(channel, level))
 
     def _settle(self, record: ActionRecord, outcome: Outcome) -> ActionRecord:
         update: dict[str, Any] = {
@@ -729,9 +754,34 @@ class ControlService:
                 log.exception("record sink rejected action %s", record.request_id)
 
 
+async def _guarded(write: Awaitable[Outcome]) -> Outcome:
+    """A device write's outcome; an unexpected exception becomes an UNKNOWN outcome."""
+    try:
+        return await write
+    except Exception as error:
+        log.exception("device write failed unexpectedly")
+        return Outcome(
+            ActionState.UNKNOWN,
+            f"{type(error).__name__}: {error}",
+            error_code="internal_error",
+        )
+
+
+def snapshot_digest(channel: Channel, block: Mapping[str, Any]) -> str:
+    return content_digest({"channel": channel.value, "block": dict(block)})
+
+
+def _check_snapshot(request: ActionRequest, snapshot: ChannelSnapshot) -> None:
+    if snapshot.block_digest != snapshot_digest(snapshot.channel, snapshot.block):
+        raise refusals.restore_invalid("the snapshot was changed")
+    if request.channel is not snapshot.channel or request.level != (snapshot.level or 0):
+        raise refusals.restore_invalid("the request does not match the snapshot")
+
+
 def _may_irrigate(right: WriteRight, request: ActionRequest, planned: bool) -> bool:
-    """A manual right may irrigate; the stage right only for a planned irrigation of its stage."""
-    if right.kind is RightKind.MANUAL:
+    """A manual or test right may irrigate; the stage right only for a planned irrigation of its
+    stage."""
+    if right.kind in rights.OPERATOR_KINDS:
         return True
     return (
         planned
