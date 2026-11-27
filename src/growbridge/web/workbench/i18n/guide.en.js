@@ -48,6 +48,7 @@ export default {
   "guide.treatments.noFactor": "Choose the factor you change.",
   "guide.measures.lead": "What will you measure?",
   "guide.measures.variables": "Variables",
+  "guide.measures.gone": "No longer offered in the catalog",
   "guide.measures.endpoint": "Main outcome (a variable you measure by hand)",
   "guide.measures.noneChosen": "Choose at least one variable.",
   "guide.measures.noEndpoint": "Choose the main outcome among the hand-measured variables.",

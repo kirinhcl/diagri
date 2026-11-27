@@ -194,6 +194,24 @@ test("the main outcome is chosen among the ticked hand-measured variables", asyn
   assert.deepEqual(body.option_ids, ["canopy_area_growth", "air_temperature"]);
 });
 
+test("a reopened measures step keeps a variable the catalog no longer offers", async () => {
+  const kept = { variables: ["canopy_area_growth", "retired_height"], primary_endpoint: "retired_height" };
+  const view = session(["question", "crop", "treatments", "measures"]);
+  const withOld = { ...view, steps: view.steps.map((e) => (e.step === "measures" ? { ...e, chosen: { ...e.chosen, answer: kept, option_ids: ["canopy_area_growth"] } } : e)) };
+  const answers = { ...answering("measures", view), [`${SESSION_PATH}/steps/measures/reopen`]: () => withOld };
+  const { element, ctx } = await open("measures", { view: withOld, answers, files: { "guide-options-measures.json": OPTIONS.measures } });
+  byTag(railItems(element).find((item) => titleOf(item) === "测量"), "button")[0].dispatchEvent(new Event("click"));
+  await flush();
+  const row = named(element, "variable").find((el) => el.getAttribute("value") === "retired_height");
+  assert.ok(row && row.hasAttribute("checked"));
+  assert.match(text(element), /目录里已不再提供/);
+  pick(element, "variable", "canopy_area_growth");
+  await submit(element);
+  const body = chooseCalls(ctx, "measures")[0].body;
+  assert.deepEqual(body.answer, kept);
+  assert.deepEqual(body.option_ids, ["canopy_area_growth"]);
+});
+
 test("the analysis step prefills the two fractions and sends the method, effect and rules", async () => {
   const { element, ctx } = await open("analysis", { answers: answering("analysis", session(["question", "crop", "treatments", "measures", "analysis"])) });
   assert.equal(named(element, "max_missing_fraction")[0].value, "0.2");

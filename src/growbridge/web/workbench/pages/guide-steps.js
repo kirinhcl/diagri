@@ -230,9 +230,15 @@ function measuresBody(ctx, { session, options, post, box }) {
   const refreshEndpoint = () => {
     if (!group) return;
     const ticked = group.chosen();
-    endpoint.refresh(options.filter((o) => manual.has(o.id) && ticked.includes(o.id)).map((o) => ({ value: o.id, label: labelOf(ctx, o) })));
+    const offered = options.filter((o) => manual.has(o.id) && ticked.includes(o.id)).map((o) => ({ value: o.id, label: labelOf(ctx, o) }));
+    const keptEndpoint = gone.filter((id) => ticked.includes(id) && id === before.primary_endpoint).map((id) => ({ value: id, label: id }));
+    endpoint.refresh([...offered, ...keptEndpoint]);
   };
-  const items = options.map((o) => ({ id: o.id, label: labelOf(ctx, o) }));
+  // Variables chosen before that the catalog no longer offers stay on the card, ticked, until the person unticks them.
+  const offeredIds = new Set(options.map((o) => o.id));
+  const gone = array(before.variables).filter((id) => !offeredIds.has(id));
+  const goneNote = ctx.t("guide.measures.gone");
+  const items = [...options.map((o) => ({ id: o.id, label: labelOf(ctx, o) })), ...gone.map((id) => ({ id, label: id, hint: goneNote }))];
   group = choiceGroup({ name: "variable", legend: ctx.t("guide.measures.variables"), kind: "checkbox", items, selected: array(before.variables), onChange: refreshEndpoint });
   refreshEndpoint();
   const submit = async () => {
@@ -240,7 +246,7 @@ function measuresBody(ctx, { session, options, post, box }) {
     endpoint.fail("");
     if (variables.length === 0) return refuse(box, ctx.t("guide.measures.noneChosen"));
     if (!endpoint.value()) return endpoint.fail(ctx.t("guide.measures.noEndpoint"));
-    return post({ variables, primary_endpoint: endpoint.value() }, variables);
+    return post({ variables, primary_endpoint: endpoint.value() }, variables.filter((id) => offeredIds.has(id)));
   };
   return { content: [group.element, endpoint.row], submit };
 }

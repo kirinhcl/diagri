@@ -48,6 +48,7 @@ export default {
   "guide.treatments.noFactor": "请选出你改变的因子。",
   "guide.measures.lead": "你要测量什么？",
   "guide.measures.variables": "变量",
+  "guide.measures.gone": "目录里已不再提供",
   "guide.measures.endpoint": "主要终点（手工测量的变量）",
   "guide.measures.noneChosen": "至少选一个变量。",
   "guide.measures.noEndpoint": "请在手工测量的变量里选出主要终点。",
