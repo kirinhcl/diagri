@@ -17,11 +17,13 @@ const RESULT_KEYS = {
   restored: "greenhouses.tests.result.restored",
   restore_failed: "greenhouses.tests.result.restoreFailed",
   protected: "greenhouses.tests.result.protected",
+  not_run: "greenhouses.tests.result.notRun",
 };
 const SHORT_KEYS = {
   restored: "greenhouses.tests.short.restored",
   restore_failed: "greenhouses.tests.short.restoreFailed",
   protected: "greenhouses.tests.short.protected",
+  not_run: "greenhouses.tests.short.notRun",
 };
 
 const base = (row) => `/greenhouses/${encodeURIComponent(row.id)}`;

@@ -24,7 +24,8 @@ from growbridge.archive.ids import new_id
 from growbridge.archive.models import ActionRecord, ActionState, Channel, Model, RightKind
 from growbridge.config import Greenhouse
 from growbridge.control import refusals
-from growbridge.ports import ActionRequest, Actor, ChannelSnapshot, ControlPort, RightScope
+from growbridge.control.device import changed_nothing
+from growbridge.ports import ActionRequest, Actor, ChannelSnapshot, ControlPort, Denied, RightScope
 from growbridge.service import BridgeError
 from growbridge.workflow import denials as workflow_denials
 from growbridge.workflow import device_test_denials as denials
@@ -57,12 +58,20 @@ class DeviceTestRecord(Model):
     channel: Channel
     operator: str
     state: str  # running, done, restore_failed, settled_onsite
-    result: str | None = None  # restored, restore_failed, protected
+    result: str | None = None  # restored, restore_failed, protected, not_run
     snapshot: ChannelSnapshot | None = None
     right_number: int | None = None
     started_at: float
     ended_at: float | None = None
     note: str = ""
+
+
+class _NothingWritten(Exception):
+    """A test stopped before anything reached the device; ``error`` is the refusal to raise."""
+
+    def __init__(self, error: Denied):
+        super().__init__(str(error))
+        self.error = error
 
 
 def _ignore(*_args: Any, **_kwargs: Any) -> None:
@@ -147,18 +156,25 @@ class DeviceTests:
     async def run(self, greenhouse_id: str, channel: Channel, actor: Actor) -> dict[str, Any]:
         house = self._check(greenhouse_id, channel, actor)
         record = self._begin(house, channel, actor)
+        self._active.add(record.test_id)  # from here on a tick's resume() leaves the row alone
         try:
-            snapshot = await self.control.snapshot(channel)
-        except BaseException as error:
-            self.db.execute("DELETE FROM device_tests WHERE test_id = ?", (record.test_id,))
-            if isinstance(error, (BridgeError, ConnectionError, OSError)):
-                raise refusals.no_live_link(house.device_id) from error
-            raise
-        self._active.add(record.test_id)
-        try:
+            snapshot = await self._snapshot(record)
             return await self._exercise(record, snapshot)
+        except _NothingWritten as stop:
+            self._drop(record)
+            raise stop.error from None
         finally:
             self._active.discard(record.test_id)
+
+    async def _snapshot(self, record: DeviceTestRecord) -> ChannelSnapshot:
+        try:
+            return await self.control.snapshot(record.channel)
+        except (BridgeError, ConnectionError, OSError) as error:
+            raise _NothingWritten(refusals.no_live_link(record.device_id)) from error
+
+    def _drop(self, record: DeviceTestRecord) -> None:
+        """Nothing reached the device: the test leaves no record."""
+        self.db.execute("DELETE FROM device_tests WHERE test_id = ?", (record.test_id,))
 
     def _check(self, greenhouse_id: str, channel: Channel, actor: Actor) -> Greenhouse:
         """Every refusal comes before anything is written or stored."""
@@ -171,7 +187,8 @@ class DeviceTests:
         return house
 
     def _check_state(self, house: Greenhouse, channel: Channel) -> None:
-        if not self.idle_device(house.device_id):
+        starting = self.idle is not None and self.idle.stage_starting
+        if starting or not self.idle_device(house.device_id):
             raise denials.not_idle(house.id)
         self._check_free(house)
         if channel in self.protected():
@@ -212,19 +229,36 @@ class DeviceTests:
 
     async def _exercise(self, record: DeviceTestRecord, snapshot: ChannelSnapshot) -> dict:
         actions: list[str] = []
-        result = "restore_failed"
         async with self._idle_paused():
-            right = self._grant(record, snapshot)
             try:
-                switched = await self._switch_on(record, right)
-                actions.append(switched.request_id)
-                if switched.state is ActionState.CONFIRMED and record.channel is not Channel.PUMP:
-                    await self.sleep(TEST_SECONDS)
+                right = self._grant(record, snapshot)
+            except Denied as error:
+                raise _NothingWritten(error) from None
+            try:
+                result = await self._run_on(record, right, snapshot, actions)
             finally:
-                result = await self._put_back(record, right, snapshot, actions)
                 await self.control.handover(right, "device test")
-                self._finish(record, result)
+        self._finish(record, result)
         return self._reply(record, result, actions)
+
+    async def _run_on(
+        self, record: DeviceTestRecord, right: int, snapshot: ChannelSnapshot, actions: list[str]
+    ) -> str:
+        """Switch on, wait, put back. A refusal before the write means nothing was written."""
+        try:
+            switched = await self._switch_on(record, right)
+        except Denied as error:
+            raise _NothingWritten(error) from None
+        actions.append(switched.request_id)
+        if changed_nothing(switched.state, switched.error, switched.error_code):
+            return "not_run"  # the device did not take the test value: nothing to put back
+        if switched.state is ActionState.CONFIRMED and record.channel is not Channel.PUMP:
+            await self.sleep(TEST_SECONDS)
+        try:
+            return await self._put_back(record, right, snapshot, actions)
+        except Denied:
+            log.exception("device test %s: restore refused", record.test_id)
+            return "restore_failed"
 
     def _idle_paused(self):
         return self.idle.paused() if self.idle is not None else nullcontext()
@@ -257,8 +291,10 @@ class DeviceTests:
         request = self._request(record, right, request_id, snapshot.level or 0)
         try:
             restored = await self.control.restore(request, snapshot)
+        except Denied:
+            raise  # refused before anything was sent: the caller decides
         except Exception:
-            log.exception("device test %s: restore refused or failed", record.test_id)
+            log.exception("device test %s: restore failed", record.test_id)
             return "restore_failed"
         actions.append(restored.request_id)
         return "restored" if restored.state is ActionState.CONFIRMED else "restore_failed"
@@ -333,16 +369,20 @@ class DeviceTests:
             self._mark_settled(record, actor, note)
 
     async def resume(self) -> None:
-        """Each runtime tick: one restore attempt for every test a restart left running, once
-        the device link is usable."""
+        """Each runtime tick: a restore attempt for every test a restart left running, once the
+        device link is usable. A refusal (still starting, stale link) leaves it for a later tick."""
         ready = self.control.connected() and self.control.transport_stopped()
         if not ready or self.control.interlocked():
             return
         rows = self.db.query("SELECT test_id FROM device_tests WHERE state = 'running'")
         for row in rows:
             record = self.record(row["test_id"])
-            if record is not None and record.test_id not in self._active:
+            if record is None or record.test_id in self._active:
+                continue
+            try:
                 await self._restore_again(record, [])
+            except Denied as refusal:
+                log.info("device test %s: restore waits (%s)", record.test_id, refusal.reason)
 
     def _own_open(self, greenhouse_id: str, test_id: str, actor: Actor) -> DeviceTestRecord:
         house = self.locks.greenhouse(greenhouse_id)
@@ -358,9 +398,10 @@ class DeviceTests:
         return record
 
     async def _restore_again(self, record: DeviceTestRecord, actions: list[str]) -> str:
+        """Write a stored snapshot back under a fresh right; a refusal propagates unchanged."""
         if record.snapshot is None:  # cut off before anything was written
-            self._finish(record, "restored", resolve=True)
-            return "restored"
+            self._drop(record)
+            return "not_run"
         self._active.add(record.test_id)
         try:
             async with self._idle_paused():

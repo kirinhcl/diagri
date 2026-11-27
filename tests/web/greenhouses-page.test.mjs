@@ -107,6 +107,16 @@ test("a running test disables every button until the reply, then shows the resul
   assert.ok(ctx.api.calls.some((c) => c.method === "POST" && c.path === "/greenhouses/gh-01/test/light"));
 });
 
+test("a test the device did not take says nothing changed", async () => {
+  const answers = { "/greenhouses/gh-01/test/fan": () => ({ test_id: "t", channel: "fan", test_level: 10, seconds: 10, result: "not_run", actions: [] }) };
+  const { element } = await renderPage("greenhouses", {}, { lang: "en", answers });
+
+  testButtons(element).find((b) => /fan/.test(b.textContent)).dispatchEvent(new Event("click"));
+  await flush();
+
+  assert.match(visibleText(element), /did not take the test value/);
+});
+
 test("the pump asks for confirmation first", async () => {
   const { element, ctx } = await renderPage("greenhouses", {}, { lang: "en" });
   const pump = testButtons(element).find((b) => /pump/.test(b.textContent));

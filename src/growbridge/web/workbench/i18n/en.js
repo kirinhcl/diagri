@@ -697,6 +697,8 @@ export default {
   "greenhouses.tests.result.restored": "Done: the settings were put back and the controller confirmed them.",
   "greenhouses.tests.result.restoreFailed": "Not put back: check the device on site.",
   "greenhouses.tests.result.protected": "A safety rule took over this device during the test; it is left to the rule.",
+  "greenhouses.tests.result.notRun": "The device did not take the test value; nothing changed. Check the connection and try again.",
+  "greenhouses.tests.short.notRun": "Not run",
   "greenhouses.tests.busy": "A round has started in this greenhouse, so tests are unavailable.",
   "greenhouses.tests.unsettled": "The last test could not put the settings back ({device}). Check the device on site first.",
   "greenhouses.tests.retry": "Retry restore",

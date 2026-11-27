@@ -697,6 +697,8 @@ export default {
   "greenhouses.tests.result.restored": "完成：已恢复原来的设置，控制器已确认。",
   "greenhouses.tests.result.restoreFailed": "未能恢复：请到现场检查设备。",
   "greenhouses.tests.result.protected": "测试中安全规则接管了这个设备，已交给安全规则。",
+  "greenhouses.tests.result.notRun": "设备没有接受测试值，什么都没有改变。请检查连接后再试。",
+  "greenhouses.tests.short.notRun": "未运行",
   "greenhouses.tests.busy": "这个温室的实验已开始，测试不可用。",
   "greenhouses.tests.unsettled": "上一次测试没能恢复原来的设置（{device}）。请先到现场检查设备。",
   "greenhouses.tests.retry": "重试还原",
