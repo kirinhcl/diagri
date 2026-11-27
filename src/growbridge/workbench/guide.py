@@ -22,7 +22,7 @@ from growbridge.guide.compose import (
     review,
 )
 from growbridge.guide.draft import carried_answers, latest_chosen, step_states
-from growbridge.guide.options import options_for
+from growbridge.guide.options import option_in_answer, options_for
 from growbridge.guide.steps import (
     ANSWERED,
     MAX_BLOCKS,
@@ -183,6 +183,9 @@ class _Guide:
             raise _invalid(step, "that choice was not offered for this step")
         declared = self.base(session, events).declared_before
         answer = self._checked(step, body.answer, declared)
+        picked = [o for o in offered.options if o.id in body.option_ids]
+        if not all(option_in_answer(step, option, answer) for option in picked):
+            raise _invalid(step, "a chosen option is not in the answer")
         source = "system" if body.option_ids else "own"
         chosen = {"answer": answer, "source": source, "option_ids": list(body.option_ids)}
         offer = {"options": [o.model_dump(mode="json") for o in offered.options]}

@@ -139,6 +139,28 @@ test("a crop outside the table is typed, with the NCBI lookup opening in a new t
   assert.deepEqual(call.body, { answer: { crop: "Rocket", crop_taxon: "NCBITaxon:3707" }, option_ids: [] });
 });
 
+test("the crop card shows the cultivar and the batch, and sends them", async () => {
+  const { element, ctx } = await open("crop", { answers: answering("crop", session(["question", "crop"])) });
+  assert.match(text(element), /品种/);
+  assert.match(text(element), /批次/);
+  pick(element, "crop", "lettuce");
+  change(named(element, "cultivar")[0], "Butterhead");
+  change(named(element, "batch")[0], "B-7");
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "crop")[0].body, { answer: { crop: "Lettuce", crop_taxon: "NCBITaxon:4236", cultivar: "Butterhead", batch: "B-7" }, option_ids: ["lettuce"] });
+  const en = await open("crop", { lang: "en" });
+  assert.match(text(en.element), /Cultivar/);
+  assert.match(text(en.element), /Batch/);
+});
+
+test("a reopened crop step shows the cultivar and the batch it was given", async () => {
+  const answer = { crop: "Lettuce", crop_taxon: "NCBITaxon:4236", cultivar: "Butterhead", batch: "B-7" };
+  const view = session(ALL, { status: { crop: "needs_review" }, answers: { crop: answer } });
+  const { element } = await open("crop", { view });
+  assert.equal(named(element, "cultivar")[0].value, "Butterhead");
+  assert.equal(named(element, "batch")[0].value, "B-7");
+});
+
 test("the crop names follow the language of the page", async () => {
   const zh = await open("crop", { lang: "zh" });
   assert.match(text(zh.element), /生菜/);
@@ -165,6 +187,18 @@ test("the treatments step sends the factor, the rows and the control", async () 
   change(named(element, "control")[0], "control");
   await submit(element);
   assert.deepEqual(chooseCalls(ctx, "treatments")[0].body, { answer: ANSWERS.treatments, option_ids: ["light"] });
+});
+
+test("each treatment's description is on the card and is sent", async () => {
+  const described = { ...ANSWERS.treatments, treatments: ANSWERS.treatments.treatments.map((row) => ({ ...row, description: `about ${row.id}` })) };
+  const view = session(ALL, { status: { treatments: "needs_review" }, answers: { treatments: described } });
+  const { element, ctx } = await open("treatments", { view, answers: answering("treatments", view) });
+  const fields = named(element, "description");
+  assert.deepEqual(fields.map((input) => input.value), ["about control", "about high"]);
+  change(fields[1], "under shade cloth");
+  await submit(element);
+  const sent = chooseCalls(ctx, "treatments")[0].body.answer.treatments;
+  assert.deepEqual(sent.map((row) => row.description), ["about control", "under shade cloth"]);
 });
 
 test("two treatments with the same ID are refused beside the field", async () => {
@@ -224,6 +258,22 @@ test("the analysis step prefills the two fractions and sends the method, effect 
     answer: { ...ANSWERS.analysis, exclusion_rules: ["tent 3 failed"] },
     option_ids: ["paired_block"],
   });
+});
+
+test("a carried script hash is shown read-only on the analysis card, and sent", async () => {
+  const hash = "a".repeat(64);
+  const view = session(ALL, { status: { analysis: "needs_review" }, answers: { analysis: { ...ANSWERS.analysis, script_sha256: hash } } });
+  const { element, ctx } = await open("analysis", { view, answers: answering("analysis", view) });
+  assert.ok(byClass(element, "tech-details").some((node) => node.textContent.includes(hash)), "the hash sits in the technical details");
+  assert.match(text(element), /上一版声明了分析脚本的哈希/);
+  assert.equal(named(element, "script_sha256").length, 0, "not an editable field");
+  await submit(element);
+  assert.equal(chooseCalls(ctx, "analysis")[0].body.answer.script_sha256, hash);
+});
+
+test("an analysis without a hash shows no technical details for it", async () => {
+  const { element } = await open("analysis");
+  assert.equal(byClass(element, "tech-details").length, 0);
 });
 
 test("a step to recheck says so", async () => {
@@ -389,6 +439,28 @@ test("a carried allocation table is dropped when the blocks change, and the seed
   assert.equal(answer.blocks, 3);
   assert.equal(answer.randomization_seed, 5);
   assert.equal(Object.hasOwn(answer, "allocations"), false);
+});
+
+test("the scale card says whether the hand-written table is kept or made again from the seed", async () => {
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale: CARRIED_SCALE } });
+  for (const [lang, kept, redrawn] of [
+    ["zh", /沿用上一版手写的分配表/, /按随机种子重新生成/],
+    ["en", /The last version's hand-written allocation table is kept/, /made again from the random seed/],
+  ]) {
+    const { element } = await open("scale", { view, lang });
+    assert.match(text(element), kept, lang);
+    assert.doesNotMatch(text(element), redrawn, lang);
+    change(named(element, "blocks")[0], "3");
+    assert.match(text(element), redrawn, lang);
+    assert.doesNotMatch(text(element), kept, lang);
+    change(named(element, "blocks")[0], "2");
+    assert.match(text(element), kept, lang);
+  }
+});
+
+test("a scale without a kept table says nothing about one", async () => {
+  const { element } = await open("scale");
+  assert.equal(byClass(element, "guide-table-note")[0].children.length, 0);
 });
 
 test("a carried treatment with two factors keeps the other factor when re-saved", async () => {

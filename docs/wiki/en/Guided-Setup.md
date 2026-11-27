@@ -29,11 +29,11 @@ You write the research question, and the hypothesis if you have one. The system 
 
 ### 2. Crop
 
-The system offers a list of crops it knows. You choose one, or enter your own species name and its NCBI Taxonomy ID (the page links to the NCBI lookup).
+The system offers a list of crops it knows. You choose one, or enter your own species name and its NCBI Taxonomy ID (the page links to the NCBI lookup). The cultivar and the batch are typed in their own fields on the same card.
 
 ### 3. Treatments
 
-You choose the factor you change, give each treatment a short ID, a name and a level, and say which treatment is the control. The other factors stay as they were.
+You choose the factor you change, give each treatment a short ID, a name, a level and, if you like, a description, and say which treatment is the control. The other factors stay as they were.
 
 ### 4. Measurements
 
@@ -63,7 +63,7 @@ Every answer in the draft panel carries a mark:
 
 | Mark | Meaning |
 | --- | --- |
-| From the list | You chose one of the options the system offered. |
+| From the list | You took one of the options the system offered, and its value is in the answer (the server checks this). Values you typed beside it on the same card, such as the cultivar and batch beside a listed crop or the levels and descriptions of a listed factor, are part of the same answer and carry the same mark. |
 | Your own | You typed the value yourself. |
 | Kept from the last version | You started from a protocol the project already had and did not change this value. |
 

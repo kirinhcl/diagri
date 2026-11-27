@@ -6,7 +6,7 @@ import { textOr } from "../i18n.js";
 import { h } from "../ui/dom.js";
 import { linesField, rowGroup } from "../ui/field-forms.js";
 import { convert, fieldRow, initialText, setFieldError } from "../ui/forms.js";
-import { errorBox, note, section, showErrors } from "../ui/section.js";
+import { errorBox, note, section, showErrors, techDetails } from "../ui/section.js";
 import { findingsList } from "./stage-actions.js";
 
 const OTHER = "__other__";
@@ -132,15 +132,22 @@ function cropBody(ctx, { session, options, post, box }) {
   const sync = () => typed.toggleAttribute("hidden", group.chosen()[0] !== OTHER);
   const group = choiceGroup({ name: "crop", legend: ctx.t("guide.step.crop"), items, selected: start.selected, onChange: sync });
   sync();
-  const extras = carried(prev && prev.answer, ["cultivar", "batch"]);
+  // Typed beside the choice and part of the same answer, so they are always on the card.
+  const moreSpecs = [
+    { name: "cultivar", label: ctx.t("guide.crop.cultivar") },
+    { name: "batch", label: ctx.t("guide.crop.batch") },
+  ];
+  const more = fieldSet(ctx, moreSpecs, carried(prev && prev.answer, ["cultivar", "batch"]));
   const submit = async () => {
     const [picked] = group.chosen();
     if (!picked) return refuse(box, ctx.t("guide.crop.choose"));
+    const extras = more.read();
+    if (!extras) return null;
     if (picked !== OTHER) return post({ ...options.find((o) => o.id === picked).value, ...extras }, [picked]);
     const values = own.read();
     return values ? post({ crop: values.crop_name, crop_taxon: values.crop_taxon, ...extras }, []) : null;
   };
-  return { content: [group.element, typed], submit };
+  return { content: [group.element, typed, ...more.rows], submit };
 }
 
 // --- treatments --------------------------------------------------------------------------------------
@@ -169,6 +176,7 @@ function treatmentRowFields(ctx) {
     { name: "id", label: ctx.t("guide.treatments.id"), required: true, parse: trimmed },
     { name: "name", label: ctx.t("guide.treatments.name"), required: true, parse: trimmed },
     { name: "level", label: ctx.t("guide.treatments.level"), type: "number", required: true },
+    { name: "description", label: ctx.t("guide.treatments.description") },
   ];
 }
 
@@ -219,7 +227,7 @@ function treatmentsBody(ctx, { session, options, post, box }) {
     name: "rows",
     label: ctx.t("guide.treatments.rows"),
     fields: treatmentRowFields(ctx),
-    rows: rowsBefore.map((row) => ({ id: row.id, name: row.name, level: (row.factors || {})[factorKey] })),
+    rows: rowsBefore.map((row) => ({ id: row.id, name: row.name, level: (row.factors || {})[factorKey], description: row.description || "" })),
     addLabel: ctx.t("guide.treatments.add"),
     removeLabel: ctx.t("guide.treatments.remove"),
     minRows: 2,
@@ -237,8 +245,7 @@ function treatmentsBody(ctx, { session, options, post, box }) {
     if (!found) return null;
     if (!control.value()) return control.fail(ctx.t("guide.treatments.noControl"));
     const prior = new Map(rowsBefore.map((row) => [row.id, row]));
-    const described = new Map(rowsBefore.map((row) => [row.id, row.description || ""]));
-    const treatments = found.map((row) => ({ id: row.id, name: row.name, description: described.get(row.id) || "", factors: { ...otherFactors(prior.get(row.id) || {}, picked), [picked]: row.level } }));
+    const treatments = found.map((row) => ({ id: row.id, name: row.name, description: row.description ?? "", factors: { ...otherFactors(prior.get(row.id) || {}, picked), [picked]: row.level } }));
     return post({ treatments, control_treatment_id: control.value() }, [picked]);
   };
   return { content: [factor.element, group.element, kept.element, control.row], submit };
@@ -299,7 +306,13 @@ function analysisBody(ctx, { session, options, defaults, post, box }) {
     if (!picked) return refuse(box, ctx.t("guide.analysis.noMethod"));
     return values ? post({ exclusion_rules: [], ...values, method: picked, ...carried(before, ["script_sha256"]) }, [picked]) : null;
   };
-  return { content: [method.element, ...fields.rows], submit };
+  return { content: [method.element, ...fields.rows, carriedHash(ctx, before.script_sha256)], submit };
+}
+
+// A script hash an earlier version declared goes back with the answer; it is shown, never edited here.
+function carriedHash(ctx, hash) {
+  if (!hash) return null;
+  return h("div", { class: "guide-analysis-hash" }, note(ctx.t("guide.analysis.hash")), techDetails(ctx.t, [[ctx.t("analysis.sha"), hash]]));
 }
 
 // --- scale -------------------------------------------------------------------------------------------
@@ -315,13 +328,14 @@ function scaleFields(ctx) {
 }
 
 // The standard deviation field and the two buttons that fill the number of blocks (or rounds).
-function helper(ctx, { session, box, activeCount }) {
+function helper(ctx, { session, box, activeCount, changed }) {
   const spread = fieldSet(ctx, [{ name: "sd", label: ctx.t("guide.scale.sd"), hint: ctx.t("guide.scale.sdHint"), type: "number" }]);
   const analysis = answerOf(session, "analysis");
   const known = analysis.target_effect !== undefined && Boolean(analysis.method);
   const pilot = h("div", { class: "guide-pilot" });
   const fill = (n) => {
     activeCount().input.value = String(n);
+    changed();
   };
   const button = (cls, text, click) => h("button", { class: ["button", cls], attrs: { type: "button", disabled: cls === "guide-estimate" && !known }, text, on: { click } });
   const estimate = async () => {
@@ -385,6 +399,21 @@ function tableStillFits(session, before, layout, values) {
   return same(values.units, before.units) && values[count] === before[count] && sameTreatments;
 }
 
+const linesOf = (text) => String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+// Says, as the person edits, whether a carried hand-written table goes back as it is or is made again from the seed.
+function tableNote(ctx, { session, before, current }) {
+  const element = h("div", { class: "guide-table-note" });
+  const redraw = () => {
+    if (array(before.allocations).length === 0) return;
+    const { layout, values } = current();
+    const key = tableStillFits(session, before, layout, values) ? "guide.scale.tableKept" : "guide.scale.tableRedrawn";
+    element.replaceChildren(note(ctx.t(key)));
+  };
+  redraw();
+  return { element, redraw };
+}
+
 function scaleBody(ctx, { session, options, defaults, post, box, extra, base, done }) {
   const before = answerOf(session, "scale");
   const layouts = options.map((o) => ({ id: o.id, label: labelOf(ctx, o) }));
@@ -392,11 +421,16 @@ function scaleBody(ctx, { session, options, defaults, post, box, extra, base, do
   const fields = fieldSet(ctx, scaleFields(ctx), before);
   const isSeries = () => layout.chosen()[0] !== "tents";
   const activeCount = () => fields.entry(isSeries() ? "blocks" : "rounds");
+  let table = null;
   const sync = () => {
     fields.entry("blocks").row.toggleAttribute("hidden", !isSeries());
     fields.entry("rounds").row.toggleAttribute("hidden", isSeries());
+    if (table) table.redraw();
   };
   const layout = choiceGroup({ name: "layout", legend: ctx.t("guide.scale.layout"), items: layouts, selected: first ? [first] : [], onChange: sync });
+  const current = () => ({ layout: layout.chosen()[0], values: { units: linesOf(fields.entry("units").input.value), [isSeries() ? "blocks" : "rounds"]: Number(activeCount().input.value) } });
+  table = tableNote(ctx, { session, before, current });
+  for (const name of ["blocks", "rounds", "units"]) for (const kind of ["input", "change"]) fields.entry(name).input.addEventListener(kind, table.redraw);
   sync();
   const seed = before.randomization_seed ?? defaults.randomization_seed;
   const submit = async () => {
@@ -409,8 +443,8 @@ function scaleBody(ctx, { session, options, defaults, post, box, extra, base, do
     await checkDesign(ctx, { base, extra, box, done, view });
   };
   const count = [fields.entry("blocks").row, fields.entry("rounds").row];
-  const rest = [fields.entry("units").row, fields.entry("stages").row, seed === undefined ? null : seedRow(ctx, seed)];
-  return { content: [layout.element, ...count, helper(ctx, { session, box, activeCount }), ...rest], submit };
+  const rest = [fields.entry("units").row, fields.entry("stages").row, seed === undefined ? null : seedRow(ctx, seed), table.element];
+  return { content: [layout.element, ...count, helper(ctx, { session, box, activeCount, changed: table.redraw }), ...rest], submit };
 }
 
 // --- the card ----------------------------------------------------------------------------------------

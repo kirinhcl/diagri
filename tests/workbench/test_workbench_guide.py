@@ -114,6 +114,44 @@ def test_an_option_that_was_not_offered_is_refused(bench, operator, sid):
     assert len(bench.guide.events(sid)) == before
 
 
+@pytest.mark.parametrize(
+    ("step", "answer", "picked"),
+    [
+        ("crop", {"crop": "Lettuce", "crop_taxon": "NCBITaxon:3707"}, "lettuce"),
+        ("crop", {"crop": "Rocket", "crop_taxon": "NCBITaxon:4236"}, "lettuce"),
+        (
+            "treatments",
+            {
+                **TREATMENTS,
+                "treatments": [TREATMENTS["treatments"][0], {"id": "high", "name": "x"}],
+            },
+            "light",
+        ),
+        ("analysis", ANSWERS["analysis"], "two_group"),
+        ("scale", ANSWERS["scale"], "tents"),
+    ],
+)
+def test_a_picked_option_must_be_in_the_answer(bench, operator, sid, step, answer, picked):
+    before = len(bench.guide.events(sid))
+
+    r = choose(bench, operator, sid, step, answer, [picked])
+
+    assert r.status_code == 422 and detail(r)["reason"] == "guide_answer_invalid"
+    assert detail(r)["params"] == {"step": step}
+    assert len(bench.guide.events(sid)) == before
+
+
+def test_a_picked_variable_must_be_one_of_the_variables(bench, operator, sid):
+    ids = [o["id"] for o in operator.get(f"{GUIDE}/{sid}/steps/measures").json()["options"]]
+    other = next(i for i in ids if i != "canopy_area_growth")
+
+    r = choose(bench, operator, sid, "measures", ANSWERS["measures"], [other])
+    kept = choose(bench, operator, sid, "measures", ANSWERS["measures"], ["canopy_area_growth"])
+
+    assert r.status_code == 422 and detail(r)["params"] == {"step": "measures"}
+    assert kept.status_code == 200
+
+
 def test_a_step_outside_the_list_is_refused(bench, operator, sid):
     assert operator.get(f"{GUIDE}/{sid}/steps/dinner").status_code == 422
     assert choose(bench, operator, sid, "dinner", {}).status_code == 422

@@ -3,7 +3,7 @@ from datetime import date
 from vocab_support import TEST_CATALOG
 
 from growbridge.guide.crops import CHECKED_ON, CROPS
-from growbridge.guide.options import options_for
+from growbridge.guide.options import option_in_answer, options_for
 from growbridge.guide.steps import STEPS
 from growbridge.vocab.curie import taxon_problems
 
@@ -64,6 +64,32 @@ def test_steps_without_choices_offer_nothing():
     for step in ("question", "review", "round"):
         o = options_for(step, TEST_CATALOG, 7)
         assert (o.step, o.options, o.defaults) == (step, (), {})
+
+
+def offered(step, option_id):
+    return next(o for o in options_for(step, TEST_CATALOG, 7).options if o.id == option_id)
+
+
+def rows(*factors):
+    return {"treatments": [{"id": f"t{i}", "factors": f} for i, f in enumerate(factors)]}
+
+
+def test_a_picked_option_is_in_the_answer_only_with_its_value():
+    lettuce = offered("crop", "lettuce")
+    assert option_in_answer("crop", lettuce, {"crop": "Lettuce", "crop_taxon": "NCBITaxon:4236"})
+    assert not option_in_answer("crop", lettuce, {"crop": "Lettuce", "crop_taxon": "NCBITaxon:1"})
+    assert not option_in_answer("crop", lettuce, {"crop": "Rocket", "crop_taxon": "NCBITaxon:4236"})
+    light = offered("treatments", "light")
+    assert option_in_answer("treatments", light, rows({"light": 40}, {"light": 70, "co2": 1}))
+    assert not option_in_answer("treatments", light, rows({"light": 40}, {"co2": 1}))
+    endpoint = offered("measures", "canopy_area_growth")
+    assert option_in_answer("measures", endpoint, {"variables": ["canopy_area_growth"]})
+    assert not option_in_answer("measures", endpoint, {"variables": ["air_temperature"]})
+    assert option_in_answer("analysis", offered("analysis", "two_group"), {"method": "two_group"})
+    assert not option_in_answer("analysis", offered("analysis", "two_group"), {"method": "x"})
+    assert option_in_answer("scale", offered("scale", "tents"), {"layout": "tents"})
+    assert not option_in_answer("scale", offered("scale", "tents"), {"layout": "series"})
+    assert not option_in_answer("question", lettuce, {"question": "Q"})
 
 
 def test_options_are_a_pure_function_and_never_mention_ai():

@@ -1,6 +1,7 @@
 """What a guided step offers to choose from. Options come from the system only (the catalog, a
 checked crop table, fixed lists), never from a model. Pure: same input, same options, same order."""
 
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from growbridge.archive.models import Model
@@ -82,6 +83,30 @@ def _scale_options() -> tuple[Option, ...]:
             label_zh="多帐篷并行",
         ),
     )
+
+
+def _factor_in_every_treatment(value: Mapping[str, Any], answer: Mapping[str, Any]) -> bool:
+    return all(value["factor"] in row.get("factors", {}) for row in answer["treatments"])
+
+
+# Per step: whether a picked option's value is in the answer, so "from the list" stays true of it.
+_IN_ANSWER: Mapping[str, Callable[[Mapping[str, Any], Mapping[str, Any]], bool]] = {
+    "crop": lambda value, answer: (
+        answer["crop"] == value["crop"] and answer["crop_taxon"] == value["crop_taxon"]
+    ),
+    "treatments": _factor_in_every_treatment,
+    "measures": lambda value, answer: value["variable"] in answer["variables"],
+    "analysis": lambda value, answer: answer["method"] == value["method"],
+    "scale": lambda value, answer: answer["layout"] == value["layout"],
+}
+
+
+def option_in_answer(step: StepId, option: Option, answer: Mapping[str, Any]) -> bool:
+    """Whether the value of ``option``, picked at ``step``, is in the parsed ``answer`` (as
+    dumped): the same crop and species, a factor every treatment has, a listed variable, the same
+    method or layout. A step that offers nothing has no option in any answer."""
+    check = _IN_ANSWER.get(step)
+    return check is not None and check(option.value, answer)
 
 
 def options_for(step: StepId, catalog: Catalog, seed: int) -> StepOptions:
