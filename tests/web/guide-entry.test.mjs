@@ -117,6 +117,16 @@ test("the round step creates the round, then sends the goal in the page language
   assert.ok(links.includes("#/rounds/round-5"));
 });
 
+test("the round step says a round uses the protocol's latest version, not the saved one by number", async () => {
+  const zh = visibleText(openRound().element);
+  assert.match(zh, /协议 2，第 3 版 已保存/);
+  assert.match(zh, /轮次用协议 2 的最新版本/);
+  const ctx = testCtx({ lang: "en" });
+  bindFormContext(ctx);
+  const en = visibleText(roundStep(ctx, { session: SESSION, saved: SAVED }));
+  assert.match(en, /uses the latest version of Protocol 2/);
+});
+
 test("the round step without a saved protocol points back to the review and posts nothing", async () => {
   const opened = [];
   const { ctx, element } = openRound({ saved: null, onOpenStep: (step) => opened.push(step) });

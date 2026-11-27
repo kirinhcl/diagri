@@ -57,7 +57,7 @@ Once the protocol is saved and nothing has been chosen since, the guide opens on
 
 ### 8. Round and goal
 
-After the save you can create a round of the saved protocol and state the goal. Both are optional: you can skip this step and do it later from the project page. If nothing has been saved in this guide yet, the step says so and points back to the review. The goal box starts with your research question; you can change it before you send it. When the goal is sent, the step links to the round page.
+After the save you can create a round of the protocol and state the goal. The round uses the protocol's latest version at the moment you create it, which is what `POST /wb/rounds` binds; that is the version you just saved unless another one was saved since. Both are optional: you can skip this step and do it later from the project page. If nothing has been saved in this guide yet, the step says so and points back to the review. The goal box starts with your research question; you can change it before you send it. When the goal is sent, the step links to the round page.
 
 ## Where each answer comes from
 

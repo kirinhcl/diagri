@@ -110,7 +110,7 @@ export default {
   "guide.entry.create": "创建并开始引导",
   "guide.entry.noBudget": "这个部署没有调用预算，所以没有设置。引导已打开。",
   "guide.entry.start": "按引导建立或修改协议",
-  "guide.round.lead": "{protocol} 已保存。现在可以用它建一个轮次并写下目标，也可以先离开这一步，以后再做。",
+  "guide.round.lead": "{protocol} 已保存。在这里建的轮次用{name} 的最新版本（以建轮次时为准）。现在可以建一个轮次并写下目标，也可以先离开这一步，以后再做。",
   "guide.round.make": "建轮次",
   "guide.round.made": "轮次已建好。在下面写下目标，也可以跳过。",
   "guide.round.goal": "目标",

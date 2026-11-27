@@ -111,7 +111,7 @@ export default {
   "guide.entry.create": "Create and start the guide",
   "guide.entry.noBudget": "This deployment has no call budget, so none was set. The guide is open.",
   "guide.entry.start": "Set up or change the protocol with the guide",
-  "guide.round.lead": "{protocol} is saved. You can make a round of it now and state the goal, or leave this step and do it later.",
+  "guide.round.lead": "{protocol} is saved. A round made here uses the latest version of {name} at the time it is made. You can make one now and state the goal, or leave this step and do it later.",
   "guide.round.make": "Create the round",
   "guide.round.made": "The round is created. State the goal below, or skip it.",
   "guide.round.goal": "Goal",

@@ -168,7 +168,9 @@ export function roundStep(ctx, { session, saved, onOpenStep = () => {} }) {
     }
   };
   make.addEventListener("click", onMake);
-  const name = protocolName(ctx.t, saved.protocol_id, saved.version);
-  holder.append(note(ctx.t("guide.round.lead", { protocol: name })), make, link(hrefFor("project", { projectId }), ctx.t("guide.round.skip")));
+  // POST /rounds binds the protocol's latest version, which is not always the one this guide saved.
+  const savedName = protocolName(ctx.t, saved.protocol_id, saved.version);
+  const lead = ctx.t("guide.round.lead", { protocol: savedName, name: protocolName(ctx.t, saved.protocol_id) });
+  holder.append(note(lead), make, link(hrefFor("project", { projectId }), ctx.t("guide.round.skip")));
   return h("div", { class: "guide-round" }, holder, box);
 }
