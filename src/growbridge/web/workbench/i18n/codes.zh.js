@@ -251,6 +251,7 @@ export default {
   "tickStep.archive": "存档",
   "tickStep.executor": "执行器",
   "tickStep.recovery": "恢复检查",
+  "tickStep.device_tests": "设备测试",
   "tickStep.observer": "观察器",
   "tickStep.outbox": "通知发送",
   "tickStep.tasks": "任务截止时间",

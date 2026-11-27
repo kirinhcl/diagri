@@ -353,7 +353,7 @@ class Runtime:
             ("archive", self._ingest),
             ("executor", self.executor.tick),
             ("recovery", self._follow_up),
-            ("device tests", device_test_step(self.access_parts)),
+            ("device_tests", device_test_step(self.access_parts)),
             ("observer", self.observer.tick),
             ("outbox", self._deliver),
             ("tasks", self._expire),

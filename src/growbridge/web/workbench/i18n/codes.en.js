@@ -251,6 +251,7 @@ export default {
   "tickStep.archive": "archive",
   "tickStep.executor": "executor",
   "tickStep.recovery": "recovery check",
+  "tickStep.device_tests": "device tests",
   "tickStep.observer": "observer",
   "tickStep.outbox": "notification delivery",
   "tickStep.tasks": "task deadlines",

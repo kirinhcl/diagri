@@ -278,11 +278,11 @@ class DeviceTests:
             note = f"{record.channel.value}: {result}"
             self.locks.note_event(record.greenhouse_id, "test", record.operator, note)
         if state == "restore_failed":
-            self._alert(record)
+            self._report_failure(record)
         elif resolve:
             self.resolve(ALERT, record.test_id, ("device", record.device_id))
 
-    def _alert(self, record: DeviceTestRecord) -> None:
+    def _report_failure(self, record: DeviceTestRecord) -> None:
         params = {
             "greenhouse_id": record.greenhouse_id,
             "channel": record.channel.value,
@@ -293,7 +293,15 @@ class DeviceTests:
             f" greenhouse {record.greenhouse_id}; check the device on site"
         )
         scope = ("device", record.device_id)
-        self.alert(ALERT, record.test_id, message, "critical", scope, code=ALERT, params=params)
+        self.alert(
+            ALERT,
+            record.test_id,
+            message,
+            "critical",
+            scope,
+            code="device_test_restore_failed",
+            params=params,
+        )
 
     # --- unsettled tests -----------------------------------------------------------------------
 
