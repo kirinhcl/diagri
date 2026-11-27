@@ -35,6 +35,7 @@ GrowBridge is DiAGRI's device bridge: the part that reads and controls a Spider 
 **How-to guides**
 
 - [Enable DiAGRI](Enable-DiAGRI.md): configuration, write host, operators, model roles.
+- [Set up research with the guide](Guided-Setup.md): build a protocol step by step, then a round and its goal.
 - [Run a research round](Run-a-Research-Round.md): from a goal to a delivered report.
 - [Manual takeover, irrigation and handback](Manual-Takeover-and-Irrigation.md): writing by hand and giving control back.
 - [Troubleshooting runbook](Troubleshooting-Runbook.md): what you see, what the system did, what you do.

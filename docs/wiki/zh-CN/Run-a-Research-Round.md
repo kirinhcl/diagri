@@ -52,6 +52,8 @@ curl -s -b wb.cookies -X POST -H "Origin: $BASE" -H 'x-growbridge-ui: 1' \
 
 操作员设计这一轮，给项目定下模型调用预算，然后提出目标。目标会成为编排 Agent 的一个研究任务，编排 Agent 再把设计工作交给计划 Agent。
 
+控制台也可以一步一步建立协议，并在最后建轮次、提出目标：见[用引导建立研究](Guided-Setup.md)。下面的请求就是引导替你发出的那些。
+
 **创建项目、协议和轮次。**
 
 ```http

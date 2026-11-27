@@ -5,7 +5,7 @@ import { labelOr, textOr } from "../i18n.js";
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
 import { errorParts, note, pageHead, section } from "../ui/section.js";
-import { reviewStep } from "./guide-review.js";
+import { reviewStep, roundStep } from "./guide-review.js";
 import { stepCard } from "./guide-steps.js";
 
 const RAIL = ["project", "question", "crop", "treatments", "measures", "analysis", "scale", "review", "round"];
@@ -91,6 +91,11 @@ export async function render(ctx, { sessionId }) {
     const step = shown();
     const mine = ++drawn;
     if (step === "review") return drawReview(mine);
+    if (step === "round") {
+      const saved = array(session.saved).at(-1) || null;
+      stage.replaceChildren(section(ctx.t("guide.step.round"), roundStep(ctx, { session, saved, onOpenStep: goTo })));
+      return;
+    }
     if (!ANSWERED.includes(step)) {
       stage.replaceChildren(section(ctx.t(`guide.step.${step}`), note(ctx.t("guide.later"))));
       return;

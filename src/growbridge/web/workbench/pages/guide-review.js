@@ -4,7 +4,9 @@
 import { ApiError } from "../api.js";
 import { saveDraft } from "../drafts.js";
 import { protocolFormDraft } from "../guide-draft.js";
+import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
+import { simpleForm } from "../ui/forms.js";
 import { protocolName } from "../ui/names.js";
 import { errorBox, note, section, showErrors, techDetails } from "../ui/section.js";
 import { protocolForm } from "./protocol-form.js";
@@ -94,4 +96,54 @@ export async function reviewStep(ctx, { session, project, onSaved, onOpenStep = 
   }
   const lead = review.protocol ? note(ctx.t("guide.review.lead")) : null;
   return h("div", { class: "guide-review" }, missingSteps(ctx, review, onOpenStep), problemsBlock(ctx, review), hintsBlock(ctx, review), lead, kept.element, holder, box);
+}
+
+// --- step 8: the round and the goal (both optional) ---------------------------------------------------
+
+const link = (href, text) => h("a", { class: "text-link", attrs: { href }, text });
+
+// The research question of the session's question step, the first suggestion for the goal.
+function questionOf(session) {
+  const entry = array(session.steps).find((item) => item.step === "question");
+  const answer = entry && entry.chosen && entry.chosen.answer;
+  return answer && typeof answer.question === "string" ? answer.question : "";
+}
+
+// The goal goes to the round just made, in the page language; afterwards the round page is one link away.
+function goalForm(ctx, { projectId, roundId, question, holder }) {
+  const fields = [{ name: "goal", label: ctx.t("guide.round.goal"), type: "textarea", required: true, value: question }];
+  const onSubmit = async ({ goal }) => {
+    await ctx.api.post("/goals", { project_id: projectId, round_id: roundId, goal, language: ctx.lang }, { action: ctx.t("guide.round.send") });
+    holder.replaceChildren(note(ctx.t("guide.round.done")), link(hrefFor("round", { roundId }), ctx.t("guide.round.open")));
+  };
+  return simpleForm({ fields, submitLabel: ctx.t("guide.round.send"), onSubmit, draftKey: `guide-goal:${roundId}`, ctx });
+}
+
+export function roundStep(ctx, { session, saved, onOpenStep = () => {} }) {
+  if (!saved) {
+    const open = () => onOpenStep("review");
+    const back = h("button", { class: ["button", "guide-back-review"], attrs: { type: "button" }, text: ctx.t("guide.step.review"), on: { click: open } });
+    return h("div", { class: "guide-round" }, note(ctx.t("guide.round.noSave")), back);
+  }
+  const projectId = session.session.project_id;
+  const box = errorBox();
+  const holder = h("div", { class: "guide-round-body" });
+  const make = h("button", { class: ["button", "button-primary", "guide-make-round"], attrs: { type: "button" }, text: ctx.t("guide.round.make") });
+  const onMake = async () => {
+    make.disabled = true;
+    try {
+      const made = await ctx.api.post("/rounds", { project_id: projectId, protocol_id: saved.protocol_id }, { action: ctx.t("guide.round.make") });
+      box.hidden = true;
+      const form = goalForm(ctx, { projectId, roundId: made.round_id, question: questionOf(session), holder });
+      holder.replaceChildren(note(ctx.t("guide.round.made")), form, link(hrefFor("round", { roundId: made.round_id }), ctx.t("guide.round.skipGoal")));
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      showErrors(box, error, ctx);
+      make.disabled = false;
+    }
+  };
+  make.addEventListener("click", onMake);
+  const name = protocolName(ctx.t, saved.protocol_id, saved.version);
+  holder.append(note(ctx.t("guide.round.lead", { protocol: name })), make, link(hrefFor("project", { projectId }), ctx.t("guide.round.skip")));
+  return h("div", { class: "guide-round" }, holder, box);
 }

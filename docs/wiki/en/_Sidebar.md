@@ -10,6 +10,7 @@
 **How-to guides**
 
 - [Enable DiAGRI](Enable-DiAGRI.md)
+- [Set up research with the guide](Guided-Setup.md)
 - [Run a research round](Run-a-Research-Round.md)
 - [Manual takeover and irrigation](Manual-Takeover-and-Irrigation.md)
 - [Troubleshooting runbook](Troubleshooting-Runbook.md)
