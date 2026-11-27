@@ -398,3 +398,5 @@ _register(
     ("account_change_refused", ("detail",)),
 )
 _register("model_role", ("model_drafts_through_tools", ()), action=False)
+_register("state", ("guide_not_owner", ()), action=False)
+_register("param", ("guide_answer_invalid", ("step",)))

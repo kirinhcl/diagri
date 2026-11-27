@@ -2465,6 +2465,18 @@
       "params": [],
       "action": false,
       "of": "model_role"
+    },
+    "guide_not_owner": {
+      "params": [],
+      "action": false,
+      "of": "state"
+    },
+    "guide_answer_invalid": {
+      "params": [
+        "step"
+      ],
+      "action": true,
+      "of": "param"
     }
   }
 }

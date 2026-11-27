@@ -489,4 +489,7 @@ export default {
   "msg.validation.duplicate": "前面已有一项用了这个值；每一项都要不同。",
   "msg.validation.json_invalid": "这段文字不是有效的 JSON",
   "msg.validation.other": "这一项无法被接受",
+  "msg.denial.guide_not_owner": "这份引导是另一位操作员开始的，只有他们能修改。",
+  "msg.denial.guide_answer_invalid": "这一步的答案不符合要求。",
+  "msg.denial.guide_answer_invalid.action": "按提示改好这一步，再提交。",
 };

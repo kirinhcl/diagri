@@ -1,5 +1,5 @@
 import pytest
-from vocab_support import TEST_CATALOG
+from vocab_support import TEST_CATALOG, WITH_OLD
 
 from growbridge.guide.steps import (
     ANSWER_MODELS,
@@ -71,6 +71,20 @@ def test_variables_are_unique_and_in_the_catalog():
     )
     problems = answer_problems("measures", answer, TEST_CATALOG)
     assert any("twice" in p for p in problems) and any("nope" in p for p in problems)
+
+
+def test_a_deprecated_variable_an_earlier_version_declared_may_be_kept():
+    raw = {
+        "variables": ["canopy_growth_old", "canopy_area_growth"],
+        "primary_endpoint": "canopy_area_growth",
+    }
+    answer = parse_answer("measures", raw)
+
+    refused = answer_problems("measures", answer, WITH_OLD)
+    kept = answer_problems("measures", answer, WITH_OLD, frozenset({"canopy_growth_old"}))
+
+    assert any("deprecated" in p for p in refused)
+    assert kept == ()
 
 
 def test_a_malformed_species_is_a_problem():

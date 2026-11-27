@@ -107,12 +107,19 @@ def parse_answer(step: StepId, raw: Mapping[str, Any]) -> Model:
     return model.model_validate(dict(raw))
 
 
-def answer_problems(step: StepId, answer: Model, catalog: Catalog) -> tuple[str, ...]:
-    """What is wrong with an answer, by the same rules ``vocab.checks`` applies to a protocol."""
+def answer_problems(
+    step: StepId,
+    answer: Model,
+    catalog: Catalog,
+    declared_before: frozenset[str] = frozenset(),
+) -> tuple[str, ...]:
+    """What is wrong with an answer, by the same rules ``vocab.checks`` applies to a protocol.
+    ``declared_before`` holds the variables earlier versions of the protocol declared, which a
+    deprecated variable may keep."""
     if isinstance(answer, TreatmentsAnswer):
         return tuple(_treatment_problems(answer, catalog))
     if isinstance(answer, MeasuresAnswer):
-        return tuple(_measure_problems(answer, catalog))
+        return tuple(_measure_problems(answer, catalog, declared_before))
     if isinstance(answer, CropAnswer):
         return tuple(taxon_problems(answer.crop_taxon, answer.cultivar))
     return ()
@@ -132,13 +139,15 @@ def _treatment_problems(answer: TreatmentsAnswer, catalog: Catalog) -> list[str]
     return problems
 
 
-def _measure_problems(answer: MeasuresAnswer, catalog: Catalog) -> list[str]:
+def _measure_problems(
+    answer: MeasuresAnswer, catalog: Catalog, declared_before: frozenset[str]
+) -> list[str]:
     problems: list[str] = []
     seen: set[str] = set()
     for name in answer.variables:
         if name in seen:
             problems.append(f"variable {name} is listed twice")
         seen.add(name)
-        problems.extend(_variable_problems(name, catalog, frozenset()))
+        problems.extend(_variable_problems(name, catalog, declared_before))
     problems.extend(_endpoint_problems(answer.primary_endpoint, seen, catalog))
     return problems

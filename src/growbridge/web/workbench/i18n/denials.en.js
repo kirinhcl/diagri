@@ -489,4 +489,7 @@ export default {
   "msg.validation.duplicate": "An earlier entry already uses this; each one must be different.",
   "msg.validation.json_invalid": "The text is not valid JSON.",
   "msg.validation.other": "This entry could not be accepted.",
+  "msg.denial.guide_not_owner": "Another operator started this guide; only they can change it.",
+  "msg.denial.guide_answer_invalid": "This step's answer is not acceptable.",
+  "msg.denial.guide_answer_invalid.action": "Fix this step as shown and submit it again.",
 };

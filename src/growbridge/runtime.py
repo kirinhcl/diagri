@@ -41,6 +41,7 @@ from growbridge.config import Settings
 from growbridge.control.ledger import Ledger
 from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
+from growbridge.guide.store import GuideStore
 from growbridge.observer.alerts import Alert, AlertBook, Scope
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
 from growbridge.observer.device_notes import DeviceNotes
@@ -232,6 +233,7 @@ class Runtime:
     last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
     access_parts: AccessParts | None = None  # multi-user locks and rules; None when off
     notes: DeviceNotes | None = None  # notes people write about the device (memory)
+    guide: GuideStore | None = None  # the record of guided protocol setups
 
     # --- life cycle ----------------------------------------------------------------------------
 
@@ -283,6 +285,7 @@ class Runtime:
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
         extra = {"conversation": self.conversation, **workbench_access(self.access_parts)}
         extra["notes"] = self.notes
+        extra["guide"] = self.guide
         return create_workbench(*args, role_tokens or {}, *more, **extra)
 
     @property
@@ -689,6 +692,7 @@ def build_runtime(
         observer=observer,
         reports=ReportStore(dbs["observer"]),
         notes=DeviceNotes(dbs["observer"], clock),
+        guide=GuideStore(dbs["workflow"], clock),
         runner=ConfirmatoryRunner(dbs["agents"], clock, sandbox, data_dir / "analysis"),
         holdout=HoldoutRegistry(dbs["agents"], clock, outcomes, flow.catalog),
         sandbox=sandbox,

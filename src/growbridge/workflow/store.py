@@ -204,6 +204,14 @@ class WorkflowStore:
             declared.update(ResearchProtocol.model_validate_json(row["body"]).variables)
         return frozenset(declared)
 
+    def project_protocols(self, project_id: str) -> tuple[tuple[str, int], ...]:
+        """(id, version) of every protocol version of the project, in the order they were saved."""
+        rows = self.db.query(
+            "SELECT id, version FROM wf_protocols WHERE project_id = ? ORDER BY created_at, rowid",
+            (project_id,),
+        )
+        return tuple((row["id"], row["version"]) for row in rows)
+
     def latest_protocol(self, protocol_id: str, project_id: str) -> ResearchProtocol | None:
         row = self.db.one(
             "SELECT body FROM wf_protocols WHERE id = ? AND project_id = ?"
