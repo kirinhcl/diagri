@@ -287,6 +287,36 @@ def test_a_carried_version_saved_unchanged_records_no_edit(bench, operator, pid,
     assert view["saved"][0]["edited"] == []
 
 
+def sessions(bench) -> int:
+    return bench.guide.db.one("SELECT COUNT(*) AS n FROM guide_sessions")["n"]
+
+
+def test_a_listed_protocol_that_cannot_be_read_back_starts_no_session(
+    bench, operator, pid, monkeypatch
+):
+    bench.workflow.save_protocol(make_protocol(project_id=pid), bench.designer)
+    monkeypatch.setattr(bench.workflow.store, "protocol", lambda protocol_id, version: None)
+
+    with pytest.raises(LookupError, match="protocol-1"):
+        bench.post(operator, GUIDE, {"project_id": pid})
+
+    assert sessions(bench) == 0
+
+
+def test_a_session_and_its_carried_answers_are_written_together(bench, operator, pid, monkeypatch):
+    bench.workflow.save_protocol(make_protocol(project_id=pid), bench.designer)
+
+    def broken(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(bench.guide, "append_many", broken)
+
+    with pytest.raises(OSError):
+        bench.post(operator, GUIDE, {"project_id": pid})
+
+    assert sessions(bench) == 0
+
+
 def test_the_latest_saved_version_is_the_one_carried(bench, operator, pid):
     bench.workflow.save_protocol(make_protocol(project_id=pid), bench.designer)
     newer = make_protocol(project_id=pid, version=2, question="the second wording")

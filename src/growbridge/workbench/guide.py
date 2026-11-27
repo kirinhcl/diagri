@@ -30,7 +30,7 @@ from growbridge.guide.steps import (
     answer_problems,
     parse_answer,
 )
-from growbridge.guide.store import GuideEvent, GuideSession, GuideStore
+from growbridge.guide.store import EventKind, GuideEvent, GuideSession, GuideStore
 from growbridge.planning.design import estimate_sample_size
 from growbridge.ports import Actor, Denied
 from growbridge.workbench.common import Body, rejected
@@ -160,18 +160,24 @@ class _Guide:
         if not self.workflow.store.has_project(project_id):
             raise unknown
         project_write(self.access, actor, project_id, lambda: unknown)
-        session = self.guide.start(project_id, actor.id, lang)
         rows = self.workflow.store.project_protocols(project_id)
-        if rows:
-            self._carry(session, *rows[-1], actor)
+        carried = self._carried(*rows[-1]) if rows else []
+        # The session and what it carries are written together: never a session without them.
+        with self.guide.db.transaction():
+            session = self.guide.start(project_id, actor.id, lang)
+            if carried:
+                self.guide.append_many(session.session_id, carried, actor.id)
         return session.session_id
 
-    def _carry(self, session: GuideSession, protocol_id: str, version: int, actor: Actor) -> None:
+    def _carried(
+        self, protocol_id: str, version: int
+    ) -> list[tuple[str, EventKind, dict[str, Any]]]:
+        """The ``chosen`` events that carry a saved version into a new session."""
         protocol = self.workflow.store.protocol(protocol_id, version)
         if protocol is None:
-            return
+            raise LookupError(f"protocol {protocol_id} v{version} is listed but cannot be read")
         origin = {"protocol_id": protocol_id, "version": version}
-        items = [
+        return [
             (
                 step,
                 "chosen",
@@ -179,7 +185,6 @@ class _Guide:
             )
             for step, answer in carried_answers(protocol).items()
         ]
-        self.guide.append_many(session.session_id, items, actor.id)
 
     def choose(
         self, session: GuideSession, step: StepId, body: ChooseIn, actor: Actor
