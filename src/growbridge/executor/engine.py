@@ -308,6 +308,10 @@ class ExecutorEngine:
         active = (r for r in rules if self._protection.get(r.id, RuleState()).active)
         return {rule.action.channel: rule.id for rule in active}
 
+    def protected_channels(self) -> frozenset[Channel]:
+        """The channels an active protection rule holds now (read by device tests)."""
+        return self._protected()
+
     def _protected(self) -> frozenset[Channel]:
         """The channels in ``_protecting``."""
         return frozenset(self._protecting())

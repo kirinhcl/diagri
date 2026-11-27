@@ -218,3 +218,13 @@ async def test_executor_stage_ends_on_time_when_every_end_action_is_held(rig):
     assert rig.state() == "ended"
     assert await light(rig) == 0
     assert ended_detail(rig) == {"confirmed": True, "held": ["light"]}
+
+
+async def test_protected_channels_lists_active_protection(rig):
+    await rig.start()
+    await rig.tick()
+    assert rig.engine.protected_channels() == frozenset()
+
+    await overheat(rig)
+
+    assert rig.engine.protected_channels() == frozenset({Channel.LIGHT})

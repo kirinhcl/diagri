@@ -9,8 +9,8 @@ right anyway, and ``restore`` grants a fresh one on the next tick. An aborted or
 without a release is not idle: the holder's plants may still be inside.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
 from growbridge.archive.models import RightKind, RuleAction
 from growbridge.ports import ControlPort, IdleRuntime, RightScope
@@ -30,7 +30,7 @@ class IdleCare:
         self.device_id = device_id
         self.levels = levels
         self._right: int | None = None
-        self._starts = 0  # stage starts handing rights back right now
+        self._starts = 0  # stage starts handing rights back, or device tests, right now
 
     @property
     def right(self) -> int | None:
@@ -58,6 +58,19 @@ class IdleCare:
         """Around a stage start: no idle right is granted or used until it is over."""
         self._starts += 1
         try:
+            yield
+        finally:
+            self._starts -= 1
+
+    @asynccontextmanager
+    async def paused(self) -> AsyncIterator[None]:
+        """Around a device test: the idle right is handed back and none is granted or used until
+        it is over; ``restore`` grants a fresh one on the next tick."""
+        self._starts += 1
+        try:
+            if self._valid():
+                assert self._right is not None
+                await self.control.handover(self._right, "device test")
             yield
         finally:
             self._starts -= 1

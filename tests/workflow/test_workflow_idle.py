@@ -189,3 +189,30 @@ async def test_an_aborted_round_goes_idle_once_released(world):
     await world.svc.restore_care()
 
     assert world.svc.idle_runtime() == IdleRuntime(right=idle.right, levels=IDLE)
+
+
+async def test_paused_hands_back_the_idle_right_and_grants_none(world):
+    idle = attach(world)
+    idle.restore()
+    held = idle.right
+
+    async with idle.paused():
+        assert (held, "device test") in world.control.handovers
+        assert idle.runtime() is None
+        idle.restore()
+        assert idle.right == held  # nothing new granted while paused
+
+    assert world.control.live(RightKind.CARE) == []
+
+
+async def test_restore_grants_a_fresh_right_after_the_pause(world):
+    idle = attach(world)
+    idle.restore()
+    held = idle.right
+    async with idle.paused():
+        pass
+
+    idle.restore()
+
+    assert idle.right != held
+    assert world.svc.idle_runtime() == IdleRuntime(right=idle.right, levels=IDLE)
