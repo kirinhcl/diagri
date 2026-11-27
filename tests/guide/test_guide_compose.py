@@ -197,6 +197,23 @@ def test_next_version_follows_the_highest_saved():
 def test_review_is_ready_for_a_complete_valid_draft():
     r = review(chosen_from(carried_answers(make_protocol())), **KEYS, **REVIEW)
     assert r.ready and r.protocol is not None and not r.missing and not r.problems
+    assert r.problem_steps == ()
+
+
+def test_review_names_the_steps_to_change_for_its_problems():
+    answers = carried_answers(make_protocol())
+    answers["measures"] = {
+        "variables": ["canopy_growth_old"],
+        "primary_endpoint": "canopy_growth_old",
+    }
+    answers["crop"] = {**answers["crop"], "crop_taxon": "lettuce"}
+    r = review(chosen_from(answers), **KEYS, catalog=WITH_OLD, declared_before=frozenset())
+    assert r.problem_steps == ("crop", "measures")
+    stale = with_scale({**carried_answers(make_protocol())["scale"], "units": ["tent-9"]})
+    stale["scale"]["allocations"] = [a.model_dump(mode="json") for a in make_protocol().allocations]
+    assert review(chosen_from(stale), **KEYS, **REVIEW).problem_steps == ("scale",)
+    broken = {**carried_answers(make_protocol()), "analysis": {"method": "paired_block"}}
+    assert review(chosen_from(broken), **KEYS, **REVIEW).problem_steps == ("analysis",)
 
 
 def test_review_names_a_missing_step_without_a_protocol():

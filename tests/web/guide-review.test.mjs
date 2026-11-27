@@ -132,25 +132,45 @@ test("a review without a hash shows no box for it", async () => {
   assert.equal(named(element, "keep_script_hash").length, 0);
 });
 
-test("problems and blocking findings are listed before the form, hints under their own heading", async () => {
-  const review = {
-    ...REVIEW,
-    ready: false,
-    problems: ["Variable air_temperature is not in the catalog"],
-    design: [
-      { code: "missing_control", message: "no control", blocking: true, variant: "undefined", params: { control: "x" } },
-      { code: "seed_mismatch", message: "differs", blocking: false, variant: "differs", params: {} },
-    ],
-  };
-  const { element } = await open({ review });
+const NOT_READY = {
+  ...REVIEW,
+  ready: false,
+  problems: ["Variable air_temperature is not in the catalog"],
+  problem_steps: ["measures"],
+  design: [
+    { code: "missing_control", message: "no control", blocking: true, variant: "undefined", params: { control: "x" } },
+    { code: "seed_mismatch", message: "differs", blocking: false, variant: "differs", params: {} },
+  ],
+};
+
+test("a review that is not ready lists what stops it, each with a link back, and shows no form", async () => {
+  const opened = [];
+  const { element } = await open({ review: NOT_READY, onOpenStep: (step) => opened.push(step) });
   const all = visibleText(element);
   const problems = all.indexOf("Problems to solve before saving");
   assert.ok(problems >= 0, all);
   assert.ok(all.indexOf("Variable air_temperature is not in the catalog") > problems);
   assert.ok(all.indexOf("Blocking") > problems);
   assert.ok(all.indexOf("Hints") > problems);
-  assert.ok(problems < all.indexOf("Save as"), "problems come before the form");
-  assert.equal(byTag(element, "form").length, 1, "the form is still shown");
+  assert.equal(byTag(element, "form").length, 0, "no form while the review is not ready");
+  assert.equal(named(element, "keep_script_hash").length, 0);
+  for (const cls of ["guide-problem-step", "guide-design-step"]) for (const button of byClass(element, cls)) button.dispatchEvent(new Event("click"));
+  assert.deepEqual(opened, ["measures", "scale"]);
+});
+
+test("a review that is not ready says the project page's protocol form is still there", async () => {
+  for (const [lang, said] of [["en", /protocol form on the project page/], ["zh", /项目页上的协议表单/]]) {
+    const { element } = await open({ review: NOT_READY, lang });
+    assert.match(visibleText(element), said, lang);
+    const link = byTag(element, "a").find((a) => (a.getAttribute("href") || "").includes(PROJECT.project_id));
+    assert.ok(link, `a link to the project page (${lang})`);
+  }
+});
+
+test("a ready review shows the form", async () => {
+  const { element } = await open();
+  assert.equal(byTag(element, "form").length, 1);
+  assert.equal(byClass(element, "guide-problem-step").length, 0);
 });
 
 test("a missing step links back to it", async () => {
@@ -253,6 +273,19 @@ test("a choice after the save opens the review form again", async () => {
   await flush();
   assert.equal(currentRail(element), "Review and save");
   assert.equal(byTag(element, "form").length, 1);
+});
+
+test("on the guide page a problem's link opens its answered step again", async () => {
+  const view = answeredFrom(2);
+  const answers = { "/guide/sessions/guide-1/steps/measures/reopen": () => view };
+  const fixtures = { "guide-session.json": view, "guide-review.json": NOT_READY };
+  const { element, ctx } = await renderPage("guide", { sessionId: "guide-1" }, { lang: "en", fixtures, answers });
+  await flush();
+  assert.equal(byTag(element, "form").length, 0);
+  byClass(element, "guide-problem-step")[0].dispatchEvent(new Event("click"));
+  await flush();
+  assert.ok(ctx.api.calls.some((call) => call.method === "POST" && call.path.endsWith("/steps/measures/reopen")));
+  assert.equal(currentRail(element), "Measurements");
 });
 
 test("the review page has no 'AI' text", async () => {

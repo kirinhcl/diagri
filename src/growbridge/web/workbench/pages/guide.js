@@ -91,9 +91,11 @@ export async function render(ctx, { sessionId }) {
   const draft = h("aside", { class: "guide-draft" });
   const shown = () => viewing || currentStep(session);
 
+  // An answered step is opened again (and the server records it); any other step is only shown.
+  const visit = (step) => (ANSWERED.includes(step) && statusOf(session, step) !== "pending" ? openStep(step) : goTo(step));
+
   const drawSides = () => {
-    const open = (step) => (ANSWERED.includes(step) ? openStep(step) : goTo(step));
-    rail.replaceChildren(...RAIL.map((step, index) => railItem(ctx, { session, step, index, shown: shown(), open })));
+    rail.replaceChildren(...RAIL.map((step, index) => railItem(ctx, { session, step, index, shown: shown(), open: visit })));
     draft.replaceChildren(...draftPanel(ctx, session));
   };
 
@@ -128,7 +130,7 @@ export async function render(ctx, { sessionId }) {
   async function drawReview(mine) {
     try {
       const project = await ctx.api.get(`/projects/${enc(session.session.project_id)}`);
-      const card = await reviewStep(ctx, { session, project, onSaved, onOpenStep: goTo });
+      const card = await reviewStep(ctx, { session, project, onSaved, onOpenStep: visit });
       if (mine === drawn) stage.replaceChildren(section(ctx.t("guide.step.review"), card));
     } catch (error) {
       if (mine === drawn) showFailure(error);

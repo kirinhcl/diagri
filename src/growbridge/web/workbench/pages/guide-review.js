@@ -14,23 +14,41 @@ import { findingsList } from "./stage-actions.js";
 
 const array = (value) => (Array.isArray(value) ? value : []);
 const enc = encodeURIComponent;
+const link = (href, text) => h("a", { class: "text-link", attrs: { href }, text });
 
 // When the project already holds a protocol with the review's id, the form saves its next version.
 const saveAsOf = (project, review) => (array(project.protocols).some((row) => row.protocol_id === review.protocol_id) ? review.protocol_id : "");
 
+// Buttons that open the steps to change, one per step.
+function stepLinks(ctx, { steps, cls, onOpenStep }) {
+  if (steps.length === 0) return null;
+  const button = (step) => h("li", {}, h("button", { class: ["button", cls], attrs: { type: "button" }, text: ctx.t(`guide.step.${step}`), on: { click: () => onOpenStep(step) } }));
+  return h("ul", { class: "guide-review-list guide-step-links" }, steps.map(button));
+}
+
 function missingSteps(ctx, review, onOpenStep) {
   const steps = array(review.missing);
   if (steps.length === 0) return null;
-  const button = (step) => h("li", {}, h("button", { class: ["button", "guide-missing-step"], attrs: { type: "button" }, text: ctx.t(`guide.step.${step}`), on: { click: () => onOpenStep(step) } }));
-  return section(ctx.t("guide.review.missing"), h("ul", { class: "guide-review-list" }, steps.map(button)));
+  return section(ctx.t("guide.review.missing"), stepLinks(ctx, { steps, cls: "guide-missing-step", onOpenStep }));
 }
 
-function problemsBlock(ctx, review) {
+// Problems link to the steps whose answers they come from; findings that block the design link to the scale,
+// where the guide stops on them.
+function problemsBlock(ctx, review, onOpenStep) {
   const blocking = array(review.design).filter((finding) => finding && finding.blocking === true);
   const problems = array(review.problems);
   if (problems.length + blocking.length === 0) return null;
   const list = problems.length ? h("ul", { class: "guide-review-list" }, problems.map((text) => h("li", { text }))) : null;
-  return section(ctx.t("guide.review.problems"), list, blocking.length ? findingsList(ctx, blocking) : null);
+  const toProblems = stepLinks(ctx, { steps: problems.length ? array(review.problem_steps) : [], cls: "guide-problem-step", onOpenStep });
+  const toDesign = blocking.length ? [findingsList(ctx, blocking), stepLinks(ctx, { steps: ["scale"], cls: "guide-design-step", onOpenStep })] : [];
+  return section(ctx.t("guide.review.problems"), list, toProblems, ...toDesign);
+}
+
+// While the review is not ready the guide offers no form; the project page's form stays for those who want it.
+function notReady(ctx, { review, projectId }) {
+  const said = note(ctx.t(review.protocol ? "guide.review.notReady" : "guide.review.noProtocol"));
+  const expert = h("p", { class: "note guide-review-expert" }, ctx.t("guide.review.expert"), " ", link(hrefFor("project", { projectId }), ctx.t("guide.review.expertLink")));
+  return [said, expert];
 }
 
 function hintsBlock(ctx, review) {
@@ -75,7 +93,8 @@ export async function reviewStep(ctx, { session, project, onSaved, onOpenStep = 
   const box = errorBox();
   const holder = h("div", { class: "guide-review-form" });
   const record = recorder(ctx, { base, onSaved, box, holder });
-  const hash = review.protocol && review.protocol.analysis ? review.protocol.analysis.script_sha256 : null;
+  const ready = review.ready === true && Boolean(review.protocol);
+  const hash = ready && review.protocol.analysis ? review.protocol.analysis.script_sha256 : null;
   const kept = hashBlock(ctx, hash);
 
   const onSubmit = async ({ protocol }) => {
@@ -88,14 +107,14 @@ export async function reviewStep(ctx, { session, project, onSaved, onOpenStep = 
     await record({ protocol_id: id, version });
   };
 
-  if (!review.protocol) holder.append(note(ctx.t("guide.review.noProtocol")));
+  if (!ready) holder.append(...notReady(ctx, { review, projectId: project.project_id }));
   else {
     const saveAs = saveAsOf(project, review);
     saveDraft(`protocol:${project.project_id}-form`, protocolFormDraft(review.protocol, { saveAs }));
     holder.append(protocolForm(ctx, { project, onSubmit, protocolId: saveAs }));
   }
-  const lead = review.protocol ? note(ctx.t("guide.review.lead")) : null;
-  return h("div", { class: "guide-review" }, missingSteps(ctx, review, onOpenStep), problemsBlock(ctx, review), hintsBlock(ctx, review), lead, kept.element, holder, box);
+  const lead = ready ? note(ctx.t("guide.review.lead")) : null;
+  return h("div", { class: "guide-review" }, missingSteps(ctx, review, onOpenStep), problemsBlock(ctx, review, onOpenStep), hintsBlock(ctx, review), lead, kept.element, holder, box);
 }
 
 // The review after a save with nothing chosen since: what was saved and the way on to step 8. There is no form,
@@ -107,8 +126,6 @@ export function savedReview(ctx, { saved, onOpenStep = () => {} }) {
 }
 
 // --- step 8: the round and the goal (both optional) ---------------------------------------------------
-
-const link = (href, text) => h("a", { class: "text-link", attrs: { href }, text });
 
 // The research question of the session's question step, the first suggestion for the goal.
 function questionOf(session) {

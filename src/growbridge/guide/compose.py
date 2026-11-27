@@ -16,6 +16,7 @@ from growbridge.guide.steps import (
     ScaleAnswer,
     StepId,
     TreatmentsAnswer,
+    answer_problems,
     parse_answer,
 )
 from growbridge.planning.design import check_experimental_design, randomize_series, randomize_tents
@@ -35,10 +36,20 @@ class IncompleteDraft(ValueError):
         self.missing = missing
 
 
+class AnswerProblem(ValueError):
+    """An answer that does not fit, naming the step whose answer to change."""
+
+    def __init__(self, step: StepId, message: str) -> None:
+        super().__init__(message)
+        self.step = step
+
+
 class Review(Model):
     protocol: ResearchProtocol | None
     missing: tuple[StepId, ...] = ()
     problems: tuple[str, ...] = ()
+    # The steps whose answers the problems come from, in step order: where to go to solve them.
+    problem_steps: tuple[StepId, ...] = ()
     design: tuple[Finding, ...] = ()
     ready: bool = False
 
@@ -52,17 +63,20 @@ def compose(
     seed: int,
 ) -> ResearchProtocol:
     """The protocol the latest choices make; ``IncompleteDraft`` when a step has none and
-    ``ValueError`` when an answer does not fit or the layout cannot be randomized."""
+    ``AnswerProblem`` when an answer does not fit or the layout cannot be randomized."""
     missing = tuple(step for step in ANSWERED if step not in answers)
     if missing:
         raise IncompleteDraft(missing)
-    parsed = {step: parse_answer(step, answers[step].answer) for step in ANSWERED}
+    parsed = {step: _parsed(step, answers[step]) for step in ANSWERED}
     question, crop, treatments, measures, analysis, scale = (parsed[s] for s in ANSWERED)
     assert isinstance(question, QuestionAnswer) and isinstance(crop, CropAnswer)
     assert isinstance(treatments, TreatmentsAnswer) and isinstance(measures, MeasuresAnswer)
     assert isinstance(analysis, AnalysisAnswer) and isinstance(scale, ScaleAnswer)
     used_seed = seed if scale.randomization_seed is None else scale.randomization_seed
-    allocations, blocks, rounds = _layout(scale, treatments, used_seed)
+    try:
+        allocations, blocks, rounds = _layout(scale, treatments, used_seed)
+    except ValueError as exc:
+        raise AnswerProblem("scale", str(exc)) from None
     return ResearchProtocol(
         id=protocol_id,
         project_id=project_id,
@@ -92,6 +106,13 @@ def compose(
         crop_taxon=crop.crop_taxon,
         cultivar=crop.cultivar,
     )
+
+
+def _parsed(step: StepId, chosen: Chosen) -> Model:
+    try:
+        return parse_answer(step, chosen.answer)
+    except ValueError as exc:
+        raise AnswerProblem(step, str(exc)) from None
 
 
 def _layout(
@@ -183,6 +204,8 @@ def review(
         )
     except IncompleteDraft as exc:
         return Review(protocol=None, missing=exc.missing)
+    except AnswerProblem as exc:
+        return Review(protocol=None, problems=(str(exc),), problem_steps=(exc.step,))
     except ValueError as exc:
         return Review(protocol=None, problems=(str(exc),))
     try:
@@ -193,9 +216,23 @@ def review(
         *check_protocol(checked, catalog, declared_before),
         *taxon_problems(checked.crop_taxon, checked.cultivar),
     )
+    steps = _problem_steps(answers, catalog, declared_before) if problems else ()
     design = check_experimental_design(checked)
     ready = not problems and not any(finding.blocking for finding in design)
-    return Review(protocol=checked, problems=problems, design=design, ready=ready)
+    return Review(
+        protocol=checked, problems=problems, problem_steps=steps, design=design, ready=ready
+    )
+
+
+def _problem_steps(
+    answers: Mapping[StepId, Chosen], catalog: Catalog, declared_before: frozenset[str]
+) -> tuple[StepId, ...]:
+    """The steps whose answers break a catalog or species rule, by the same rules step by step."""
+    return tuple(
+        step
+        for step in ANSWERED
+        if answer_problems(step, parse_answer(step, answers[step].answer), catalog, declared_before)
+    )
 
 
 def edited_fields(composed: ResearchProtocol, saved: ResearchProtocol) -> tuple[str, ...]:
