@@ -85,6 +85,7 @@ export default {
   "guide.scale.estimateNeedsAnalysis": "Answer the analysis plan first.",
   "guide.scale.dontKnow": "I don't know",
   "guide.scale.pilot": "Treated as a pilot experiment; the conclusion will be uncertain.",
+  "guide.scale.overLimit": "The estimate is above the guide's limit (100); check that the effect and the SD use the same unit.",
   "guide.review.lead": "Check the protocol below. Every value can be changed before you save it.",
   "guide.review.missing": "Steps not answered yet",
   "guide.review.problems": "Problems to solve before saving",

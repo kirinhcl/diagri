@@ -103,7 +103,7 @@
 | `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/choose` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在、`guide_not_owner`）、`param`（`guide_answer_invalid`） |
 | `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/reopen` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在、`guide_not_owner`） |
 | `GET` | `/wb/guide/sessions/{session_id}/review` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在） |
-| `GET` | `/wb/guide/sample-size` | 操作员 | 局域网、覆盖网络 | 否 | 无 |
+| `GET` | `/wb/guide/sample-size` | 操作员 | 局域网、覆盖网络 | 否 | `param`（`guide_answer_invalid`） |
 | `POST` | `/wb/guide/sessions/{session_id}/saved` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话或协议不存在、`guide_not_owner`） |
 | `POST` | `/wb/projects` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/protocols` | 操作员 | 局域网、覆盖网络 | 否 | `state`、`param` |
@@ -178,10 +178,10 @@
 | `POST` | `/wb/guide/sessions` | `project_id`，可选 `lang`（`en` 或 `zh`，默认 `zh`） | `session_id`。项目已有保存的协议时，会话开始时六个要回答的步骤从最近保存的版本带过来 |
 | `GET` | `/wb/guide/sessions/{session_id}` | 无 | `session`、`steps`（六个要回答的步骤，每步有 `status`：`pending`、`done` 或 `needs_review`，以及最新的 `chosen`）和 `saved`（`protocol_id`、`version`、`digest`、`edited`）。项目的所有者和管理员可以读；其他人得到的是"会话不存在"的回答 |
 | `GET` | `/wb/guide/sessions/{session_id}/steps/{step}` | 无 | 这一步的 `options`（`id`、`value`、`label_en`、`label_zh`，来自目录、查证过的作物表或固定清单，从不来自模型）和 `defaults`。`step` 是 `question`、`crop`、`treatments`、`measures`、`analysis`、`scale`、`review`、`round` 之一，其他值返回 422 |
-| `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/choose` | `answer`（对象）、可选 `option_ids` | 会话视图。一次记下给出的选项和所做的选择；带 `option_ids` 时来源是 `system`，不带是 `own`。答案不合格、目录不接受的变量或因子、或没有给出过的选项，都返回 422，原因是 `guide_answer_invalid`。只有开始这个会话的操作员能调用 |
+| `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/choose` | `answer`（对象）、可选 `option_ids` | 会话视图。一次记下给出的选项和所做的选择；带 `option_ids` 时来源是 `system`，不带是 `own`。答案不合格、目录不接受的变量或因子、或没有给出过的选项，都返回 422，原因是 `guide_answer_invalid`。引导组成的实验有上限：连续轮次最多 100 个区组，多帐篷并行最多 200 轮；单位最多 50 个，处理最多 20 个，阶段最多 20 个。另一个计数（连续轮次的轮数、多帐篷的区组数）只由沿用的版本带回来，分别最多 2000 和 200。分配超过 2000 条的布局在复核时列为问题。只有开始这个会话的操作员能调用 |
 | `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/reopen` | 无 | 会话视图，并记下一条 `reopened`。只有开始这个会话的操作员能调用 |
 | `GET` | `/wb/guide/sessions/{session_id}/review` | 无 | 组成的 `protocol`（缺步骤或答案不合格时为 `null`）、`missing`、`problems`、`design`（发现）、`ready`，以及协议将以什么保存的 `protocol_id` 和 `version`：会话开始时沿用或上次保存的协议的 ID 和下一个版本号，否则是新 ID。协议由 `POST /wb/protocols` 保存，不在这里 |
-| `GET` | `/wb/guide/sample-size` | 查询参数 `effect`、`sd`（大于 0）、`design`（`paired_block` 或 `two_group`） | `n`（`paired_block` 是区组数，`two_group` 是每组的单位数）和 `design` |
+| `GET` | `/wb/guide/sample-size` | 查询参数 `effect`、`sd`（大于 0）、`design`（`paired_block` 或 `two_group`） | `n`（`paired_block` 是区组数，`two_group` 是每组的单位数）、`design`，以及 `over_limit`：`n` 超过引导的 100 个区组时为真。数字相差太大、算不出样本量时返回 422，原因是 `guide_answer_invalid`（步骤 `scale`） |
 | `POST` | `/wb/guide/sessions/{session_id}/saved` | `protocol_id`、会话所属项目已保存的某个 `version` | 会话视图，并记下一条 `saved`：该版本的 `digest` 和 `edited`（与选择组成的结果不同的字段；选择已组不成协议时为 `null`，没有可比较的对象）。别的项目的版本或不存在的版本返回 `state`，什么都不记 |
 | `POST` | `/wb/projects` | `name`（1 到 200） | `project_id` |
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |

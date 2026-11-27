@@ -253,6 +253,19 @@ test("the sample-size helper fills the blocks", async () => {
   assert.equal(read.path, "/guide/sample-size?effect=0.15&sd=0.4&design=paired_block");
 });
 
+test("an estimate above the guide's limit is not filled in and says what to check", async () => {
+  const answers = { "GET /guide/sample-size": () => ({ n: 78489, design: "paired_block", over_limit: true }) };
+  for (const [lang, said] of [["zh", /超过引导的上限（100）.*同一单位/], ["en", /above the guide's limit \(100\).*same unit/]]) {
+    const { element } = await open("scale", { answers, lang });
+    change(named(element, "blocks")[0], "4");
+    change(named(element, "sd")[0], "1");
+    byClass(element, "guide-estimate")[0].dispatchEvent(new Event("click"));
+    await flush();
+    assert.equal(named(element, "blocks")[0].value, "4", lang);
+    assert.match(text(element), said);
+  }
+});
+
 test("not knowing the spread fills two blocks and says the experiment is a pilot", async () => {
   const { element } = await open("scale");
   assert.doesNotMatch(text(element), /按先导实验处理/);

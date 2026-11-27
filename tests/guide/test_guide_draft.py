@@ -1,6 +1,9 @@
 from growbridge.archive.models import Allocation, AnalysisPlan
+from growbridge.guide import draft
 from growbridge.guide.draft import carried_answers, latest_chosen, step_states
+from growbridge.guide.steps import MAX_BLOCKS
 from growbridge.guide.store import GuideEvent
+from growbridge.planning.design import randomize_series
 from growbridge.sim.fixtures import make_protocol
 
 ANSWERS = {
@@ -135,3 +138,17 @@ def test_carried_analysis_keeps_the_script_hash():
         script_sha256="ab" * 32,
     )
     assert carried_answers(make_protocol(analysis=plan))["analysis"]["script_sha256"] == "ab" * 32
+
+
+def test_a_carried_version_above_the_caps_is_not_randomized_again(monkeypatch):
+    blocks = MAX_BLOCKS + 1
+    made = randomize_series(["control", "high"], blocks, 7, "tent-1")
+    p = make_protocol(allocations=made, randomization_seed=7, blocks=blocks, rounds=2 * blocks)
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("randomized a carried version above the caps")
+
+    monkeypatch.setattr(draft, "randomize_series", refuse)
+    monkeypatch.setattr(draft, "randomize_tents", refuse)
+    scale = carried_answers(p)["scale"]
+    assert scale["allocations"] == [a.model_dump(mode="json") for a in made]

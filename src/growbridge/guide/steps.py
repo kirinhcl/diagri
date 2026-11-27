@@ -26,6 +26,18 @@ STEPS: tuple[StepId, ...] = (
 )
 ANSWERED: tuple[StepId, ...] = STEPS[:6]
 
+# The largest experiment the guide composes. Above them one answer would make the review and the
+# design checks run long enough to hold up the event loop the device tick shares.
+MAX_BLOCKS = 100  # the blocks of a series
+MAX_ROUNDS = 200  # the rounds of tents side by side
+MAX_UNITS = 50
+MAX_TREATMENTS = 20
+MAX_STAGES = 20
+# The other count, which only a carried version brings back: a series runs each treatment once per
+# block, and tents keep one block per round.
+MAX_SERIES_ROUNDS = MAX_BLOCKS * MAX_TREATMENTS
+MAX_TENT_BLOCKS = MAX_ROUNDS
+
 # A step whose answer was made from another step's answer must be looked at again when that
 # other answer changes.
 DEPENDS_ON: Mapping[StepId, frozenset[StepId]] = {
@@ -47,7 +59,7 @@ class CropAnswer(Model):
 
 
 class TreatmentsAnswer(Model):
-    treatments: tuple[Treatment, ...] = Field(min_length=2)
+    treatments: tuple[Treatment, ...] = Field(min_length=2, max_length=MAX_TREATMENTS)
     control_treatment_id: str
 
 
@@ -68,10 +80,10 @@ class AnalysisAnswer(Model):
 
 class ScaleAnswer(Model):
     layout: Literal["series", "tents"]
-    units: tuple[str, ...] = Field(min_length=1)
+    units: tuple[str, ...] = Field(min_length=1, max_length=MAX_UNITS)
     blocks: int | None = None
     rounds: int | None = None
-    stages: tuple[str, ...] = Field(min_length=1)
+    stages: tuple[str, ...] = Field(min_length=1, max_length=MAX_STAGES)
     experimental_unit: str = "tent"
     # These two appear only when an existing version is carried over.
     randomization_seed: int | None = None
@@ -80,13 +92,25 @@ class ScaleAnswer(Model):
     @model_validator(mode="after")
     def _layout_is_complete(self) -> "ScaleAnswer":
         if self.layout == "series":
-            if self.blocks is None or self.blocks < 1:
-                raise ValueError("a series needs blocks of at least 1")
+            _count("blocks", self.blocks, MAX_BLOCKS, needed_by="a series")
+            _count("rounds", self.rounds, MAX_SERIES_ROUNDS)
             if len(self.units) != 1:
                 raise ValueError("a series runs in exactly one unit")
-        elif self.rounds is None or self.rounds < 1:
-            raise ValueError("tents need rounds of at least 1")
+        else:
+            _count("rounds", self.rounds, MAX_ROUNDS, needed_by="tents")
+            _count("blocks", self.blocks, MAX_TENT_BLOCKS)
         return self
+
+
+def _count(name: str, value: int | None, most: int, needed_by: str = "") -> None:
+    """A count of the scale between 1 and ``most``; it may be left out unless ``needed_by``
+    names the layout that needs it."""
+    if value is None:
+        if needed_by:
+            raise ValueError(f"{needed_by} needs {name} of at least 1")
+        return
+    if not 1 <= value <= most:
+        raise ValueError(f"{name} must be at least 1 and at most {most}")
 
 
 ANSWER_MODELS: Mapping[StepId, type[Model]] = {

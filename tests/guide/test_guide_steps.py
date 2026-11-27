@@ -5,6 +5,11 @@ from growbridge.guide.steps import (
     ANSWER_MODELS,
     ANSWERED,
     DEPENDS_ON,
+    MAX_BLOCKS,
+    MAX_ROUNDS,
+    MAX_STAGES,
+    MAX_TREATMENTS,
+    MAX_UNITS,
     STEPS,
     answer_problems,
     parse_answer,
@@ -137,3 +142,45 @@ def test_parse_answer_rejects_unknown_fields_and_steps():
         parse_answer("review", {})
     with pytest.raises(ValueError):
         parse_answer("question", {"question": ""})
+
+
+# --- the caps that keep one answer from stalling the controller --------------------------------
+
+
+def series(**changes):
+    return {"layout": "series", "units": ["tent-1"], "blocks": 2, "stages": ["veg"], **changes}
+
+
+def tents(**changes):
+    return {"layout": "tents", "units": ["a", "b"], "rounds": 2, "stages": ["veg"], **changes}
+
+
+def test_the_count_a_layout_asks_for_is_capped():
+    assert parse_answer("scale", series(blocks=MAX_BLOCKS)).blocks == MAX_BLOCKS
+    assert parse_answer("scale", tents(rounds=MAX_ROUNDS)).rounds == MAX_ROUNDS
+    with pytest.raises(ValueError, match="at most"):
+        parse_answer("scale", series(blocks=MAX_BLOCKS + 1))
+    with pytest.raises(ValueError, match="at most"):
+        parse_answer("scale", tents(rounds=MAX_ROUNDS + 1))
+
+
+def test_the_count_only_a_carried_version_brings_is_capped_too():
+    most = MAX_BLOCKS * MAX_TREATMENTS
+    assert parse_answer("scale", series(rounds=most)).rounds == most
+    with pytest.raises(ValueError, match="at most"):
+        parse_answer("scale", series(rounds=most + 1))
+    with pytest.raises(ValueError, match="at most"):
+        parse_answer("scale", tents(blocks=MAX_ROUNDS + 1))
+    with pytest.raises(ValueError):
+        parse_answer("scale", tents(blocks=0))
+
+
+def test_units_stages_and_treatments_are_capped():
+    many = [f"u{i}" for i in range(MAX_UNITS + 1)]
+    with pytest.raises(ValueError):
+        parse_answer("scale", tents(units=many))
+    with pytest.raises(ValueError):
+        parse_answer("scale", series(stages=[f"s{i}" for i in range(MAX_STAGES + 1)]))
+    rows = [t(f"t{i}", {"light": i}) for i in range(MAX_TREATMENTS + 1)]
+    with pytest.raises(ValueError):
+        parse_answer("treatments", {"treatments": rows, "control_treatment_id": "t0"})

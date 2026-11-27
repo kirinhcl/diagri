@@ -330,9 +330,12 @@ function helper(ctx, { session, box, activeCount }) {
     setFieldError(entry, "");
     box.hidden = true;
     if (!(Number(typed) > 0)) return setFieldError(entry, ctx.t(typed === "" ? "form.required" : "form.badNumber"));
+    pilot.replaceChildren();
     try {
       const found = await ctx.api.get(`/guide/sample-size?effect=${enc(analysis.target_effect)}&sd=${enc(Number(typed))}&design=${enc(analysis.method)}`);
-      if (Number.isSafeInteger(found && found.n)) fill(found.n);
+      // An estimate above the guide's limit is left out of the field: it usually means two units were mixed.
+      if (found && found.over_limit === true) pilot.replaceChildren(note(ctx.t("guide.scale.overLimit")));
+      else if (Number.isSafeInteger(found && found.n)) fill(found.n);
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       showErrors(box, error, ctx);

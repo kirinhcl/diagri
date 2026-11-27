@@ -2,7 +2,9 @@ import pytest
 from vocab_support import TEST_CATALOG, WITH_OLD
 
 from growbridge.archive.models import Allocation
+from growbridge.guide import compose as compose_module
 from growbridge.guide.compose import (
+    MAX_ALLOCATIONS,
     IncompleteDraft,
     compose,
     edited_fields,
@@ -11,7 +13,7 @@ from growbridge.guide.compose import (
     review,
 )
 from growbridge.guide.draft import Chosen, carried_answers
-from growbridge.guide.steps import StepId
+from growbridge.guide.steps import MAX_ROUNDS, MAX_UNITS, StepId
 from growbridge.planning.design import randomize_tents
 from growbridge.sim.fixtures import make_protocol
 
@@ -108,6 +110,31 @@ def test_a_carried_table_that_no_longer_fits_the_scale_is_a_review_problem():
         r = review(chosen_from(stale), **KEYS, **REVIEW)
         assert r.protocol is None and not r.ready
         assert any("no longer fits the scale" in problem for problem in r.problems)
+
+
+def test_a_layout_above_the_allocation_cap_is_a_review_problem_not_a_stall(monkeypatch):
+    units = [f"tent-{i}" for i in range(MAX_UNITS)]
+    assert MAX_ROUNDS * len(units) > MAX_ALLOCATIONS
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("randomized above the allocation cap")
+
+    monkeypatch.setattr(compose_module, "randomize_tents", refuse)
+    r = review(chosen_from(with_scale(tents_scale(units, rounds=MAX_ROUNDS))), **KEYS, **REVIEW)
+    assert r.protocol is None and not r.ready
+    assert any(str(MAX_ALLOCATIONS) in problem for problem in r.problems)
+
+
+def test_a_kept_table_above_the_allocation_cap_is_a_review_problem():
+    table = [
+        {"round": r, "block": r, "unit": u, "treatment_id": tid}
+        for r in range(1, MAX_ROUNDS + 1)
+        for u, tid in [(f"tent-{i}", ("control", "high")[i % 2]) for i in range(12)]
+    ]
+    scale = {**tents_scale([f"tent-{i}" for i in range(12)], MAX_ROUNDS), "allocations": table}
+    r = review(chosen_from(with_scale(scale)), **KEYS, **REVIEW)
+    assert r.protocol is None
+    assert any(str(MAX_ALLOCATIONS) in problem for problem in r.problems)
 
 
 def test_a_missing_step_is_named():

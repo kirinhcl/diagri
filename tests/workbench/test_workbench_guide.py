@@ -4,6 +4,7 @@ import pytest
 from vocab_support import WITH_OLD
 from workbench_support import Bench
 
+from growbridge.guide.steps import MAX_BLOCKS, MAX_ROUNDS
 from growbridge.planning.design import estimate_sample_size
 from growbridge.sim.fixtures import make_protocol
 
@@ -254,13 +255,48 @@ def test_sample_size_matches_the_design_helper(operator, design):
 
     r = operator.get("/wb/guide/sample-size", params=params).json()
 
-    assert r == {"n": estimate_sample_size(0.15, 0.1, design=design), "design": design}
+    n = estimate_sample_size(0.15, 0.1, design=design)
+    assert r == {"n": n, "design": design, "over_limit": False}
 
 
 def test_a_sample_size_needs_positive_numbers(operator):
     params = {"effect": 0, "sd": 0.1, "design": "paired_block"}
 
     assert operator.get("/wb/guide/sample-size", params=params).status_code == 422
+
+
+def test_a_sample_size_above_the_block_cap_says_so(operator):
+    params = {"effect": 0.01, "sd": 1, "design": "paired_block"}
+
+    r = operator.get("/wb/guide/sample-size", params=params).json()
+
+    assert r["n"] > MAX_BLOCKS and r["over_limit"] is True
+
+
+def test_a_sample_size_that_overflows_is_refused_not_a_crash(operator):
+    params = {"effect": 1e-200, "sd": 1, "design": "paired_block"}
+
+    r = operator.get("/wb/guide/sample-size", params=params)
+
+    assert r.status_code == 422 and detail(r)["reason"] == "guide_answer_invalid"
+    assert detail(r)["params"] == {"step": "scale"}
+
+
+@pytest.mark.parametrize(
+    "scale",
+    [
+        {**ANSWERS["scale"], "blocks": MAX_BLOCKS + 1},
+        {"layout": "tents", "units": ["a", "b"], "rounds": MAX_ROUNDS + 1, "stages": ["v"]},
+    ],
+)
+def test_a_scale_above_the_caps_is_refused(bench, operator, sid, scale):
+    before = len(bench.guide.events(sid))
+
+    r = choose(bench, operator, sid, "scale", scale)
+
+    assert r.status_code == 422 and detail(r)["reason"] == "guide_answer_invalid"
+    assert detail(r)["params"] == {"step": "scale"}
+    assert len(bench.guide.events(sid)) == before
 
 
 def test_a_model_identity_cannot_use_a_guide_write_route(bench, operator, pid, sid):

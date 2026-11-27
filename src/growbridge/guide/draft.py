@@ -5,7 +5,15 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from growbridge.archive.models import Model, ResearchProtocol
-from growbridge.guide.steps import ANSWERED, DEPENDS_ON, StepId
+from growbridge.guide.steps import (
+    ANSWERED,
+    DEPENDS_ON,
+    MAX_BLOCKS,
+    MAX_ROUNDS,
+    MAX_TREATMENTS,
+    MAX_UNITS,
+    StepId,
+)
 from growbridge.guide.store import GuideEvent
 from growbridge.planning.design import randomize_series, randomize_tents
 
@@ -120,8 +128,12 @@ def _carried_scale(protocol: ResearchProtocol) -> dict[str, Any]:
 
 
 def _reproducible(protocol: ResearchProtocol, units: list[str], series: bool) -> bool:
-    """Whether the protocol's own seed regenerates its allocations exactly."""
+    """Whether the protocol's own seed regenerates its allocations exactly. A version above the
+    guide's caps, or with another number of allocations than its counts make, is not randomized
+    again: its table is kept as it is."""
     ids = [t.id for t in protocol.treatments]
+    if not _randomizable(protocol, len(ids), len(units), series):
+        return False
     seed = protocol.randomization_seed
     try:
         if series:
@@ -131,3 +143,13 @@ def _reproducible(protocol: ResearchProtocol, units: list[str], series: bool) ->
     except ValueError:
         return False
     return made == protocol.allocations
+
+
+def _randomizable(protocol: ResearchProtocol, treatments: int, units: int, series: bool) -> bool:
+    if treatments > MAX_TREATMENTS or units > MAX_UNITS:
+        return False
+    if series:
+        count, most, expected = protocol.blocks, MAX_BLOCKS, protocol.blocks * treatments
+    else:
+        count, most, expected = protocol.rounds, MAX_ROUNDS, protocol.rounds * units
+    return 1 <= count <= most and expected == len(protocol.allocations)

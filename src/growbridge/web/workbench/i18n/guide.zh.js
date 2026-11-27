@@ -85,6 +85,7 @@ export default {
   "guide.scale.estimateNeedsAnalysis": "请先回答分析计划。",
   "guide.scale.dontKnow": "不知道",
   "guide.scale.pilot": "按先导实验处理，结论会是不确定",
+  "guide.scale.overLimit": "估算的区组数超过引导的上限（100），请检查效应和标准差是否用同一单位。",
   "guide.review.lead": "请检查下面的协议。保存前每个值都可以修改。",
   "guide.review.missing": "还没回答的步骤",
   "guide.review.problems": "保存前要解决的问题",

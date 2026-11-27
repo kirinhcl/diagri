@@ -47,6 +47,8 @@ The system offers two methods, paired blocks and two groups. You choose one and 
 
 The system offers two layouts, in series or side by side in tents. You decide the number of blocks and rounds and the names of the units and stages. The random seed is set for you so the allocation can be reproduced; the allocation itself is always made by the system's own randomization. If you know the standard deviation of the main outcome from earlier work, the page can estimate the number of blocks; if you do not, the experiment is treated as a pilot and its conclusion is uncertain.
 
+The guide composes experiments up to a size: at most 100 blocks in series, 200 rounds in tents, 50 units, 20 treatments, 20 stages and 2000 allocations. An estimate above 100 blocks is not filled in; the page asks you to check that the target effect and the standard deviation use the same unit. A larger experiment is set up with the protocol form on the project page; a larger version the guide starts from keeps its allocation table, and the review names the limit it passes.
+
 ### 7. Review and save
 
 The guide shows what is missing or wrong: steps not answered yet, problems to solve before saving, and hints. Then it shows the composed protocol in the normal protocol form, with every value open to change. The same values give the same protocol digest as the hand-filled form. **Saving is always your own click.** The guide never saves on its own; the form saves through `POST /wb/protocols` like the project page. If the last version of the protocol declared an analysis script hash, it is shown with a "keep" box, ticked at first. The hash goes back on the new version only if you leave the box ticked and save the same protocol id.

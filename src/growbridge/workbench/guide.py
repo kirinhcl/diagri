@@ -23,7 +23,13 @@ from growbridge.guide.compose import (
 )
 from growbridge.guide.draft import carried_answers, latest_chosen, step_states
 from growbridge.guide.options import options_for
-from growbridge.guide.steps import ANSWERED, StepId, answer_problems, parse_answer
+from growbridge.guide.steps import (
+    ANSWERED,
+    MAX_BLOCKS,
+    StepId,
+    answer_problems,
+    parse_answer,
+)
 from growbridge.guide.store import GuideEvent, GuideSession, GuideStore
 from growbridge.planning.design import estimate_sample_size
 from growbridge.ports import Actor, Denied
@@ -269,7 +275,11 @@ def add_guide_routes(
         sd: Annotated[float, Query(gt=0, allow_inf_nan=False)],
         design: Literal["paired_block", "two_group"],
     ):
-        return {"n": estimate_sample_size(effect, sd, design=design), "design": design}
+        try:
+            n = estimate_sample_size(effect, sd, design=design)
+        except (OverflowError, ValueError) as exc:
+            raise _invalid("scale", f"no sample size for these numbers: {exc}") from None
+        return {"n": n, "design": design, "over_limit": n > MAX_BLOCKS}
 
     @router.post("/guide/sessions/{session_id}/saved")
     async def record_saved(session_id: PathId, body: SavedIn, actor: Operator):

@@ -25,6 +25,9 @@ from growbridge.vocab.checks import check_protocol
 from growbridge.vocab.curie import taxon_problems
 from growbridge.workbench.rounds import checked_protocol
 
+# The most allocations the guide composes; above it a review would hold up the event loop.
+MAX_ALLOCATIONS = 2000
+
 
 class IncompleteDraft(ValueError):
     def __init__(self, missing: tuple[StepId, ...]) -> None:
@@ -102,6 +105,7 @@ def _layout(
     else:
         assert scale.rounds is not None
         blocks = rounds = scale.rounds
+    _check_allocation_count(scale, len(ids), blocks, rounds)
     if scale.allocations is not None:
         if not _table_fits(scale, ids, blocks, rounds):
             raise ValueError(KEPT_TABLE_STALE)
@@ -109,6 +113,21 @@ def _layout(
     if scale.layout == "series":
         return randomize_series(ids, blocks, seed, scale.units[0]), blocks, rounds
     return randomize_tents(ids, scale.units, rounds, seed), blocks, rounds
+
+
+def _check_allocation_count(scale: ScaleAnswer, treatments: int, blocks: int, rounds: int) -> None:
+    """Refuse, before anything is randomized or checked, a layout with more allocations than the
+    guide composes: the design checks grow with blocks times allocations."""
+    if scale.allocations is not None:
+        count = len(scale.allocations)
+    elif scale.layout == "series":
+        count = blocks * treatments
+    else:
+        count = rounds * len(scale.units)
+    if count > MAX_ALLOCATIONS:
+        raise ValueError(
+            f"the layout makes {count} allocations; the guide composes at most {MAX_ALLOCATIONS}"
+        )
 
 
 KEPT_TABLE_STALE = (
