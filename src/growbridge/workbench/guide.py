@@ -233,8 +233,14 @@ class _Guide:
         }
 
     def saved(self, session: GuideSession, body: SavedIn, actor: Actor) -> dict[str, Any]:
-        protocol = self.workflow.store.protocol(body.protocol_id, body.version)
+        """Record the version this session ended in. One of another project, or one saved before
+        the session started (so not by it), is answered as unknown."""
+        store = self.workflow.store
+        protocol = store.protocol(body.protocol_id, body.version)
+        saved_at = store.protocol_saved_at(body.protocol_id, body.version)
         if protocol is None or protocol.project_id != session.project_id:
+            raise denials.unknown("protocol", body.protocol_id)
+        if saved_at is None or saved_at < session.started_at:
             raise denials.unknown("protocol", body.protocol_id)
         events = self.guide.events(session.session_id)
         payload = {

@@ -226,6 +226,19 @@ def test_saved_refuses_a_protocol_of_another_project(bench, operator, sid):
     assert len(bench.guide.events(sid)) == before
 
 
+def test_saved_refuses_a_version_saved_before_the_session_started(bench, operator, pid):
+    bench.workflow.save_protocol(make_protocol(project_id=pid), bench.designer)
+    bench.clock.advance(60)
+    sid = start(bench, operator, pid)
+    before = len(bench.guide.events(sid))
+
+    r = bench.post(operator, f"{GUIDE}/{sid}/saved", {"protocol_id": "protocol-1", "version": 1})
+
+    assert r.status_code == 409 and detail(r)["reason"] == "record_not_found"
+    assert detail(r)["params"]["record_kind"] == "protocol"
+    assert len(bench.guide.events(sid)) == before
+
+
 def test_saved_refuses_a_protocol_that_does_not_exist(bench, operator, sid):
     r = bench.post(operator, f"{GUIDE}/{sid}/saved", {"protocol_id": "nope", "version": 1})
 

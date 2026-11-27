@@ -195,6 +195,14 @@ class WorkflowStore:
         )
         return None if row is None else ResearchProtocol.model_validate_json(row["body"])
 
+    def protocol_saved_at(self, protocol_id: str, version: int) -> float | None:
+        """When a protocol version was saved; ``None`` for one that was not."""
+        row = self.db.one(
+            "SELECT created_at FROM wf_protocols WHERE id = ? AND version = ?",
+            (protocol_id, version),
+        )
+        return None if row is None else row["created_at"]
+
     def protocol_variables_before(self, protocol_id: str, version: int) -> frozenset[str]:
         rows = self.db.query(
             "SELECT body FROM wf_protocols WHERE id = ? AND version < ?", (protocol_id, version)
