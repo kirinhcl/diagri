@@ -2422,6 +2422,44 @@
       "action": true,
       "of": "state"
     },
+    "device_test_not_local": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_not_idle": {
+      "params": [
+        "greenhouse_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_running": {
+      "params": [
+        "greenhouse_id",
+        "channel"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_unsettled": {
+      "params": [
+        "greenhouse_id",
+        "test_id"
+      ],
+      "action": true,
+      "of": "state"
+    },
+    "device_test_protected": {
+      "params": [
+        "greenhouse_id",
+        "channel"
+      ],
+      "action": true,
+      "of": "state"
+    },
     "operator_name_length": {
       "params": [
         "max_length"

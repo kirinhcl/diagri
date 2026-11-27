@@ -387,6 +387,11 @@ _register(
     ("project_has_unfinished_stages", ("project_id",)),
     ("operator_not_active", ("name",)),
     ("plants_not_removed", ("greenhouse_id",)),
+    ("device_test_not_local", ("greenhouse_id",)),
+    ("device_test_not_idle", ("greenhouse_id",)),
+    ("device_test_running", ("greenhouse_id", "channel")),
+    ("device_test_unsettled", ("greenhouse_id", "test_id")),
+    ("device_test_protected", ("greenhouse_id", "channel")),
 )
 _register(
     "param",

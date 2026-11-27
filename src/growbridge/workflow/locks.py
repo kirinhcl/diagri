@@ -135,6 +135,11 @@ class GreenhouseLocks:
                 self._record(greenhouse_id, holder, "lock", holder, "")
         return wanted
 
+    def note_event(self, greenhouse_id: str, action: str, actor: str, note: str) -> None:
+        """Add an entry to the lock log (device tests record theirs here)."""
+        row = self._row(greenhouse_id)
+        self._record(greenhouse_id, None if row is None else row["holder"], action, actor, note)
+
     def _record(self, greenhouse_id: str, holder: str | None, action: str, actor: str, note: str):
         self.db.execute(
             "INSERT INTO greenhouse_lock_events(greenhouse_id, holder, action, actor, at, note)"
