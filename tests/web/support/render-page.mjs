@@ -56,6 +56,8 @@ const ROUTES = [
   [/^\/greenhouses$/, () => "greenhouses.json"],
   [/^\/admin\/operators$/, () => "admin-operators.json"],
   [/^\/admin\/locks$/, () => "admin-locks.json"],
+  [/^\/guide\/sessions\/[^/]+$/, () => "guide-session.json"],
+  [/^\/guide\/sessions\/[^/]+\/steps\/([a-z]+)$/, ([step]) => `guide-options-${step}.json`],
 ];
 
 function stageFixture(id, part, pending) {

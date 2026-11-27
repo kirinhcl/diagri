@@ -81,6 +81,7 @@ const PAGES_CHECKED = [
   { page: "project", params: { projectId: PROJECT.project_id } },
   { page: "project", params: { projectId: PROJECT.project_id }, fixtures: BUSY_PROJECT },
   { page: "environment" },
+  { page: "guide", params: { sessionId: "guide-1" } },
   { page: "safety" },
   { page: "greenhouses" },
   { page: "admin" },

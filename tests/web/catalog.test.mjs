@@ -16,7 +16,7 @@ import { visibleText } from "./support/leaks.mjs";
 const KNOWN = JSON.parse(readFileSync(new URL("./fixtures/known-codes.json", import.meta.url), "utf8"));
 const ROOT = fileURLToPath(new URL("../../src/growbridge/web/workbench", import.meta.url));
 // Prefixes whose dynamic part is always a constant of the console itself, never a server value.
-const KEY_BUILDERS_ALLOWED = new Set(["nav", "stage", "measure", "metric", "env.channel", "env.window", "round.choice"]);
+const KEY_BUILDERS_ALLOWED = new Set(["nav", "stage", "measure", "metric", "env.channel", "env.window", "round.choice", "guide.step"]);
 const TEMPLATE_KEY = /\bt\(\s*`([^`$]*)\$\{/g; // t(`prefix.${value}`)
 const JOINED_KEY = /\bt\(\s*(["'])([^"']*)\1\s*\+/g; // t("prefix." + value)
 

@@ -512,3 +512,20 @@ code {
 .tasks-rules summary { cursor: pointer; }
 .tasks-rules summary:hover { color: var(--green-dark); }
 .tasks-rules p { margin: 6px 0 0; }
+
+/* guide page: step rail, the open card, the draft so far */
+.guide-layout { display: grid; grid-template-columns: minmax(150px, 200px) minmax(0, 1fr) minmax(180px, 260px); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .guide-layout { grid-template-columns: minmax(0, 1fr); } }
+.guide-rail { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.guide-rail-button { display: flex; gap: 8px; align-items: baseline; width: 100%; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--muted-strong); font: inherit; text-align: left; }
+button.guide-rail-button { cursor: pointer; color: var(--ink); }
+button.guide-rail-button:hover { background: var(--pale); }
+.guide-rail-item[aria-current="step"] .guide-rail-button { background: var(--pale); color: var(--green); font-weight: 650; }
+.guide-rail-number { min-width: 1.2em; font-size: 12px; color: var(--muted-strong); }
+.guide-rail-status { display: block; font-size: 12px; color: var(--amber); }
+.guide-choices { display: grid; gap: 6px; }
+.guide-choice { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.guide-own[hidden], .guide-choices[hidden] { display: none; }
+.guide-helper { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+.guide-draft-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.guide-draft-row { display: grid; gap: 2px; font-size: 14px; overflow-wrap: anywhere; }

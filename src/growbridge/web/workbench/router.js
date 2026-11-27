@@ -4,6 +4,7 @@ const WITH_ID = new Map([
   ["projects", ["project", "projectId"]],
   ["rounds", ["round", "roundId"]],
   ["stages", ["stage", "stageId"]],
+  ["guide", ["guide", "sessionId"]],
 ]);
 
 function decode(part) {
@@ -24,7 +25,7 @@ function evidenceParams(query) {
 }
 
 // Every page a signed-in operator can open; the sign-in page is separate.
-export const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety", "greenhouses", "admin"]);
+export const PAGES = new Set(["inbox", "environment", "projects", "project", "round", "stage", "alerts", "evidence", "compute", "safety", "greenhouses", "admin", "guide"]);
 
 export function parseHash(hash) {
   const [path, query = ""] = String(hash || "").replace(/^#/, "").split("?");

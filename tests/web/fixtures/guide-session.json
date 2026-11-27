@@ -1,0 +1,19 @@
+{
+  "session": {
+    "session_id": "guide-1",
+    "project_id": "project_f37eabecfe164f2991f1e2f552b714da",
+    "operator": "alice",
+    "started_at": 1800000000.0,
+    "lang": "zh",
+    "seed": 417978402
+  },
+  "steps": [
+    { "step": "question", "status": "pending", "chosen": null },
+    { "step": "crop", "status": "pending", "chosen": null },
+    { "step": "treatments", "status": "pending", "chosen": null },
+    { "step": "measures", "status": "pending", "chosen": null },
+    { "step": "analysis", "status": "pending", "chosen": null },
+    { "step": "scale", "status": "pending", "chosen": null }
+  ],
+  "saved": []
+}

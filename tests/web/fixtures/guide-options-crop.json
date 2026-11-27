@@ -1,0 +1,10 @@
+{
+  "step": "crop",
+  "options": [
+    { "id": "lettuce", "value": { "crop": "Lettuce", "crop_taxon": "NCBITaxon:4236" }, "label_en": "Lettuce", "label_zh": "生菜" },
+    { "id": "tomato", "value": { "crop": "Tomato", "crop_taxon": "NCBITaxon:4081" }, "label_en": "Tomato", "label_zh": "番茄" },
+    { "id": "cucumber", "value": { "crop": "Cucumber", "crop_taxon": "NCBITaxon:3659" }, "label_en": "Cucumber", "label_zh": "黄瓜" },
+    { "id": "pepper", "value": { "crop": "Pepper", "crop_taxon": "NCBITaxon:4072" }, "label_en": "Pepper", "label_zh": "辣椒" }
+  ],
+  "defaults": {}
+}

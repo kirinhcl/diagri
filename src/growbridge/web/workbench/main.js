@@ -20,6 +20,7 @@ const ID_CRUMBS = new Map([
   ["project", "crumb.project"],
   ["round", "crumb.round"],
   ["stage", "crumb.stage"],
+  ["guide", "crumb.guide"],
 ]);
 
 const app = document.getElementById("app");

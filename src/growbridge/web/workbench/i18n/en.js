@@ -2,6 +2,7 @@ import codes from "./codes.en.js";
 import denials from "./denials.en.js";
 import evidence from "./evidence.en.js";
 import forms from "./forms.en.js";
+import guide from "./guide.en.js";
 import messages from "./messages.en.js";
 
 export default {
@@ -9,6 +10,7 @@ export default {
   ...messages,
   ...denials,
   ...forms,
+  ...guide,
   ...evidence,
   "app.title": "DiAGRI Workbench",
   "app.subtitle": "Workbench",
