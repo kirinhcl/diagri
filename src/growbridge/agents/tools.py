@@ -177,12 +177,16 @@ class Toolset:
         return [t for t in self._tools.values() if not (restricted and (t.sandbox or t.writes))]
 
     def schemas(self, restricted: bool = False) -> list[dict]:
-        """Strict tool definitions; ``restricted`` hides sandbox and write tools."""
+        """Tool definitions; ``restricted`` hides sandbox and write tools.
+
+        Not ``strict``: its grammar rejected these schemas (numeric and length limits, more than
+        24 optional parameters in a request, a compiled grammar too large). ``call`` validates
+        every input against the tool's input model instead.
+        """
         return [
             {
                 "name": tool.name,
                 "description": tool.description,
-                "strict": True,
                 "input_schema": input_schema(tool.input_model),
             }
             for tool in self._visible(restricted)

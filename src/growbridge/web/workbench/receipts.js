@@ -30,8 +30,23 @@ export function sleep(ms, signal) {
   });
 }
 
+// A version 4 (RFC 4122) uuid. A browser gives crypto.randomUUID only to a secure context (HTTPS or
+// localhost); a page served over plain HTTP from a LAN address has getRandomValues alone.
+export function randomUuid(source = globalThis.crypto) {
+  if (typeof source.randomUUID === "function") return source.randomUUID();
+  const random = source.getRandomValues(new Uint8Array(16));
+  const bytes = Array.from(random, (byte, index) => {
+    if (index === 6) return (byte & 0x0f) | 0x40; // version 4
+    if (index === 8) return (byte & 0x3f) | 0x80; // RFC 4122 variant
+    return byte;
+  });
+  const hex = bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)]
+    .join("-");
+}
+
 // A request id the server accepts (^[a-zA-Z0-9_-]{8,100}$); a retry after re-auth reuses it.
-export function newRequestId(randomUUID = () => globalThis.crypto.randomUUID()) {
+export function newRequestId(randomUUID = () => randomUuid()) {
   return `wb-${randomUUID()}`;
 }
 
