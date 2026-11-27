@@ -1308,6 +1308,13 @@
       "action": true,
       "of": "right_held"
     },
+    "restore_invalid": {
+      "params": [
+        "detail"
+      ],
+      "action": true,
+      "of": "param"
+    },
     "right_channel": {
       "params": [
         "right_id",

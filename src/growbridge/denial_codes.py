@@ -120,6 +120,7 @@ _register(
     ("right_needs_operator", ("right_id",)),
 )
 _register("right_held", ("right_held", ("device_id", "stage_id")))
+_register("param", ("restore_invalid", ("detail",)))
 _register(
     "scope",
     ("right_channel", ("right_id", "channel")),

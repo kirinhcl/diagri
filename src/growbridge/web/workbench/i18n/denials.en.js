@@ -134,6 +134,8 @@ export default {
   "msg.denial.right_wrong_kind.action": "Use “Start irrigation” on the stage page, or use “Take over by hand” there first.",
   "msg.denial.right_voided": "The queued command was cancelled before it was sent.",
   "msg.denial.right_voided.action": "Check the stage and device state, then send the command again if it is still needed.",
+  "msg.denial.restore_invalid": "The saved device settings could not be written back.",
+  "msg.denial.restore_invalid.action": "Check the device on site and use “Retry restore” on the Greenhouses page, or confirm you handled it there.",
   "msg.denial.right_needs_operator": "This kind of write right can only be used by an identified operator.",
   "msg.denial.right_needs_operator.action": "Sign in as an operator and request the right again.",
   "msg.denial.right_held": "A stage already holds the write right for this device.",

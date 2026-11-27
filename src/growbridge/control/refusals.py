@@ -139,6 +139,15 @@ def controls_disabled() -> Denied:
     )
 
 
+def restore_invalid(detail: str) -> Denied:
+    return Denied(
+        "param",
+        f"cannot restore this snapshot: {detail}",
+        reason="restore_invalid",
+        params={"detail": detail},
+    )
+
+
 def right_wrong_kind(right_id: int) -> Denied:
     return Denied(
         "right_invalid",

@@ -134,6 +134,8 @@ export default {
   "msg.denial.right_wrong_kind.action": "请在阶段页点“开始浇水”，或先点“人工接管”。",
   "msg.denial.right_voided": "排队的指令在发出之前被取消了。",
   "msg.denial.right_voided.action": "请看一下阶段和设备现在的状态，仍然需要的话再发一次。",
+  "msg.denial.restore_invalid": "保存的设备设置无法写回。",
+  "msg.denial.restore_invalid.action": "请到现场检查设备，然后在「温室」页点“重试还原”，或在那里确认已在现场处理。",
   "msg.denial.right_needs_operator": "这种写入权只能由已确认身份的操作员使用。",
   "msg.denial.right_needs_operator.action": "请用操作员账号登录后再申请。",
   "msg.denial.right_held": "这台设备的写入权已经被一个阶段占用。",

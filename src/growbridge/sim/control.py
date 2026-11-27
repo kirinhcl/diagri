@@ -5,15 +5,18 @@ from collections.abc import Mapping
 from growbridge.archive.models import (
     LEVEL_RANGES,
     ActionRecord,
+    ActionState,
     Channel,
     RightKind,
     RunSheet,
     SafetyConfig,
     WriteRight,
 )
+from growbridge.control.service import snapshot_digest
 from growbridge.ports import (
     ActionRequest,
     Capabilities,
+    ChannelSnapshot,
     DeviceState,
     Difference,
     PumpOffTrigger,
@@ -136,6 +139,12 @@ class FakeControl:
     ) -> ActionRecord:
         raise NotImplementedError("FakeControl does not simulate writes")
 
+    async def snapshot(self, channel: Channel) -> ChannelSnapshot:
+        raise NotImplementedError("FakeControl does not simulate writes")
+
+    async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
+        raise NotImplementedError("FakeControl does not simulate writes")
+
     def irrigating(self) -> bool:
         return False
 
@@ -196,3 +205,63 @@ class FakeControl:
 
     def _now(self) -> float:
         return self.clock.now() if self.clock is not None else 0.0
+
+
+class WritingFakeControl(FakeControl):
+    """A ``FakeControl`` that also writes: levels and blocks change in memory, every call is
+    logged, and ``fail_restore`` / ``unreadable`` simulate a restore the device did not take and
+    a device that cannot be read."""
+
+    def __init__(self, clock=None):
+        super().__init__(clock)
+        self.blocks: dict[Channel, dict] = {}
+        self.fail_restore = False
+        self.unreadable = False
+
+    async def submit(self, request: ActionRequest) -> ActionRecord:
+        self.levels[request.channel] = request.level
+        self.log.append(("submit", request.channel, request.level, request.request_id))
+        return self._record(request, ActionState.CONFIRMED)
+
+    async def irrigate(
+        self, request: ActionRequest, seconds: float, planned: bool = False
+    ) -> ActionRecord:
+        self.levels[Channel.PUMP] = 0  # switched on, then off and confirmed
+        self.log.append(("irrigate", seconds, request.request_id))
+        return self._record(request, ActionState.CONFIRMED)
+
+    async def snapshot(self, channel: Channel) -> ChannelSnapshot:
+        if self.unreadable:
+            raise ConnectionError("simulated: the device cannot be read")
+        block = dict(self.blocks.get(channel, {"modeType": 0}))
+        level = self.levels.get(channel, 0)
+        digest = snapshot_digest(channel, block)
+        return ChannelSnapshot(
+            channel=channel,
+            block=block,
+            level=level,
+            mode=block.get("modeType"),
+            block_digest=digest,
+        )
+
+    async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
+        self.log.append(("restore", request.channel, request.level, request.request_id))
+        if self.fail_restore:
+            return self._record(request, ActionState.FAILED)
+        self.levels[request.channel] = request.level
+        self.blocks[request.channel] = dict(snapshot.block)
+        return self._record(request, ActionState.CONFIRMED)
+
+    def _record(self, request: ActionRequest, state: ActionState) -> ActionRecord:
+        right = self.rights[request.right_number]
+        return ActionRecord(
+            request_id=request.request_id,
+            state=state,
+            channel=request.channel,
+            planned_level=request.level,
+            right_number=right.number,
+            right_kind=right.kind,
+            trigger=request.trigger,
+            created_at=self._now(),
+            operator=request.operator or right.operator,
+        )
