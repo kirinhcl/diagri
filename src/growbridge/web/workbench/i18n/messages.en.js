@@ -75,6 +75,9 @@ export default {
     "Open the stage page, deal with the reason shown, then continue the stage.",
   "msg.alert.task_deadline": "A research task is past its deadline and needs attention.",
   "msg.alert.task_deadline.action": "Open this task in its project; finish it or close it.",
+  "msg.alert.device_test_restore_failed": "A device test could not put the settings back: {channel}.",
+  "msg.alert.device_test_restore_failed.action":
+    "Check the device on site, then on the Greenhouses page retry the restore or confirm you handled it.",
   "msg.alert.run_health": "The run's health checks are failing: {failures}.",
   "msg.alert.run_health.action":
     "Fix the items listed; until then the data of this run cannot be trusted.",

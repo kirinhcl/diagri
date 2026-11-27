@@ -59,6 +59,7 @@ from growbridge.workbench.rounds import ProjectBudget, add_round_routes
 from growbridge.workbench.scope import project_read, project_write, stage_read, stage_write
 from growbridge.workflow import denials
 from growbridge.workflow.access import Access
+from growbridge.workflow.device_test import DeviceTests
 from growbridge.workflow.locks import GreenhouseLocks
 from growbridge.workflow.naming import STAGE_NAME_KEYS, stage_names
 from growbridge.workflow.permissions import REAUTH_SECONDS, require_operator
@@ -239,9 +240,11 @@ class Workbench:
         access: Access | None = None,
         locks: GreenhouseLocks | None = None,
         notes: DeviceNotes | None = None,
+        tests: DeviceTests | None = None,
     ):
         self.access = access  # multi-user rules; None when multi_user is off
         self.locks = locks
+        self.device_tests = tests
         self.workflow = workflow
         self.control = control
         self.archive = archive
@@ -302,7 +305,9 @@ class Workbench:
         if compute is not None and tasks is not None:
             add_compute_routes(self.router, self.operator, self.fresh, compute, tasks, access)
         if access is not None and locks is not None:
-            add_greenhouse_routes(self.router, self.operator, self.fresh, locks, access)
+            add_greenhouse_routes(
+                self.router, self.operator, self.fresh, locks, access, self.device_tests
+            )
             routes = (self.router, self.operator, self.fresh, operators, locks, workflow.store)
             add_admin_routes(*routes, access)
 
@@ -737,6 +742,7 @@ def create_workbench(
     access: Access | None = None,
     locks: GreenhouseLocks | None = None,
     notes: DeviceNotes | None = None,
+    tests: DeviceTests | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
     ``tasks`` and ``budget`` together add the call budget and research goal routes; ``runner``
@@ -745,4 +751,4 @@ def create_workbench(
     the goal routes) records each goal and adds the project conversation read."""
     args = (workflow, control, archive, operators, settings, role_tokens)
     more = (alerts, tasks, budget, runner, holdout, compute, conversation)
-    return Workbench(*args, *more, access=access, locks=locks, notes=notes).router
+    return Workbench(*args, *more, access=access, locks=locks, notes=notes, tests=tests).router

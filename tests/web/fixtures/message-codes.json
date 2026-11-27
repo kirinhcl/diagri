@@ -136,6 +136,14 @@
       ],
       "action": true
     },
+    "device_test_restore_failed": {
+      "params": [
+        "greenhouse_id",
+        "channel",
+        "test_id"
+      ],
+      "action": true
+    },
     "run_health": {
       "params": [
         "failures"

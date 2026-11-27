@@ -237,6 +237,7 @@ export default {
   "alert.kind.stage_checks": "Stage check failure",
   "alert.kind.stage_waiting": "Stage waiting for a person",
   "alert.kind.task_deadline": "Research task overdue",
+  "alert.kind.device_test_restore_failed": "Device test not restored",
   "alert.kind.task_missed": "Missed manual task",
   "alert.kind.threshold": "Threshold crossed",
   "alert.kind.tick_step": "Background step failure",

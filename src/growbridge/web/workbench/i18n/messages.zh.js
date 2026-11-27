@@ -56,6 +56,8 @@ export default {
   "msg.alert.stage_waiting.action": "请打开阶段页，按显示的原因处理，然后继续运行这个阶段。",
   "msg.alert.task_deadline": "有一个研究任务过了截止时间，需要处理。",
   "msg.alert.task_deadline.action": "请打开项目里的这个任务，处理完或者关闭它。",
+  "msg.alert.device_test_restore_failed": "设备测试没能恢复原来的设置：{channel}。",
+  "msg.alert.device_test_restore_failed.action": "请到现场检查设备，然后在「温室」页重试还原，或确认已在现场处理。",
   "msg.alert.run_health": "这次运行的健康检查没有通过：{failures}。",
   "msg.alert.run_health.action": "请修好列出的这几项；修好前，这次运行的数据不可信。",
   "msg.alert.external_monitor": "外部的{signal}心跳没能送出去。",

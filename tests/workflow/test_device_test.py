@@ -143,8 +143,7 @@ async def test_restore_failure_raises_an_alert(rig):
 async def test_unreadable_device_writes_nothing(rig):
     rig.control.unreadable = True
 
-    with pytest.raises(ConnectionError):
-        await rig.tests.run("gh-01", Channel.LIGHT, rig.people.alice)
+    assert await refused(rig) == "no_live_link"
 
     assert rig.tests.history("gh-01") == []
     assert rig.control.granted(RightKind.TEST) == [] and calls(rig, "submit") == []

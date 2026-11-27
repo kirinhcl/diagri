@@ -237,6 +237,7 @@ export default {
   "alert.kind.stage_checks": "阶段检查故障",
   "alert.kind.stage_waiting": "阶段等待处理",
   "alert.kind.task_deadline": "研究任务逾期",
+  "alert.kind.device_test_restore_failed": "设备测试未还原",
   "alert.kind.task_missed": "错过的人工任务",
   "alert.kind.threshold": "超出阈值",
   "alert.kind.tick_step": "后台步骤失败",

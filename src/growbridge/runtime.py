@@ -62,7 +62,13 @@ from growbridge.ports import Actor, Denied, StageRuntime
 from growbridge.research.analysis import ConfirmatoryRunner
 from growbridge.research.holdout import HoldoutRegistry, project_outcomes
 from growbridge.research.sandbox import SANDBOX_EXEC, RefusingSandbox, SeatbeltSandbox
-from growbridge.runtime_access import AccessParts, build_access, workbench_access
+from growbridge.runtime_access import (
+    AccessParts,
+    build_access,
+    device_test_step,
+    wire_device_tests,
+    workbench_access,
+)
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_alerts import expire_tasks, stage_alerts
 from growbridge.runtime_backup import Backups
@@ -347,6 +353,7 @@ class Runtime:
             ("archive", self._ingest),
             ("executor", self.executor.tick),
             ("recovery", self._follow_up),
+            ("device tests", device_test_step(self.access_parts)),
             ("observer", self.observer.tick),
             ("outbox", self._deliver),
             ("tasks", self._expire),
@@ -717,6 +724,7 @@ def build_runtime(
     executor.watchdog.alert = runtime._alert
     executor.watchdog.resolve = runtime.resolve_alert
     backups.alert = runtime.alert
+    wire_device_tests(parts, executor, runtime)
     return runtime
 
 

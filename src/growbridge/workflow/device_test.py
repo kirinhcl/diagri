@@ -23,7 +23,9 @@ from growbridge.archive.db import Database
 from growbridge.archive.ids import new_id
 from growbridge.archive.models import ActionRecord, ActionState, Channel, Model, RightKind
 from growbridge.config import Greenhouse
+from growbridge.control import refusals
 from growbridge.ports import ActionRequest, Actor, ChannelSnapshot, ControlPort, RightScope
+from growbridge.service import BridgeError
 from growbridge.workflow import denials as workflow_denials
 from growbridge.workflow import device_test_denials as denials
 from growbridge.workflow.access import Access
@@ -142,8 +144,10 @@ class DeviceTests:
         record = self._begin(house, channel, actor)
         try:
             snapshot = await self.control.snapshot(channel)
-        except BaseException:
+        except BaseException as error:
             self.db.execute("DELETE FROM device_tests WHERE test_id = ?", (record.test_id,))
+            if isinstance(error, (BridgeError, ConnectionError, OSError)):
+                raise refusals.no_live_link(house.device_id) from error
             raise
         self._active.add(record.test_id)
         try:

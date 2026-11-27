@@ -221,14 +221,14 @@ class WritingFakeControl(FakeControl):
     async def submit(self, request: ActionRequest) -> ActionRecord:
         self.levels[request.channel] = request.level
         self.log.append(("submit", request.channel, request.level, request.request_id))
-        return self._record(request, ActionState.CONFIRMED)
+        return self._receipt(request, ActionState.CONFIRMED)
 
     async def irrigate(
         self, request: ActionRequest, seconds: float, planned: bool = False
     ) -> ActionRecord:
         self.levels[Channel.PUMP] = 0  # switched on, then off and confirmed
         self.log.append(("irrigate", seconds, request.request_id))
-        return self._record(request, ActionState.CONFIRMED)
+        return self._receipt(request, ActionState.CONFIRMED)
 
     async def snapshot(self, channel: Channel) -> ChannelSnapshot:
         if self.unreadable:
@@ -247,12 +247,12 @@ class WritingFakeControl(FakeControl):
     async def restore(self, request: ActionRequest, snapshot: ChannelSnapshot) -> ActionRecord:
         self.log.append(("restore", request.channel, request.level, request.request_id))
         if self.fail_restore:
-            return self._record(request, ActionState.FAILED)
+            return self._receipt(request, ActionState.FAILED)
         self.levels[request.channel] = request.level
         self.blocks[request.channel] = dict(snapshot.block)
-        return self._record(request, ActionState.CONFIRMED)
+        return self._receipt(request, ActionState.CONFIRMED)
 
-    def _record(self, request: ActionRequest, state: ActionState) -> ActionRecord:
+    def _receipt(self, request: ActionRequest, state: ActionState) -> ActionRecord:
         right = self.rights[request.right_number]
         return ActionRecord(
             request_id=request.request_id,
