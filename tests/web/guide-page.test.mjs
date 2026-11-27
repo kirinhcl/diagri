@@ -1,0 +1,501 @@
+// The guide page: the step rail, the cards of the six answer steps, and the draft summary. The page
+// sends exactly what the server's choose route takes; it never invents an answer.
+import assert from "node:assert/strict";
+import { afterEach, test } from "node:test";
+
+import { clearDrafts } from "../../src/growbridge/web/workbench/drafts.js";
+import { ApiError } from "../../src/growbridge/web/workbench/api.js";
+import { visibleText } from "./support/leaks.mjs";
+import { FIXTURES, renderPage } from "./support/render-page.mjs";
+
+afterEach(() => clearDrafts());
+
+const BASE = FIXTURES["guide-session.json"];
+const SESSION_PATH = "/guide/sessions/guide-1";
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+const flush = async () => {
+  for (let i = 0; i < 6; i += 1) await settle();
+};
+const find = (node, match) => [...(match(node) ? [node] : []), ...[...(node.children || [])].flatMap((child) => find(child, match))];
+const byTag = (node, tag) => find(node, (el) => el.localName === tag);
+const byClass = (node, name) => find(node, (el) => el.classList && el.classList.contains(name));
+const named = (node, name) => find(node, (el) => el.getAttribute && el.getAttribute("name") === name);
+const change = (input, value) => {
+  input.value = value;
+  input.dispatchEvent(new Event("input"));
+  input.dispatchEvent(new Event("change"));
+};
+// A radio or a check box, chosen by its name and value.
+const pick = (root, name, value) => {
+  const input = named(root, name).find((el) => el.getAttribute("value") === value);
+  assert.ok(input, `${name}=${value}`);
+  input.checked = true;
+  input.dispatchEvent(new Event("change"));
+};
+const railItems = (root) => byClass(root, "guide-rail-item");
+const titleOf = (item) => byClass(item, "guide-rail-title")[0].textContent;
+const currentTitle = (root) => {
+  const current = railItems(root).find((item) => item.getAttribute("aria-current") === "step");
+  return current ? titleOf(current) : null;
+};
+const submit = async (root) => {
+  byTag(byClass(root, "guide-card")[0], "form")[0].dispatchEvent(new Event("submit", { cancelable: true }));
+  await flush();
+};
+const text = (root) => visibleText(root);
+
+const ANSWERS = {
+  question: { question: "Does more light speed up growth?", hypothesis: "" },
+  crop: { crop: "Lettuce", crop_taxon: "NCBITaxon:4236" },
+  treatments: {
+    treatments: [
+      { id: "control", name: "Light 40", description: "", factors: { light: 40 } },
+      { id: "high", name: "Light 70", description: "", factors: { light: 70 } },
+    ],
+    control_treatment_id: "control",
+  },
+  measures: { variables: ["canopy_area_growth"], primary_endpoint: "canopy_area_growth" },
+  analysis: { target_effect: 0.15, method: "paired_block", exclusion_rules: [], max_missing_fraction: 0.2, max_deviation_fraction: 0.1 },
+  scale: { layout: "series", blocks: 3, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent" },
+};
+
+// A session view: the steps in `done` answered (with their source and status when given), the rest pending.
+function session(done = [], { source = {}, status = {}, answers = {} } = {}) {
+  const steps = BASE.steps.map(({ step }, index) =>
+    done.includes(step)
+      ? { step, status: status[step] || "done", chosen: { step, answer: answers[step] || ANSWERS[step], source: source[step] || "own", option_ids: [], seq: index + 2 } }
+      : { step, status: "pending", chosen: null },
+  );
+  return { ...BASE, steps };
+}
+const option = (id, zh, en, value) => ({ id, value, label_zh: zh, label_en: en });
+const OPTIONS = {
+  treatments: { step: "treatments", options: [option("light", "光照", "Light", { factor: "light", unit: "%" })], defaults: {} },
+  measures: {
+    step: "measures",
+    options: [
+      option("canopy_area_growth", "冠层面积增长", "Canopy area growth", { variable: "canopy_area_growth", kind: "manual", unit: "cm2" }),
+      option("air_temperature", "气温", "Air temperature", { variable: "air_temperature", kind: "sensor", unit: "C" }),
+    ],
+    defaults: {},
+  },
+  analysis: {
+    step: "analysis",
+    options: [option("paired_block", "配对区组", "Paired blocks", { method: "paired_block" }), option("two_group", "两组比较", "Two groups", { method: "two_group" })],
+    defaults: { max_missing_fraction: 0.2, max_deviation_fraction: 0.1 },
+  },
+  scale: {
+    step: "scale",
+    options: [option("series", "连续轮次", "Run in series", { layout: "series" }), option("tents", "多帐篷并行", "Side by side in tents", { layout: "tents" })],
+    defaults: { randomization_seed: 417978402, experimental_unit: "tent" },
+  },
+};
+const ALL = ["question", "crop", "treatments", "measures", "analysis", "scale"];
+const BEFORE = Object.fromEntries(ALL.map((step, index) => [step, ALL.slice(0, index)]));
+
+// The page for the step that is current once the steps before it are done (or for `view`).
+async function open(step, { done = BEFORE[step], files = {}, answers = {}, lang = "zh", view } = {}) {
+  const options = OPTIONS[step] ? { [`guide-options-${step}.json`]: OPTIONS[step] } : {};
+  const fixtures = { "guide-session.json": view || session(done), ...options, ...files };
+  return renderPage("guide", { sessionId: "guide-1" }, { lang, fixtures, answers });
+}
+const chooseCalls = (ctx, step) => ctx.api.calls.filter((call) => call.method === "POST" && call.path === `${SESSION_PATH}/steps/${step}/choose`);
+const answering = (step, view) => ({ [`${SESSION_PATH}/steps/${step}/choose`]: () => view });
+
+test("the rail shows nine steps and opens the first pending one", async () => {
+  const { element } = await renderPage("guide", { sessionId: "guide-1" }, { lang: "zh" });
+  assert.equal(railItems(element).length, 9);
+  assert.equal(currentTitle(element), "研究问题");
+});
+
+test("the current step is the first pending one, and the review once all are answered", async () => {
+  const { element } = await open("scale", { view: session(ALL) });
+  assert.equal(currentTitle(element), "复核保存");
+  const mixed = await open("crop", { view: session(["question", "treatments"]) });
+  assert.equal(currentTitle(mixed.element), "作物");
+});
+
+test("choosing a listed crop sends its option id", async () => {
+  const { element, ctx } = await open("crop", { answers: answering("crop", session(["question", "crop"], { source: { crop: "system" } })) });
+  pick(element, "crop", "lettuce");
+  await submit(element);
+  const [call] = chooseCalls(ctx, "crop");
+  assert.deepEqual(call.body.option_ids, ["lettuce"]);
+  assert.equal(call.body.answer.crop_taxon, FIXTURES["guide-options-crop.json"].options[0].value.crop_taxon);
+  assert.equal(call.body.answer.crop, "Lettuce");
+});
+
+test("a crop outside the table is typed, with the NCBI lookup opening in a new tab", async () => {
+  const { element, ctx } = await open("crop", { answers: answering("crop", session(["question", "crop"])) });
+  pick(element, "crop", "__other__");
+  change(named(element, "crop_name")[0], "Rocket");
+  change(named(element, "crop_taxon")[0], "NCBITaxon:3707");
+  const link = byTag(element, "a").find((a) => a.getAttribute("href") === "https://www.ncbi.nlm.nih.gov/taxonomy");
+  assert.ok(link);
+  assert.equal(link.getAttribute("target"), "_blank");
+  assert.match(link.getAttribute("rel"), /noopener/);
+  await submit(element);
+  const [call] = chooseCalls(ctx, "crop");
+  assert.deepEqual(call.body, { answer: { crop: "Rocket", crop_taxon: "NCBITaxon:3707" }, option_ids: [] });
+});
+
+test("the crop card shows the cultivar and the batch, and sends them", async () => {
+  const { element, ctx } = await open("crop", { answers: answering("crop", session(["question", "crop"])) });
+  assert.match(text(element), /品种/);
+  assert.match(text(element), /批次/);
+  pick(element, "crop", "lettuce");
+  change(named(element, "cultivar")[0], "Butterhead");
+  change(named(element, "batch")[0], "B-7");
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "crop")[0].body, { answer: { crop: "Lettuce", crop_taxon: "NCBITaxon:4236", cultivar: "Butterhead", batch: "B-7" }, option_ids: ["lettuce"] });
+  const en = await open("crop", { lang: "en" });
+  assert.match(text(en.element), /Cultivar/);
+  assert.match(text(en.element), /Batch/);
+});
+
+test("a reopened crop step shows the cultivar and the batch it was given", async () => {
+  const answer = { crop: "Lettuce", crop_taxon: "NCBITaxon:4236", cultivar: "Butterhead", batch: "B-7" };
+  const view = session(ALL, { status: { crop: "needs_review" }, answers: { crop: answer } });
+  const { element } = await open("crop", { view });
+  assert.equal(named(element, "cultivar")[0].value, "Butterhead");
+  assert.equal(named(element, "batch")[0].value, "B-7");
+});
+
+test("the crop names follow the language of the page", async () => {
+  const zh = await open("crop", { lang: "zh" });
+  assert.match(text(zh.element), /生菜/);
+  const en = await open("crop", { lang: "en" });
+  assert.match(text(en.element), /Lettuce/);
+});
+
+test("the question step sends both texts", async () => {
+  const { element, ctx } = await renderPage("guide", { sessionId: "guide-1" }, { answers: answering("question", session(["question"])) });
+  change(named(element, "question")[0], "Does more light speed up growth?");
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "question")[0].body, { answer: ANSWERS.question, option_ids: [] });
+});
+
+test("the treatments step sends the factor, the rows and the control", async () => {
+  const { element, ctx } = await open("treatments", { answers: answering("treatments", session(["question", "crop", "treatments"])) });
+  pick(element, "factor", "light");
+  const [first, second] = byClass(element, "row-group-row");
+  for (const [row, id, name, level] of [[first, "control", "Light 40", "40"], [second, "high", "Light 70", "70"]]) {
+    change(named(row, "id")[0], id);
+    change(named(row, "name")[0], name);
+    change(named(row, "level")[0], level);
+  }
+  change(named(element, "control")[0], "control");
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "treatments")[0].body, { answer: ANSWERS.treatments, option_ids: ["light"] });
+});
+
+test("each treatment's description is on the card and is sent", async () => {
+  const described = { ...ANSWERS.treatments, treatments: ANSWERS.treatments.treatments.map((row) => ({ ...row, description: `about ${row.id}` })) };
+  const view = session(ALL, { status: { treatments: "needs_review" }, answers: { treatments: described } });
+  const { element, ctx } = await open("treatments", { view, answers: answering("treatments", view) });
+  const fields = named(element, "description");
+  assert.deepEqual(fields.map((input) => input.value), ["about control", "about high"]);
+  change(fields[1], "under shade cloth");
+  await submit(element);
+  const sent = chooseCalls(ctx, "treatments")[0].body.answer.treatments;
+  assert.deepEqual(sent.map((row) => row.description), ["about control", "under shade cloth"]);
+});
+
+test("two treatments with the same ID are refused beside the field", async () => {
+  const { element, ctx } = await open("treatments");
+  pick(element, "factor", "light");
+  for (const row of byClass(element, "row-group-row")) {
+    change(named(row, "id")[0], "same");
+    change(named(row, "name")[0], "x");
+    change(named(row, "level")[0], "1");
+  }
+  change(named(element, "control")[0], "same");
+  await submit(element);
+  assert.equal(chooseCalls(ctx, "treatments").length, 0);
+  assert.match(text(element), /两个处理用了同一个编号/);
+});
+
+test("the main outcome is chosen among the ticked hand-measured variables", async () => {
+  const { element, ctx } = await open("measures", { answers: answering("measures", session(["question", "crop", "treatments", "measures"])) });
+  pick(element, "variable", "air_temperature");
+  pick(element, "variable", "canopy_area_growth");
+  const endpoint = named(element, "endpoint")[0];
+  assert.deepEqual(byTag(endpoint, "option").map((o) => o.getAttribute("value")).filter(Boolean), ["canopy_area_growth"]);
+  change(endpoint, "canopy_area_growth");
+  await submit(element);
+  const body = chooseCalls(ctx, "measures")[0].body;
+  assert.deepEqual(body.answer, { variables: ["canopy_area_growth", "air_temperature"], primary_endpoint: "canopy_area_growth" });
+  assert.deepEqual(body.option_ids, ["canopy_area_growth", "air_temperature"]);
+});
+
+test("a reopened measures step keeps a variable the catalog no longer offers", async () => {
+  const kept = { variables: ["canopy_area_growth", "retired_height"], primary_endpoint: "retired_height" };
+  const view = session(["question", "crop", "treatments", "measures"]);
+  const withOld = { ...view, steps: view.steps.map((e) => (e.step === "measures" ? { ...e, chosen: { ...e.chosen, answer: kept, option_ids: ["canopy_area_growth"] } } : e)) };
+  const answers = { ...answering("measures", view), [`${SESSION_PATH}/steps/measures/reopen`]: () => withOld };
+  const { element, ctx } = await open("measures", { view: withOld, answers, files: { "guide-options-measures.json": OPTIONS.measures } });
+  byTag(railItems(element).find((item) => titleOf(item) === "测量"), "button")[0].dispatchEvent(new Event("click"));
+  await flush();
+  const row = named(element, "variable").find((el) => el.getAttribute("value") === "retired_height");
+  assert.ok(row && row.hasAttribute("checked"));
+  assert.match(text(element), /目录里已不再提供/);
+  pick(element, "variable", "canopy_area_growth");
+  await submit(element);
+  const body = chooseCalls(ctx, "measures")[0].body;
+  assert.deepEqual(body.answer, kept);
+  assert.deepEqual(body.option_ids, ["canopy_area_growth"]);
+});
+
+test("the analysis step prefills the two fractions and sends the method, effect and rules", async () => {
+  const { element, ctx } = await open("analysis", { answers: answering("analysis", session(["question", "crop", "treatments", "measures", "analysis"])) });
+  assert.equal(named(element, "max_missing_fraction")[0].value, "0.2");
+  assert.equal(named(element, "max_deviation_fraction")[0].value, "0.1");
+  pick(element, "method", "paired_block");
+  change(named(element, "target_effect")[0], "0.15");
+  change(named(element, "exclusion_rules")[0], "tent 3 failed\n\n");
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "analysis")[0].body, {
+    answer: { ...ANSWERS.analysis, exclusion_rules: ["tent 3 failed"] },
+    option_ids: ["paired_block"],
+  });
+});
+
+test("a carried script hash is shown read-only on the analysis card, and sent", async () => {
+  const hash = "a".repeat(64);
+  const view = session(ALL, { status: { analysis: "needs_review" }, answers: { analysis: { ...ANSWERS.analysis, script_sha256: hash } } });
+  const { element, ctx } = await open("analysis", { view, answers: answering("analysis", view) });
+  assert.ok(byClass(element, "tech-details").some((node) => node.textContent.includes(hash)), "the hash sits in the technical details");
+  assert.match(text(element), /上一版声明了分析脚本的哈希/);
+  assert.equal(named(element, "script_sha256").length, 0, "not an editable field");
+  await submit(element);
+  assert.equal(chooseCalls(ctx, "analysis")[0].body.answer.script_sha256, hash);
+});
+
+test("an analysis without a hash shows no technical details for it", async () => {
+  const { element } = await open("analysis");
+  assert.equal(byClass(element, "tech-details").length, 0);
+});
+
+test("a step to recheck says so", async () => {
+  const view = session(ALL, { status: { analysis: "needs_review" } });
+  const { element } = await open("analysis", { view });
+  assert.equal(currentTitle(element), "分析计划");
+  assert.match(text(element), /前面改过，请重看/);
+});
+
+test("the draft panel marks where each answer came from", async () => {
+  const view = session(["question", "crop", "treatments"], { source: { question: "own", crop: "system", treatments: "carried" } });
+  const { element } = await open("measures", { view });
+  const panel = text(byClass(element, "guide-draft")[0]);
+  const at = ["自己填写", "系统选项", "沿用上一版"].map((mark) => panel.indexOf(mark));
+  assert.ok(at.every((index) => index >= 0), panel);
+  assert.deepEqual([...at].sort((a, b) => a - b), at);
+});
+
+test("the sample-size helper fills the blocks", async () => {
+  const answers = { "GET /guide/sample-size": () => ({ n: 6, design: "paired_block" }) };
+  const { element, ctx } = await open("scale", { answers });
+  change(named(element, "sd")[0], "0.4");
+  byClass(element, "guide-estimate")[0].dispatchEvent(new Event("click"));
+  await flush();
+  assert.equal(named(element, "blocks")[0].value, "6");
+  const read = ctx.api.calls.find((call) => call.path.startsWith("/guide/sample-size"));
+  assert.equal(read.path, "/guide/sample-size?effect=0.15&sd=0.4&design=paired_block");
+});
+
+test("an estimate above the guide's limit is not filled in and says what to check", async () => {
+  const answers = { "GET /guide/sample-size": () => ({ n: 78489, design: "paired_block", over_limit: true }) };
+  for (const [lang, said] of [["zh", /超过引导的上限（100）.*同一单位/], ["en", /above the guide's limit \(100\).*same unit/]]) {
+    const { element } = await open("scale", { answers, lang });
+    change(named(element, "blocks")[0], "4");
+    change(named(element, "sd")[0], "1");
+    byClass(element, "guide-estimate")[0].dispatchEvent(new Event("click"));
+    await flush();
+    assert.equal(named(element, "blocks")[0].value, "4", lang);
+    assert.match(text(element), said);
+  }
+});
+
+test("not knowing the spread fills two blocks and says the experiment is a pilot", async () => {
+  const { element } = await open("scale");
+  assert.doesNotMatch(text(element), /按先导实验处理/);
+  byClass(element, "guide-unknown")[0].dispatchEvent(new Event("click"));
+  assert.equal(named(element, "blocks")[0].value, "2");
+  assert.match(text(element), /按先导实验处理，结论会是不确定/);
+});
+
+async function fillScale(element) {
+  pick(element, "layout", "series");
+  change(named(element, "blocks")[0], "3");
+  change(named(element, "units")[0], "tent-1");
+  change(named(element, "stages")[0], "vegetative");
+  await submit(element);
+}
+
+test("the scale step sends the layout, the count, the units and the stages", async () => {
+  const answers = { ...answering("scale", session(ALL)), [`GET ${SESSION_PATH}/review`]: () => ({ design: [] }) };
+  const { element, ctx } = await open("scale", { answers });
+  await fillScale(element);
+  assert.deepEqual(chooseCalls(ctx, "scale")[0].body, { answer: ANSWERS.scale, option_ids: ["series"] });
+});
+
+test("a blocking design finding keeps the page on the scale step", async () => {
+  const finding = { code: "unbalanced_block", message: "Block 1 has 1 treatment.", blocking: true, variant: "", params: {} };
+  const answers = {
+    ...answering("scale", session(ALL)),
+    [`GET ${SESSION_PATH}/review`]: () => ({ protocol: null, missing: [], problems: [], design: [finding], ready: false }),
+  };
+  const { element } = await open("scale", { answers });
+  await fillScale(element);
+  assert.equal(currentTitle(element), "规模");
+  assert.ok(byClass(element, "findings").length > 0);
+  assert.match(text(byClass(element, "guide-card")[0]), /这些结果会拦住设计/);
+});
+
+test("a design with only hints moves on to the review", async () => {
+  const answers = { ...answering("scale", session(ALL)), [`GET ${SESSION_PATH}/review`]: () => ({ design: [{ code: "unbalanced_block", message: "", blocking: false }] }) };
+  const { element } = await open("scale", { answers });
+  await fillScale(element);
+  assert.equal(currentTitle(element), "复核保存");
+});
+
+test("a refused answer is shown on the card and nothing moves", async () => {
+  const refuse = () => {
+    throw new ApiError(422, "guide_answer_invalid", "refused");
+  };
+  const { element } = await open("crop", { answers: { [`${SESSION_PATH}/steps/crop/choose`]: refuse } });
+  pick(element, "crop", "lettuce");
+  await submit(element);
+  assert.equal(currentTitle(element), "作物");
+  assert.ok(byClass(element, "form-status-error").some((box) => !box.hasAttribute("hidden")));
+});
+
+test("a finished step opens again and is reopened on the server", async () => {
+  const view = session(["question", "crop"]);
+  const answers = { [`${SESSION_PATH}/steps/question/reopen`]: () => view };
+  const { element, ctx } = await open("treatments", { view, answers });
+  assert.equal(currentTitle(element), "处理");
+  const done = railItems(element).find((item) => titleOf(item) === "研究问题");
+  byTag(done, "button")[0].dispatchEvent(new Event("click"));
+  await flush();
+  assert.ok(ctx.api.calls.some((call) => call.method === "POST" && call.path === `${SESSION_PATH}/steps/question/reopen`));
+  assert.equal(currentTitle(element), "研究问题");
+  assert.equal(named(element, "question")[0].value, ANSWERS.question.question);
+});
+
+test("a saved version with no comparison does not break the page", async () => {
+  const view = { ...session(["question"]), saved: [{ protocol_id: "protocol-1-b714da", version: 1, digest: "d", edited: null }] };
+  const { element } = await open("crop", { view });
+  assert.equal(currentTitle(element), "作物");
+});
+
+test("no text of the page says AI, in either language", async () => {
+  for (const step of ["crop", "treatments", "measures", "analysis", "scale"]) {
+    for (const lang of ["zh", "en"]) {
+      const { element } = await open(step, { lang });
+      assert.doesNotMatch(text(element), /\bAI\b/, `${step} ${lang}`);
+    }
+  }
+});
+
+test("a failed read of the step options is shown on the page, at the start and after a save", async () => {
+  const boom = () => {
+    throw new TypeError("boom");
+  };
+  const first = await open("crop", { answers: { [`GET ${SESSION_PATH}/steps/crop`]: boom } });
+  assert.ok(byClass(first.element, "form-status-error").length > 0);
+  assert.equal(byClass(first.element, "guide-card").length, 0);
+  const answers = { ...answering("question", session(["question"])), [`GET ${SESSION_PATH}/steps/crop`]: boom };
+  const { element } = await renderPage("guide", { sessionId: "guide-1" }, { answers });
+  change(named(element, "question")[0], "Does more light speed up growth?");
+  await submit(element);
+  assert.ok(byClass(element, "form-status-error").length > 0);
+  assert.equal(byClass(element, "guide-card").length, 0);
+});
+
+const TABLE = [
+  { round: 1, block: 1, unit: "tent-1", treatment_id: "control" },
+  { round: 2, block: 1, unit: "tent-1", treatment_id: "high" },
+  { round: 3, block: 2, unit: "tent-1", treatment_id: "control" },
+  { round: 4, block: 2, unit: "tent-1", treatment_id: "high" },
+];
+const CARRIED_SCALE = { layout: "series", blocks: 2, rounds: 4, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5, allocations: TABLE };
+
+async function resaveScale(change_, scale = CARRIED_SCALE) {
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale } });
+  const answers = { ...answering("scale", view), [`GET ${SESSION_PATH}/review`]: () => ({ design: [] }) };
+  const { element, ctx } = await open("scale", { view, answers });
+  change_(element);
+  await submit(element);
+  return chooseCalls(ctx, "scale")[0].body.answer;
+}
+
+test("a carried allocation table is kept when nothing it was made for changed", async () => {
+  assert.deepEqual(await resaveScale(() => {}), CARRIED_SCALE);
+});
+
+test("a carried allocation table is dropped when the blocks change, and the seed stays", async () => {
+  const answer = await resaveScale((element) => change(named(element, "blocks")[0], "3"));
+  assert.equal(answer.blocks, 3);
+  assert.equal(answer.randomization_seed, 5);
+  assert.equal(Object.hasOwn(answer, "allocations"), false);
+  assert.equal(Object.hasOwn(answer, "rounds"), false, "the rounds are made again from the blocks");
+});
+
+test("carried counts the layout does not ask for go back only while the scale is unchanged", async () => {
+  const reproducible = { layout: "series", blocks: 2, rounds: 6, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5 };
+  assert.deepEqual(await resaveScale(() => {}, reproducible), reproducible);
+  const tents = { layout: "tents", blocks: 1, rounds: 3, units: ["a", "b"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5 };
+  assert.deepEqual(await resaveScale(() => {}, tents), tents);
+  const changed = await resaveScale((element) => change(named(element, "rounds")[0], "4"), tents);
+  assert.equal(changed.rounds, 4);
+  assert.equal(Object.hasOwn(changed, "blocks"), false);
+  const moved = await resaveScale((element) => change(named(element, "units")[0], "a\nb\nc\nd"), reproducible);
+  assert.equal(Object.hasOwn(moved, "rounds"), false);
+});
+
+test("carried counts do not go back once the treatments were chosen again after the scale", async () => {
+  const reproducible = { layout: "series", blocks: 2, rounds: 6, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5 };
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale: reproducible } });
+  const later = { ...view, steps: view.steps.map((e) => (e.step === "treatments" ? { ...e, chosen: { ...e.chosen, seq: 20 } } : e)) };
+  const answers = { ...answering("scale", later), [`GET ${SESSION_PATH}/review`]: () => ({ design: [] }) };
+  const { element, ctx } = await open("scale", { view: later, answers });
+  await submit(element);
+  const answer = chooseCalls(ctx, "scale")[0].body.answer;
+  assert.equal(answer.blocks, 2);
+  assert.equal(Object.hasOwn(answer, "rounds"), false);
+});
+
+test("the scale card says whether the hand-written table is kept or made again from the seed", async () => {
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale: CARRIED_SCALE } });
+  for (const [lang, kept, redrawn] of [
+    ["zh", /沿用上一版手写的分配表/, /按随机种子重新生成/],
+    ["en", /The last version's hand-written allocation table is kept/, /made again from the random seed/],
+  ]) {
+    const { element } = await open("scale", { view, lang });
+    assert.match(text(element), kept, lang);
+    assert.doesNotMatch(text(element), redrawn, lang);
+    change(named(element, "blocks")[0], "3");
+    assert.match(text(element), redrawn, lang);
+    assert.doesNotMatch(text(element), kept, lang);
+    change(named(element, "blocks")[0], "2");
+    assert.match(text(element), kept, lang);
+  }
+});
+
+test("a scale without a kept table says nothing about one", async () => {
+  const { element } = await open("scale");
+  assert.equal(byClass(element, "guide-table-note")[0].children.length, 0);
+});
+
+test("a carried treatment with two factors keeps the other factor when re-saved", async () => {
+  const two = {
+    treatments: ANSWERS.treatments.treatments.map((row, i) => ({ ...row, factors: { light: row.factors.light, co2: 400 + 400 * i } })),
+    control_treatment_id: "control",
+  };
+  const view = session(ALL, { status: { treatments: "needs_review" }, answers: { treatments: two } });
+  const { element, ctx } = await open("treatments", { view, answers: answering("treatments", view) });
+  assert.match(text(element), /其他因子保持不变/);
+  await submit(element);
+  assert.deepEqual(chooseCalls(ctx, "treatments")[0].body.answer, two);
+});

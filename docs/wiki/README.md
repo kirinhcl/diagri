@@ -16,6 +16,7 @@ This folder is the project wiki. It lives in the repository so that pages are ve
 | | `Tutorial-Simulated-Round.md` | Tutorial: a simulated research round | 教程：在模拟器上跑通一轮 DiAGRI | tutorial · 教程 |
 | | `Example-Full-Round-With-Claude.md` | Example: a complete round with the model roles | 示例：模型角色跑完整一轮 | tutorial · 教程 |
 | How-to guides · 操作指南 | `Enable-DiAGRI.md` | Enable DiAGRI | 启用 DiAGRI | how-to · 操作指南 |
+| | `Guided-Setup.md` | Set up research with the guide | 用引导建立研究 | how-to · 操作指南 |
 | | `Run-a-Research-Round.md` | Run a research round | 运行一轮研究 | how-to · 操作指南 |
 | | `Manual-Takeover-and-Irrigation.md` | Manual takeover, irrigation and handback | 人工接管、灌溉与交还 | how-to · 操作指南 |
 | | `Troubleshooting-Runbook.md` | Troubleshooting runbook | 故障处理手册 | how-to · 操作指南 |

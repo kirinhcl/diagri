@@ -23,6 +23,7 @@ from growbridge.archive.models import (
 )
 from growbridge.archive.store import Archive
 from growbridge.config import Greenhouse, Settings
+from growbridge.guide.store import GuideStore
 from growbridge.observer.alerts import AlertBook
 from growbridge.observer.device_notes import DeviceNotes
 from growbridge.ports import ActionRequest, Actor
@@ -154,6 +155,7 @@ class Bench:
         self.archive = Archive(self.db, tmp_path / "archive", self.clock)
         self.alerts = AlertBook(self.db, self.clock, "SIMULATED")  # as serve: the local device
         self.notes = DeviceNotes(self.db, self.clock)
+        self.guide = GuideStore(self.db, self.clock)
         self.tasks = TaskBoard(self.db, self.clock)
         self.budget = CallBudget(self.db, self.clock)
         self.operators = Operators(self.db, self.clock, scrypt_n=FAST_SCRYPT)
@@ -219,6 +221,7 @@ class Bench:
             access=self.access,
             locks=self.locks,
             notes=self.notes,
+            guide=self.guide,
             tests=self.device_tests if multi_user else None,
         )
         self.app = create_app(self.settings, bridge=object(), workbench=self.router)

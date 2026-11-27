@@ -195,6 +195,14 @@ class WorkflowStore:
         )
         return None if row is None else ResearchProtocol.model_validate_json(row["body"])
 
+    def protocol_saved_at(self, protocol_id: str, version: int) -> float | None:
+        """When a protocol version was saved; ``None`` for one that was not."""
+        row = self.db.one(
+            "SELECT created_at FROM wf_protocols WHERE id = ? AND version = ?",
+            (protocol_id, version),
+        )
+        return None if row is None else row["created_at"]
+
     def protocol_variables_before(self, protocol_id: str, version: int) -> frozenset[str]:
         rows = self.db.query(
             "SELECT body FROM wf_protocols WHERE id = ? AND version < ?", (protocol_id, version)
@@ -203,6 +211,14 @@ class WorkflowStore:
         for row in rows:
             declared.update(ResearchProtocol.model_validate_json(row["body"]).variables)
         return frozenset(declared)
+
+    def project_protocols(self, project_id: str) -> tuple[tuple[str, int], ...]:
+        """(id, version) of every protocol version of the project, in the order they were saved."""
+        rows = self.db.query(
+            "SELECT id, version FROM wf_protocols WHERE project_id = ? ORDER BY created_at, rowid",
+            (project_id,),
+        )
+        return tuple((row["id"], row["version"]) for row in rows)
 
     def latest_protocol(self, protocol_id: str, project_id: str) -> ResearchProtocol | None:
         row = self.db.one(

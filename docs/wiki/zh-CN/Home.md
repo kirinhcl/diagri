@@ -35,6 +35,7 @@ GrowBridge 是 DiAGRI 的设备桥接部分：通过蓝牙读取并控制 Spider
 **操作指南**
 
 - [启用 DiAGRI](Enable-DiAGRI.md)：配置、写入主机、操作员、模型角色。
+- [用引导建立研究](Guided-Setup.md)：一步一步建立协议，再建轮次和目标。
 - [运行一轮研究](Run-a-Research-Round.md)：从研究目标到报告交付。
 - [人工接管、灌溉与交还](Manual-Takeover-and-Irrigation.md)：手动写入，再把控制权交回去。
 - [故障处理手册](Troubleshooting-Runbook.md)：你会看到什么，系统已经做了什么，你需要做什么。

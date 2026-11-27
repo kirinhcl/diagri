@@ -52,6 +52,8 @@ Before step 4 the operator can also freeze the analysis script of the protocol (
 
 The operator designs the round, gives the project a model call budget and states the goal. The goal becomes a research task of the orchestrator, which hands the design to the planner.
 
+The console can also build the protocol step by step and make the round and the goal at the end: see [Set up research with the guide](Guided-Setup.md). The requests below are what the guide sends for you.
+
 **Create the project, the protocol and the round.**
 
 ```http

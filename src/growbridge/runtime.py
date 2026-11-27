@@ -41,6 +41,7 @@ from growbridge.config import Settings
 from growbridge.control.ledger import Ledger
 from growbridge.control.service import ControlService
 from growbridge.executor.engine import ExecutorEngine
+from growbridge.guide.store import GuideStore
 from growbridge.observer.alerts import Alert, AlertBook, Scope
 from growbridge.observer.channels import EmailChannel, NotifyChannel, TelegramChannel
 from growbridge.observer.device_notes import DeviceNotes
@@ -72,6 +73,7 @@ from growbridge.runtime_access import (
 from growbridge.runtime_agents import make_dispatcher, role_tools, run_agents
 from growbridge.runtime_alerts import expire_tasks, stage_alerts
 from growbridge.runtime_backup import Backups
+from growbridge.runtime_compute import build_compute
 from growbridge.runtime_heartbeat import UNCONFIGURED_MESSAGE
 from growbridge.runtime_mirror import InterventionMirror
 from growbridge.service import Bridge
@@ -100,9 +102,6 @@ OUTBOX_CAP_SECONDS = 1800.0
 GIB = 1024**3
 STORAGE_LOW_BYTES = 2 * GIB
 STORAGE_CRITICAL_BYTES = GIB // 2
-# Service-level ceilings until real CSC quotas are known (architecture doc §12.3).
-COMPUTE_CPU_CAP_HOURS = 1000.0
-COMPUTE_STORAGE_CAP_GB = 100.0
 # Run-health limits: age in seconds of the thing each probe watches.
 HEALTH_LIMITS = {
     "growbridge_response": 60.0,
@@ -238,6 +237,7 @@ class Runtime:
     last_beat: tuple[float, bool] | None = None  # (monotonic, run health) of the last signal
     access_parts: AccessParts | None = None  # multi-user locks and rules; None when off
     notes: DeviceNotes | None = None  # notes people write about the device (memory)
+    guide: GuideStore | None = None  # the record of guided protocol setups
 
     # --- life cycle ----------------------------------------------------------------------------
 
@@ -289,6 +289,7 @@ class Runtime:
         more = (self.book, self.tasks, self.budget, self.runner, self.holdout, self.compute)
         extra = {"conversation": self.conversation, **workbench_access(self.access_parts)}
         extra["notes"] = self.notes
+        extra["guide"] = self.guide
         return create_workbench(*args, role_tokens or {}, *more, **extra)
 
     @property
@@ -611,17 +612,6 @@ def _probes(
     }
 
 
-def _compute(
-    backend: Any, db: Database, clock: Clock, snapshots: Path, templates: Any, members: Any
-) -> ComputeService | None:
-    """Inputs are references under ``snapshots``; they stay refused until the input guard is
-    installed (``runtime_compute.install_input_guard``)."""
-    if backend is None:
-        return None
-    caps = (COMPUTE_CPU_CAP_HOURS, COMPUTE_STORAGE_CAP_GB)
-    return ComputeService(db, clock, backend, templates, members, *caps, input_root=snapshots)
-
-
 def build_runtime(
     settings: Settings,
     transport_factory: Callable[[Settings], Any] = make_transport,
@@ -696,11 +686,12 @@ def build_runtime(
         observer=observer,
         reports=ReportStore(dbs["observer"]),
         notes=DeviceNotes(dbs["observer"], clock),
+        guide=GuideStore(dbs["workflow"], clock),
         runner=ConfirmatoryRunner(dbs["agents"], clock, sandbox, data_dir / "analysis"),
         holdout=HoldoutRegistry(dbs["agents"], clock, outcomes, flow.catalog),
         sandbox=sandbox,
         operators=Operators(dbs["workflow"], clock),
-        compute=_compute(
+        compute=build_compute(
             compute_backend,
             dbs["compute"],
             clock,

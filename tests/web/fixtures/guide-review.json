@@ -1,0 +1,47 @@
+{
+  "protocol": {
+    "id": "protocol-2-55fbcb",
+    "project_id": "project_189c5bff02eb40099b5399d16d55fbcb",
+    "version": 1,
+    "question": "Does more light speed up canopy growth?",
+    "hypothesis": "",
+    "crop": "Lettuce",
+    "batch": "",
+    "treatments": [
+      { "id": "control", "name": "Light 40", "description": "", "factors": { "light": 40.0 } },
+      { "id": "high", "name": "Light 70", "description": "", "factors": { "light": 70.0 } }
+    ],
+    "control_treatment_id": "control",
+    "allocations": [
+      { "round": 1, "block": 1, "unit": "tent-1", "treatment_id": "high" },
+      { "round": 2, "block": 1, "unit": "tent-1", "treatment_id": "control" },
+      { "round": 3, "block": 2, "unit": "tent-1", "treatment_id": "control" },
+      { "round": 4, "block": 2, "unit": "tent-1", "treatment_id": "high" },
+      { "round": 5, "block": 3, "unit": "tent-1", "treatment_id": "high" },
+      { "round": 6, "block": 3, "unit": "tent-1", "treatment_id": "control" }
+    ],
+    "randomization_seed": 417978402,
+    "analysis": {
+      "primary_endpoint": "canopy_area_growth",
+      "target_effect": 0.15,
+      "method": "paired_block",
+      "script_sha256": null,
+      "exclusion_rules": [],
+      "max_missing_fraction": 0.2,
+      "max_deviation_fraction": 0.1
+    },
+    "stages": ["vegetative"],
+    "rounds": 6,
+    "blocks": 3,
+    "experimental_unit": "tent",
+    "variables": ["canopy_area_growth"],
+    "crop_taxon": "NCBITaxon:4236"
+  },
+  "missing": [],
+  "problems": [],
+  "problem_steps": [],
+  "design": [],
+  "ready": true,
+  "protocol_id": "protocol-2-55fbcb",
+  "version": 1
+}

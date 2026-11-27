@@ -15,4 +15,5 @@ export const EXEMPTIONS = [
   { page: "inbox", fixture: "inbox.json", path: "items[*].detail.question", shown: "folded", batch: 3, why: "研究任务的问题是模型写的（C5，INB-01）" },
   { page: "alerts", fixture: "alerts.json", path: "alerts[kind=audit_finding].params.summary", batch: 3, why: "模型写的监察备注（C5，ALT-11）" },
   { page: "alerts", fixture: "alerts.json", path: "alerts[kind=audit_finding].params.evidence[*]", batch: 3, why: "模型写的监察备注（C5，ALT-11）" },
+  { page: "guide", fixture: "guide-session.json", path: "steps[step=measures].chosen.answer.variables[*]", batch: "keep", why: "引导的测量步骤把人以前选过、但目录里已不再提供的变量按其编号原样放在已勾选的一行里（R11），这是此人自己选过的值，与协议表单按编号列出变量一致" },
 ];

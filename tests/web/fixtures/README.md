@@ -61,6 +61,8 @@ against the server's enums and literals.
 | greenhouse-tests.json | `/greenhouses/{id}/tests` (device tests; synthetic) |
 | admin-operators.json | `/admin/operators` (multi-user; synthetic) |
 | admin-locks.json | `/admin/locks` (multi-user; synthetic) |
+| guide-session.json | `/guide/sessions/{session_id}` (a new session, nothing answered; shape of the real answer, synthetic ids) |
+| guide-options-crop.json | `/guide/sessions/{session_id}/steps/crop` (four of the real crop options; `guide-options-question.json` is the real answer for the question step, with no options; other steps read `guide-options-<step>.json`, which a test supplies) |
 | conversation.json | `/projects/{project_id}/conversation?after=0` |
 | round.json | `/rounds/{round_id}` (delivered round) |
 | report.json | `/rounds/{round_id}/report` |

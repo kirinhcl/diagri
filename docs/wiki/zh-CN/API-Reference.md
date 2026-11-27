@@ -58,7 +58,7 @@
 
 ## 工作台路由
 
-工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 64 个路由；打开 `multi_user` 时再多 14 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在。运行时总是全部都传。
+工作台是 DiAGRI 模式下操作员使用的 HTTP 接口：`/wb` 下的一组 JSON 路由，由 [`workbench/api.py`](../../../src/growbridge/workbench/api.py) 的 `create_workbench` 构建，只在 `auto_research = true` 时挂载。发起和掌控一轮研究的路由在 [`workbench/rounds.py`](../../../src/growbridge/workbench/rounds.py) 里。操作员控制台是 `/workbench` 下的一个网页，只调用这些路由（见[启用 DiAGRI](Enable-DiAGRI.md)）；`web/workbench/` 之外的 `web/` 文件是桥接控制台。共 72 个路由；打开 `multi_user` 时再多 14 个（见[多用户路由](#多用户路由)）。[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 和 [`workbench/environment.py`](../../../src/growbridge/workbench/environment.py) 里的九个读取路由（`/wb/safety`、`/wb/inbox`、`/wb/projects`、`/wb/projects/{project_id}`、阶段的读数、测量和历史，以及 `/wb/environment` 和 `/wb/capabilities`）总是挂载：没有传入的服务，[`workbench/reads.py`](../../../src/growbridge/workbench/reads.py) 在待办里直接略过。其中两个告警路由只在传入告警簿时才存在，预算和目标两个路由只在传入任务板和调用预算时才存在，三个分析路由（[`workbench/analysis.py`](../../../src/growbridge/workbench/analysis.py)）只在传入确认性分析运行器时才存在，两个留出集路由（[`workbench/holdouts.py`](../../../src/growbridge/workbench/holdouts.py)）只在传入留出数据登记时才存在，八个引导路由（[`workbench/guide.py`](../../../src/growbridge/workbench/guide.py)）只在传入引导记录库时才存在。运行时总是全部都传。
 
 | 调用方 | 凭据 | 检查 |
 | --- | --- | --- |
@@ -97,6 +97,14 @@
 | `POST` | `/wb/alerts/{event_id}/read` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `GET` | `/wb/devices/{device_id}/notes` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不是本机设备）、`not_lock_holder` |
 | `POST` | `/wb/devices/{device_id}/notes` | 操作员 | 局域网、覆盖网络 | 否 | `state`（不是本机设备）、`not_lock_holder` |
+| `POST` | `/wb/guide/sessions` | 操作员 | 局域网、覆盖网络 | 否 | `state`（项目不存在） |
+| `GET` | `/wb/guide/sessions/{session_id}` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在） |
+| `GET` | `/wb/guide/sessions/{session_id}/steps/{step}` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在） |
+| `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/choose` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在、`guide_not_owner`）、`param`（`guide_answer_invalid`） |
+| `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/reopen` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在、`guide_not_owner`） |
+| `GET` | `/wb/guide/sessions/{session_id}/review` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话不存在） |
+| `GET` | `/wb/guide/sample-size` | 操作员 | 局域网、覆盖网络 | 否 | `param`（`guide_answer_invalid`） |
+| `POST` | `/wb/guide/sessions/{session_id}/saved` | 操作员 | 局域网、覆盖网络 | 否 | `state`（会话或协议不存在、`guide_not_owner`） |
 | `POST` | `/wb/projects` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
 | `POST` | `/wb/protocols` | 操作员 | 局域网、覆盖网络 | 否 | `state`、`param` |
 | `POST` | `/wb/rounds` | 操作员 | 局域网、覆盖网络 | 否 | `state` |
@@ -167,6 +175,14 @@
 | `POST` | `/wb/alerts/{event_id}/read` | 可选 `note`（最多 500 字）：原因或处理。每次已读带的非空原因都保留；模型把它当作背景，附在对应的读数卡住经历上 | `event_id` |
 | `GET` | `/wb/devices/{device_id}/notes` | 无 | `notes`：这台设备最新的 10 条日志（`id`、`device_id`、`at`、`actor`、`sensor`、`text`），最新在前。日志写的是设备本身，不属于某个实验，之后持有这个温室的人也能看到 |
 | `POST` | `/wb/devices/{device_id}/notes` | `text`（1 到 500 字）、可选 `sensor`（最多 40 字） | 新写入的日志 |
+| `POST` | `/wb/guide/sessions` | `project_id`，可选 `lang`（`en` 或 `zh`，默认 `zh`） | `session_id`。项目已有保存的协议时，会话开始时六个要回答的步骤从最近保存的版本带过来；规模一步原样保留 `rounds` 和 `blocks`、随机种子，以及种子重现不出来的分配表，所以不改动的版本组成后和原来相同 |
+| `GET` | `/wb/guide/sessions/{session_id}` | 无 | `session`、`steps`（六个要回答的步骤，每步有 `status`：`pending`、`done` 或 `needs_review`，以及最新的 `chosen`）和 `saved`（`protocol_id`、`version`、`digest`、`edited`，以及事件序号 `seq`：某次保存的 `seq` 大于每个步骤所选的序号，说明保存之后没有再选过）。项目的所有者和管理员可以读；其他人得到的是"会话不存在"的回答 |
+| `GET` | `/wb/guide/sessions/{session_id}/steps/{step}` | 无 | 这一步的 `options`（`id`、`value`、`label_en`、`label_zh`，来自目录、查证过的作物表或固定清单，从不来自模型）和 `defaults`。`step` 是 `question`、`crop`、`treatments`、`measures`、`analysis`、`scale`、`review`、`round` 之一，其他值返回 422 |
+| `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/choose` | `answer`（对象）、可选 `option_ids` | 会话视图。一次记下给出的选项和所做的选择；带 `option_ids` 时来源是 `system`，不带是 `own`。答案不合格、目录不接受的变量或因子、没有给出过的选项，或所选选项的值不在回答里（别的作物或物种、有处理缺少的因子、没列出的变量、别的方法或布局），都返回 422，原因是 `guide_answer_invalid`。引导组成的实验有上限：连续轮次最多 100 个区组，多帐篷并行最多 200 轮；单位最多 50 个，处理最多 20 个，阶段最多 20 个。另一个计数（连续轮次的轮数、多帐篷的区组数）只由沿用的版本带回来，分别最多 2000 和 200。分配超过 2000 条的布局在复核时列为问题。只有开始这个会话的操作员能调用 |
+| `POST` | `/wb/guide/sessions/{session_id}/steps/{step}/reopen` | 无 | 会话视图，并记下一条 `reopened`。只有开始这个会话的操作员能调用 |
+| `GET` | `/wb/guide/sessions/{session_id}/review` | 无 | 组成的 `protocol`（缺步骤或答案不合格时为 `null`）、`missing`、`problems`、`problem_steps`（问题出自哪些步骤的回答，按步骤顺序）、`design`（发现）、`ready`（没有问题、也没有阻断性发现；引导页只在这时给出协议表单），以及协议将以什么保存的 `protocol_id` 和 `version`：会话开始时沿用或上次保存的协议的 ID 和下一个版本号，否则是新 ID。协议由 `POST /wb/protocols` 保存，不在这里 |
+| `GET` | `/wb/guide/sample-size` | 查询参数 `effect`、`sd`（大于 0）、`design`（`paired_block` 或 `two_group`） | `n`（`paired_block` 是区组数，`two_group` 是每组的单位数）、`design`，以及 `over_limit`：`n` 超过引导的 100 个区组时为真。数字相差太大、算不出样本量时返回 422，原因是 `guide_answer_invalid`（步骤 `scale`） |
+| `POST` | `/wb/guide/sessions/{session_id}/saved` | `protocol_id`、会话所属项目已保存的某个 `version` | 会话视图，并记下一条 `saved`：该版本的 `digest` 和 `edited`（与选择组成的结果不同的字段；选择已组不成协议时为 `null`，没有可比较的对象）。别的项目的版本、不存在的版本，或在会话开始之前保存的版本（所以不是在这次会话里保存的）都返回 `state`，什么都不记 |
 | `POST` | `/wb/projects` | `name`（1 到 200） | `project_id` |
 | `POST` | `/wb/protocols` | `protocol`（一个 `ResearchProtocol`；`id` 和 `project_id` 为 1 到 100，`version` 为 1 到 1000000，不能有 NaN 或无穷大） | `protocol_id`、`version`、`digest` |
 | `POST` | `/wb/rounds` | `project_id`、`protocol_id`（各 1 到 100） | `round_id`、`state` |

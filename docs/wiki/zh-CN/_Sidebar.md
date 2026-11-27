@@ -10,6 +10,7 @@
 **操作指南**
 
 - [启用 DiAGRI](Enable-DiAGRI.md)
+- [用引导建立研究](Guided-Setup.md)
 - [运行一轮研究](Run-a-Research-Round.md)
 - [人工接管与灌溉](Manual-Takeover-and-Irrigation.md)
 - [故障处理手册](Troubleshooting-Runbook.md)

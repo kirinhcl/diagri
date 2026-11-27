@@ -291,6 +291,7 @@ export default {
   "recordKind.treatment": "treatment",
   "recordKind.device": "device",
   "recordKind.request": "request",
+  "recordKind.guide_session": "guide session",
   "computeUnit.cpu_hours": "CPU hours",
   "computeUnit.storage_gb": "GB",
   "paramKind.int": "whole number",

@@ -1,6 +1,7 @@
 // The projects list, newest first, with a form to start a new project.
 import { hrefFor } from "../router.js";
 import { h } from "../ui/dom.js";
+import { guidedNewForm } from "./guide-entry.js";
 import { simpleForm } from "../ui/forms.js";
 import { displayName, nameDetails } from "../ui/names.js";
 import { note, pageHead, section, techDetails, timeText } from "../ui/section.js";
@@ -52,6 +53,7 @@ export async function render(ctx) {
     { class: "page projects" },
     pageHead(ctx.t("nav.projects"), ctx.t("projects.lead")),
     section(ctx.t("projects.list"), list),
+    section(ctx.t("guide.entry.title"), note(ctx.t("guide.entry.lead")), guidedNewForm(ctx)),
     section(ctx.t("projects.new"), createForm(ctx)),
   );
   return { element };

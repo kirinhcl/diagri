@@ -29,6 +29,7 @@ from growbridge.archive.models import (
 from growbridge.archive.store import Archive
 from growbridge.compute.service import ComputeService
 from growbridge.config import Settings
+from growbridge.guide.store import GuideStore
 from growbridge.jsonsafe import json_safe
 from growbridge.observer.alerts import AlertBook
 from growbridge.observer.device_notes import NOTE_MAX, DeviceNotes
@@ -51,6 +52,7 @@ from growbridge.workbench.compute import add_compute_routes
 from growbridge.workbench.evidence import add_evidence_routes
 from growbridge.workbench.evidence_relations import add_evidence_relation_routes
 from growbridge.workbench.greenhouses import add_greenhouse_routes
+from growbridge.workbench.guide import add_guide_routes
 from growbridge.workbench.holdouts import add_holdout_routes
 from growbridge.workbench.manual_tasks import add_manual_task_routes
 from growbridge.workbench.reads import add_read_routes
@@ -240,6 +242,7 @@ class Workbench:
         access: Access | None = None,
         locks: GreenhouseLocks | None = None,
         notes: DeviceNotes | None = None,
+        guide: GuideStore | None = None,
         tests: DeviceTests | None = None,
     ):
         self.access = access  # multi-user rules; None when multi_user is off
@@ -294,6 +297,8 @@ class Workbench:
         add_evidence_routes(self.router, self.operator, archive, workflow, access)
         add_evidence_relation_routes(self.router, self.operator, archive, access)
         add_round_card_routes(self.router, self.operator, archive, workflow, holdout, access)
+        if guide is not None:
+            add_guide_routes(self.router, self.operator, workflow, guide, access)
         add_manual_task_routes(
             self.router, self.operator, self.on_site, workflow, archive, control, self.clock, access
         )
@@ -742,6 +747,7 @@ def create_workbench(
     access: Access | None = None,
     locks: GreenhouseLocks | None = None,
     notes: DeviceNotes | None = None,
+    guide: GuideStore | None = None,
     tests: DeviceTests | None = None,
 ) -> APIRouter:
     """The ``/wb`` router. ``alerts`` adds the alert list and mark-as-read routes when given;
@@ -751,4 +757,6 @@ def create_workbench(
     the goal routes) records each goal and adds the project conversation read."""
     args = (workflow, control, archive, operators, settings, role_tokens)
     more = (alerts, tasks, budget, runner, holdout, compute, conversation)
-    return Workbench(*args, *more, access=access, locks=locks, notes=notes, tests=tests).router
+    return Workbench(
+        *args, *more, access=access, locks=locks, notes=notes, guide=guide, tests=tests
+    ).router

@@ -2,6 +2,7 @@ import codes from "./codes.zh.js";
 import denials from "./denials.zh.js";
 import evidence from "./evidence.zh.js";
 import forms from "./forms.zh.js";
+import guide from "./guide.zh.js";
 import messages from "./messages.zh.js";
 
 export default {
@@ -9,6 +10,7 @@ export default {
   ...messages,
   ...denials,
   ...forms,
+  ...guide,
   ...evidence,
   "app.title": "DiAGRI 工作台",
   "app.subtitle": "工作台",

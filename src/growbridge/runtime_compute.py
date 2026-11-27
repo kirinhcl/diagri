@@ -24,14 +24,19 @@ from pydantic import ValidationError
 from growbridge.agents.handlers_common import Deps, scoped_snapshot
 from growbridge.agents.handlers_researcher import ROLE
 from growbridge.archive import snapshot as snapshots
+from growbridge.archive.clock import Clock
+from growbridge.archive.db import Database
 from growbridge.compute.backend import BackendUnavailable, JobTemplate, SubmitRejected
 from growbridge.compute.firecrest import ENV_VARIABLES, FirecrestBackend
-from growbridge.compute.service import template_problem
+from growbridge.compute.service import ComputeService, template_problem
 from growbridge.config import Settings
 from growbridge.ports import Denied
 
 log = logging.getLogger(__name__)
 MAX_TEMPLATE_BYTES = 1 << 20
+# Service-level ceilings until real CSC quotas are known (architecture doc §12.3).
+COMPUTE_CPU_CAP_HOURS = 1000.0
+COMPUTE_STORAGE_CAP_GB = 100.0
 
 
 class ComputeConfigError(ValueError):
@@ -141,6 +146,17 @@ def compute_options(settings: Settings, environ: Mapping[str, str]) -> dict[str,
         "compute_templates": setup.templates,
         "compute_members": setup.members,
     }
+
+
+def build_compute(
+    backend: Any, db: Database, clock: Clock, snapshot_root: Path, templates: Any, members: Any
+) -> ComputeService | None:
+    """The service ``build_runtime`` holds; None when no backend is set up. Inputs are references
+    under ``snapshot_root``; they stay refused until ``install_input_guard`` installs the guard."""
+    if backend is None:
+        return None
+    caps = (COMPUTE_CPU_CAP_HOURS, COMPUTE_STORAGE_CAP_GB)
+    return ComputeService(db, clock, backend, templates, members, *caps, input_root=snapshot_root)
 
 
 def install_input_guard(runtime: Any) -> None:
