@@ -90,7 +90,9 @@ export default {
   "guide.review.problems": "Problems to solve before saving",
   "guide.review.hints": "Hints",
   "guide.review.noProtocol": "The protocol cannot be put together yet. Solve the points above, then come back to this step.",
-  "guide.review.notRecorded": "The protocol is saved, but the guide could not note it yet.",
+  "guide.review.notRecorded": "The protocol is saved as {protocol}, but the guide could not note it yet.",
+  "guide.review.hash": "The last version declared an analysis script hash.",
+  "guide.review.keepHash": "Keep this hash when saving",
   "guide.review.retry": "Try again",
   "guide.scale.blocking": "These findings stop the design. Change the scale and save again.",
 };

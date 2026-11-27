@@ -6,7 +6,7 @@ import { saveDraft } from "../drafts.js";
 import { protocolFormDraft } from "../guide-draft.js";
 import { h } from "../ui/dom.js";
 import { protocolName } from "../ui/names.js";
-import { errorBox, note, section, showErrors } from "../ui/section.js";
+import { errorBox, note, section, showErrors, techDetails } from "../ui/section.js";
 import { protocolForm } from "./protocol-form.js";
 import { findingsList } from "./stage-actions.js";
 
@@ -36,14 +36,22 @@ function hintsBlock(ctx, review) {
   return hints.length ? section(ctx.t("guide.review.hints"), findingsList(ctx, hints)) : null;
 }
 
-// The script hash an earlier version carried is not a field of the form, so the form would drop it; it is put back.
-function withCarriedHash(protocol, hash) {
-  return hash ? { ...protocol, analysis: { ...protocol.analysis, script_sha256: hash } } : protocol;
+// The script hash an earlier version carried has no field in the form. It is shown read-only with a box that is
+// ticked at first; it goes back on the protocol only when the box is ticked and the protocol saved is the same one
+// the review was made for (a different or new id never inherits it).
+function hashBlock(ctx, hash) {
+  if (!hash) return { element: null, keep: () => false };
+  const box = h("input", { class: "input-check", attrs: { type: "checkbox", name: "keep_script_hash", checked: true } });
+  const label = h("label", { class: "guide-choice" }, box, h("span", { text: ctx.t("guide.review.keepHash") }));
+  const element = h("div", { class: "guide-review-hash" }, note(ctx.t("guide.review.hash")), techDetails(ctx.t, [[ctx.t("analysis.sha"), hash]]), label);
+  return { element, keep: () => box.checked };
 }
 
-// Tells the guide what was saved. A failure stays on the page with a retry: the protocol is already saved, so the
-// form is not offered again (it would save one more version).
-function recorder(ctx, { base, onSaved, box }) {
+const withHash = (protocol, hash) => ({ ...protocol, analysis: { ...protocol.analysis, script_sha256: hash } });
+
+// Tells the guide what was saved. A failure replaces the form (it would save one more version) with a note saying
+// what is saved and a retry; the error stays beside it.
+function recorder(ctx, { base, onSaved, box, holder }) {
   const record = async (body) => {
     try {
       const view = await ctx.api.post(`${base}/saved`, body, { action: ctx.t("guide.step.review") });
@@ -51,8 +59,9 @@ function recorder(ctx, { base, onSaved, box }) {
     } catch (error) {
       if (!(error instanceof ApiError)) throw error;
       showErrors(box, error, ctx);
+      const saved = protocolName(ctx.t, body.protocol_id, body.version);
       const retry = h("button", { class: ["button", "guide-retry"], attrs: { type: "button" }, text: ctx.t("guide.review.retry"), on: { click: () => record(body) } });
-      box.append(h("p", { text: ctx.t("guide.review.notRecorded") }), retry);
+      holder.replaceChildren(note(ctx.t("guide.review.notRecorded", { protocol: saved })), retry);
     }
   };
   return record;
@@ -62,11 +71,13 @@ export async function reviewStep(ctx, { session, project, onSaved, onOpenStep = 
   const base = `/guide/sessions/${enc(session.session.session_id)}`;
   const review = await ctx.api.get(`${base}/review`);
   const box = errorBox();
-  const record = recorder(ctx, { base, onSaved, box });
+  const holder = h("div", { class: "guide-review-form" });
+  const record = recorder(ctx, { base, onSaved, box, holder });
   const hash = review.protocol && review.protocol.analysis ? review.protocol.analysis.script_sha256 : null;
+  const kept = hashBlock(ctx, hash);
 
   const onSubmit = async ({ protocol }) => {
-    const sent = withCarriedHash(protocol, hash);
+    const sent = kept.keep() && protocol.id === review.protocol_id ? withHash(protocol, hash) : protocol;
     const made = await ctx.api.post("/protocols", { protocol: sent }, { action: ctx.t("project.protocols.save") });
     const id = (made && made.protocol_id) ?? sent.id;
     const version = (made && made.version) ?? sent.version;
@@ -75,12 +86,12 @@ export async function reviewStep(ctx, { session, project, onSaved, onOpenStep = 
     await record({ protocol_id: id, version });
   };
 
-  let form = note(ctx.t("guide.review.noProtocol"));
-  if (review.protocol) {
+  if (!review.protocol) holder.append(note(ctx.t("guide.review.noProtocol")));
+  else {
     const saveAs = saveAsOf(project, review);
     saveDraft(`protocol:${project.project_id}-form`, protocolFormDraft(review.protocol, { saveAs }));
-    form = protocolForm(ctx, { project, onSubmit, protocolId: saveAs });
+    holder.append(protocolForm(ctx, { project, onSubmit, protocolId: saveAs }));
   }
   const lead = review.protocol ? note(ctx.t("guide.review.lead")) : null;
-  return h("div", { class: "guide-review" }, missingSteps(ctx, review, onOpenStep), problemsBlock(ctx, review), hintsBlock(ctx, review), lead, form, box);
+  return h("div", { class: "guide-review" }, missingSteps(ctx, review, onOpenStep), problemsBlock(ctx, review), hintsBlock(ctx, review), lead, kept.element, holder, box);
 }

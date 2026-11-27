@@ -95,13 +95,41 @@ test("a protocol that is already saved is offered as the one to save the next ve
   assert.deepEqual(body, asFormSends(carried.protocol));
 });
 
-test("a script hash carried from an earlier version is kept, though the form has no field for it", async () => {
-  const hash = "a".repeat(64);
-  const carried = { ...REVIEW, protocol: { ...REVIEW.protocol, analysis: { ...REVIEW.protocol.analysis, script_sha256: hash } } };
-  const answers = { "/protocols": () => ({ protocol_id: REVIEW.protocol.id, version: 1 }), [SAVED_PATH]: () => SESSION };
-  const { ctx, element } = await open({ review: carried, answers });
+const HASH = "a".repeat(64);
+const withHash = (review) => ({ ...review, protocol: { ...review.protocol, analysis: { ...review.protocol.analysis, script_sha256: HASH } } });
+const HASH_ANSWERS = { "/protocols": () => ({ protocol_id: REVIEW.protocol.id, version: 1 }), [SAVED_PATH]: () => SESSION };
+const tick = (element, checked) => {
+  const box = named(element, "keep_script_hash")[0];
+  box.checked = checked;
+  box.dispatchEvent(new Event("change"));
+};
+
+test("a script hash carried from an earlier version is shown, ticked, and sent for the same protocol", async () => {
+  const { ctx, element } = await open({ review: withHash(REVIEW), answers: HASH_ANSWERS });
+  assert.equal(named(element, "keep_script_hash")[0].checked, true);
+  assert.ok(visibleText(element).includes("The last version declared an analysis script hash."));
+  assert.ok(byClass(element, "tech-details").some((node) => node.textContent.includes(HASH)), "the hash sits in the technical details");
   await submit(element);
-  assert.equal(posts(ctx)[0].body.protocol.analysis.script_sha256, hash);
+  assert.equal(posts(ctx)[0].body.protocol.analysis.script_sha256, HASH);
+});
+
+test("an unticked script hash is not sent", async () => {
+  const { ctx, element } = await open({ review: withHash(REVIEW), answers: HASH_ANSWERS });
+  tick(element, false);
+  await submit(element);
+  assert.ok(!Object.hasOwn(posts(ctx)[0].body.protocol.analysis, "script_sha256"));
+});
+
+test("a script hash is not sent to a protocol with another id", async () => {
+  const other = { ...withHash(REVIEW), protocol_id: "protocol-other-1" };
+  const { ctx, element } = await open({ review: other, answers: HASH_ANSWERS });
+  await submit(element);
+  assert.ok(!Object.hasOwn(posts(ctx)[0].body.protocol.analysis, "script_sha256"));
+});
+
+test("a review without a hash shows no box for it", async () => {
+  const { element } = await open();
+  assert.equal(named(element, "keep_script_hash").length, 0);
 });
 
 test("problems and blocking findings are listed before the form, hints under their own heading", async () => {
@@ -172,6 +200,8 @@ test("if the guide cannot be told, the saved protocol is not saved again", async
   const { ctx, element } = await open({ answers, onSaved: () => saved.push(1) });
   await submit(element);
   assert.equal(saved.length, 0);
+  assert.equal(byTag(element, "form").length, 0, "the form is gone");
+  assert.ok(visibleText(element).includes("saved as"), "says what is saved");
   const retry = byClass(element, "guide-retry")[0];
   assert.ok(retry, "a retry button");
   retry.dispatchEvent(new Event("click"));
