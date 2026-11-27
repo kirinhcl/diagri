@@ -353,3 +353,47 @@ def test_another_operator_cannot_start_a_session_on_the_project(world):
     r = bench.post(bench.user("bob"), GUIDE, {"project_id": project})
 
     assert r.status_code == 409 and detail(r)["reason"] == "record_not_found"
+
+
+# --- numbers, and a save that cannot be compared ---------------------------------------------
+
+
+@pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity"])
+def test_a_non_finite_number_in_an_answer_is_refused(bench, operator, sid, literal):
+    body = (
+        '{"answer": {"treatments": [{"id": "a", "name": "a", "factors": {"light": LITERAL}},'
+        ' {"id": "b", "name": "b", "factors": {"light": 70}}], "control_treatment_id": "a"}}'
+    ).replace("LITERAL", literal)
+    before = len(bench.guide.events(sid))
+
+    r = operator.post(
+        f"{GUIDE}/{sid}/steps/treatments/choose",
+        content=body,
+        headers={**bench.ui(operator), "content-type": "application/json"},
+    )
+
+    assert r.status_code == 422 and detail(r)["reason"] == "guide_answer_invalid"
+    assert detail(r)["params"] == {"step": "treatments"}
+    assert len(bench.guide.events(sid)) == before
+
+
+def test_a_save_that_cannot_be_compared_records_no_edited_list(bench, operator, sid):
+    answer_all(bench, operator, sid)
+    review = operator.get(f"{GUIDE}/{sid}/review").json()
+    saved = bench.post(operator, "/wb/protocols", {"protocol": review["protocol"]})
+    assert saved.status_code == 200
+    broken = {"answer": {"method": "x"}, "source": "own", "option_ids": []}
+    bench.guide.append(sid, "analysis", "chosen", broken, "alice")
+
+    body = {"protocol_id": review["protocol_id"], "version": review["version"]}
+    view = bench.post(operator, f"{GUIDE}/{sid}/saved", body).json()
+
+    assert view["saved"][0]["edited"] is None
+    assert view["saved"][0]["digest"] == saved.json()["digest"]
+    assert bench.guide.events(sid)[-1].payload["edited"] is None
+
+
+def test_an_unknown_session_names_the_guide_session_kind(bench, operator):
+    r = operator.get(f"{GUIDE}/guide-nothing")
+
+    assert detail(r)["params"]["record_kind"] == "guide_session"

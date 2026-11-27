@@ -13,7 +13,7 @@ from typing import Annotated, Any, Literal, NamedTuple
 from fastapi import APIRouter, Depends, Query
 from pydantic import Field
 
-from growbridge.archive.models import ResearchProtocol
+from growbridge.archive.models import ResearchProtocol, non_finite_paths
 from growbridge.guide.compose import (
     compose,
     edited_fields,
@@ -72,7 +72,7 @@ class _Guide:
     # --- who may see and change a session ------------------------------------------------------
 
     def session(self, session_id: str, actor: Actor, *, write: bool) -> GuideSession:
-        unknown = denials.unknown("guide session", session_id)
+        unknown = denials.unknown("guide_session", session_id)
         found = self.guide.session(session_id)
         if found is None:
             raise unknown
@@ -107,9 +107,9 @@ class _Guide:
 
     def edited(
         self, session: GuideSession, events: tuple[GuideEvent, ...], saved: ResearchProtocol
-    ) -> list[str]:
-        """What differs between the saved version and what the choices make; every top-level
-        field when the choices no longer make a protocol."""
+    ) -> list[str] | None:
+        """What differs between the saved version and what the choices make; ``None`` when the
+        choices no longer make a protocol, so no comparison was possible."""
         try:
             composed = compose(
                 latest_chosen(events),
@@ -119,7 +119,7 @@ class _Guide:
                 seed=session.seed,
             )
         except ValueError:
-            return sorted(ResearchProtocol.model_fields)
+            return None
         return list(edited_fields(composed, saved))
 
     # --- what the routes answer ----------------------------------------------------------------
@@ -180,6 +180,9 @@ class _Guide:
         return self.view(session)
 
     def _checked(self, step: StepId, raw: dict[str, Any], declared: frozenset[str]):
+        spoiled = non_finite_paths(raw)
+        if spoiled:
+            raise _invalid(step, f"numbers must be finite; not at {', '.join(spoiled)}")
         try:
             answer = parse_answer(step, raw)
         except ValueError as exc:

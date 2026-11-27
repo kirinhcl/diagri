@@ -289,6 +289,7 @@ export default {
   "recordKind.treatment": "处理",
   "recordKind.device": "设备",
   "recordKind.request": "请求",
+  "recordKind.guide_session": "引导会话",
   "computeUnit.cpu_hours": "CPU 小时",
   "computeUnit.storage_gb": "GB",
   "paramKind.int": "整数",
