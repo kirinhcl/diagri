@@ -97,14 +97,17 @@ def compose(
 def _layout(
     scale: ScaleAnswer, treatments: TreatmentsAnswer, seed: int
 ) -> tuple[tuple[Allocation, ...], int, int]:
-    """Allocations, blocks and rounds. Allocations the answer carries are used as they are."""
+    """Allocations, blocks and rounds. Allocations and counts the answer carries are used as they
+    are; a count it leaves out is the one its layout makes."""
     ids = [t.id for t in treatments.treatments]
     if scale.layout == "series":
         assert scale.blocks is not None  # the answer model guarantees it
-        blocks, rounds = scale.blocks, scale.blocks * len(ids)
+        blocks = scale.blocks
+        rounds = scale.rounds if scale.rounds is not None else blocks * len(ids)
     else:
         assert scale.rounds is not None
-        blocks = rounds = scale.rounds
+        rounds = scale.rounds
+        blocks = scale.blocks if scale.blocks is not None else rounds
     _check_allocation_count(scale, len(ids), blocks, rounds)
     if scale.allocations is not None:
         if not _table_fits(scale, ids, blocks, rounds):

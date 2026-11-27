@@ -386,18 +386,29 @@ async function checkDesign(ctx, { base, extra, box, done, view }) {
   return done(view, { stay: true });
 }
 
-// A carried allocation table is reused only when nothing it was made for has changed: layout, units,
-// the number of blocks or rounds, and the treatments. Otherwise the server draws a new one from the seed.
-function tableStillFits(session, before, layout, values) {
-  const table = array(before.allocations);
-  if (table.length === 0 || before.layout !== layout) return false;
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const count = layout === "series" ? "blocks" : "rounds";
+// The treatments a carried scale was made for are still the ones chosen: the table's own treatments when it
+// carries one, otherwise no treatments chosen since the scale.
+function sameTreatments(session, before) {
   const ids = array(answerOf(session, "treatments").treatments).map((row) => row.id);
-  const used = new Set(table.map((row) => row.treatment_id));
-  const sameTreatments = used.size === ids.length && ids.every((id) => used.has(id));
-  return same(values.units, before.units) && values[count] === before[count] && sameTreatments;
+  const table = array(before.allocations);
+  if (table.length > 0) {
+    const used = new Set(table.map((row) => row.treatment_id));
+    return used.size === ids.length && ids.every((id) => used.has(id));
+  }
+  const seq = (step) => (chosenOf(session, step) || {}).seq;
+  return seq("treatments") < seq("scale");
 }
+
+// Nothing a carried scale was made for has changed: layout, units, the number of blocks or rounds, and the
+// treatments. Only then do the carried values the card does not ask for go back: the other count and a
+// hand-written table. Otherwise the server makes them again, the allocation from the seed.
+function scaleUnchanged(session, before, layout, values) {
+  if (before.layout !== layout) return false;
+  const count = layout === "series" ? "blocks" : "rounds";
+  return JSON.stringify(values.units) === JSON.stringify(before.units) && values[count] === before[count] && sameTreatments(session, before);
+}
+
+const tableStillFits = (session, before, layout, values) => array(before.allocations).length > 0 && scaleUnchanged(session, before, layout, values);
 
 const linesOf = (text) => String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 
@@ -438,7 +449,8 @@ function scaleBody(ctx, { session, options, defaults, post, box, extra, base, do
     const values = fields.read([activeCount(), fields.entry("units"), fields.entry("stages")]);
     if (!picked || !values) return;
     const unit = before.experimental_unit || defaults.experimental_unit || "tent";
-    const kept = { ...carried(before, ["randomization_seed"]), ...(tableStillFits(session, before, picked, values) ? carried(before, ["allocations"]) : {}) };
+    const other = picked === "tents" ? "blocks" : "rounds";
+    const kept = { ...carried(before, ["randomization_seed"]), ...(scaleUnchanged(session, before, picked, values) ? carried(before, [other, "allocations"]) : {}) };
     const view = await post({ layout: picked, ...values, experimental_unit: unit, ...kept }, [picked], { keepStep: true });
     await checkDesign(ctx, { base, extra, box, done, view });
   };

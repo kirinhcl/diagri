@@ -94,7 +94,7 @@ def test_carried_answers_reproduce_the_example_protocol_as_a_series():
     p = make_protocol()
     carried = carried_answers(p)
     scale = carried["scale"]
-    assert scale["layout"] == "series" and scale["blocks"] == 2 and scale["rounds"] is None
+    assert scale["layout"] == "series" and scale["blocks"] == 2 and scale["rounds"] == 4
     assert scale["units"] == ["tent-1"] and scale["randomization_seed"] == 20261118
     assert scale["allocations"] is None  # the seed reproduces these allocations
     assert carried["question"] == {"question": p.question, "hypothesis": p.hypothesis}
@@ -126,8 +126,14 @@ def test_carried_tents_layout_lists_units_by_first_appearance():
     )
     p = make_protocol(allocations=allocations, rounds=1, blocks=1)
     scale = carried_answers(p)["scale"]
-    assert scale["layout"] == "tents" and scale["blocks"] is None and scale["rounds"] == 1
+    assert scale["layout"] == "tents" and scale["blocks"] == 1 and scale["rounds"] == 1
     assert scale["units"] == ["tent-b", "tent-a"]
+
+
+def test_a_carried_scale_keeps_both_counts_exactly():
+    scale = carried_answers(make_protocol(rounds=6))["scale"]
+    assert (scale["blocks"], scale["rounds"]) == (2, 6)
+    assert scale["allocations"] is None  # the seed still reproduces the allocations
 
 
 def test_carried_analysis_keeps_the_script_hash():

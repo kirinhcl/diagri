@@ -419,10 +419,10 @@ const TABLE = [
   { round: 3, block: 2, unit: "tent-1", treatment_id: "control" },
   { round: 4, block: 2, unit: "tent-1", treatment_id: "high" },
 ];
-const CARRIED_SCALE = { layout: "series", blocks: 2, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5, allocations: TABLE };
+const CARRIED_SCALE = { layout: "series", blocks: 2, rounds: 4, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5, allocations: TABLE };
 
-async function resaveScale(change_) {
-  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale: CARRIED_SCALE } });
+async function resaveScale(change_, scale = CARRIED_SCALE) {
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale } });
   const answers = { ...answering("scale", view), [`GET ${SESSION_PATH}/review`]: () => ({ design: [] }) };
   const { element, ctx } = await open("scale", { view, answers });
   change_(element);
@@ -439,6 +439,31 @@ test("a carried allocation table is dropped when the blocks change, and the seed
   assert.equal(answer.blocks, 3);
   assert.equal(answer.randomization_seed, 5);
   assert.equal(Object.hasOwn(answer, "allocations"), false);
+  assert.equal(Object.hasOwn(answer, "rounds"), false, "the rounds are made again from the blocks");
+});
+
+test("carried counts the layout does not ask for go back only while the scale is unchanged", async () => {
+  const reproducible = { layout: "series", blocks: 2, rounds: 6, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5 };
+  assert.deepEqual(await resaveScale(() => {}, reproducible), reproducible);
+  const tents = { layout: "tents", blocks: 1, rounds: 3, units: ["a", "b"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5 };
+  assert.deepEqual(await resaveScale(() => {}, tents), tents);
+  const changed = await resaveScale((element) => change(named(element, "rounds")[0], "4"), tents);
+  assert.equal(changed.rounds, 4);
+  assert.equal(Object.hasOwn(changed, "blocks"), false);
+  const moved = await resaveScale((element) => change(named(element, "units")[0], "a\nb\nc\nd"), reproducible);
+  assert.equal(Object.hasOwn(moved, "rounds"), false);
+});
+
+test("carried counts do not go back once the treatments were chosen again after the scale", async () => {
+  const reproducible = { layout: "series", blocks: 2, rounds: 6, units: ["tent-1"], stages: ["vegetative"], experimental_unit: "tent", randomization_seed: 5 };
+  const view = session(ALL, { status: { scale: "needs_review" }, answers: { scale: reproducible } });
+  const later = { ...view, steps: view.steps.map((e) => (e.step === "treatments" ? { ...e, chosen: { ...e.chosen, seq: 20 } } : e)) };
+  const answers = { ...answering("scale", later), [`GET ${SESSION_PATH}/review`]: () => ({ design: [] }) };
+  const { element, ctx } = await open("scale", { view: later, answers });
+  await submit(element);
+  const answer = chooseCalls(ctx, "scale")[0].body.answer;
+  assert.equal(answer.blocks, 2);
+  assert.equal(Object.hasOwn(answer, "rounds"), false);
 });
 
 test("the scale card says whether the hand-written table is kept or made again from the seed", async () => {

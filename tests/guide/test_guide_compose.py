@@ -59,7 +59,8 @@ def test_composing_the_carried_example_gives_back_the_same_protocol():
 
 def test_a_series_has_blocks_times_treatments_rounds():
     answers = carried_answers(make_protocol())
-    answers["scale"] = {**answers["scale"], "blocks": 3, "randomization_seed": None}
+    # a changed count goes without the carried rounds, as the page sends it
+    answers["scale"] = {**answers["scale"], "blocks": 3, "rounds": None, "randomization_seed": None}
     composed = compose(chosen_from(answers), **KEYS)
     assert composed.blocks == 3 and composed.rounds == 6
     assert len(composed.allocations) == 6 and composed.randomization_seed == 1
@@ -110,6 +111,35 @@ def test_a_carried_table_that_no_longer_fits_the_scale_is_a_review_problem():
         r = review(chosen_from(stale), **KEYS, **REVIEW)
         assert r.protocol is None and not r.ready
         assert any("no longer fits the scale" in problem for problem in r.problems)
+
+
+@pytest.mark.parametrize("overrides", [{"rounds": 6}, {"rounds": 3, "blocks": 1}])
+def test_a_carried_version_comes_back_with_its_own_rounds_and_blocks(overrides):
+    allocations = make_protocol().allocations
+    if "blocks" in overrides:  # tents: two tents side by side, three rounds in one block
+        allocations = tuple(
+            Allocation(round=r, block=1, unit=u, treatment_id=t)
+            for r in (1, 2, 3)
+            for u, t in (("tent-1", "control"), ("tent-2", "high"))
+        )
+    p = make_protocol(allocations=allocations, **overrides)
+    composed = compose(chosen_from(carried_answers(p)), **{**KEYS, "seed": 9})
+    assert (composed.rounds, composed.blocks) == (p.rounds, p.blocks)
+    assert composed.digest() == p.digest()
+
+
+def test_a_kept_table_with_a_make_up_round_fits_its_carried_rounds():
+    hand = (
+        Allocation(round=1, block=1, unit="tent-1", treatment_id="control"),
+        Allocation(round=2, block=1, unit="tent-1", treatment_id="high"),
+        Allocation(round=3, block=2, unit="tent-1", treatment_id="control"),
+        Allocation(round=4, block=2, unit="tent-1", treatment_id="high"),
+        Allocation(round=5, block=2, unit="tent-1", treatment_id="high"),  # round 4 made up
+    )
+    p = make_protocol(allocations=hand, rounds=5)
+    r = review(chosen_from(carried_answers(p)), **KEYS, **REVIEW)
+    assert r.problems == () and r.protocol is not None
+    assert r.protocol.allocations == hand and r.protocol.rounds == 5
 
 
 def test_a_layout_above_the_allocation_cap_is_a_review_problem_not_a_stall(monkeypatch):

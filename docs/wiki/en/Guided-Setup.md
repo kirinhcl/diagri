@@ -67,7 +67,7 @@ Every answer in the draft panel carries a mark:
 | Your own | You typed the value yourself. |
 | Kept from the last version | You started from a protocol the project already had and did not change this value. |
 
-When you change an early step, the steps after it that depend on it are marked "An earlier step changed; please check this one" until you look at them again. Keeping the last version keeps its allocation as it was.
+When you change an early step, the steps after it that depend on it are marked "An earlier step changed; please check this one" until you look at them again. Keeping the last version keeps its allocation and its numbers of rounds and blocks as they were, as long as the layout, the units, the count on the scale card and the treatments stay the same.
 
 ## See also
 

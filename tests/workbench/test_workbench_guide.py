@@ -246,6 +246,22 @@ def test_a_project_with_a_protocol_starts_from_it(bench, operator, pid):
     assert review["protocol"]["allocations"] == kept
 
 
+@pytest.mark.parametrize("overrides", [{}, {"rounds": 6}])
+def test_a_carried_version_saved_unchanged_records_no_edit(bench, operator, pid, overrides):
+    first = make_protocol(project_id=pid, **overrides).model_dump(mode="json")
+    assert bench.post(operator, "/wb/protocols", {"protocol": first}).status_code == 200
+    sid = start(bench, operator, pid)
+
+    review = operator.get(f"{GUIDE}/{sid}/review").json()
+    assert review["problems"] == [] and review["protocol"] == {**first, "version": 2}
+    saved = bench.post(operator, "/wb/protocols", {"protocol": review["protocol"]})
+    assert saved.status_code == 200
+    body = {"protocol_id": review["protocol_id"], "version": review["version"]}
+    view = bench.post(operator, f"{GUIDE}/{sid}/saved", body).json()
+
+    assert view["saved"][0]["edited"] == []
+
+
 def test_the_latest_saved_version_is_the_one_carried(bench, operator, pid):
     bench.workflow.save_protocol(make_protocol(project_id=pid), bench.designer)
     newer = make_protocol(project_id=pid, version=2, question="the second wording")

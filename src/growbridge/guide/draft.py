@@ -110,6 +110,8 @@ def carried_answers(protocol: ResearchProtocol) -> dict[StepId, dict[str, Any]]:
 
 
 def _carried_scale(protocol: ResearchProtocol) -> dict[str, Any]:
+    """Both counts are carried exactly, with the seed and any hand-written table, so a version
+    kept unchanged composes to itself even when its counts are not the ones its layout makes."""
     units = list(dict.fromkeys(a.unit for a in protocol.allocations))
     series = len(units) == 1
     kept = None
@@ -118,8 +120,8 @@ def _carried_scale(protocol: ResearchProtocol) -> dict[str, Any]:
     return {
         "layout": "series" if series else "tents",
         "units": units,
-        "blocks": protocol.blocks if series else None,
-        "rounds": None if series else protocol.rounds,
+        "blocks": protocol.blocks,
+        "rounds": protocol.rounds,
         "stages": list(protocol.stages),
         "experimental_unit": protocol.experimental_unit,
         "randomization_seed": protocol.randomization_seed,
