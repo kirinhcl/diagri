@@ -4,7 +4,7 @@ checks an answer must pass. Nothing here stores anything: the draft is worked ou
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 
 from growbridge.archive.models import Allocation, Model, Treatment
 from growbridge.vocab.catalog import Catalog
@@ -88,6 +88,17 @@ class ScaleAnswer(Model):
     # These two appear only when an existing version is carried over.
     randomization_seed: int | None = None
     allocations: tuple[Allocation, ...] | None = None
+
+    @field_validator("units", "stages")
+    @classmethod
+    def _names_are_filled_in_and_distinct(
+        cls, names: tuple[str, ...], info: ValidationInfo
+    ) -> tuple[str, ...]:
+        if any(not name.strip() for name in names):
+            raise ValueError(f"every one of the {info.field_name} needs a name")
+        if len(set(names)) != len(names):
+            raise ValueError(f"two of the {info.field_name} have the same name")
+        return names
 
     @model_validator(mode="after")
     def _layout_is_complete(self) -> "ScaleAnswer":

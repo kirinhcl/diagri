@@ -175,6 +175,21 @@ def test_the_count_only_a_carried_version_brings_is_capped_too():
         parse_answer("scale", tents(blocks=0))
 
 
+@pytest.mark.parametrize(
+    "scale",
+    [
+        tents(units=["a", "a"]),
+        tents(units=["a", " "]),
+        series(units=[""]),
+        series(stages=["veg", "veg"]),
+        series(stages=["veg", ""]),
+    ],
+)
+def test_unit_and_stage_names_are_filled_in_and_distinct(scale):
+    with pytest.raises(ValueError):
+        parse_answer("scale", scale)
+
+
 def test_units_stages_and_treatments_are_capped():
     many = [f"u{i}" for i in range(MAX_UNITS + 1)]
     with pytest.raises(ValueError):
