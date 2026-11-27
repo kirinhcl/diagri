@@ -405,6 +405,7 @@ export default {
   "tech.right.stage": "Stage write right",
   "tech.right.care": "Care write right",
   "tech.right.manual": "Manual write right",
+  "tech.right.test": "Device test write right",
   "receipt.request": "Sent {time}",
   "receipt.confirmedLevel": "The device reports {level}.",
   "receipt.unknownNote": "The device did not confirm the change. Check on site before writing again.",

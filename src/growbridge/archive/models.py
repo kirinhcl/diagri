@@ -130,6 +130,7 @@ class RightKind(StrEnum):
     STAGE = "stage"
     MANUAL = "manual"
     CARE = "care"
+    TEST = "test"  # an operator's short on-site device test on an idle greenhouse
     PROTECTION = "protection"
 
 

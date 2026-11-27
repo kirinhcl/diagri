@@ -12,7 +12,8 @@ from growbridge.archive.models import (
 from growbridge.ports import ActionRequest, Denied, RightScope
 
 LISTED_LEVEL_KINDS = (RightKind.CARE, RightKind.PROTECTION)
-ORDINARY_KINDS = (RightKind.STAGE, RightKind.MANUAL)
+ORDINARY_KINDS = (RightKind.STAGE, RightKind.MANUAL, RightKind.TEST)
+OPERATOR_KINDS = (RightKind.MANUAL, RightKind.TEST)  # bound to an authenticated operator
 
 
 def build_right(
@@ -30,10 +31,10 @@ def build_right(
             )
         if not channels:
             channels = tuple(dict.fromkeys(level.channel for level in scope.levels))
-    if kind is RightKind.MANUAL and not (operator and operator.strip()):
+    if kind in OPERATOR_KINDS and not (operator and operator.strip()):
         raise Denied(
             "right_invalid",
-            "a manual right is bound to an authenticated operator",
+            f"a {kind.value} right is bound to an authenticated operator",
             reason="right_needs_operator",
             params={"right_id": None},
         )

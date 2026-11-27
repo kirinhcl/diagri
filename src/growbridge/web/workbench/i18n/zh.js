@@ -405,6 +405,7 @@ export default {
   "tech.right.stage": "阶段写入权",
   "tech.right.care": "照护写入权",
   "tech.right.manual": "人工写入权",
+  "tech.right.test": "设备测试写入权",
   "receipt.request": "发送于 {time}",
   "receipt.confirmedLevel": "设备回报 {level}。",
   "receipt.unknownNote": "设备没有确认这次改动。再次写入前请先到现场核对。",

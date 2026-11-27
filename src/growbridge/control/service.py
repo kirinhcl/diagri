@@ -730,8 +730,9 @@ class ControlService:
 
 
 def _may_irrigate(right: WriteRight, request: ActionRequest, planned: bool) -> bool:
-    """A manual right may irrigate; the stage right only for a planned irrigation of its stage."""
-    if right.kind is RightKind.MANUAL:
+    """A manual or test right may irrigate; the stage right only for a planned irrigation of its
+    stage."""
+    if right.kind in rights.OPERATOR_KINDS:
         return True
     return (
         planned
