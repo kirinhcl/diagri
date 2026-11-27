@@ -13,7 +13,7 @@ There are two ways in, both in the console at `/workbench`:
 - **New project.** On the projects page, fill in the form "New project with the guide": the project name and the call budget (100 calls and 10 dollars are filled in; change them if you like). The console creates the project, sets the budget, and opens the guide. Setting a budget needs a recent re-authentication, as on the project page. A deployment without a model call budget has no budget route; the console then skips the budget, says so, and opens the guide anyway.
 - **Existing project.** On a project page, in the protocols section, press "Set up or change the protocol with the guide". The guide starts from what the project already holds.
 
-Every answer is kept on the server as it is given. You can leave the page and come back, and you can open any finished step again.
+Every answer is kept on the server as it is given, and you can open any finished step again. The guide page's address stays valid, so bookmark it if you want to come back to a guide you have not saved yet: no page lists unsaved guides, and the button on the project page always starts a new guide.
 
 ## The steps
 
