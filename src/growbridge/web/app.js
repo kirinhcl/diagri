@@ -1,3 +1,5 @@
+import { randomUuid } from "./workbench/receipts.js";
+
 const messages = {
   en: {
     workspace: "GROW SPACE",
@@ -789,7 +791,7 @@ async function mutate(path, params, success, dirtyKey, retryBody = null) {
   if (state.busy || (!retryBody && !canControl())) return;
   const body = retryBody || {
     ...params,
-    request_id: "ui-" + crypto.randomUUID(),
+    request_id: "ui-" + randomUuid(),
   };
   state.busy = true;
   state.pumpBusy = path === "/pump";

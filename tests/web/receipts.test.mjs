@@ -7,6 +7,7 @@ import {
   answerLost,
   newRequestId,
   pollReceipt,
+  randomUuid,
   receiptOutcome,
   sleep,
 } from "../../src/growbridge/web/workbench/receipts.js";
@@ -213,4 +214,39 @@ test("request ids match the server's pattern and differ each time", () => {
   assert.match(second, pattern);
   assert.notEqual(first, second);
   assert.ok(first.startsWith("wb-"));
+});
+
+// Runs fn with a globalThis.crypto that has no randomUUID, as a browser gives a page served over
+// plain HTTP from a LAN address (not a secure context); getRandomValues stays available there.
+function withoutRandomUUID(fn) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  const real = globalThis.crypto;
+  const insecure = { getRandomValues: (array) => real.getRandomValues(array) };
+  Object.defineProperty(globalThis, "crypto", { value: insecure, configurable: true });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(globalThis, "crypto", original);
+  }
+}
+
+test("request ids work on a page without crypto.randomUUID (plain HTTP on a LAN address)", () => {
+  const [first, second] = withoutRandomUUID(() => [newRequestId(), newRequestId()]);
+  assert.match(first, /^wb-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(first, second);
+  assert.equal(typeof globalThis.crypto.randomUUID, "function"); // the real crypto is back
+});
+
+test("random uuids use crypto.randomUUID when the page has it", () => {
+  const secure = {
+    randomUUID: () => "11111111-2222-4333-8444-555555555555",
+    getRandomValues: () => assert.fail("getRandomValues is not needed"),
+  };
+  assert.equal(randomUuid(secure), "11111111-2222-4333-8444-555555555555");
+});
+
+test("the fallback is a version 4, RFC 4122 uuid whatever bytes getRandomValues returns", () => {
+  const filled = (byte) => ({ getRandomValues: (array) => array.fill(byte) });
+  assert.equal(randomUuid(filled(0xff)), "ffffffff-ffff-4fff-bfff-ffffffffffff");
+  assert.equal(randomUuid(filled(0x00)), "00000000-0000-4000-8000-000000000000");
 });
